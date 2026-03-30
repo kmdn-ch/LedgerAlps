@@ -1,4 +1,4 @@
-# SwissOpen-Accounting
+# LedgerAlps
 
 Une solution open source de gestion pour les devis, la facturation et la comptabilité, spécifiquement conçue pour répondre aux exigences légales et fiduciaires suisses, tout en restant extensible aux normes européennes.
 
