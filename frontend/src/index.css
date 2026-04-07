@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --sidebar-w: 240px;
+    --header-h: 56px;
+    --color-bg:       #f0f4f8;
+    --color-surface:  #ffffff;
+    --color-border:   #d9e2ec;
+    --color-text:     #102a43;
+    --color-muted:    #627d98;
+    --color-accent:   #f97316;
+    --color-primary:  #334e68;
+  }
+
+  * { @apply border-alpine-200; }
+
+  body {
+    @apply bg-alpine-50 text-alpine-900 font-sans antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  h1, h2, h3 { @apply font-display; }
+}
+
+@layer components {
+  /* ─── Buttons ─────────────────────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded
+           transition-all duration-150 focus-visible:outline-none
+           focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed select-none;
+  }
+  .btn-primary {
+    @apply btn bg-alpine-800 text-white hover:bg-alpine-900 active:scale-[0.98]
+           shadow-sm;
+  }
+  .btn-secondary {
+    @apply btn bg-white text-alpine-800 border border-alpine-200
+           hover:bg-alpine-50 active:scale-[0.98] shadow-card;
+  }
+  .btn-danger {
+    @apply btn bg-danger-500 text-white hover:bg-danger-700 active:scale-[0.98];
+  }
+  .btn-ghost {
+    @apply btn text-alpine-600 hover:bg-alpine-100 hover:text-alpine-900;
+  }
+  .btn-sm { @apply btn text-xs px-3 py-1.5; }
+
+  /* ─── Cards ───────────────────────────────────────────────────────────── */
+  .card {
+    @apply bg-white rounded-xl border border-alpine-200 shadow-card;
+  }
+  .card-header {
+    @apply px-6 py-4 border-b border-alpine-100 flex items-center justify-between;
+  }
+  .card-body  { @apply px-6 py-4; }
+  .card-footer { @apply px-6 py-4 border-t border-alpine-100 bg-alpine-50/50 rounded-b-xl; }
+
+  /* ─── Form controls ───────────────────────────────────────────────────── */
+  .input {
+    @apply w-full px-3 py-2 text-sm bg-white border border-alpine-200 rounded
+           text-alpine-900 placeholder:text-alpine-400
+           focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500
+           disabled:bg-alpine-50 disabled:cursor-not-allowed
+           transition-colors duration-150;
+  }
+  .label {
+    @apply block text-xs font-medium text-alpine-600 mb-1 uppercase tracking-wide;
+  }
+  .input-error  { @apply border-danger-500 focus:ring-danger-500/40; }
+  .error-msg    { @apply text-xs text-danger-500 mt-1; }
+  .select       { @apply input appearance-none cursor-pointer; }
+
+  /* ─── Table ───────────────────────────────────────────────────────────── */
+  .table-wrapper { @apply overflow-x-auto rounded-xl border border-alpine-200; }
+  .table { @apply w-full text-sm border-collapse; }
+  .table thead tr { @apply bg-alpine-900 text-white; }
+  .table thead th {
+    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider
+           first:rounded-tl-xl last:rounded-tr-xl;
+  }
+  .table tbody tr {
+    @apply border-t border-alpine-100 hover:bg-alpine-50/60
+           transition-colors duration-100;
+  }
+  .table tbody td { @apply px-4 py-3 text-alpine-800; }
+  .table tbody tr:last-child td { @apply first:rounded-bl-xl last:rounded-br-xl; }
+
+  /* ─── Badges ──────────────────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold;
+  }
+  .badge-draft    { @apply badge bg-alpine-100  text-alpine-700; }
+  .badge-sent     { @apply badge bg-accent-100  text-accent-700; }
+  .badge-paid     { @apply badge bg-success-100 text-success-700; }
+  .badge-overdue  { @apply badge bg-danger-100  text-danger-700; }
+  .badge-cancelled{ @apply badge bg-alpine-100  text-alpine-500 line-through; }
+  .badge-archived { @apply badge bg-alpine-100  text-alpine-500; }
+
+  /* ─── Stat card ───────────────────────────────────────────────────────── */
+  .stat-card {
+    @apply card flex flex-col gap-1 px-6 py-5;
+  }
+  .stat-label { @apply text-xs font-medium text-alpine-500 uppercase tracking-wide; }
+  .stat-value { @apply text-2xl font-display font-700 text-alpine-900 tabular-nums; }
+  .stat-delta { @apply text-xs text-alpine-500; }
+}

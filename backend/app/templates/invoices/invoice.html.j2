@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="{{ locale[:2] }}">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 9pt; color: #1a1a1a; }
+  @page { size: A4; margin: 15mm 15mm 25mm 20mm; }
+
+  /* En-tête */
+  .header { display: flex; justify-content: space-between; margin-bottom: 12mm; }
+  .company-name { font-size: 14pt; font-weight: 700; color: #c0392b; }
+  .company-details { font-size: 8pt; color: #555; line-height: 1.6; }
+  .doc-type { font-size: 18pt; font-weight: 300; text-transform: uppercase;
+              letter-spacing: 2px; color: #2c3e50; text-align: right; }
+  .doc-number { font-size: 10pt; color: #888; text-align: right; }
+
+  /* Adresses */
+  .addresses { display: flex; justify-content: space-between; margin-bottom: 10mm; }
+  .address-block { min-width: 70mm; }
+  .address-label { font-size: 7pt; text-transform: uppercase; letter-spacing: 1px;
+                   color: #888; margin-bottom: 2mm; }
+  .address-content { font-size: 9pt; line-height: 1.6; }
+
+  /* Dates / références */
+  .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 8mm; }
+  .meta-table td { padding: 1.5mm 3mm; font-size: 8pt; }
+  .meta-table td:first-child { color: #666; width: 35mm; }
+  .meta-table td:nth-child(2) { font-weight: 500; }
+  .meta-table tr:nth-child(odd) { background: #f8f9fa; }
+
+  /* Lignes de facture */
+  .lines-table { width: 100%; border-collapse: collapse; margin-bottom: 6mm; }
+  .lines-table thead tr { background: #2c3e50; color: white; }
+  .lines-table thead th { padding: 2.5mm 3mm; font-size: 8pt;
+                           font-weight: 600; text-align: left; }
+  .lines-table thead th.right { text-align: right; }
+  .lines-table tbody tr:nth-child(even) { background: #f8f9fa; }
+  .lines-table tbody td { padding: 2mm 3mm; font-size: 8.5pt; vertical-align: top; }
+  .lines-table tbody td.right { text-align: right; white-space: nowrap; }
+  .lines-table tbody td.center { text-align: center; }
+  .discount { font-size: 7.5pt; color: #888; }
+
+  /* Totaux */
+  .totals { float: right; width: 75mm; margin-bottom: 8mm; }
+  .totals table { width: 100%; border-collapse: collapse; }
+  .totals td { padding: 1.5mm 3mm; font-size: 9pt; }
+  .totals td:first-child { color: #555; }
+  .totals td:last-child { text-align: right; font-weight: 500; }
+  .totals .total-row td { font-size: 11pt; font-weight: 700;
+                           border-top: 0.5mm solid #2c3e50;
+                           padding-top: 2mm; color: #2c3e50; }
+
+  /* Notes */
+  .notes { clear: both; background: #f0f4f8; border-left: 3px solid #3498db;
+           padding: 3mm 4mm; margin-bottom: 8mm; font-size: 8pt; color: #444;
+           line-height: 1.5; }
+  .terms { font-size: 7.5pt; color: #666; margin-bottom: 6mm; line-height: 1.4; }
+
+  /* QR-facture */
+  .qr-section { border-top: 0.5mm solid #333; padding-top: 4mm; page-break-inside: avoid; }
+  .qr-title { font-size: 8pt; font-weight: 700; margin-bottom: 3mm; text-align: center; }
+  .qr-layout { display: flex; gap: 6mm; align-items: flex-start; }
+  .qr-code-box { flex-shrink: 0; }
+  .qr-code-box img { width: 46mm; height: 46mm; }
+  .qr-data { flex: 1; font-size: 7.5pt; line-height: 1.6; }
+  .qr-data .label { font-weight: 700; font-size: 6.5pt; text-transform: uppercase;
+                    color: #555; margin-top: 2mm; }
+  .qr-ref { font-family: "Courier New", monospace; font-size: 8pt;
+             letter-spacing: 0.5px; font-weight: 600; }
+  .qr-scissors { text-align: center; color: #aaa; font-size: 7pt; margin: 2mm 0; }
+
+  /* Pied de page */
+  .footer { position: fixed; bottom: 0; left: 0; right: 0;
+            font-size: 7pt; color: #888; text-align: center;
+            padding: 3mm 15mm; border-top: 0.3mm solid #ddd; }
+
+  /* Statut */
+  .status-badge { display: inline-block; padding: 1mm 3mm; border-radius: 2mm;
+                  font-size: 8pt; font-weight: 600; margin-left: 3mm; }
+  .status-paid { background: #d4edda; color: #155724; }
+  .status-overdue { background: #f8d7da; color: #721c24; }
+  .status-draft { background: #fff3cd; color: #856404; }
+
+  .watermark-draft {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg);
+    font-size: 80pt; font-weight: 900; color: rgba(200,200,200,0.18);
+    text-transform: uppercase; pointer-events: none; z-index: -1;
+  }
+</style>
+</head>
+<body>
+
+{% if invoice.status == 'draft' %}<div class="watermark-draft">BROUILLON</div>{% endif %}
+
+<!-- En-tête -->
+<div class="header">
+  <div>
+    <div class="company-name">{{ company.name }}</div>
+    <div class="company-details">
+      {{ company.address_line1 }}<br>
+      {{ company.postal_code }} {{ company.city }}<br>
+      {% if company.uid_number %}TVA : {{ company.uid_number }}<br>{% endif %}
+      {% if company.email %}{{ company.email }}{% endif %}
+    </div>
+  </div>
+  <div>
+    <div class="doc-type">
+      {% if invoice.document_type == 'invoice' %}Facture
+      {% elif invoice.document_type == 'quote' %}Offre de prix
+      {% elif invoice.document_type == 'credit_note' %}Note de crédit
+      {% endif %}
+    </div>
+    <div class="doc-number">{{ invoice.number }}
+      {% if invoice.status == 'paid' %}<span class="status-badge status-paid">Payée</span>
+      {% elif invoice.status == 'overdue' %}<span class="status-badge status-overdue">En retard</span>
+      {% elif invoice.status == 'draft' %}<span class="status-badge status-draft">Brouillon</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Adresses -->
+<div class="addresses">
+  <div class="address-block">
+    <div class="address-label">Émetteur</div>
+    <div class="address-content">
+      <strong>{{ company.name }}</strong><br>
+      {{ company.address_line1 }}<br>
+      {{ company.postal_code }} {{ company.city }}, {{ company.country }}
+    </div>
+  </div>
+  <div class="address-block">
+    <div class="address-label">Destinataire</div>
+    <div class="address-content">
+      <strong>{{ contact.name }}</strong><br>
+      {% if contact.address_line1 %}{{ contact.address_line1 }}<br>{% endif %}
+      {% if contact.address_line2 %}{{ contact.address_line2 }}<br>{% endif %}
+      {{ contact.postal_code }} {{ contact.city }}, {{ contact.country }}
+      {% if contact.uid_number %}<br>TVA : {{ contact.uid_number }}{% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Métadonnées -->
+<table class="meta-table">
+  <tr><td>Numéro</td><td>{{ invoice.number }}</td></tr>
+  <tr><td>Date d'émission</td><td>{{ invoice.issue_date | date }}</td></tr>
+  {% if invoice.due_date %}<tr><td>Échéance</td><td><strong>{{ invoice.due_date | date }}</strong></td></tr>{% endif %}
+  {% if invoice.service_period_start %}
+  <tr><td>Période de service</td><td>{{ invoice.service_period_start | date }} – {{ invoice.service_period_end | date }}</td></tr>
+  {% endif %}
+  <tr><td>Devise</td><td>{{ invoice.currency }}</td></tr>
+</table>
+
+<!-- Lignes de facture -->
+<table class="lines-table">
+  <thead>
+    <tr>
+      <th style="width:5%">#</th>
+      <th style="width:40%">Description</th>
+      <th class="right" style="width:8%">Qté</th>
+      <th style="width:7%">Unité</th>
+      <th class="right" style="width:12%">Prix unitaire</th>
+      <th class="right" style="width:8%">Rabais</th>
+      <th class="right" style="width:8%">TVA</th>
+      <th class="right" style="width:12%">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for line in invoice.lines %}
+    <tr>
+      <td>{{ line.position }}</td>
+      <td>{{ line.description }}</td>
+      <td class="right">{{ line.quantity | number }}</td>
+      <td class="center">{{ line.unit or '' }}</td>
+      <td class="right">{{ line.unit_price | currency(invoice.currency) }}</td>
+      <td class="right">
+        {% if line.discount_percent > 0 %}
+          <span class="discount">{{ line.discount_percent }}%</span>
+        {% endif %}
+      </td>
+      <td class="right">{{ line.vat_rate }}%</td>
+      <td class="right"><strong>{{ line.line_total | currency(invoice.currency) }}</strong></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<!-- Totaux -->
+<div class="totals">
+  <table>
+    <tr><td>Sous-total HT</td><td>{{ invoice.subtotal | currency(invoice.currency) }}</td></tr>
+    {% for rate, data in vat_summary.items() %}
+    <tr><td>TVA {{ rate }}% ({{ data.code }})</td><td>{{ data.vat | currency(invoice.currency) }}</td></tr>
+    {% endfor %}
+    <tr class="total-row"><td>Total {{ invoice.currency }}</td><td>{{ invoice.total | currency(invoice.currency) }}</td></tr>
+    {% if invoice.amount_paid > 0 %}
+    <tr><td style="color:#155724">Déjà payé</td><td style="color:#155724">– {{ invoice.amount_paid | currency(invoice.currency) }}</td></tr>
+    <tr class="total-row"><td>Solde dû</td><td>{{ (invoice.total - invoice.amount_paid) | currency(invoice.currency) }}</td></tr>
+    {% endif %}
+  </table>
+</div>
+
+{% if invoice.notes %}
+<div class="notes">{{ invoice.notes }}</div>
+{% endif %}
+
+{% if invoice.terms %}
+<div class="terms">{{ invoice.terms }}</div>
+{% endif %}
+
+<!-- QR-facture -->
+{% if qr_payload and invoice.qr_iban %}
+<div class="qr-section">
+  <div class="qr-scissors">✂ ─────────────────────────────────────────────────────</div>
+  <div class="qr-title">Section de paiement — Swiss QR-Bill</div>
+  <div class="qr-layout">
+    <div class="qr-code-box">
+      {% if qr_image_b64 %}
+      <img src="data:image/png;base64,{{ qr_image_b64 }}" alt="Swiss QR Code">
+      {% endif %}
+    </div>
+    <div class="qr-data">
+      <div class="label">Compte / IBAN payable à</div>
+      {{ invoice.qr_iban | iban_format }}<br>
+      {{ company.name }}<br>
+      {{ company.address_line1 }}, {{ company.postal_code }} {{ company.city }}
+
+      {% if invoice.qr_reference %}
+      <div class="label">Référence</div>
+      <div class="qr-ref">{{ invoice.qr_reference | qrr_format }}</div>
+      {% endif %}
+
+      {% if invoice.payment_info %}
+      <div class="label">Message</div>
+      {{ invoice.payment_info }}
+      {% endif %}
+
+      <div class="label">Monnaie / Montant</div>
+      {{ invoice.currency }}&nbsp;&nbsp;<strong>{{ invoice.total | currency(invoice.currency) }}</strong>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="footer">
+  {{ company.name }} — {{ company.address_line1 }}, {{ company.postal_code }} {{ company.city }}
+  {% if company.uid_number %} — N° TVA : {{ company.uid_number }}{% endif %}
+  {% if company.iban %} — IBAN : {{ company.iban | iban_format }}{% endif %}
+  &nbsp;|&nbsp; Page <span class="page-number"></span>
+</div>
+
+</body>
+</html>

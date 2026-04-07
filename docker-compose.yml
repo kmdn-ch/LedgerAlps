@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ledgeralps_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ledgeralps}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-ledgeralps}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ledgeralps}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ledgeralps_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ledgeralps}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-ledgeralps}
+      SECRET_KEY: ${SECRET_KEY:-changeme_in_production_32chars_min}
+      DEBUG: ${DEBUG:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./backend:/app
+      - app_data:/app/data
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: ledgeralps_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+
+  nginx:
+    image: nginx:alpine
+    container_name: ledgeralps_nginx
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/certs:/etc/nginx/certs:ro
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+    driver: local
+  app_data:
+    driver: local
