@@ -10,11 +10,12 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
 func main() {
 	// ── 1. Load and validate configuration ────────────────────────────────────
-	// config.Load() calls os.Exit(1) if JWT_SECRET is weak or too short.
+	// Aborts with os.Exit(1) if JWT_SECRET is weak, empty, or < 32 chars.
 	cfg := config.Load()
 
 	// ── 2. Open database (SQLite WAL by default, PostgreSQL if DSN is set) ────
@@ -41,7 +42,6 @@ func main() {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 	}))
 	r.Use(middleware.SecurityHeaders())
-
 	if cfg.Debug {
 		r.Use(gin.Logger())
 	}
@@ -51,25 +51,48 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "0.2.0-go"})
 	})
 
-	// ── 6. API v1 routes ──────────────────────────────────────────────────────
+	// ── 6. Services ───────────────────────────────────────────────────────────
+	accountingSvc := accounting.New(database, cfg.UsePostgres())
+
+	// ── 7. API v1 routes ──────────────────────────────────────────────────────
 	v1 := r.Group("/api/v1")
 
 	// Auth (public)
-	authHandler := handlers.NewAuthHandler(database, cfg)
-	v1.POST("/auth/login", authHandler.Login)
+	v1.POST("/auth/login", handlers.NewAuthHandler(database, cfg).Login)
 
-	// Protected routes
-	protected := v1.Group("")
-	protected.Use(middleware.RequireAuth(cfg.JWTSecret))
+	// Protected routes — JWT required
+	api := v1.Group("")
+	api.Use(middleware.RequireAuth(cfg.JWTSecret))
 
 	// Journal
-	journalHandler := handlers.NewJournalHandler(database, cfg.UsePostgres())
-	protected.GET("/journal", journalHandler.ListJournal)
+	jh := handlers.NewJournalHandler(database, cfg.UsePostgres())
+	jwh := handlers.NewJournalWriteHandler(accountingSvc)
+	api.GET("/journal", jh.ListJournal)
+	api.POST("/journal", jwh.CreateEntry)
+	api.POST("/journal/:id/post", jwh.PostEntry)
 
-	// ── 7. Start server ───────────────────────────────────────────────────────
+	// Accounts
+	ah := handlers.NewAccountsHandler(database, cfg.UsePostgres())
+	api.GET("/accounts", ah.ListAccounts)
+	api.POST("/accounts", ah.CreateAccount)
+
+	// Contacts
+	ch := handlers.NewContactsHandler(database, cfg.UsePostgres())
+	api.GET("/contacts", ch.ListContacts)
+	api.GET("/contacts/:id", ch.GetContact)
+	api.POST("/contacts", ch.CreateContact)
+	api.PATCH("/contacts/:id", ch.UpdateContact)
+
+	// Invoices
+	ih := handlers.NewInvoicesHandler(database, cfg.UsePostgres())
+	api.GET("/invoices", ih.ListInvoices)
+	api.GET("/invoices/:id", ih.GetInvoice)
+	api.POST("/invoices", ih.CreateInvoice)
+	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
+
+	// ── 8. Start server ───────────────────────────────────────────────────────
 	addr := ":" + cfg.Port
 	fmt.Printf("LedgerAlps: listening on http://localhost%s\n", addr)
-
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("FATAL: server error: %v", err)
 	}
