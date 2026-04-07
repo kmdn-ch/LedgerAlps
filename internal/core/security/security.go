@@ -12,9 +12,17 @@ import (
 
 const bcryptCost = 12
 
-// HashPassword returns a bcrypt hash of the plain-text password.
+// prehash applies SHA-256 to the password before bcrypt.
+// bcrypt silently truncates input at 72 bytes; pre-hashing avoids this so that
+// passwords of any length produce distinct hashes (e.g. "a"*72 ≠ "a"*73).
+func prehash(password string) []byte {
+	h := sha256.Sum256([]byte(password))
+	return h[:]
+}
+
+// HashPassword returns a bcrypt hash of the pre-hashed password.
 func HashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	bytes, err := bcrypt.GenerateFromPassword(prehash(password), bcryptCost)
 	if err != nil {
 		return "", fmt.Errorf("hashing password: %w", err)
 	}
@@ -23,7 +31,7 @@ func HashPassword(password string) (string, error) {
 
 // CheckPassword compares a bcrypt hash with a candidate password.
 func CheckPassword(hash, password string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+	return bcrypt.CompareHashAndPassword([]byte(hash), prehash(password)) == nil
 }
 
 // ─── JWT ──────────────────────────────────────────────────────────────────────
