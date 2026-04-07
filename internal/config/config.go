@@ -32,7 +32,8 @@ type Config struct {
 	JWTRefreshDays     int
 
 	// Application
-	LogLevel string
+	LogLevel       string
+	AllowedOrigins string // comma-separated CORS origins, e.g. "http://localhost:5173"
 }
 
 // Load reads environment variables and validates critical values.
@@ -47,6 +48,7 @@ func Load() *Config {
 		JWTAccessMinutes:   60,
 		JWTRefreshDays:     30,
 		LogLevel:           getEnv("LOG_LEVEL", "INFO"),
+		AllowedOrigins:     getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
 	}
 
 	cfg.validateSecrets()

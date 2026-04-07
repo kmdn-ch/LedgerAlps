@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/api/handlers"
@@ -42,6 +43,7 @@ func main() {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 	}))
 	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.CORS(strings.Split(cfg.AllowedOrigins, ",")...))
 	if cfg.Debug {
 		r.Use(gin.Logger())
 	}

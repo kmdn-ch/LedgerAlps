@@ -48,6 +48,8 @@ export const accountsApi = {
 
 // ─── Journal ──────────────────────────────────────────────────────────────────
 export const journalApi = {
+  list:    (params?: { page?: number; page_size?: number; date_from?: string; date_to?: string; status?: string; reference?: string }) =>
+    api.get('/journal', { params }),
   create:  (data: unknown) => api.post('/journal', data),
   post:    (id: string)    => api.post(`/journal/${id}/post`),
   reverse: (id: string, date: string) =>
@@ -56,7 +58,9 @@ export const journalApi = {
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 export const contactsApi = {
-  list:   (type?: string) => api.get('/contacts', { params: { contact_type: type } }),
+  list:   (params?: { contact_type?: string; page?: number; page_size?: number }) =>
+    api.get('/contacts', { params }),
+  get:    (id: string) => api.get(`/contacts/${id}`),
   create: (data: unknown) => api.post('/contacts', data),
   update: (id: string, data: unknown) => api.patch(`/contacts/${id}`, data),
 }
@@ -67,8 +71,11 @@ export const invoicesApi = {
     api.get('/invoices', { params: { status, document_type: type } }),
   get:          (id: string)                     => api.get(`/invoices/${id}`),
   create:       (data: unknown)                  => api.post('/invoices', data),
+  transition: (id: string, status: string) =>
+    api.post(`/invoices/${id}/transition`, { status }),
+  // Legacy alias kept for Python backend compatibility
   updateStatus: (id: string, status: string, extra?: object) =>
-    api.patch(`/invoices/${id}/status`, { status, ...extra }),
+    api.post(`/invoices/${id}/transition`, { status, ...extra }),
   downloadPDF:  (id: string) =>
     api.get(`/pdf/invoice/${id}`, { responseType: 'blob' }),
 }
