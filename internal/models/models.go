@@ -160,15 +160,16 @@ type InvoiceLine struct {
 }
 
 type AuditLog struct {
-	ID          string    `db:"id"`
-	UserID      string    `db:"user_id"`
-	Action      string    `db:"action"`
-	TableName   string    `db:"table_name"`
-	RecordID    string    `db:"record_id"`
-	BeforeState *string   `db:"before_state"` // JSON, personal data masked
-	AfterState  *string   `db:"after_state"`  // JSON, personal data masked
-	IPAddress   *string   `db:"ip_address"`
-	EntryHash   string    `db:"entry_hash"`   // SHA-256 of this record's fields
-	PrevHash    *string   `db:"prev_hash"`    // SHA-256 of previous AuditLog.EntryHash (CO art. 957a)
-	CreatedAt   time.Time `db:"created_at"`
+	ID             string    `db:"id"`
+	UserID         string    `db:"user_id"`
+	Action         string    `db:"action"`
+	TableName      string    `db:"table_name"`
+	RecordID       string    `db:"record_id"`
+	BeforeState    *string   `db:"before_state"`    // JSON, personal data masked (nLPD)
+	AfterState     *string   `db:"after_state"`     // JSON, personal data masked (nLPD)
+	IPAddress      *string   `db:"ip_address"`
+	EntryHash      string    `db:"entry_hash"`      // SHA-256 of this record's fields
+	PrevHash       *string   `db:"prev_hash"`       // SHA-256 chained from previous entry (CO art. 957a)
+	SequenceNumber int64     `db:"sequence_number"` // Monotonic counter for chain continuity verification
+	CreatedAt      time.Time `db:"created_at"`
 }

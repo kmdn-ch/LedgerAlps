@@ -58,7 +58,8 @@ func (c *Config) UsePostgres() bool {
 	return c.PostgresDSN != ""
 }
 
-// validateSecrets aborts startup if any secret equals a known weak value.
+// validateSecrets aborts startup if any secret equals a known weak value
+// or does not meet minimum length requirements.
 func (c *Config) validateSecrets() {
 	secrets := map[string]string{
 		"JWT_SECRET": c.JWTSecret,
@@ -71,6 +72,13 @@ func (c *Config) validateSecrets() {
 						"Generate a strong secret before starting LedgerAlps.\n", name)
 				os.Exit(1)
 			}
+		}
+		// JWT_SECRET must be at least 32 characters to resist brute-force.
+		if name == "JWT_SECRET" && len(val) < 32 {
+			fmt.Fprintf(os.Stderr,
+				"FATAL: JWT_SECRET must be at least 32 characters (got %d). "+
+					"Generate one with: openssl rand -hex 32\n", len(val))
+			os.Exit(1)
 		}
 	}
 }

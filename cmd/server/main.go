@@ -14,7 +14,7 @@ import (
 
 func main() {
 	// ── 1. Load and validate configuration ────────────────────────────────────
-	// config.Load() calls os.Exit(1) if any secret equals a known weak default.
+	// config.Load() calls os.Exit(1) if JWT_SECRET is weak or too short.
 	cfg := config.Load()
 
 	// ── 2. Open database (SQLite WAL by default, PostgreSQL if DSN is set) ────
@@ -26,7 +26,7 @@ func main() {
 
 	// ── 3. Apply embedded migrations automatically ────────────────────────────
 	fmt.Println("LedgerAlps: applying migrations…")
-	if err := db.Migrate(database); err != nil {
+	if err := db.Migrate(database, cfg.UsePostgres()); err != nil {
 		log.Fatalf("FATAL: migration failed: %v", err)
 	}
 	fmt.Println("LedgerAlps: migrations up-to-date.")
@@ -36,7 +36,10 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
-	r.Use(gin.Recovery())
+	r.Use(gin.CustomRecovery(func(c *gin.Context, err any) {
+		log.Printf("PANIC recovered: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	}))
 	r.Use(middleware.SecurityHeaders())
 
 	if cfg.Debug {
@@ -60,7 +63,7 @@ func main() {
 	protected.Use(middleware.RequireAuth(cfg.JWTSecret))
 
 	// Journal
-	journalHandler := handlers.NewJournalHandler(database)
+	journalHandler := handlers.NewJournalHandler(database, cfg.UsePostgres())
 	protected.GET("/journal", journalHandler.ListJournal)
 
 	// ── 7. Start server ───────────────────────────────────────────────────────

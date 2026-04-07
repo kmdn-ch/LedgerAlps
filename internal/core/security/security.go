@@ -71,17 +71,26 @@ func ParseToken(secret, tokenStr string) (*Claims, error) {
 // ─── Hash chain (CO art. 957a) ────────────────────────────────────────────────
 
 // ComputeEntryHash computes the SHA-256 hash for an audit log entry.
-// The hash covers: userID + action + table + recordID + afterState + createdAt.
-func ComputeEntryHash(userID, action, tableName, recordID, afterState string, createdAt time.Time) string {
-	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s",
-		userID, action, tableName, recordID, afterState, createdAt.UTC().Format(time.RFC3339Nano))
-	sum := sha256.Sum256([]byte(data))
+// Fields are JSON-encoded to prevent separator-injection collisions.
+// Covers: userID, action, tableName, recordID, beforeState, afterState, ipAddress, createdAt.
+func ComputeEntryHash(userID, action, tableName, recordID, beforeState, afterState, ipAddress string, createdAt time.Time) string {
+	// JSON array encoding prevents field-boundary collisions (e.g. "a|b" vs "a" + "|b").
+	fields := fmt.Sprintf(`[%q,%q,%q,%q,%q,%q,%q,%q]`,
+		userID, action, tableName, recordID, beforeState, afterState, ipAddress,
+		createdAt.UTC().Format(time.RFC3339Nano))
+	sum := sha256.Sum256([]byte(fields))
 	return hex.EncodeToString(sum[:])
 }
 
-// ChainHash returns SHA-256(prevHash + entryHash), forming the audit chain.
-// If prevHash is empty (first entry), SHA-256(entryHash) is returned.
+// ChainHash returns the SHA-256 of prevHash concatenated with entryHash (CO art. 957a).
+// For the first entry (prevHash == ""), returns SHA-256(entryHash) without a leading empty string,
+// ensuring the chain anchor is deterministic and collision-free.
 func ChainHash(prevHash, entryHash string) string {
-	sum := sha256.Sum256([]byte(prevHash + entryHash))
+	var sum [32]byte
+	if prevHash == "" {
+		sum = sha256.Sum256([]byte(entryHash))
+	} else {
+		sum = sha256.Sum256([]byte(prevHash + entryHash))
+	}
 	return hex.EncodeToString(sum[:])
 }

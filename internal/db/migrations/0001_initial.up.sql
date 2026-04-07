@@ -51,13 +51,22 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Prevent updates to posted entries at the DB level
-CREATE TRIGGER IF NOT EXISTS trg_journal_entries_immutable
+-- Prevent UPDATE on posted entries (CO art. 957a — immuabilité des écritures validées)
+CREATE TRIGGER IF NOT EXISTS trg_journal_entries_no_update
 BEFORE UPDATE ON journal_entries
 FOR EACH ROW
 WHEN OLD.status = 'posted'
 BEGIN
     SELECT RAISE(ABORT, 'Cannot modify a posted journal entry (CO art. 957a)');
+END;
+
+-- Prevent DELETE on posted entries (CO art. 957a — conservation 10 ans)
+CREATE TRIGGER IF NOT EXISTS trg_journal_entries_no_delete
+BEFORE DELETE ON journal_entries
+FOR EACH ROW
+WHEN OLD.status = 'posted'
+BEGIN
+    SELECT RAISE(ABORT, 'Cannot delete a posted journal entry (CO art. 957a)');
 END;
 
 CREATE TABLE IF NOT EXISTS journal_lines (
@@ -136,20 +145,26 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     before_state TEXT,   -- JSON, personal data masked (nLPD)
     after_state  TEXT,   -- JSON, personal data masked (nLPD)
     ip_address   TEXT,
-    entry_hash   TEXT NOT NULL,   -- SHA-256 of this record
-    prev_hash    TEXT,            -- SHA-256 chained from previous entry (CO art. 957a)
-    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    entry_hash       TEXT NOT NULL,   -- SHA-256 of this record
+    prev_hash        TEXT,            -- SHA-256 chained from previous entry (CO art. 957a)
+    sequence_number  INTEGER NOT NULL, -- Monotonic counter for chain continuity verification
+    created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ─── Indexes ──────────────────────────────────────────────────────────────────
 
-CREATE INDEX IF NOT EXISTS idx_journal_entries_date     ON journal_entries(date);
-CREATE INDEX IF NOT EXISTS idx_journal_entries_status   ON journal_entries(status);
-CREATE INDEX IF NOT EXISTS idx_journal_entries_ref      ON journal_entries(reference);
-CREATE INDEX IF NOT EXISTS idx_journal_lines_entry      ON journal_lines(entry_id);
-CREATE INDEX IF NOT EXISTS idx_journal_lines_account    ON journal_lines(account_id);
-CREATE INDEX IF NOT EXISTS idx_invoices_contact         ON invoices(contact_id);
-CREATE INDEX IF NOT EXISTS idx_invoices_status          ON invoices(status);
-CREATE INDEX IF NOT EXISTS idx_invoices_issue_date      ON invoices(issue_date);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_table_record  ON audit_logs(table_name, record_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_user          ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_date        ON journal_entries(date);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_status      ON journal_entries(status);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_ref         ON journal_entries(reference);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_date_status ON journal_entries(date, status);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_fiscal_year ON journal_entries(fiscal_year_id);
+CREATE INDEX IF NOT EXISTS idx_journal_lines_entry         ON journal_lines(entry_id);
+CREATE INDEX IF NOT EXISTS idx_journal_lines_account       ON journal_lines(account_id);
+CREATE INDEX IF NOT EXISTS idx_journal_lines_entry_account ON journal_lines(entry_id, account_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_contact            ON invoices(contact_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_status             ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_invoices_issue_date         ON invoices(issue_date);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_table_record     ON audit_logs(table_name, record_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user             ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_sequence         ON audit_logs(sequence_number);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at       ON audit_logs(created_at DESC);

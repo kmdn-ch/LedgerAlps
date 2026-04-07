@@ -1,21 +1,24 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
 )
 
 type JournalHandler struct {
-	db *sql.DB
+	db          *sql.DB
+	usePostgres bool
 }
 
-func NewJournalHandler(db *sql.DB) *JournalHandler {
-	return &JournalHandler{db: db}
+func NewJournalHandler(database *sql.DB, usePostgres bool) *JournalHandler {
+	return &JournalHandler{db: database, usePostgres: usePostgres}
 }
 
 // ListJournal godoc
@@ -35,7 +38,6 @@ func (h *JournalHandler) ListJournal(c *gin.Context) {
 	status := c.Query("status")
 	reference := c.Query("reference")
 
-	// Build dynamic WHERE clause
 	where := " WHERE 1=1"
 	args := []any{}
 
@@ -64,18 +66,26 @@ func (h *JournalHandler) ListJournal(c *gin.Context) {
 		args = append(args, "%"+reference+"%")
 	}
 
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
 	// Count total
+	countQuery := db.Rebind("SELECT COUNT(*) FROM journal_entries"+where, h.usePostgres)
 	var total int
-	if err := h.db.QueryRowContext(c, "SELECT COUNT(*) FROM journal_entries"+where, args...).Scan(&total); err != nil {
+	if err := h.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
 
+	// Fetch page
+	listQuery := db.Rebind(
+		"SELECT id, reference, date, description, status, is_reversal, created_at, updated_at"+
+			" FROM journal_entries"+where+
+			" ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?",
+		h.usePostgres,
+	)
 	offset := (page - 1) * pageSize
-	query := "SELECT id, reference, date, description, status, is_reversal, created_at, updated_at" +
-		" FROM journal_entries" + where +
-		" ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?"
-	rows, err := h.db.QueryContext(c, query, append(args, pageSize, offset)...)
+	rows, err := h.db.QueryContext(ctx, listQuery, append(args, pageSize, offset)...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
@@ -92,6 +102,10 @@ func (h *JournalHandler) ListJournal(c *gin.Context) {
 		}
 		e.IsReversal = isReversal == 1
 		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "rows error"})
+		return
 	}
 
 	pages := (total + pageSize - 1) / pageSize

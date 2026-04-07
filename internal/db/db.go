@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -8,51 +9,69 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/kmdn-ch/ledgeralps/internal/config"
-	_ "modernc.org/sqlite"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "modernc.org/sqlite"
 )
 
 //go:embed migrations
 var migrationsFS embed.FS
 
-// Open returns an *sql.DB connected to either SQLite or PostgreSQL depending
-// on the configuration. SQLite is opened in WAL mode for concurrency.
+// Open returns an *sql.DB connected to SQLite (WAL mode) or PostgreSQL depending
+// on configuration. Connection pool defaults are set for typical SME workloads.
 func Open(cfg *config.Config) (*sql.DB, error) {
-	var (
-		driver string
-		dsn    string
-	)
+	var driver, dsn string
 
 	if cfg.UsePostgres() {
 		driver = "pgx"
 		dsn = cfg.PostgresDSN
 	} else {
 		driver = "sqlite"
-		// WAL mode + foreign keys enabled via connection string
+		// WAL mode + foreign keys enforced via DSN parameters (modernc.org/sqlite)
 		dsn = fmt.Sprintf("file:%s?_journal_mode=WAL&_foreign_keys=on", cfg.SQLitePath)
 	}
 
-	db, err := sql.Open(driver, dsn)
+	database, err := sql.Open(driver, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("opening database (%s): %w", driver, err)
 	}
-	if err := db.Ping(); err != nil {
+
+	// Connection pool tuning
+	if cfg.UsePostgres() {
+		database.SetMaxOpenConns(50)
+		database.SetMaxIdleConns(10)
+		database.SetConnMaxLifetime(5 * time.Minute)
+	} else {
+		// SQLite WAL: concurrent readers, serialised writers
+		database.SetMaxOpenConns(25)
+		database.SetMaxIdleConns(5)
+		database.SetConnMaxLifetime(10 * time.Minute)
+	}
+
+	// Ping with timeout to catch misconfigured DSNs at startup
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := database.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("pinging database (%s): %w", driver, err)
 	}
-	return db, nil
+
+	return database, nil
 }
 
 // Migrate applies all pending SQL migration files embedded in the binary.
+// Each migration is applied atomically in a transaction (DDL is transactional
+// in both SQLite and PostgreSQL).
 // Files must follow the naming convention: NNNN_description.up.sql
-func Migrate(db *sql.DB) error {
-	// Ensure the migrations tracking table exists
-	if _, err := db.Exec(`
+func Migrate(database *sql.DB, usePostgres bool) error {
+	// Ensure the migrations tracking table exists (outside the per-migration tx)
+	createTable := `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
-			version TEXT PRIMARY KEY,
+			version    TEXT PRIMARY KEY,
 			applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)`); err != nil {
+		)`
+	if _, err := database.Exec(createTable); err != nil {
 		return fmt.Errorf("creating schema_migrations: %w", err)
 	}
 
@@ -61,7 +80,6 @@ func Migrate(db *sql.DB) error {
 		return fmt.Errorf("reading embedded migrations: %w", err)
 	}
 
-	// Filter and sort .up.sql files
 	var files []string
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".up.sql") {
@@ -73,13 +91,11 @@ func Migrate(db *sql.DB) error {
 	for _, name := range files {
 		version := strings.TrimSuffix(name, ".up.sql")
 
-		// Skip already-applied migrations
+		// Check if already applied (use correct placeholder for DB dialect)
+		checkQ := Rebind("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", usePostgres)
 		var count int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = ?`, version).Scan(&count); err != nil {
-			// PostgreSQL uses $1 placeholder — try again
-			if err2 := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = $1`, version).Scan(&count); err2 != nil {
-				return fmt.Errorf("checking migration %s: %w", version, err2)
-			}
+		if err := database.QueryRow(checkQ, version).Scan(&count); err != nil {
+			return fmt.Errorf("checking migration %s: %w", version, err)
 		}
 		if count > 0 {
 			continue
@@ -90,18 +106,28 @@ func Migrate(db *sql.DB) error {
 			return fmt.Errorf("reading migration %s: %w", name, err)
 		}
 
-		if _, err := db.Exec(string(content)); err != nil {
+		// Apply migration atomically: DDL + schema_migrations record in one transaction
+		tx, err := database.Begin()
+		if err != nil {
+			return fmt.Errorf("beginning transaction for migration %s: %w", name, err)
+		}
+
+		if _, err := tx.Exec(string(content)); err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("applying migration %s: %w", name, err)
 		}
 
-		if _, err := db.Exec(`INSERT INTO schema_migrations(version) VALUES(?)`, version); err != nil {
-			// PostgreSQL
-			if _, err2 := db.Exec(`INSERT INTO schema_migrations(version) VALUES($1)`, version); err2 != nil {
-				return fmt.Errorf("recording migration %s: %w", version, err2)
-			}
+		insertQ := Rebind("INSERT INTO schema_migrations(version) VALUES(?)", usePostgres)
+		if _, err := tx.Exec(insertQ, version); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("recording migration %s: %w", version, err)
 		}
 
-		fmt.Printf("  ✓ applied migration: %s\n", name)
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("committing migration %s: %w", name, err)
+		}
+
+		fmt.Printf("  [OK] applied migration: %s\n", name)
 	}
 	return nil
 }

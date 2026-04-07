@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"time"
@@ -9,6 +10,11 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
 )
+
+// dummyHash is a pre-computed bcrypt hash used to equalise timing when a user
+// is not found — prevents email enumeration via response-time analysis.
+// Cost 12 matches production cost so the dummy comparison burns the same ~100ms.
+var dummyHash, _ = security.HashPassword("ledgeralps-dummy-password-for-timing-attack-prevention-do-not-use")
 
 type AuthHandler struct {
 	db  *sql.DB
@@ -33,22 +39,34 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
 	var (
 		userID       string
 		passwordHash string
 		isAdmin      bool
 		isActive     bool
 	)
-	err := h.db.QueryRowContext(c, `
+	err := h.db.QueryRowContext(ctx, `
 		SELECT id, password_hash, is_admin, is_active
 		FROM users WHERE email = ?`, req.Email).
 		Scan(&userID, &passwordHash, &isAdmin, &isActive)
-	if err == sql.ErrNoRows || (err == nil && !security.CheckPassword(passwordHash, req.Password)) {
+
+	if err == sql.ErrNoRows {
+		// User not found: run bcrypt on dummy hash to equalise timing with the
+		// "wrong password" branch (~100ms), preventing email enumeration attacks.
+		security.CheckPassword(dummyHash, req.Password)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	if !security.CheckPassword(passwordHash, req.Password) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
 	if !isActive {
