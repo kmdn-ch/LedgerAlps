@@ -6,7 +6,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"path/filepath"
+	"path" // always forward-slash — required by embed.FS on all platforms
 	"sort"
 	"strings"
 	"time"
@@ -101,7 +101,7 @@ func Migrate(database *sql.DB, usePostgres bool) error {
 			continue
 		}
 
-		content, err := migrationsFS.ReadFile(filepath.Join("migrations", name))
+		content, err := migrationsFS.ReadFile(path.Join("migrations", name))
 		if err != nil {
 			return fmt.Errorf("reading migration %s: %w", name, err)
 		}

@@ -96,6 +96,7 @@ func main() {
 	ih := handlers.NewInvoicesHandler(database, cfg.UsePostgres(), accountingSvc)
 	api.GET("/invoices", ih.ListInvoices)
 	api.GET("/invoices/:id", ih.GetInvoice)
+	api.GET("/invoices/:id/pdf", ih.GetInvoicePDF)
 	api.POST("/invoices", ih.CreateInvoice)
 	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
 
