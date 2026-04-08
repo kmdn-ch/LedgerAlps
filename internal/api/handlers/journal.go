@@ -41,6 +41,12 @@ func (h *JournalHandler) ListJournal(c *gin.Context) {
 	where := " WHERE 1=1"
 	args := []any{}
 
+	// Data isolation: non-admin users only see their own entries (nLPD art. 6)
+	if uid := currentUserID(c); uid != "" && !isAdmin(c) {
+		where += " AND created_by_id = ?"
+		args = append(args, uid)
+	}
+
 	if dateFrom != "" {
 		if _, err := time.Parse("2006-01-02", dateFrom); err != nil {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "date_from must be YYYY-MM-DD"})

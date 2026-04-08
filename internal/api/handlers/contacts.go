@@ -26,10 +26,18 @@ func (h *ContactsHandler) ListContacts(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
+	// Data isolation: non-admin users see only active contacts (shared resource — contacts
+	// are company-wide, not per-user, so all authenticated users may list them).
+	// Admins additionally see inactive contacts via ?include_inactive=true.
+	includeInactive := c.Query("include_inactive") == "true" && isAdmin(c)
+	activeFilter := " WHERE is_active = 1"
+	if includeInactive {
+		activeFilter = " WHERE 1=1"
+	}
 	q := db.Rebind(`
 		SELECT id, contact_type, name, email, phone, address, city, postal_code, country,
 		       iban, qr_iban, vat_number, payment_term_days, is_active, created_at, updated_at
-		FROM contacts WHERE is_active = 1 ORDER BY name`, h.usePostgres)
+		FROM contacts`+activeFilter+` ORDER BY name`, h.usePostgres)
 
 	rows, err := h.db.QueryContext(ctx, q)
 	if err != nil {

@@ -42,6 +42,13 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 	status := c.Query("status")
 	where := " WHERE 1=1"
 	args := []any{}
+
+	// Data isolation: non-admin users only see their own invoices (nLPD art. 6)
+	if uid := currentUserID(c); uid != "" && !isAdmin(c) {
+		where += " AND created_by_id = ?"
+		args = append(args, uid)
+	}
+
 	if status != "" {
 		where += " AND status = ?"
 		args = append(args, status)

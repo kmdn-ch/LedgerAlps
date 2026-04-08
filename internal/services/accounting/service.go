@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
@@ -175,22 +176,32 @@ func (s *Service) PostEntry(ctx context.Context, userID, entryID, ipAddress stri
 		return fmt.Errorf("update entry: %w", err)
 	}
 
-	// 6. Write audit log record with CO art. 957a hash chain
-	afterJSON, _ := json.Marshal(map[string]any{
+	// 6. Write audit log record with CO art. 957a hash chain.
+	// Personal data fields are masked (nLPD art. 6) before persistence.
+	rawAfterJSON, _ := json.Marshal(map[string]any{
 		"entry_id": entryID,
 		"status":   "posted",
 		"debit":    totalDebit,
 		"credit":   totalCredit,
 	})
+	maskedAfterJSON := maskPersonalData(string(rawAfterJSON))
+	// before_state is empty for a post action; mask for safety if ever non-empty.
+	maskedBeforeJSON := maskPersonalData("")
+
 	insertAudit := db.Rebind(`
-		INSERT INTO audit_logs (id, user_id, action, table_name, record_id, after_state, ip_address, entry_hash, prev_hash, sequence_number)
-		VALUES (?, ?, 'post', 'journal_entries', ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+		INSERT INTO audit_logs (id, user_id, action, table_name, record_id, before_state, after_state, ip_address, entry_hash, prev_hash, sequence_number)
+		VALUES (?, ?, 'post', 'journal_entries', ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
 	var prevHashPtr *string
 	if prevHash != "" {
 		prevHashPtr = &prevHash
 	}
+	// Store before_state as NULL when empty (avoids persisting empty string).
+	var beforeStatePtr *string
+	if maskedBeforeJSON != "" {
+		beforeStatePtr = &maskedBeforeJSON
+	}
 	if _, err := tx.ExecContext(ctx, insertAudit,
-		db.NewID(), userID, entryID, string(afterJSON), ipAddress,
+		db.NewID(), userID, entryID, beforeStatePtr, maskedAfterJSON, ipAddress,
 		entryHash, prevHashPtr, nextSeq); err != nil {
 		return fmt.Errorf("insert audit log: %w", err)
 	}
@@ -266,6 +277,22 @@ func (s *Service) VerifyEntryIntegrity(ctx context.Context, entryID string) erro
 	}
 
 	return nil
+}
+
+// ─── nLPD data minimisation ───────────────────────────────────────────────────
+
+// sensitiveFieldRe matches JSON key-value pairs whose keys are known personal-data
+// fields (nLPD art. 6 — minimisation des données dans les logs).
+// It captures: "fieldname":"<value>" or "fieldname": "<value>" (with optional space).
+var sensitiveFieldRe = regexp.MustCompile(
+	`("(?:email|name|address|phone|iban|qr_iban|password_hash)"\s*:\s*)"[^"]*"`,
+)
+
+// maskPersonalData replaces the values of sensitive fields with "[MASKED]"
+// in a JSON string (nLPD art. 6 — minimisation des données dans les logs).
+// Masked fields: email, name, address, phone, iban, qr_iban, password_hash.
+func maskPersonalData(jsonData string) string {
+	return sensitiveFieldRe.ReplaceAllString(jsonData, `${1}"[MASKED]"`)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -16,24 +16,23 @@ import (
 
 func main() {
 	// ── 1. Load and validate configuration ────────────────────────────────────
-	// Aborts with os.Exit(1) if JWT_SECRET is weak, empty, or < 32 chars.
 	cfg := config.Load()
 
-	// ── 2. Open database (SQLite WAL by default, PostgreSQL if DSN is set) ────
+	// ── 2. Open database ──────────────────────────────────────────────────────
 	database, err := db.Open(cfg)
 	if err != nil {
 		log.Fatalf("FATAL: cannot open database: %v", err)
 	}
 	defer database.Close()
 
-	// ── 3. Apply embedded migrations automatically ────────────────────────────
+	// ── 3. Migrations auto-embarquées ─────────────────────────────────────────
 	fmt.Println("LedgerAlps: applying migrations…")
 	if err := db.Migrate(database, cfg.UsePostgres()); err != nil {
 		log.Fatalf("FATAL: migration failed: %v", err)
 	}
 	fmt.Println("LedgerAlps: migrations up-to-date.")
 
-	// ── 4. Configure Gin ──────────────────────────────────────────────────────
+	// ── 4. Gin ────────────────────────────────────────────────────────────────
 	if !cfg.Debug {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -49,7 +48,7 @@ func main() {
 		r.Use(gin.Logger())
 	}
 
-	// ── 5. Health check (unauthenticated) ─────────────────────────────────────
+	// ── 5. Health ─────────────────────────────────────────────────────────────
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "0.2.0-go"})
 	})
@@ -57,11 +56,14 @@ func main() {
 	// ── 6. Services ───────────────────────────────────────────────────────────
 	accountingSvc := accounting.New(database, cfg.UsePostgres())
 
-	// ── 7. API v1 routes ──────────────────────────────────────────────────────
+	// ── 7. API v1 ─────────────────────────────────────────────────────────────
 	v1 := r.Group("/api/v1")
 
-	// Auth (public)
-	v1.POST("/auth/login", handlers.NewAuthHandler(database, cfg).Login)
+	// Auth — public endpoints
+	authHandler := handlers.NewAuthHandler(database, cfg)
+	v1.POST("/auth/login", authHandler.Login)
+	v1.POST("/auth/refresh", authHandler.Refresh)
+	v1.POST("/auth/logout", authHandler.Logout)
 
 	// Protected routes — JWT required
 	api := v1.Group("")
@@ -77,9 +79,9 @@ func main() {
 	// Accounts
 	ah := handlers.NewAccountsHandler(database, cfg.UsePostgres())
 	api.GET("/accounts", ah.ListAccounts)
-	api.POST("/accounts", ah.CreateAccount)
-	api.GET("/accounts/trial-balance", ah.TrialBalance)
+	api.GET("/accounts/trial-balance", ah.TrialBalance)     // BEFORE /:code to avoid shadowing
 	api.GET("/accounts/:code/balance", ah.AccountBalance)
+	api.POST("/accounts", ah.CreateAccount)
 
 	// Contacts
 	ch := handlers.NewContactsHandler(database, cfg.UsePostgres())
@@ -95,7 +97,13 @@ func main() {
 	api.POST("/invoices", ih.CreateInvoice)
 	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
 
-	// ── 8. Start server ───────────────────────────────────────────────────────
+	// Fiscal years + VAT declaration (admin)
+	fyh := handlers.NewFiscalYearHandler(database, cfg.UsePostgres())
+	api.GET("/fiscal-years", fyh.ListFiscalYears)
+	api.POST("/fiscal-years/:id/close", fyh.CloseFiscalYear)
+	api.POST("/vat/declaration", fyh.GenerateVATDeclaration)
+
+	// ── 8. Start ──────────────────────────────────────────────────────────────
 	addr := ":" + cfg.Port
 	fmt.Printf("LedgerAlps: listening on http://localhost%s\n", addr)
 	if err := r.Run(addr); err != nil {

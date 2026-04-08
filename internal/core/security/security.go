@@ -1,6 +1,7 @@
 package security
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -40,11 +41,26 @@ type Claims struct {
 	jwt.RegisteredClaims
 	UserID  string `json:"sub"`
 	IsAdmin bool   `json:"is_admin"`
+	JTI     string `json:"jti"`
 	// NOTE: email is intentionally excluded from the JWT payload (nLPD data minimisation)
 }
 
+// newJTI generates a cryptographically random hex-encoded 16-byte token ID.
+func newJTI() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating jti: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
 // GenerateAccessToken creates a short-lived access JWT (default 60 min).
+// A unique jti (JWT ID) is embedded to allow per-token revocation tracking.
 func GenerateAccessToken(secret, userID string, isAdmin bool, ttl time.Duration) (string, error) {
+	jti, err := newJTI()
+	if err != nil {
+		return "", err
+	}
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
@@ -53,9 +69,37 @@ func GenerateAccessToken(secret, userID string, isAdmin bool, ttl time.Duration)
 		},
 		UserID:  userID,
 		IsAdmin: isAdmin,
+		JTI:     jti,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
+}
+
+// GenerateRefreshToken creates a long-lived refresh JWT.
+// Returns the signed token string and the jti so the caller can store it in DB
+// for revocation tracking (see refresh_tokens table).
+func GenerateRefreshToken(secret, userID string, isAdmin bool, ttl time.Duration) (tokenString, jti string, err error) {
+	jti, err = newJTI()
+	if err != nil {
+		return "", "", err
+	}
+	now := time.Now()
+	claims := Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Subject:   userID,
+		},
+		UserID:  userID,
+		IsAdmin: isAdmin,
+		JTI:     jti,
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err = token.SignedString([]byte(secret))
+	if err != nil {
+		return "", "", fmt.Errorf("signing refresh token: %w", err)
+	}
+	return tokenString, jti, nil
 }
 
 // ParseToken validates a JWT and returns its claims.
