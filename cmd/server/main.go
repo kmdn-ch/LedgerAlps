@@ -122,6 +122,14 @@ func main() {
 	api.POST("/payments/export", isoH.ExportPain001)
 	api.POST("/bank-statements/import", isoH.ImportCamt053)
 
+	// Legal archive export — CO art. 958f (10-year retention)
+	expH := handlers.NewExportHandler(database, cfg.UsePostgres())
+	api.GET("/exports/legal-archive", expH.LegalArchive)
+
+	// Stats dashboard
+	statsH := handlers.NewStatsHandler(database, cfg.UsePostgres())
+	api.GET("/stats", statsH.GetStats)
+
 	// ── 8. Start ──────────────────────────────────────────────────────────────
 	addr := ":" + cfg.Port
 	fmt.Printf("LedgerAlps: listening on http://localhost%s\n", addr)
