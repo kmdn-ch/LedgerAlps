@@ -1,7 +1,7 @@
 // LedgerAlps — Détail d'une facture
 
 import { useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Download, Eye, EyeOff, Send, CheckCircle,
@@ -55,8 +55,8 @@ export function InvoiceDetailPage() {
   })
 
   const transition = useMutation({
-    mutationFn: ({ status, paymentDate }: { status: DocumentStatus; paymentDate?: string }) =>
-      invoicesApi.updateStatus(invoiceId!, status, paymentDate ? { payment_date: paymentDate } : undefined),
+    mutationFn: ({ status }: { status: DocumentStatus; paymentDate?: string }) =>
+      invoicesApi.updateStatus(invoiceId!, status),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoice', invoiceId] })
       qc.invalidateQueries({ queryKey: ['invoices'] })

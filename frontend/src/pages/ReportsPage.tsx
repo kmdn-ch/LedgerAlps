@@ -5,7 +5,7 @@ import {
   Download, Archive, Upload, FileSpreadsheet,
   BookOpen, BarChart3, Calendar, AlertCircle,
 } from 'lucide-react'
-import { isoApi, downloadBlob } from '@/api/client'
+import { isoApi } from '@/api/client'
 import { PageHeader, SectionTitle, ErrorBanner } from '@/components/ui'
 
 export function ReportsPage() {
@@ -18,8 +18,6 @@ export function ReportsPage() {
   const [loading,  setLoading]  = useState<string | null>(null)
   const [error,    setError]    = useState('')
   const [camtResult, setCamtResult] = useState<null | { count: number; entries: unknown[] }>(null)
-
-  const fmt = (d: string) => d.replace(/-/g, '')
 
   // ── camt.053 import ────────────────────────────────────────────────────────
   const handleCamtUpload = async (file: File) => {

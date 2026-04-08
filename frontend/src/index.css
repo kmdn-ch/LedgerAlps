@@ -105,6 +105,6 @@
     @apply card flex flex-col gap-1 px-6 py-5;
   }
   .stat-label { @apply text-xs font-medium text-alpine-500 uppercase tracking-wide; }
-  .stat-value { @apply text-2xl font-display font-700 text-alpine-900 tabular-nums; }
+  .stat-value { @apply text-2xl font-display font-bold text-alpine-900 tabular-nums; }
   .stat-delta { @apply text-xs text-alpine-500; }
 }

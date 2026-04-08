@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useState } from 'react'
 import { Save, Building2, CreditCard, FileText, Shield } from 'lucide-react'
-import { PageHeader, SectionTitle } from '@/components/ui'
+import { PageHeader } from '@/components/ui'
 
 const schema = z.object({
   // Identité

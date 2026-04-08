@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, ArrowLeft } from 'lucide-react'
+import { Plus, Trash2, ArrowLeft, Save } from 'lucide-react'
 import { invoicesApi, contactsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
 import { formatCHF } from '@/utils'
@@ -247,12 +247,6 @@ export function NewInvoicePage() {
               <textarea rows={3} className="input resize-none"
                 placeholder="Paiement à 30 jours. IBAN : CH…"
                 {...register('terms')} />
-            </div>
-            <div className="col-span-2">
-              <label className="label">Message de paiement (max 140 car.)</label>
-              <input className="input" maxLength={140}
-                placeholder={`Facture ${new Date().getFullYear()}-XXXX`}
-                {...register('payment_info')} />
             </div>
           </div>
         </div>

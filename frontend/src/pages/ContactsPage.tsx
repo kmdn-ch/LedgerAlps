@@ -15,7 +15,7 @@ export function ContactsPage() {
 
   const { data: contacts = [], isLoading } = useQuery<Contact[]>({
     queryKey: ['contacts', typeFilter],
-    queryFn:  () => contactsApi.list(typeFilter || undefined).then(r => r.data),
+    queryFn:  () => contactsApi.list(typeFilter ? { contact_type: typeFilter } : undefined).then(r => r.data),
   })
 
   const filtered = contacts.filter(c =>

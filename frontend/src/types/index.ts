@@ -134,14 +134,21 @@ export interface InvoiceLine {
 
 export interface Invoice {
   id: string
+  invoice_number: string
+  /** @deprecated use invoice_number */
   number: string
   document_type: DocumentType
   status: DocumentStatus
   contact_id: string
   issue_date: string
   due_date: string | null
+  currency: string
+  subtotal_amount: number
+  /** @deprecated use subtotal_amount */
   subtotal: string
-  vat_amount: string
+  vat_amount: number
+  total_amount: number
+  /** @deprecated use total_amount */
   total: string
   amount_paid: string
   qr_iban: string | null
