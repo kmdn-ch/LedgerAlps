@@ -5,11 +5,11 @@
 
 ---
 
-## État actuel : Sprints 1 + 2 + 3 + 4 + 5 + 6 TERMINÉS ✅
+## État actuel : Sprints 1–7 TERMINÉS ✅ | PR#1 MERGÉE ✅
 
-Branche active : `go-rewrite` | PR ouverte : **kmdn-ch/LedgerAlps#1** (go-rewrite → main)
+Branche : `go-rewrite` mergée dans `main` — **kmdn-ch/LedgerAlps#1 MERGED** (2026-04-08)
 
-Dernier commit : `f263885` — Sprint 6 complet (ISO 20022 + json tags + frontend alignment)
+Dernier commit : `46fc8d6` — Sprint 7 (Export ZIP légal + Dashboard stats)
 
 ---
 
@@ -26,7 +26,7 @@ Dernier commit : `f263885` — Sprint 6 complet (ISO 20022 + json tags + fronten
 
 ---
 
-## API complète (21 endpoints)
+## API complète (26 endpoints)
 
 ```
 POST /auth/login · /auth/refresh · /auth/logout · /auth/register · /auth/bootstrap
@@ -46,6 +46,8 @@ GET  /fiscal-years                POST /fiscal-years/:id/close
 POST /vat/declaration
 POST /payments/export           (pain.001.001.09 XML)
 POST /bank-statements/import    (camt.053.001.08 → JSON)
+GET  /stats                     (dashboard: invoices, journal, accounts, contacts, fiscal year)
+GET  /exports/legal-archive     (ZIP CO art. 958f: accounts+journal+invoices+contacts+fiscal_years)
 ```
 
 ---
@@ -96,9 +98,11 @@ internal/
 - [x] Frontend aligné Go backend (json tags, API client, auth store, pages) ✅ Sprint 6
 - [ ] Merger PR#1 dans main quand validé
 
-### Priorité basse
-- [ ] Export ZIP légal annuel (CO art. 958f, conservation 10 ans)
-- [ ] Dashboard stats endpoint
+### Priorité basse — TOUTES TERMINÉES ✅
+- [x] Export ZIP légal annuel (CO art. 958f, conservation 10 ans) ✅ Sprint 7
+- [x] Dashboard stats endpoint ✅ Sprint 7
+- [ ] Frontend: vérifier `npm run build` (TypeScript) — lancer `! npm run build` côté Windows
+- [ ] PR#1 mergée ✅ (2026-04-08)
 
 ---
 
@@ -110,6 +114,7 @@ internal/
 ### Sprint 4 ✅ — Auth completeness (/auth/register, /auth/bootstrap, login persiste refresh_token)
 ### Sprint 5 ✅ — QR-bill SPC 0200, PDF invoices (A4 + QR payment slip), 10 tests intégration
 ### Sprint 6 ✅ — ISO 20022 (pain.001 + camt.053), json tags models, frontend alignment complet
+### Sprint 7 ✅ — Export ZIP légal CO art. 958f, Dashboard stats (GET /stats), PR#1 mergée → main
 
 ---
 
