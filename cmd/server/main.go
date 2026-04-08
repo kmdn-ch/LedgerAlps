@@ -64,6 +64,8 @@ func main() {
 	v1.POST("/auth/login", authHandler.Login)
 	v1.POST("/auth/refresh", authHandler.Refresh)
 	v1.POST("/auth/logout", authHandler.Logout)
+	v1.POST("/auth/register", authHandler.Register)
+	v1.POST("/auth/bootstrap", authHandler.Bootstrap) // one-shot: creates first admin user
 
 	// Protected routes — JWT required
 	api := v1.Group("")

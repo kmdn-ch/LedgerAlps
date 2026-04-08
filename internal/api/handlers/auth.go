@@ -13,6 +13,13 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
 
+// registerRequest is used for POST /auth/register and POST /auth/bootstrap.
+type registerRequest struct {
+	Email    string `json:"email"    binding:"required,email"`
+	Name     string `json:"name"     binding:"required,min=1,max=255"`
+	Password string `json:"password" binding:"required,min=8"`
+}
+
 // dummyHash is a pre-computed bcrypt hash used to equalise timing when a user
 // is not found — prevents email enumeration via response-time analysis.
 // Cost 12 matches production cost so the dummy comparison burns the same ~100ms.
@@ -76,17 +83,36 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	ttl := time.Duration(h.cfg.JWTAccessMinutes) * time.Minute
-	token, err := security.GenerateAccessToken(h.cfg.JWTSecret, userID, isAdmin, ttl)
+	accessTTL := time.Duration(h.cfg.JWTAccessMinutes) * time.Minute
+	accessToken, err := security.GenerateAccessToken(h.cfg.JWTSecret, userID, isAdmin, accessTTL)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate access token"})
+		return
+	}
+
+	refreshTTL := time.Duration(h.cfg.JWTRefreshDays) * 24 * time.Hour
+	refreshToken, jti, err := security.GenerateRefreshToken(h.cfg.JWTSecret, userID, isAdmin, refreshTTL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate refresh token"})
+		return
+	}
+
+	// Persist refresh token so Refresh/Logout endpoints can validate/revoke it.
+	insQ := db.Rebind(`
+		INSERT INTO refresh_tokens (id, user_id, jti, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?)`, h.cfg.UsePostgres())
+	if _, err := h.db.ExecContext(ctx, insQ,
+		db.NewID(), userID, jti,
+		time.Now().UTC().Add(refreshTTL), time.Now().UTC()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"access_token": token,
-		"token_type":   "bearer",
-		"expires_in":   int(ttl.Seconds()),
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"token_type":    "bearer",
+		"expires_in":    int(accessTTL.Seconds()),
 	})
 }
 
@@ -176,6 +202,100 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// Register godoc
+// POST /api/v1/auth/register
+// Creates a new non-admin user. Open endpoint — no auth required.
+func (h *AuthHandler) Register(c *gin.Context) {
+	var req registerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	hash, err := security.HashPassword(req.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	id := db.NewID()
+	now := time.Now().UTC()
+	q := db.Rebind(`
+		INSERT INTO users (id, email, name, password_hash, is_admin, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, 0, 1, ?, ?)`, h.cfg.UsePostgres())
+	if _, err := h.db.ExecContext(ctx, q, id, req.Email, req.Name, hash, now, now); err != nil {
+		// UNIQUE constraint on email
+		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
+			c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":         id,
+		"email":      req.Email,
+		"name":       req.Name,
+		"is_admin":   false,
+		"created_at": now,
+	})
+}
+
+// Bootstrap godoc
+// POST /api/v1/auth/bootstrap
+// Creates the first admin user. Returns 409 if any user already exists.
+// This endpoint is intentionally open (no auth) but only works once.
+func (h *AuthHandler) Bootstrap(c *gin.Context) {
+	var req registerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	// Refuse if any user already exists — bootstrap is one-shot.
+	var count int
+	if err := h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	if count > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "system already bootstrapped — use /auth/register or the admin panel"})
+		return
+	}
+
+	hash, err := security.HashPassword(req.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+		return
+	}
+
+	id := db.NewID()
+	now := time.Now().UTC()
+	q := db.Rebind(`
+		INSERT INTO users (id, email, name, password_hash, is_admin, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, 1, 1, ?, ?)`, h.cfg.UsePostgres())
+	if _, err := h.db.ExecContext(ctx, q, id, req.Email, req.Name, hash, now, now); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":         id,
+		"email":      req.Email,
+		"name":       req.Name,
+		"is_admin":   true,
+		"created_at": now,
+		"message":    "Admin user created. This endpoint is now disabled.",
+	})
 }
 
 // bearerToken extracts the token from an "Authorization: Bearer <token>" header.

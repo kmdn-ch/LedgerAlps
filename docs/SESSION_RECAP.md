@@ -5,7 +5,7 @@
 
 ---
 
-## État actuel : Sprints 1 + 2 + 3 TERMINÉS ✅
+## État actuel : Sprints 1 + 2 + 3 + 4 TERMINÉS ✅
 
 Branche active : `go-rewrite` | PR ouverte : **kmdn-ch/LedgerAlps#1** (go-rewrite → main)
 
@@ -29,7 +29,7 @@ Dernier commit : `9e10bb9` — Sprint 3 complet
 ## API complète (18 endpoints)
 
 ```
-POST /auth/login · /auth/refresh · /auth/logout
+POST /auth/login · /auth/refresh · /auth/logout · /auth/register · /auth/bootstrap
 GET  /health
 GET  /accounts                    POST /accounts
 GET  /accounts/trial-balance
@@ -76,8 +76,9 @@ internal/
 ### Priorité haute
 - [ ] PDF génération factures (maroto ou WeasyPrint subprocess)
 - [ ] QR-facture payload SPC 0200 (spec Six-Group, référence QRR)
-- [ ] /auth/register — création compte utilisateur
-- [ ] Seed admin user (endpoint bootstrap ou commande CLI)
+- [x] /auth/register — création compte utilisateur ✅ Sprint 4
+- [x] Seed admin user (POST /auth/bootstrap, one-shot) ✅ Sprint 4
+- [x] Login persiste refresh_token en DB ✅ Sprint 4
 - [ ] Tests d'intégration Go (sqlite in-memory, httptest)
 
 ### Priorité moyenne
