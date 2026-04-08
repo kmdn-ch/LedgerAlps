@@ -26,7 +26,7 @@ export function InvoicesPage() {
 
   const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
     queryKey: ['invoices', status],
-    queryFn:  () => invoicesApi.list(status || undefined).then(r => r.data),
+    queryFn:  () => invoicesApi.list(status ? { status } : undefined).then(r => r.data),
   })
 
   const downloadPDF = async (id: string, number: string) => {
@@ -36,7 +36,7 @@ export function InvoicesPage() {
 
   const markPaid = useMutation({
     mutationFn: (id: string) =>
-      invoicesApi.updateStatus(id, 'paid', { payment_date: new Date().toISOString().slice(0, 10) }),
+      invoicesApi.updateStatus(id, 'paid'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
   })
 

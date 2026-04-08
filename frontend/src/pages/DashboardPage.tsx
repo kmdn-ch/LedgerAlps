@@ -10,10 +10,10 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts'
-import { invoicesApi, accountsApi } from '@/api/client'
+import { invoicesApi } from '@/api/client'
 import { PageHeader, StatCard, StatusBadge, LoadingSpinner } from '@/components/ui'
 import { formatCHF, formatDate } from '@/utils'
-import type { Invoice, AccountBalance } from '@/types'
+import type { Invoice } from '@/types'
 
 // Données de démonstration pour le graphique
 const CHART_DATA = [
@@ -29,11 +29,6 @@ export function DashboardPage() {
   const { data: invoices = [], isLoading: invLoading } = useQuery<Invoice[]>({
     queryKey: ['invoices', 'all'],
     queryFn:  () => invoicesApi.list().then(r => r.data),
-  })
-
-  const { data: balance = [] } = useQuery<AccountBalance[]>({
-    queryKey: ['trial-balance'],
-    queryFn:  () => accountsApi.trialBalance().then(r => r.data),
   })
 
   const totalDue = invoices
@@ -154,7 +149,7 @@ export function DashboardPage() {
                 </div>
                 <div className="text-right ml-2 flex-shrink-0">
                   <div className="text-sm font-medium font-mono tabular-nums text-alpine-900">
-                    {formatCHF(inv.total, inv.currency as string ?? 'CHF')}
+                    {formatCHF(String(inv.total_amount ?? inv.total))}
                   </div>
                   <StatusBadge status={inv.status} />
                 </div>

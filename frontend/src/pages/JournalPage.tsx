@@ -41,8 +41,6 @@ const STATUS_CLASS: Record<string, string> = {
 
 export function JournalPage() {
   const [showForm, setShowForm] = useState(false)
-  const [startDate] = useState(() => new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10))
-  const [endDate]   = useState(() => new Date().toISOString().slice(0, 10))
   const qc = useQueryClient()
 
   // On simule une liste — en production, il faudrait un endpoint GET /journal

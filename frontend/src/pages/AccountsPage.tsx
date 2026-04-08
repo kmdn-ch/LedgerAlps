@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { BookOpen } from 'lucide-react'
 import { accountsApi } from '@/api/client'
-import { PageHeader, LoadingSpinner, EmptyState, SectionTitle } from '@/components/ui'
+import { PageHeader, LoadingSpinner, EmptyState } from '@/components/ui'
 import { formatCHF } from '@/utils'
 import type { Account, AccountBalance } from '@/types'
 
