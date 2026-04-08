@@ -9,7 +9,7 @@
 
 Branche active : `go-rewrite` | PR ouverte : **kmdn-ch/LedgerAlps#1** (go-rewrite → main)
 
-Dernier commit : `9e10bb9` — Sprint 3 complet
+Dernier commit : `d448869` — Sprint 5 complet + README + LICENSE
 
 ---
 
@@ -26,10 +26,10 @@ Dernier commit : `9e10bb9` — Sprint 3 complet
 
 ---
 
-## API complète (18 endpoints)
+## API complète (21 endpoints)
 
 ```
-POST /auth/login · /auth/refresh · /auth/logout · /auth/register · /auth/bootstrap
+POST /auth/login · /auth/refresh · /auth/logout · /auth/register · /auth/bootstrap · /auth/register · /auth/bootstrap
 GET  /health
 GET  /accounts                    POST /accounts
 GET  /accounts/trial-balance
@@ -37,7 +37,8 @@ GET  /accounts/:code/balance
 GET  /contacts                    GET  /contacts/:id
 POST /contacts                    PATCH /contacts/:id
 GET  /invoices                    GET  /invoices/:id
-POST /invoices                    POST /invoices/:id/transition
+GET  /invoices/:id/pdf            POST /invoices
+POST /invoices/:id/transition
 GET  /journal                     POST /journal
 POST /journal/:id/post
 GET  /fiscal-years                POST /fiscal-years/:id/close
@@ -51,21 +52,25 @@ POST /vat/declaration
 ```
 cmd/server/main.go
 .env.go.example
+LICENSE
 internal/
   api/handlers/  accounts, auth, contacts, context, fiscal_year,
-                 invoices, journal, journal_write
+                 invoices, invoice_pdf, journal, journal_write
   api/middleware/ auth, cors, errors, security
   config/config.go
   core/compliance/swiss.go + swiss_test.go
+                  qrbill.go + qrbill_test.go     (SPC 0200, QRR MOD-10)
   core/security/security.go + security_test.go
   db/ db.go, id.go, rebind.go, rebind_test.go
   db/migrations/
     0001_initial.up.sql          (schéma complet + triggers + index)
     0002_seed_plan_comptable.up.sql  (88 comptes PME suisse)
     0003_auth_refresh.up.sql     (refresh_tokens, jti revocation)
+  integration/integration_test.go  (10 tests end-to-end httptest)
   models/models.go
   services/accounting/ service.go, fiscal_year.go
   services/invoicing/service.go
+  services/pdf/service.go        (PDF A4 + QR payment slip)
   services/vat/service.go
 ```
 
@@ -88,7 +93,6 @@ internal/
 - [ ] Merger PR#1 dans main quand validé
 
 ### Priorité basse
-- [ ] /auth/register → Login doit persister refresh_token en DB
 - [ ] Export ZIP légal annuel (CO art. 958f, conservation 10 ans)
 - [ ] Dashboard stats endpoint
 
@@ -98,7 +102,9 @@ internal/
 
 ### Sprint 1 ✅ — Blockers critiques (tout corrigé proprement en Go)
 ### Sprint 2 ✅ — Bugs actifs + performance (tout implémenté)
-### Sprint 3 ✅ — Conformité complète (tout implémenté sauf PDF/QR/ISO20022)
+### Sprint 3 ✅ — Conformité complète
+### Sprint 4 ✅ — Auth completeness (/auth/register, /auth/bootstrap, login persiste refresh_token)
+### Sprint 5 ✅ — QR-bill SPC 0200, PDF invoices (A4 + QR payment slip), 10 tests intégration
 
 ---
 
