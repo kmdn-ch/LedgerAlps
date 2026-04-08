@@ -50,7 +50,7 @@ func main() {
 
 	// ── 5. Health ─────────────────────────────────────────────────────────────
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "0.2.0-go"})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "1.0.0"})
 	})
 
 	// ── 6. Services ───────────────────────────────────────────────────────────
