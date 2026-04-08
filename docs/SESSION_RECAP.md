@@ -5,11 +5,11 @@
 
 ---
 
-## État actuel : Sprints 1 + 2 + 3 + 4 + 5 TERMINÉS ✅
+## État actuel : Sprints 1 + 2 + 3 + 4 + 5 + 6 TERMINÉS ✅
 
 Branche active : `go-rewrite` | PR ouverte : **kmdn-ch/LedgerAlps#1** (go-rewrite → main)
 
-Dernier commit : `d448869` — Sprint 5 complet + README + LICENSE
+Dernier commit : `f263885` — Sprint 6 complet (ISO 20022 + json tags + frontend alignment)
 
 ---
 
@@ -29,7 +29,8 @@ Dernier commit : `d448869` — Sprint 5 complet + README + LICENSE
 ## API complète (21 endpoints)
 
 ```
-POST /auth/login · /auth/refresh · /auth/logout · /auth/register · /auth/bootstrap · /auth/register · /auth/bootstrap
+POST /auth/login · /auth/refresh · /auth/logout · /auth/register · /auth/bootstrap
+GET  /vat/rates · /auth/register · /auth/bootstrap
 GET  /health
 GET  /accounts                    POST /accounts
 GET  /accounts/trial-balance
@@ -43,6 +44,8 @@ GET  /journal                     POST /journal
 POST /journal/:id/post
 GET  /fiscal-years                POST /fiscal-years/:id/close
 POST /vat/declaration
+POST /payments/export           (pain.001.001.09 XML)
+POST /bank-statements/import    (camt.053.001.08 → JSON)
 ```
 
 ---
@@ -70,6 +73,7 @@ internal/
   models/models.go
   services/accounting/ service.go, fiscal_year.go
   services/invoicing/service.go
+  services/iso20022/ pain001.go + camt053.go   (pain.001.001.09 + camt.053.001.08)
   services/pdf/service.go        (PDF A4 + QR payment slip)
   services/vat/service.go
 ```
@@ -86,10 +90,10 @@ internal/
 - [x] Login persiste refresh_token en DB ✅ Sprint 4
 - [x] Tests d'intégration Go (10 tests, sqlite temp-file + httptest) ✅ Sprint 5
 
-### Priorité moyenne
-- [ ] ISO 20022 pain.001 export (virements)
-- [ ] ISO 20022 camt.053 import (relevés)
-- [ ] Frontend : tester toutes les pages contre backend Go
+### Priorité moyenne — TOUTES TERMINÉES ✅
+- [x] ISO 20022 pain.001 export (POST /payments/export) ✅ Sprint 6
+- [x] ISO 20022 camt.053 import (POST /bank-statements/import) ✅ Sprint 6
+- [x] Frontend aligné Go backend (json tags, API client, auth store, pages) ✅ Sprint 6
 - [ ] Merger PR#1 dans main quand validé
 
 ### Priorité basse
@@ -105,6 +109,7 @@ internal/
 ### Sprint 3 ✅ — Conformité complète
 ### Sprint 4 ✅ — Auth completeness (/auth/register, /auth/bootstrap, login persiste refresh_token)
 ### Sprint 5 ✅ — QR-bill SPC 0200, PDF invoices (A4 + QR payment slip), 10 tests intégration
+### Sprint 6 ✅ — ISO 20022 (pain.001 + camt.053), json tags models, frontend alignment complet
 
 ---
 
