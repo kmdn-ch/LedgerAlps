@@ -5,7 +5,7 @@
 
 ---
 
-## État actuel : Sprints 1 + 2 + 3 + 4 TERMINÉS ✅
+## État actuel : Sprints 1 + 2 + 3 + 4 + 5 TERMINÉS ✅
 
 Branche active : `go-rewrite` | PR ouverte : **kmdn-ch/LedgerAlps#1** (go-rewrite → main)
 
@@ -73,13 +73,13 @@ internal/
 
 ## Ce qui reste à implémenter
 
-### Priorité haute
-- [ ] PDF génération factures (maroto ou WeasyPrint subprocess)
-- [ ] QR-facture payload SPC 0200 (spec Six-Group, référence QRR)
+### Priorité haute — TOUTES TERMINÉES ✅
+- [x] PDF génération factures (go-pdf/fpdf + Swiss QR payment slip) ✅ Sprint 5
+- [x] QR-facture payload SPC 0200 (spec Six-Group, référence QRR MOD-10) ✅ Sprint 5
 - [x] /auth/register — création compte utilisateur ✅ Sprint 4
 - [x] Seed admin user (POST /auth/bootstrap, one-shot) ✅ Sprint 4
 - [x] Login persiste refresh_token en DB ✅ Sprint 4
-- [ ] Tests d'intégration Go (sqlite in-memory, httptest)
+- [x] Tests d'intégration Go (10 tests, sqlite temp-file + httptest) ✅ Sprint 5
 
 ### Priorité moyenne
 - [ ] ISO 20022 pain.001 export (virements)
