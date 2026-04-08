@@ -18,15 +18,59 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Gestion des erreurs 401 → déconnexion
+// Gestion des erreurs 401 — tenter un refresh avant de déconnecter
+let isRefreshing = false
+let failedQueue: Array<{ resolve: (v: unknown) => void; reject: (e: unknown) => void }> = []
+
+function processQueue(error: unknown, token: string | null = null) {
+  failedQueue.forEach((p) => (error ? p.reject(error) : p.resolve(token)))
+  failedQueue = []
+}
+
 api.interceptors.response.use(
   (r) => r,
   async (error) => {
-    if (error.response?.status === 401) {
-      useAuthStore.getState().logout()
-      window.location.href = '/login'
+    const original = error.config
+    if (error.response?.status !== 401 || original._retry) {
+      return Promise.reject(error)
     }
-    return Promise.reject(error)
+
+    const { refreshToken, setAccessToken, logout } = useAuthStore.getState()
+    if (!refreshToken) {
+      logout()
+      window.location.href = '/login'
+      return Promise.reject(error)
+    }
+
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject })
+      }).then((token) => {
+        original.headers.Authorization = `Bearer ${token}`
+        return api(original)
+      })
+    }
+
+    original._retry = true
+    isRefreshing = true
+
+    try {
+      const res = await axios.post(`${BASE_URL}/auth/refresh`, null, {
+        headers: { Authorization: `Bearer ${refreshToken}` },
+      })
+      const newToken: string = res.data.access_token
+      setAccessToken(newToken)
+      processQueue(null, newToken)
+      original.headers.Authorization = `Bearer ${newToken}`
+      return api(original)
+    } catch (refreshError) {
+      processQueue(refreshError, null)
+      logout()
+      window.location.href = '/login'
+      return Promise.reject(refreshError)
+    } finally {
+      isRefreshing = false
+    }
   }
 )
 
@@ -36,80 +80,98 @@ export const authApi = {
     api.post('/auth/login', { email, password }),
   register: (data: { email: string; name: string; password: string }) =>
     api.post('/auth/register', data),
+  bootstrap:(data: { email: string; name: string; password: string }) =>
+    api.post('/auth/bootstrap', data),
+  refresh:  (refreshToken: string) =>
+    api.post('/auth/refresh', null, { headers: { Authorization: `Bearer ${refreshToken}` } }),
+  logout:   (refreshToken: string) =>
+    api.post('/auth/logout', null, { headers: { Authorization: `Bearer ${refreshToken}` } }),
 }
 
 // ─── Comptes ──────────────────────────────────────────────────────────────────
 export const accountsApi = {
-  list:         ()                     => api.get('/accounts'),
-  balance:      (number: string, asOf?: string) =>
-    api.get(`/accounts/${number}/balance`, { params: { as_of: asOf } }),
-  trialBalance: (asOf?: string)        => api.get('/accounts/trial-balance', { params: { as_of: asOf } }),
+  list:         ()                      => api.get('/accounts'),
+  create:       (data: unknown)         => api.post('/accounts', data),
+  balance:      (code: string)          => api.get(`/accounts/${code}/balance`),
+  trialBalance: ()                      => api.get('/accounts/trial-balance'),
 }
 
 // ─── Journal ──────────────────────────────────────────────────────────────────
 export const journalApi = {
-  list:    (params?: { page?: number; page_size?: number; date_from?: string; date_to?: string; status?: string; reference?: string }) =>
-    api.get('/journal', { params }),
-  create:  (data: unknown) => api.post('/journal', data),
-  post:    (id: string)    => api.post(`/journal/${id}/post`),
-  reverse: (id: string, date: string) =>
-    api.post(`/journal/${id}/reverse`, null, { params: { reversal_date: date } }),
+  list:   (params?: {
+    page?: number; page_size?: number
+    date_from?: string; date_to?: string
+    status?: string; reference?: string
+  }) => api.get('/journal', { params }),
+  create: (data: unknown)  => api.post('/journal', data),
+  post:   (id: string)     => api.post(`/journal/${id}/post`),
 }
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 export const contactsApi = {
   list:   (params?: { contact_type?: string; page?: number; page_size?: number }) =>
     api.get('/contacts', { params }),
-  get:    (id: string) => api.get(`/contacts/${id}`),
-  create: (data: unknown) => api.post('/contacts', data),
+  get:    (id: string)           => api.get(`/contacts/${id}`),
+  create: (data: unknown)        => api.post('/contacts', data),
   update: (id: string, data: unknown) => api.patch(`/contacts/${id}`, data),
 }
 
 // ─── Factures ─────────────────────────────────────────────────────────────────
 export const invoicesApi = {
-  list:         (status?: string, type = 'invoice') =>
-    api.get('/invoices', { params: { status, document_type: type } }),
-  get:          (id: string)                     => api.get(`/invoices/${id}`),
-  create:       (data: unknown)                  => api.post('/invoices', data),
-  transition: (id: string, status: string) =>
+  list: (params?: { status?: string; page?: number; page_size?: number }) =>
+    api.get('/invoices', { params }),
+  get:        (id: string)                    => api.get(`/invoices/${id}`),
+  create:     (data: unknown)                 => api.post('/invoices', data),
+  transition: (id: string, status: string)   =>
     api.post(`/invoices/${id}/transition`, { status }),
-  // Legacy alias kept for Python backend compatibility
-  updateStatus: (id: string, status: string, extra?: object) =>
-    api.post(`/invoices/${id}/transition`, { status, ...extra }),
-  downloadPDF:  (id: string) =>
-    api.get(`/pdf/invoice/${id}`, { responseType: 'blob' }),
+  // Alias kept for compatibility with pages that use updateStatus
+  updateStatus: (id: string, status: string) =>
+    api.post(`/invoices/${id}/transition`, { status }),
+  // PDF — Go endpoint: GET /invoices/:id/pdf
+  downloadPDF: (id: string) =>
+    api.get(`/invoices/${id}/pdf`, { responseType: 'blob' }),
 }
 
 // ─── TVA ──────────────────────────────────────────────────────────────────────
 export const vatApi = {
-  compute: (amount: number, rate: number, included = 'excluded') =>
-    api.post('/vat/compute', { amount, vat_rate: rate, included }),
-  rates:   () => api.get('/vat/rates'),
-}
-
-// ─── Exports ──────────────────────────────────────────────────────────────────
-export const exportsApi = {
-  trialBalance:   (asOf?: string) =>
-    api.get('/exports/trial-balance', { params: { as_of: asOf }, responseType: 'blob' }),
-  generalLedger:  (start: string, end: string) =>
-    api.get('/exports/general-ledger', { params: { start_date: start, end_date: end }, responseType: 'blob' }),
-  journal:        (start: string, end: string) =>
-    api.get('/exports/journal', { params: { start_date: start, end_date: end }, responseType: 'blob' }),
-  legalArchive:   (fiscalYearId: string) =>
-    api.post(`/exports/legal-archive/${fiscalYearId}`, null, { responseType: 'blob' }),
-}
-
-// ─── QR-facture ───────────────────────────────────────────────────────────────
-export const qrApi = {
-  generatePayload: (data: unknown) => api.post('/qr-invoice/generate-payload', data),
-  generateRef:     (ref: string)   =>
-    api.post('/qr-invoice/reference/generate-qrr', null, { params: { customer_ref: ref } }),
+  rates: () => api.get('/vat/rates'),
 }
 
 // ─── ISO 20022 ────────────────────────────────────────────────────────────────
 export const isoApi = {
-  generatePain001: (data: unknown) =>
-    api.post('/iso20022/pain001', data, { responseType: 'blob' }),
+  // pain.001.001.09 — générer un fichier de paiement
+  exportPain001: (data: {
+    execution_date: string
+    debtor_name: string
+    debtor_iban: string
+    debtor_bic?: string
+    transactions: Array<{
+      end_to_end_id: string
+      creditor_name: string
+      creditor_iban: string
+      amount: number
+      currency?: string
+      reference?: string
+      unstructured?: string
+    }>
+  }) => api.post('/payments/export', data, { responseType: 'blob' }),
+
+  // camt.053.001.08 — importer un relevé bancaire
+  importCamt053: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/bank-statements/import', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+}
+
+// ─── Exercices fiscaux ────────────────────────────────────────────────────────
+export const fiscalYearsApi = {
+  list:  ()                    => api.get('/fiscal-years'),
+  close: (id: string)          => api.post(`/fiscal-years/${id}/close`),
+  vatDeclaration: (params: { period_start: string; period_end: string; method: string }) =>
+    api.post('/vat/declaration', params),
 }
 
 // ─── Utilitaire — télécharger un blob ─────────────────────────────────────────

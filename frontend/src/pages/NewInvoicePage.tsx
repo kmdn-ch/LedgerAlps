@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, ArrowLeft, Save, Send } from 'lucide-react'
+import { Plus, Trash2, ArrowLeft } from 'lucide-react'
 import { invoicesApi, contactsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
 import { formatCHF } from '@/utils'
@@ -21,13 +21,9 @@ const lineSchema = z.object({
 })
 
 const schema = z.object({
-  contact_id:   z.string().uuid('Sélectionnez un contact'),
+  contact_id:   z.string().min(1, 'Sélectionnez un contact'),
   issue_date:   z.string().min(1, 'Date requise'),
   due_date:     z.string().optional(),
-  document_type: z.enum(['invoice', 'quote', 'credit_note']).default('invoice'),
-  vat_method:   z.enum(['effective', 'tdfn']).default('effective'),
-  qr_iban:      z.string().optional(),
-  payment_info: z.string().max(140).optional(),
   notes:        z.string().optional(),
   terms:        z.string().optional(),
   lines:        z.array(lineSchema).min(1, 'Au moins une ligne'),
@@ -50,8 +46,8 @@ export function NewInvoicePage() {
   const qc        = useQueryClient()
 
   const { data: contacts = [] } = useQuery<Contact[]>({
-    queryKey: ['contacts', 'client'],
-    queryFn:  () => contactsApi.list('client').then(r => r.data),
+    queryKey: ['contacts', 'customer'],
+    queryFn:  () => contactsApi.list({ contact_type: 'customer' }).then(r => r.data),
   })
 
   const {
@@ -60,9 +56,7 @@ export function NewInvoicePage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      document_type: 'invoice',
-      vat_method:    'effective',
-      issue_date:    new Date().toISOString().slice(0, 10),
+      issue_date: new Date().toISOString().slice(0, 10),
       lines: [{ description: '', quantity: 1, unit_price: 0, discount_percent: 0, vat_rate: 8.1 }],
     },
   })
@@ -105,16 +99,6 @@ export function NewInvoicePage() {
             <h2 className="text-sm font-semibold text-alpine-800">Informations du document</h2>
           </div>
           <div className="card-body grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Type */}
-            <div>
-              <label className="label">Type</label>
-              <select className="select" {...register('document_type')}>
-                <option value="invoice">Facture</option>
-                <option value="quote">Offre de prix</option>
-                <option value="credit_note">Note de crédit</option>
-              </select>
-            </div>
-
             {/* Contact */}
             <div className="col-span-2">
               <label className="label">Contact *</label>
@@ -128,15 +112,6 @@ export function NewInvoicePage() {
                 ))}
               </select>
               {errors.contact_id && <p className="error-msg">{errors.contact_id.message}</p>}
-            </div>
-
-            {/* Méthode TVA */}
-            <div>
-              <label className="label">Méthode TVA</label>
-              <select className="select" {...register('vat_method')}>
-                <option value="effective">Effective</option>
-                <option value="tdfn">TDFN</option>
-              </select>
             </div>
 
             {/* Date émission */}
@@ -156,16 +131,6 @@ export function NewInvoicePage() {
               <input type="date" className="input" {...register('due_date')} />
             </div>
 
-            {/* QR-IBAN */}
-            <div className="col-span-2">
-              <label className="label">QR-IBAN (pour QR-facture)</label>
-              <input
-                type="text"
-                className="input font-mono"
-                placeholder="CH44 3100 0000 0012 3456 7"
-                {...register('qr_iban')}
-              />
-            </div>
           </div>
         </div>
 

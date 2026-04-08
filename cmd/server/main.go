@@ -106,6 +106,22 @@ func main() {
 	api.POST("/fiscal-years/:id/close", fyh.CloseFiscalYear)
 	api.POST("/vat/declaration", fyh.GenerateVATDeclaration)
 
+	// VAT rates (static reference data — no DB)
+	api.GET("/vat/rates", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"rates": []gin.H{
+				{"code": "standard", "rate": 8.1, "label": "Taux normal (TVA 2024)"},
+				{"code": "reduced",  "rate": 2.6, "label": "Taux réduit (alimentation, livres)"},
+				{"code": "special",  "rate": 3.8, "label": "Taux spécial (hébergement)"},
+			},
+		})
+	})
+
+	// ISO 20022 — pain.001 export + camt.053 import
+	isoH := handlers.NewISO20022Handler()
+	api.POST("/payments/export", isoH.ExportPain001)
+	api.POST("/bank-statements/import", isoH.ImportCamt053)
+
 	// ── 8. Start ──────────────────────────────────────────────────────────────
 	addr := ":" + cfg.Port
 	fmt.Printf("LedgerAlps: listening on http://localhost%s\n", addr)

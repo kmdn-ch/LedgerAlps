@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Download, BookOpen } from 'lucide-react'
-import { accountsApi, exportsApi, downloadBlob } from '@/api/client'
+import { BookOpen } from 'lucide-react'
+import { accountsApi } from '@/api/client'
 import { PageHeader, LoadingSpinner, EmptyState, SectionTitle } from '@/components/ui'
 import { formatCHF } from '@/utils'
 import type { Account, AccountBalance } from '@/types'
@@ -39,11 +39,6 @@ export function AccountsPage() {
     enabled:  view === 'balance',
   })
 
-  const handleExportBalance = async () => {
-    const resp = await exportsApi.trialBalance()
-    downloadBlob(resp.data, `balance_${new Date().toISOString().slice(0,10)}.csv`)
-  }
-
   // Grouper les comptes par type
   const grouped = accounts.reduce<Record<string, Account[]>>((acc, a) => {
     const t = a.account_type
@@ -62,11 +57,6 @@ export function AccountsPage() {
         subtitle="PME suisse — CO art. 957"
         actions={
           <div className="flex gap-2">
-            {view === 'balance' && (
-              <button onClick={handleExportBalance} className="btn-secondary">
-                <Download size={15} /> Export CSV
-              </button>
-            )}
           </div>
         }
       />

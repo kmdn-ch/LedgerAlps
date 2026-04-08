@@ -5,8 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, CheckCircle, Download } from 'lucide-react'
-import { journalApi, exportsApi, downloadBlob } from '@/api/client'
+import { Plus, Trash2, CheckCircle } from 'lucide-react'
+import { journalApi } from '@/api/client'
 import { PageHeader, LoadingSpinner, EmptyState, ErrorBanner } from '@/components/ui'
 import { formatDate, formatCHF } from '@/utils'
 import type { JournalEntry } from '@/types'
@@ -72,11 +72,6 @@ export function JournalPage() {
     },
   })
 
-  const handleExport = async () => {
-    const resp = await exportsApi.journal(startDate, endDate)
-    downloadBlob(resp.data, `journal_${startDate}_${endDate}.csv`)
-  }
-
   return (
     <div>
       <PageHeader
@@ -84,9 +79,6 @@ export function JournalPage() {
         subtitle="Écritures comptables — CO art. 957a"
         actions={
           <div className="flex gap-2">
-            <button onClick={handleExport} className="btn-secondary">
-              <Download size={15} /> Export CSV
-            </button>
             <button onClick={() => setShowForm(!showForm)} className="btn-primary">
               <Plus size={15} /> Nouvelle écriture
             </button>

@@ -308,8 +308,8 @@ func TestJournalCreateAndPost(t *testing.T) {
 	// Find account IDs for codes 1000 (Caisse) and 2000 (Dettes)
 	var acc1000ID, acc2000ID string
 	for _, acc := range accounts {
-		code, _ := acc["Code"].(string)
-		id, _ := acc["ID"].(string)
+		code, _ := acc["code"].(string)
+		id, _ := acc["id"].(string)
 		if code == "1000" {
 			acc1000ID = id
 		}
@@ -339,12 +339,12 @@ func TestJournalCreateAndPost(t *testing.T) {
 
 	createBody := parseBody(t, createW)
 	// JournalEntry model serializes ID as uppercase (no json tags)
-	entryID, _ := createBody["ID"].(string)
+	entryID, _ := createBody["id"].(string)
 	if entryID == "" {
 		t.Fatalf("created entry has no ID — body: %s", createW.Body.String())
 	}
-	if createBody["Status"] != "draft" {
-		t.Errorf("new entry should be draft, got %v", createBody["Status"])
+	if createBody["status"] != "draft" {
+		t.Errorf("new entry should be draft, got %v", createBody["status"])
 	}
 
 	// Post the entry — returns {"status": "posted"}
@@ -415,7 +415,7 @@ func TestContactCreate(t *testing.T) {
 
 	body := parseBody(t, w)
 	// models.Contact has no json tags — Go serializes ID as "ID" (uppercase)
-	if body["ID"] == nil || body["ID"] == "" {
+	if body["id"] == nil || body["id"] == "" {
 		t.Errorf("created contact has no ID — body: %s", w.Body.String())
 	}
 }
@@ -433,7 +433,7 @@ func TestInvoiceCreateAndTransition(t *testing.T) {
 	assertStatus(t, contactW, http.StatusCreated)
 	contactBody := parseBody(t, contactW)
 	// models.Contact has no json tags — Go serializes ID as "ID" (uppercase)
-	contactID, _ := contactBody["ID"].(string)
+	contactID, _ := contactBody["id"].(string)
 	if contactID == "" {
 		t.Fatalf("contact has no ID — body: %s", contactW.Body.String())
 	}
@@ -455,12 +455,12 @@ func TestInvoiceCreateAndTransition(t *testing.T) {
 
 	invBody := parseBody(t, invW)
 	// models.Invoice has no json tags — Go serializes ID as "ID" (uppercase)
-	invoiceID, _ := invBody["ID"].(string)
+	invoiceID, _ := invBody["id"].(string)
 	if invoiceID == "" {
 		t.Fatalf("invoice has no ID — body: %s", invW.Body.String())
 	}
-	if invBody["Status"] != "draft" {
-		t.Errorf("new invoice should be draft, got %v", invBody["Status"])
+	if invBody["status"] != "draft" {
+		t.Errorf("new invoice should be draft, got %v", invBody["status"])
 	}
 
 	// DRAFT → SENT
@@ -470,8 +470,8 @@ func TestInvoiceCreateAndTransition(t *testing.T) {
 
 	sentBody := parseBody(t, sentW)
 	// TransitionInvoice calls GetInvoice internally → returns models.Invoice (uppercase keys)
-	if sentBody["Status"] != "sent" {
-		t.Errorf("after transition, status should be sent, got %v", sentBody["Status"])
+	if sentBody["status"] != "sent" {
+		t.Errorf("after transition, status should be sent, got %v", sentBody["status"])
 	}
 }
 

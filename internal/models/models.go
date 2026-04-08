@@ -45,131 +45,131 @@ const (
 // ─── Core entities ────────────────────────────────────────────────────────────
 
 type User struct {
-	ID           string    `db:"id"`
-	Email        string    `db:"email"`
-	Name         string    `db:"name"`
-	PasswordHash string    `db:"password_hash"`
-	IsAdmin      bool      `db:"is_admin"`
-	IsActive     bool      `db:"is_active"`
-	CreatedAt    time.Time `db:"created_at"`
-	UpdatedAt    time.Time `db:"updated_at"`
+	ID           string    `db:"id"            json:"id"`
+	Email        string    `db:"email"         json:"email"`
+	Name         string    `db:"name"          json:"name"`
+	PasswordHash string    `db:"password_hash" json:"-"` // never expose hash
+	IsAdmin      bool      `db:"is_admin"      json:"is_admin"`
+	IsActive     bool      `db:"is_active"     json:"is_active"`
+	CreatedAt    time.Time `db:"created_at"    json:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at"    json:"updated_at"`
 }
 
 type Account struct {
-	ID          string      `db:"id"`
-	Code        string      `db:"code"`
-	Name        string      `db:"name"`
-	AccountType AccountType `db:"account_type"`
-	Description string      `db:"description"`
-	IsActive    bool        `db:"is_active"`
-	ParentID    *string     `db:"parent_id"`
-	CreatedAt   time.Time   `db:"created_at"`
-	UpdatedAt   time.Time   `db:"updated_at"`
+	ID          string      `db:"id"           json:"id"`
+	Code        string      `db:"code"         json:"code"`
+	Name        string      `db:"name"         json:"name"`
+	AccountType AccountType `db:"account_type" json:"account_type"`
+	Description string      `db:"description"  json:"description"`
+	IsActive    bool        `db:"is_active"    json:"is_active"`
+	ParentID    *string     `db:"parent_id"    json:"parent_id,omitempty"`
+	CreatedAt   time.Time   `db:"created_at"   json:"created_at"`
+	UpdatedAt   time.Time   `db:"updated_at"   json:"updated_at"`
 }
 
 type FiscalYear struct {
-	ID        string    `db:"id"`
-	Name      string    `db:"name"`
-	StartDate time.Time `db:"start_date"`
-	EndDate   time.Time `db:"end_date"`
-	IsClosed  bool      `db:"is_closed"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	ID        string    `db:"id"         json:"id"`
+	Name      string    `db:"name"        json:"name"`
+	StartDate time.Time `db:"start_date"  json:"start_date"`
+	EndDate   time.Time `db:"end_date"    json:"end_date"`
+	IsClosed  bool      `db:"is_closed"   json:"is_closed"`
+	CreatedAt time.Time `db:"created_at"  json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"  json:"updated_at"`
 }
 
 type JournalEntry struct {
-	ID              string             `db:"id"`
-	Reference       string             `db:"reference"`
-	Date            time.Time          `db:"date"`
-	Description     string             `db:"description"`
-	Status          JournalEntryStatus `db:"status"`
-	FiscalYearID    *string            `db:"fiscal_year_id"`
-	IntegrityHash   *string            `db:"integrity_hash"`
-	IsReversal      bool               `db:"is_reversal"`
-	ReversalOfID    *string            `db:"reversal_of_id"`
-	CreatedByID     string             `db:"created_by_id"`
-	CreatedAt       time.Time          `db:"created_at"`
-	UpdatedAt       time.Time          `db:"updated_at"`
+	ID            string             `db:"id"              json:"id"`
+	Reference     string             `db:"reference"       json:"reference"`
+	Date          time.Time          `db:"date"            json:"date"`
+	Description   string             `db:"description"     json:"description"`
+	Status        JournalEntryStatus `db:"status"          json:"status"`
+	FiscalYearID  *string            `db:"fiscal_year_id"  json:"fiscal_year_id,omitempty"`
+	IntegrityHash *string            `db:"integrity_hash"  json:"integrity_hash,omitempty"`
+	IsReversal    bool               `db:"is_reversal"     json:"is_reversal"`
+	ReversalOfID  *string            `db:"reversal_of_id"  json:"reversal_of_id,omitempty"`
+	CreatedByID   string             `db:"created_by_id"   json:"created_by_id"`
+	CreatedAt     time.Time          `db:"created_at"      json:"created_at"`
+	UpdatedAt     time.Time          `db:"updated_at"      json:"updated_at"`
 
-	Lines []JournalLine `db:"-"` // loaded separately
+	Lines []JournalLine `db:"-" json:"lines,omitempty"`
 }
 
 type JournalLine struct {
-	ID             string   `db:"id"`
-	EntryID        string   `db:"entry_id"`
-	AccountID      string   `db:"account_id"`
-	DebitAmount    *float64 `db:"debit_amount"`
-	CreditAmount   *float64 `db:"credit_amount"`
-	Description    string   `db:"description"`
-	Sequence       int      `db:"sequence"`
+	ID           string   `db:"id"            json:"id"`
+	EntryID      string   `db:"entry_id"      json:"entry_id"`
+	AccountID    string   `db:"account_id"    json:"account_id"`
+	DebitAmount  *float64 `db:"debit_amount"  json:"debit_amount,omitempty"`
+	CreditAmount *float64 `db:"credit_amount" json:"credit_amount,omitempty"`
+	Description  string   `db:"description"   json:"description"`
+	Sequence     int      `db:"sequence"      json:"sequence"`
 }
 
 type Contact struct {
-	ID               string      `db:"id"`
-	ContactType      ContactType `db:"contact_type"`
-	Name             string      `db:"name"`
-	Email            *string     `db:"email"`
-	Phone            *string     `db:"phone"`
-	Address          *string     `db:"address"`
-	City             *string     `db:"city"`
-	PostalCode       *string     `db:"postal_code"`
-	Country          string      `db:"country"`
-	IBAN             *string     `db:"iban"`
-	QRIBAN           *string     `db:"qr_iban"`
-	VATNumber        *string     `db:"vat_number"`
-	PaymentTermDays  int         `db:"payment_term_days"`
-	IsActive         bool        `db:"is_active"`
-	CreatedAt        time.Time   `db:"created_at"`
-	UpdatedAt        time.Time   `db:"updated_at"`
+	ID              string      `db:"id"               json:"id"`
+	ContactType     ContactType `db:"contact_type"     json:"contact_type"`
+	Name            string      `db:"name"             json:"name"`
+	Email           *string     `db:"email"            json:"email,omitempty"`
+	Phone           *string     `db:"phone"            json:"phone,omitempty"`
+	Address         *string     `db:"address"          json:"address,omitempty"`
+	City            *string     `db:"city"             json:"city,omitempty"`
+	PostalCode      *string     `db:"postal_code"      json:"postal_code,omitempty"`
+	Country         string      `db:"country"          json:"country"`
+	IBAN            *string     `db:"iban"             json:"iban,omitempty"`
+	QRIBAN          *string     `db:"qr_iban"          json:"qr_iban,omitempty"`
+	VATNumber       *string     `db:"vat_number"       json:"vat_number,omitempty"`
+	PaymentTermDays int         `db:"payment_term_days" json:"payment_term_days"`
+	IsActive        bool        `db:"is_active"        json:"is_active"`
+	CreatedAt       time.Time   `db:"created_at"       json:"created_at"`
+	UpdatedAt       time.Time   `db:"updated_at"       json:"updated_at"`
 }
 
 type Invoice struct {
-	ID              string        `db:"id"`
-	InvoiceNumber   string        `db:"invoice_number"`
-	ContactID       string        `db:"contact_id"`
-	Status          InvoiceStatus `db:"status"`
-	IssueDate       time.Time     `db:"issue_date"`
-	DueDate         time.Time     `db:"due_date"`
-	Currency        string        `db:"currency"`
-	SubtotalAmount  float64       `db:"subtotal_amount"`
-	VATAmount       float64       `db:"vat_amount"`
-	TotalAmount     float64       `db:"total_amount"` // rounded to 0.05 CHF
-	VATRate         float64       `db:"vat_rate"`
-	Notes           *string       `db:"notes"`
-	Terms           *string       `db:"terms"`
-	QRReference     *string       `db:"qr_reference"`
-	JournalEntryID  *string       `db:"journal_entry_id"`
-	FiscalYearID    *string       `db:"fiscal_year_id"`
-	CreatedByID     string        `db:"created_by_id"`
-	CreatedAt       time.Time     `db:"created_at"`
-	UpdatedAt       time.Time     `db:"updated_at"`
+	ID             string        `db:"id"              json:"id"`
+	InvoiceNumber  string        `db:"invoice_number"  json:"invoice_number"`
+	ContactID      string        `db:"contact_id"      json:"contact_id"`
+	Status         InvoiceStatus `db:"status"          json:"status"`
+	IssueDate      time.Time     `db:"issue_date"      json:"issue_date"`
+	DueDate        time.Time     `db:"due_date"        json:"due_date"`
+	Currency       string        `db:"currency"        json:"currency"`
+	SubtotalAmount float64       `db:"subtotal_amount" json:"subtotal_amount"`
+	VATAmount      float64       `db:"vat_amount"      json:"vat_amount"`
+	TotalAmount    float64       `db:"total_amount"    json:"total_amount"`
+	VATRate        float64       `db:"vat_rate"        json:"vat_rate"`
+	Notes          *string       `db:"notes"           json:"notes,omitempty"`
+	Terms          *string       `db:"terms"           json:"terms,omitempty"`
+	QRReference    *string       `db:"qr_reference"    json:"qr_reference,omitempty"`
+	JournalEntryID *string       `db:"journal_entry_id" json:"journal_entry_id,omitempty"`
+	FiscalYearID   *string       `db:"fiscal_year_id"  json:"fiscal_year_id,omitempty"`
+	CreatedByID    string        `db:"created_by_id"   json:"created_by_id"`
+	CreatedAt      time.Time     `db:"created_at"      json:"created_at"`
+	UpdatedAt      time.Time     `db:"updated_at"      json:"updated_at"`
 
-	Lines   []InvoiceLine `db:"-"`
-	Contact *Contact      `db:"-"`
+	Lines   []InvoiceLine `db:"-" json:"lines,omitempty"`
+	Contact *Contact      `db:"-" json:"contact,omitempty"`
 }
 
 type InvoiceLine struct {
-	ID          string  `db:"id"`
-	InvoiceID   string  `db:"invoice_id"`
-	Description string  `db:"description"`
-	Quantity    float64 `db:"quantity"`
-	UnitPrice   float64 `db:"unit_price"`
-	VATRate     float64 `db:"vat_rate"`
-	LineTotal   float64 `db:"line_total"`
-	Sequence    int     `db:"sequence"`
+	ID          string  `db:"id"          json:"id"`
+	InvoiceID   string  `db:"invoice_id"  json:"invoice_id"`
+	Description string  `db:"description" json:"description"`
+	Quantity    float64 `db:"quantity"    json:"quantity"`
+	UnitPrice   float64 `db:"unit_price"  json:"unit_price"`
+	VATRate     float64 `db:"vat_rate"    json:"vat_rate"`
+	LineTotal   float64 `db:"line_total"  json:"line_total"`
+	Sequence    int     `db:"sequence"    json:"sequence"`
 }
 
 type AuditLog struct {
-	ID             string    `db:"id"`
-	UserID         string    `db:"user_id"`
-	Action         string    `db:"action"`
-	TableName      string    `db:"table_name"`
-	RecordID       string    `db:"record_id"`
-	BeforeState    *string   `db:"before_state"`    // JSON, personal data masked (nLPD)
-	AfterState     *string   `db:"after_state"`     // JSON, personal data masked (nLPD)
-	IPAddress      *string   `db:"ip_address"`
-	EntryHash      string    `db:"entry_hash"`      // SHA-256 of this record's fields
-	PrevHash       *string   `db:"prev_hash"`       // SHA-256 chained from previous entry (CO art. 957a)
-	SequenceNumber int64     `db:"sequence_number"` // Monotonic counter for chain continuity verification
-	CreatedAt      time.Time `db:"created_at"`
+	ID             string    `db:"id"              json:"id"`
+	UserID         string    `db:"user_id"         json:"user_id"`
+	Action         string    `db:"action"          json:"action"`
+	TableName      string    `db:"table_name"      json:"table_name"`
+	RecordID       string    `db:"record_id"       json:"record_id"`
+	BeforeState    *string   `db:"before_state"    json:"before_state,omitempty"`
+	AfterState     *string   `db:"after_state"     json:"after_state,omitempty"`
+	IPAddress      *string   `db:"ip_address"      json:"ip_address,omitempty"`
+	EntryHash      string    `db:"entry_hash"      json:"entry_hash"`
+	PrevHash       *string   `db:"prev_hash"       json:"prev_hash,omitempty"`
+	SequenceNumber int64     `db:"sequence_number" json:"sequence_number"`
+	CreatedAt      time.Time `db:"created_at"      json:"created_at"`
 }
