@@ -93,7 +93,7 @@ export function InvoiceDetailPage() {
         </button>
         <PageHeader
           title={invoice.number}
-          subtitle={`${invoice.document_type === 'invoice' ? 'Facture' : invoice.document_type} · émise le ${formatDate(invoice.issue_date)}`}
+          subtitle={`Facture · émise le ${formatDate(invoice.issue_date)}`}
           actions={
             <div className="flex items-center gap-2">
               {actions.map(t => (
