@@ -44,6 +44,7 @@ func main() {
 	}))
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS(strings.Split(cfg.AllowedOrigins, ",")...))
+	r.Use(middleware.ErrorHandler())
 	if cfg.Debug {
 		r.Use(gin.Logger())
 	}
@@ -77,6 +78,8 @@ func main() {
 	ah := handlers.NewAccountsHandler(database, cfg.UsePostgres())
 	api.GET("/accounts", ah.ListAccounts)
 	api.POST("/accounts", ah.CreateAccount)
+	api.GET("/accounts/trial-balance", ah.TrialBalance)
+	api.GET("/accounts/:code/balance", ah.AccountBalance)
 
 	// Contacts
 	ch := handlers.NewContactsHandler(database, cfg.UsePostgres())
@@ -86,7 +89,7 @@ func main() {
 	api.PATCH("/contacts/:id", ch.UpdateContact)
 
 	// Invoices
-	ih := handlers.NewInvoicesHandler(database, cfg.UsePostgres())
+	ih := handlers.NewInvoicesHandler(database, cfg.UsePostgres(), accountingSvc)
 	api.GET("/invoices", ih.ListInvoices)
 	api.GET("/invoices/:id", ih.GetInvoice)
 	api.POST("/invoices", ih.CreateInvoice)

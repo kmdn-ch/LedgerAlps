@@ -9,6 +9,7 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
+	accsvc "github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
 var ErrInvoiceNotFound = fmt.Errorf("invoice not found")
@@ -23,13 +24,28 @@ var validTransitions = map[models.InvoiceStatus][]models.InvoiceStatus{
 	models.InvoiceStatusArchived:  {},
 }
 
-type Service struct {
-	db          *sql.DB
-	usePostgres bool
+// AccountingServiceInterface allows the invoicing service to create and post
+// journal entries for automatic reversal on cancellation.
+type AccountingServiceInterface interface {
+	CreateEntry(ctx context.Context, userID string, req accsvc.CreateEntryRequest) (*models.JournalEntry, error)
+	PostEntry(ctx context.Context, userID, entryID, ipAddress string) error
 }
 
+type Service struct {
+	db            *sql.DB
+	usePostgres   bool
+	accountingSvc AccountingServiceInterface
+}
+
+// New creates a Service without an accounting dependency (backward compatible).
 func New(database *sql.DB, usePostgres bool) *Service {
 	return &Service{db: database, usePostgres: usePostgres}
+}
+
+// NewWithAccounting creates a Service wired to an accounting service,
+// enabling automatic journal reversal when an invoice is cancelled.
+func NewWithAccounting(database *sql.DB, usePostgres bool, acctSvc AccountingServiceInterface) *Service {
+	return &Service{db: database, usePostgres: usePostgres, accountingSvc: acctSvc}
 }
 
 // ─── CreateInvoice ────────────────────────────────────────────────────────────
@@ -128,10 +144,18 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 // ─── Transition ───────────────────────────────────────────────────────────────
 
 // Transition moves an invoice to the next status if the transition is valid.
+// When an invoice transitions from sent → cancelled and has a linked journal entry,
+// a reversal entry is automatically created and posted (CO art. 957a).
 func (s *Service) Transition(ctx context.Context, invoiceID string, to models.InvoiceStatus) error {
-	getQ := db.Rebind("SELECT status FROM invoices WHERE id = ?", s.usePostgres)
-	var current string
-	if err := s.db.QueryRowContext(ctx, getQ, invoiceID).Scan(&current); err == sql.ErrNoRows {
+	// Load current status, invoice_number, journal_entry_id, created_by_id, and issue_date.
+	getQ := db.Rebind(`
+		SELECT status, invoice_number, COALESCE(journal_entry_id, ''), created_by_id, issue_date
+		FROM invoices WHERE id = ?`, s.usePostgres)
+	var current, invoiceNumber, journalEntryID, createdByID string
+	var issueDate time.Time
+	if err := s.db.QueryRowContext(ctx, getQ, invoiceID).Scan(
+		&current, &invoiceNumber, &journalEntryID, &createdByID, &issueDate,
+	); err == sql.ErrNoRows {
 		return ErrInvoiceNotFound
 	} else if err != nil {
 		return fmt.Errorf("load invoice: %w", err)
@@ -140,12 +164,108 @@ func (s *Service) Transition(ctx context.Context, invoiceID string, to models.In
 	allowed := validTransitions[models.InvoiceStatus(current)]
 	for _, a := range allowed {
 		if a == to {
+			// Apply the status transition.
 			updateQ := db.Rebind("UPDATE invoices SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", s.usePostgres)
-			_, err := s.db.ExecContext(ctx, updateQ, string(to), invoiceID)
-			return err
+			if _, err := s.db.ExecContext(ctx, updateQ, string(to), invoiceID); err != nil {
+				return fmt.Errorf("update invoice status: %w", err)
+			}
+
+			// Automatic reversal: sent → cancelled with a linked journal entry.
+			if models.InvoiceStatus(current) == models.InvoiceStatusSent &&
+				to == models.InvoiceStatusCancelled &&
+				journalEntryID != "" &&
+				s.accountingSvc != nil {
+
+				if err := s.createReversalEntry(ctx, createdByID, invoiceNumber, journalEntryID, issueDate); err != nil {
+					return fmt.Errorf("create reversal entry: %w", err)
+				}
+			}
+
+			return nil
 		}
 	}
 	return fmt.Errorf("%w: %s → %s", ErrInvalidTransition, current, to)
+}
+
+// createReversalEntry builds a mirror journal entry with debit ↔ credit swapped,
+// marks it is_reversal=1, and immediately posts it.
+func (s *Service) createReversalEntry(
+	ctx context.Context,
+	userID, invoiceNumber, originalEntryID string,
+	entryDate time.Time,
+) error {
+	// Load the lines of the original journal entry.
+	linesQ := db.Rebind(`
+		SELECT account_id,
+		       COALESCE(debit_amount, 0),
+		       COALESCE(credit_amount, 0),
+		       description,
+		       sequence
+		FROM journal_lines
+		WHERE entry_id = ?
+		ORDER BY sequence`, s.usePostgres)
+	rows, err := s.db.QueryContext(ctx, linesQ, originalEntryID)
+	if err != nil {
+		return fmt.Errorf("load original lines: %w", err)
+	}
+	defer rows.Close()
+
+	var lines []accsvc.LineInput
+	for rows.Next() {
+		var accountID, desc string
+		var debit, credit float64
+		var seq int
+		if err := rows.Scan(&accountID, &debit, &credit, &desc, &seq); err != nil {
+			return fmt.Errorf("scan line: %w", err)
+		}
+		li := accsvc.LineInput{
+			AccountID:   accountID,
+			Description: desc,
+			Sequence:    seq,
+		}
+		// Swap debit ↔ credit for the reversal.
+		if debit != 0 {
+			li.CreditAmount = &debit
+		}
+		if credit != 0 {
+			li.DebitAmount = &credit
+		}
+		lines = append(lines, li)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate lines: %w", err)
+	}
+	if len(lines) == 0 {
+		// Original entry has no lines — nothing to reverse.
+		return nil
+	}
+
+	// Create the reversal entry as a draft via the accounting service.
+	req := accsvc.CreateEntryRequest{
+		Date:        entryDate,
+		Description: fmt.Sprintf("Contrepassation facture %s", invoiceNumber),
+		Lines:       lines,
+	}
+	reversalEntry, err := s.accountingSvc.CreateEntry(ctx, userID, req)
+	if err != nil {
+		return fmt.Errorf("create reversal draft: %w", err)
+	}
+
+	// Flag the entry as a reversal and link it to the original.
+	flagQ := db.Rebind(`
+		UPDATE journal_entries
+		SET is_reversal = 1, reversal_of_id = ?
+		WHERE id = ?`, s.usePostgres)
+	if _, err := s.db.ExecContext(ctx, flagQ, originalEntryID, reversalEntry.ID); err != nil {
+		return fmt.Errorf("flag reversal: %w", err)
+	}
+
+	// Immediately post the reversal (status = 'posted').
+	if err := s.accountingSvc.PostEntry(ctx, userID, reversalEntry.ID, ""); err != nil {
+		return fmt.Errorf("post reversal: %w", err)
+	}
+
+	return nil
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

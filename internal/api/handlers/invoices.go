@@ -10,6 +10,7 @@ import (
 	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 	"github.com/kmdn-ch/ledgeralps/internal/services/invoicing"
 )
 
@@ -19,11 +20,11 @@ type InvoicesHandler struct {
 	svc         *invoicing.Service
 }
 
-func NewInvoicesHandler(database *sql.DB, usePostgres bool) *InvoicesHandler {
+func NewInvoicesHandler(database *sql.DB, usePostgres bool, acctSvc *accounting.Service) *InvoicesHandler {
 	return &InvoicesHandler{
 		db:          database,
 		usePostgres: usePostgres,
-		svc:         invoicing.New(database, usePostgres),
+		svc:         invoicing.NewWithAccounting(database, usePostgres, acctSvc),
 	}
 }
 

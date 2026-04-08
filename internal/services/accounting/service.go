@@ -28,6 +28,19 @@ var ErrAlreadyPosted = fmt.Errorf("journal entry is already posted")
 // ErrEntryNotFound is returned when the entry does not exist.
 var ErrEntryNotFound = fmt.Errorf("journal entry not found")
 
+// ErrIntegrityViolation is returned when the stored integrity_hash of a posted
+// journal entry does not match the hash recomputed from the audit log.
+// This signals tampering or data corruption (CO art. 957a).
+type ErrIntegrityViolation struct {
+	EntryID  string
+	Expected string
+	Got      string
+}
+
+func (e ErrIntegrityViolation) Error() string {
+	return fmt.Sprintf("integrity violation for entry %s: expected hash %s, got %s", e.EntryID, e.Expected, e.Got)
+}
+
 // Service implements the double-entry accounting engine.
 type Service struct {
 	db          *sql.DB
@@ -183,6 +196,76 @@ func (s *Service) PostEntry(ctx context.Context, userID, entryID, ipAddress stri
 	}
 
 	return tx.Commit()
+}
+
+// ─── VerifyEntryIntegrity ─────────────────────────────────────────────────────
+
+// VerifyEntryIntegrity vérifie que l'integrity_hash d'une écriture postée
+// correspond au hash recalculé depuis l'audit log (CO art. 957a).
+// Retourne nil si intègre, ErrIntegrityViolation si corrompu.
+// Retourne nil sans erreur si l'écriture n'est pas encore postée (pas de hash attendu).
+func (s *Service) VerifyEntryIntegrity(ctx context.Context, entryID string) error {
+	// 1. Charger l'écriture : status et integrity_hash
+	entryQ := db.Rebind("SELECT status, COALESCE(integrity_hash, '') FROM journal_entries WHERE id = ?", s.usePostgres)
+	var status, storedHash string
+	if err := s.db.QueryRowContext(ctx, entryQ, entryID).Scan(&status, &storedHash); err == sql.ErrNoRows {
+		return ErrEntryNotFound
+	} else if err != nil {
+		return fmt.Errorf("load entry: %w", err)
+	}
+
+	// 2. Pas encore postée → pas de hash, intégrité non vérifiable
+	if status != string(models.JournalEntryStatusPosted) {
+		return nil
+	}
+
+	// 3. Charger l'audit log correspondant à l'action 'post'
+	auditQ := db.Rebind(`
+		SELECT
+			COALESCE(user_id, ''),
+			action,
+			table_name,
+			record_id,
+			COALESCE(before_state, ''),
+			COALESCE(after_state, ''),
+			COALESCE(ip_address, ''),
+			entry_hash,
+			created_at
+		FROM audit_logs
+		WHERE table_name = 'journal_entries'
+		  AND record_id = ?
+		  AND action = 'post'
+		LIMIT 1`, s.usePostgres)
+
+	var (
+		userID, action, tableName, recordID string
+		beforeState, afterState, ipAddress  string
+		auditEntryHash                      string
+		createdAt                           time.Time
+	)
+	if err := s.db.QueryRowContext(ctx, auditQ, entryID).Scan(
+		&userID, &action, &tableName, &recordID,
+		&beforeState, &afterState, &ipAddress,
+		&auditEntryHash, &createdAt,
+	); err == sql.ErrNoRows {
+		return fmt.Errorf("audit log not found for posted entry %s", entryID)
+	} else if err != nil {
+		return fmt.Errorf("load audit log: %w", err)
+	}
+
+	// 4. Recalculer l'entry_hash depuis les champs de l'audit log
+	recomputed := security.ComputeEntryHash(userID, action, tableName, recordID, beforeState, afterState, ipAddress, createdAt)
+
+	// 5. Comparer avec l'entry_hash stocké dans audit_logs
+	if recomputed != auditEntryHash {
+		return ErrIntegrityViolation{
+			EntryID:  entryID,
+			Expected: auditEntryHash,
+			Got:      recomputed,
+		}
+	}
+
+	return nil
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
