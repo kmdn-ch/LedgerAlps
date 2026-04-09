@@ -98,7 +98,8 @@ jobs:
           cp installer-work/ledgeralps-server.exe infrastructure/windows/
           cp installer-work/ledgeralps-cli.exe    infrastructure/windows/
           cd infrastructure/windows
-          makensis //DVERSION="$VERSION_NUM" installer.nsi
+          # Choco installs NSIS to Program Files (x86); PATH not refreshed in bash
+          "/c/Program Files (x86)/NSIS/makensis.exe" //DVERSION="$VERSION_NUM" installer.nsi
 
       - name: Upload installer to GitHub Release
         env:
