@@ -22,7 +22,6 @@ Unicode True
 !define SERVICE_NAME     "LedgerAlps"
 !define SERVICE_DISPLAY  "LedgerAlps Accounting Server"
 !define INSTALL_DIR      "$PROGRAMFILES64\LedgerAlps"
-!define DATA_DIR         "$COMMONAPPDATA\LedgerAlps"
 !define UNINSTALL_KEY    "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define OUT_FILE         "LedgerAlps_Setup_${VERSION}_windows_amd64.exe"
 
@@ -74,12 +73,12 @@ Section "LedgerAlps (required)" SecMain
   File "..\..\LICENSE"
 
   ; Create data directory for SQLite database and config
-  CreateDirectory "${DATA_DIR}"
+  CreateDirectory "$COMMONAPPDATA\LedgerAlps"
 
   ; Write example environment file if it doesn't exist
-  IfFileExists "${DATA_DIR}\ledgeralps.env" env_exists env_missing
+  IfFileExists "$COMMONAPPDATA\LedgerAlps\ledgeralps.env" env_exists env_missing
   env_missing:
-    FileOpen $0 "${DATA_DIR}\ledgeralps.env.example" w
+    FileOpen $0 "$COMMONAPPDATA\LedgerAlps\ledgeralps.env.example" w
     FileWrite $0 "# LedgerAlps environment configuration$\r$\n"
     FileWrite $0 "# Copy this file to ledgeralps.env and fill in the values.$\r$\n"
     FileWrite $0 "$\r$\n"
@@ -90,7 +89,7 @@ Section "LedgerAlps (required)" SecMain
     FileWrite $0 "PORT=8000$\r$\n"
     FileWrite $0 "$\r$\n"
     FileWrite $0 "# SQLite database path$\r$\n"
-    FileWrite $0 "SQLITE_PATH=${DATA_DIR}\ledgeralps.db$\r$\n"
+    FileWrite $0 "SQLITE_PATH=$COMMONAPPDATA\LedgerAlps\ledgeralps.db$\r$\n"
     FileWrite $0 "$\r$\n"
     FileWrite $0 "# OR use PostgreSQL (comment out SQLITE_PATH above)$\r$\n"
     FileWrite $0 "# POSTGRES_DSN=postgres://user:password@localhost:5432/ledgeralps?sslmode=disable$\r$\n"
@@ -134,9 +133,9 @@ Section "LedgerAlps (required)" SecMain
   DetailPrint "Installation complete!"
   DetailPrint ""
   DetailPrint "NEXT STEPS:"
-  DetailPrint "1. Edit ${DATA_DIR}\ledgeralps.env.example"
+  DetailPrint "1. Edit $COMMONAPPDATA\LedgerAlps\ledgeralps.env.example"
   DetailPrint "   Set JWT_SECRET to a strong random value (openssl rand -hex 32)"
-  DetailPrint "   Copy to ${DATA_DIR}\ledgeralps.env"
+  DetailPrint "   Copy to $COMMONAPPDATA\LedgerAlps\ledgeralps.env"
   DetailPrint "2. Start the service: sc start ${SERVICE_NAME}"
   DetailPrint "3. Open http://localhost:8000"
 SectionEnd
@@ -149,13 +148,6 @@ Section "Uninstall"
   ExecWait 'sc stop "${SERVICE_NAME}"'
   Sleep 2000
   ExecWait 'sc delete "${SERVICE_NAME}"'
-
-  ; Remove from PATH
-  ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path"
-  ; Simple removal — replace ";$INSTDIR" with ""
-  ${StrRep} $1 "$0" ";$INSTDIR" ""
-  WriteRegExpandStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path" "$1"
-  SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
 
   ; Remove files
   Delete "$INSTDIR\${PRODUCT_EXE}"
@@ -172,15 +164,10 @@ Section "Uninstall"
   ; Remove uninstall registry key
   DeleteRegKey HKLM "${UNINSTALL_KEY}"
 
-  ; Note: data in ${DATA_DIR} is preserved — user must manually remove
+  ; Note: data in $COMMONAPPDATA\LedgerAlps is preserved — user must manually remove
   DetailPrint ""
   DetailPrint "LedgerAlps has been uninstalled."
-  DetailPrint "Your data in ${DATA_DIR} has been preserved."
+  DetailPrint "Your data in $COMMONAPPDATA\LedgerAlps has been preserved."
   DetailPrint "Delete that folder manually if you no longer need your data."
 SectionEnd
 
-; --------------------------------------------------------------------------- ;
-; StrRep helper                                                               ;
-; --------------------------------------------------------------------------- ;
-!include "StrFunc.nsh"
-${StrRep}
