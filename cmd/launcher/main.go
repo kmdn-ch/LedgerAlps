@@ -130,7 +130,8 @@ func waitForServer(ctx context.Context, baseURL string) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-tick.C:
-			resp, err := http.Get(baseURL + "/health")
+			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/health", nil)
+			resp, err := http.DefaultClient.Do(req)
 			if err == nil && resp.StatusCode == http.StatusOK {
 				_ = resp.Body.Close()
 				return nil
@@ -186,7 +187,14 @@ func bootstrapAdmin(baseURL, email, name, password string) error {
 		"name":     name,
 		"password": password,
 	})
-	resp, err := http.Post(baseURL+"/api/v1/auth/bootstrap", "application/json", bytes.NewReader(body))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/auth/bootstrap", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
