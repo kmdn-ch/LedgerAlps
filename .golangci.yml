@@ -1,6 +1,9 @@
 run:
   timeout: 5m
   tests: true
+  # Pin Go version so golangci-lint doesn't reject modules targeting
+  # a Go version newer than what golangci-lint was built with.
+  go: "1.24"
 
 linters:
   enable:

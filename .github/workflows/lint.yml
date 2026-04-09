@@ -27,7 +27,9 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
-          args: --timeout=5m --config=.golangci.yml
+          # --go pins the target Go version so golangci-lint (built with Go 1.24)
+          # does not reject modules with a newer go directive in go.mod.
+          args: --timeout=5m --config=.golangci.yml --go=1.24
 
   mod-check:
     name: Module hygiene
