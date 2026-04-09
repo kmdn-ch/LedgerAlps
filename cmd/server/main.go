@@ -17,9 +17,19 @@ import (
 	"github.com/kmdn-ch/ledgeralps/version"
 )
 
-// distDir returns the path to the frontend dist folder, located next to the
-// server binary (set by installer) or in the repo for development.
+// distDir returns the path to the frontend dist folder. Resolution order:
+//  1. LEDGERALPS_INSTALL_DIR env var (set by the Windows launcher in production).
+//  2. Directory next to the running binary (standard installed layout).
+//  3. frontend/dist relative to the current working directory (dev fallback).
 func distDir() string {
+	// Check env var set by the Windows launcher (most reliable in production).
+	if installDir := os.Getenv("LEDGERALPS_INSTALL_DIR"); installDir != "" {
+		candidate := filepath.Join(installDir, "dist")
+		if _, err := os.Stat(filepath.Join(candidate, "index.html")); err == nil {
+			return candidate
+		}
+	}
+	// Fallback: look next to the running binary.
 	exe, err := os.Executable()
 	if err == nil {
 		candidate := filepath.Join(filepath.Dir(exe), "dist")
@@ -164,6 +174,11 @@ func main() {
 	alh := handlers.NewAuditHandler(database, cfg.UsePostgres())
 	api.GET("/audit-logs", alh.ListAuditLogs)
 	api.GET("/audit-logs/:id/verify", alh.VerifyAuditLog)
+
+	// Company settings
+	sh := handlers.NewSettingsHandler(database, cfg.UsePostgres())
+	api.GET("/settings/company", sh.GetCompany)
+	api.PUT("/settings/company", middleware.RequireAdmin(cfg.JWTSecret), sh.PutCompany)
 
 	// ── 8. Frontend static files ─────────────────────────────────────────────
 	// Serve the React build. All non-API routes fall through to index.html

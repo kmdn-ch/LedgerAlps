@@ -13,11 +13,32 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
 
-// registerRequest is used for POST /auth/register and POST /auth/bootstrap.
+// registerRequest is used for POST /auth/register.
 type registerRequest struct {
 	Email    string `json:"email"    binding:"required,email"`
 	Name     string `json:"name"     binding:"required,min=1,max=255"`
 	Password string `json:"password" binding:"required,min=8"`
+}
+
+// bootstrapRequest is used for POST /auth/bootstrap.
+// It extends registerRequest with optional company fields so the first admin
+// can seed the company profile in a single request.
+type bootstrapRequest struct {
+	Email    string `json:"email"    binding:"required,email"`
+	Name     string `json:"name"     binding:"required,min=1,max=255"`
+	Password string `json:"password" binding:"required,min=8"`
+	// Company fields (optional at bootstrap)
+	CompanyName          string `json:"company_name"`
+	LegalForm            string `json:"legal_form"`
+	AddressStreet        string `json:"address_street"`
+	AddressPostalCode    string `json:"address_postal_code"`
+	AddressCity          string `json:"address_city"`
+	AddressCountry       string `json:"address_country"`
+	CheNumber            string `json:"che_number"`
+	VatNumber            string `json:"vat_number"`
+	IBAN                 string `json:"iban"`
+	FiscalYearStartMonth int    `json:"fiscal_year_start_month"`
+	Currency             string `json:"currency"`
 }
 
 // dummyHash is a pre-computed bcrypt hash used to equalise timing when a user
@@ -251,8 +272,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 // POST /api/v1/auth/bootstrap
 // Creates the first admin user. Returns 409 if any user already exists.
 // This endpoint is intentionally open (no auth) but only works once.
+// Optional company fields may be supplied to seed the company_settings row.
 func (h *AuthHandler) Bootstrap(c *gin.Context) {
-	var req registerRequest
+	var req bootstrapRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
@@ -286,6 +308,39 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	if _, err := h.db.ExecContext(ctx, q, id, req.Email, req.Name, hash, now, now); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
+	}
+
+	// If a company name was provided, seed the company_settings singleton.
+	if req.CompanyName != "" {
+		country := req.AddressCountry
+		if country == "" {
+			country = "CH"
+		}
+		currency := req.Currency
+		if currency == "" {
+			currency = "CHF"
+		}
+		fyMonth := req.FiscalYearStartMonth
+		if fyMonth == 0 {
+			fyMonth = 1
+		}
+		csID := db.NewID()
+		csQ := db.Rebind(`
+			INSERT INTO company_settings
+			    (id, company_name, legal_form,
+			     address_street, address_postal_code, address_city, address_country,
+			     che_number, vat_number, iban,
+			     fiscal_year_start_month, currency,
+			     created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, h.cfg.UsePostgres())
+		// Non-fatal: a failure here doesn't block the admin account creation.
+		_, _ = h.db.ExecContext(ctx, csQ,
+			csID, req.CompanyName, req.LegalForm,
+			req.AddressStreet, req.AddressPostalCode, req.AddressCity, country,
+			req.CheNumber, req.VatNumber, req.IBAN,
+			fyMonth, currency,
+			now, now,
+		)
 	}
 
 	c.JSON(http.StatusCreated, gin.H{

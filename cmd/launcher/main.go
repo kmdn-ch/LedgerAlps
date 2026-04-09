@@ -150,6 +150,8 @@ func startServer(cfg *config) (*os.Process, error) {
 		"SQLITE_PATH="+cfg.SQLitePath,
 		"PORT="+cfg.Port,
 		"ALLOWED_ORIGINS="+cfg.AllowedOrigins,
+		// Tell the server where it's installed so it can locate the frontend dist folder.
+		"LEDGERALPS_INSTALL_DIR="+exeDir(),
 	)
 	if cfg.Debug {
 		cmd.Env = append(cmd.Env, "DEBUG=true")
@@ -181,13 +183,32 @@ func isServerRunning(baseURL string) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// bootstrapAdmin calls POST /api/v1/auth/bootstrap to create the first admin.
-func bootstrapAdmin(baseURL, email, name, password string) error {
-	body, _ := json.Marshal(map[string]string{
-		"email":    email,
-		"name":     name,
-		"password": password,
-	})
+// bootstrapPayload is sent to POST /api/v1/auth/bootstrap.
+type bootstrapPayload struct {
+	Email                string `json:"email"`
+	Name                 string `json:"name"`
+	Password             string `json:"password"`
+	CompanyName          string `json:"company_name,omitempty"`
+	LegalForm            string `json:"legal_form,omitempty"`
+	AddressStreet        string `json:"address_street,omitempty"`
+	AddressPostalCode    string `json:"address_postal_code,omitempty"`
+	AddressCity          string `json:"address_city,omitempty"`
+	AddressCountry       string `json:"address_country,omitempty"`
+	CheNumber            string `json:"che_number,omitempty"`
+	VatNumber            string `json:"vat_number,omitempty"`
+	IBAN                 string `json:"iban,omitempty"`
+	FiscalYearStartMonth int    `json:"fiscal_year_start_month,omitempty"`
+}
+
+// bootstrapAdmin calls POST /api/v1/auth/bootstrap to create the first admin + company.
+func bootstrapAdmin(baseURL string, payload bootstrapPayload) error {
+	if payload.AddressCountry == "" {
+		payload.AddressCountry = "CH"
+	}
+	if payload.FiscalYearStartMonth == 0 {
+		payload.FiscalYearStartMonth = 1
+	}
+	body, _ := json.Marshal(payload)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/auth/bootstrap", bytes.NewReader(body))
@@ -235,45 +256,51 @@ const setupHTML = `<!DOCTYPE html>
     box-shadow: 0 4px 24px rgba(0,0,0,.10);
     padding: 2.5rem 2.5rem 2rem;
     width: 100%;
-    max-width: 440px;
+    max-width: 520px;
   }
   .logo {
     display: flex;
     align-items: center;
     gap: .6rem;
-    margin-bottom: 1.8rem;
+    margin-bottom: 1.6rem;
   }
   .logo svg { width: 36px; height: 36px; flex-shrink: 0; }
   .logo-text { font-size: 1.4rem; font-weight: 700; color: #1a2e4a; letter-spacing: -.5px; }
   .logo-text span { color: #2563eb; }
-  h1 { font-size: 1.1rem; font-weight: 600; color: #1a2e4a; margin-bottom: .4rem; }
-  .subtitle { font-size: .875rem; color: #64748b; margin-bottom: 1.8rem; }
+  h1 { font-size: 1.1rem; font-weight: 600; color: #1a2e4a; margin-bottom: .3rem; }
+  .subtitle { font-size: .875rem; color: #64748b; margin-bottom: 1.6rem; }
   .section-label {
-    font-size: .7rem;
-    font-weight: 600;
+    font-size: .68rem;
+    font-weight: 700;
     letter-spacing: .08em;
     text-transform: uppercase;
-    color: #94a3b8;
-    margin: 1.2rem 0 .6rem;
+    color: #2563eb;
+    background: #eff6ff;
+    border-radius: 5px;
+    padding: .3rem .6rem;
+    margin: 1.4rem 0 .8rem;
+    display: inline-block;
   }
-  label { display: block; font-size: .875rem; font-weight: 500; color: #374151; margin-bottom: .3rem; }
-  input {
+  label { display: block; font-size: .85rem; font-weight: 500; color: #374151; margin-bottom: .25rem; }
+  input, select {
     width: 100%;
-    padding: .55rem .75rem;
+    padding: .52rem .75rem;
     border: 1.5px solid #e2e8f0;
     border-radius: 7px;
     font-size: .9rem;
     outline: none;
     transition: border-color .15s;
-    margin-bottom: .9rem;
+    margin-bottom: .8rem;
     background: #f8fafc;
+    color: #1a2e4a;
   }
-  input:focus { border-color: #2563eb; background: #fff; }
+  input:focus, select:focus { border-color: #2563eb; background: #fff; }
   input::placeholder { color: #b0bec5; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
+  .row3 { display: grid; grid-template-columns: 2fr 1fr 2fr; gap: .7rem; }
   .btn {
     width: 100%;
-    padding: .7rem;
+    padding: .75rem;
     background: #2563eb;
     color: #fff;
     border: none;
@@ -281,52 +308,34 @@ const setupHTML = `<!DOCTYPE html>
     font-size: .95rem;
     font-weight: 600;
     cursor: pointer;
-    margin-top: 1.2rem;
+    margin-top: 1.4rem;
     transition: background .15s;
   }
   .btn:hover { background: #1d4ed8; }
   .btn:disabled { background: #93c5fd; cursor: not-allowed; }
   .error {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    color: #b91c1c;
-    border-radius: 7px;
-    padding: .6rem .8rem;
-    font-size: .85rem;
-    margin-bottom: .8rem;
-    display: none;
+    background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+    border-radius: 7px; padding: .6rem .8rem; font-size: .85rem;
+    margin-bottom: .8rem; display: none;
   }
   .info {
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    color: #1e40af;
-    border-radius: 7px;
-    padding: .6rem .8rem;
-    font-size: .85rem;
-    margin-bottom: .8rem;
-    display: none;
+    background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+    border-radius: 7px; padding: .6rem .8rem; font-size: .85rem;
+    margin-bottom: .8rem; display: none;
   }
   .spinner {
-    display: none;
-    width: 18px; height: 18px;
-    border: 2px solid #fff;
-    border-top-color: transparent;
-    border-radius: 50%;
-    animation: spin .7s linear infinite;
-    margin: 0 auto;
+    display: none; width: 18px; height: 18px;
+    border: 2px solid #fff; border-top-color: transparent;
+    border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .req { color: #ef4444; margin-left: 2px; }
-  .hint { font-size: .78rem; color: #94a3b8; margin-top: -.6rem; margin-bottom: .9rem; }
+  .hint { font-size: .78rem; color: #94a3b8; margin-top: -.5rem; margin-bottom: .8rem; }
+  .opt { font-size: .75rem; color: #94a3b8; font-weight: 400; }
   .advanced-toggle {
-    font-size: .8rem;
-    color: #2563eb;
-    cursor: pointer;
-    text-decoration: underline;
-    background: none;
-    border: none;
-    padding: 0;
-    margin-bottom: .6rem;
+    font-size: .8rem; color: #2563eb; cursor: pointer;
+    text-decoration: underline; background: none; border: none;
+    padding: 0; margin-top: .4rem; display: block;
   }
   .advanced { display: none; }
 </style>
@@ -344,37 +353,89 @@ const setupHTML = `<!DOCTYPE html>
   </div>
 
   <h1>Configuration initiale</h1>
-  <p class="subtitle">Bienvenue ! Créez votre compte administrateur pour commencer.</p>
+  <p class="subtitle">Bienvenue ! Configurez votre entreprise et créez votre compte administrateur.</p>
 
   <div class="error" id="errBox"></div>
-  <div class="info" id="infoBox"></div>
+  <div class="info"  id="infoBox"></div>
 
   <form id="setupForm">
+
+    <!-- ── Entreprise ──────────────────────────────────────────────────── -->
+    <div class="section-label">Votre entreprise</div>
+
+    <label for="companyName">Raison sociale <span class="req">*</span></label>
+    <input type="text" id="companyName" placeholder="Dupont &amp; Fils Sàrl" autocomplete="organization" required>
+
+    <div class="row">
+      <div>
+        <label for="legalForm">Forme juridique</label>
+        <select id="legalForm">
+          <option value="">— choisir —</option>
+          <option value="SA">SA</option>
+          <option value="Sàrl">Sàrl</option>
+          <option value="Association">Association</option>
+          <option value="Raison individuelle">Raison individuelle</option>
+          <option value="Autre">Autre</option>
+        </select>
+      </div>
+      <div>
+        <label for="cheNumber">Numéro IDE <span class="opt">(CHE-xxx.xxx.xxx)</span></label>
+        <input type="text" id="cheNumber" placeholder="CHE-123.456.789">
+      </div>
+    </div>
+
+    <label for="addressStreet">Rue et numéro</label>
+    <input type="text" id="addressStreet" placeholder="Route des Alpes 12" autocomplete="street-address">
+
+    <div class="row">
+      <div>
+        <label for="addressPostalCode">NPA</label>
+        <input type="text" id="addressPostalCode" placeholder="1234" autocomplete="postal-code" maxlength="6">
+      </div>
+      <div>
+        <label for="addressCity">Localité</label>
+        <input type="text" id="addressCity" placeholder="Lausanne" autocomplete="address-level2">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="vatNumber">N° TVA <span class="opt">(si assujetti)</span></label>
+        <input type="text" id="vatNumber" placeholder="CHE-123.456.789 TVA">
+      </div>
+      <div>
+        <label for="iban">IBAN principal <span class="opt">(CH…)</span></label>
+        <input type="text" id="iban" placeholder="CH56 0483 5012 3456 7800 9">
+      </div>
+    </div>
+
+    <!-- ── Compte administrateur ───────────────────────────────────────── -->
     <div class="section-label">Compte administrateur</div>
 
     <div class="row">
       <div>
         <label for="firstName">Prénom <span class="req">*</span></label>
-        <input type="text" id="firstName" name="firstName" placeholder="Jean" autocomplete="given-name" required>
+        <input type="text" id="firstName" placeholder="Jean" autocomplete="given-name" required>
       </div>
       <div>
         <label for="lastName">Nom <span class="req">*</span></label>
-        <input type="text" id="lastName" name="lastName" placeholder="Dupont" autocomplete="family-name" required>
+        <input type="text" id="lastName" placeholder="Dupont" autocomplete="family-name" required>
       </div>
     </div>
 
     <label for="email">Adresse e-mail <span class="req">*</span></label>
-    <input type="email" id="email" name="email" placeholder="admin@entreprise.ch" autocomplete="email" required>
+    <input type="email" id="email" placeholder="admin@entreprise.ch" autocomplete="email" required>
 
     <label for="password">Mot de passe <span class="req">*</span></label>
-    <input type="password" id="password" name="password" placeholder="Min. 8 caractères" minlength="8" autocomplete="new-password" required>
-    <p class="hint">Minimum 8 caractères. Ce mot de passe vous servira à vous connecter.</p>
+    <input type="password" id="password" placeholder="Min. 8 caractères" minlength="8" autocomplete="new-password" required>
+    <p class="hint">Minimum 8 caractères. Vous l'utiliserez pour vous connecter à LedgerAlps.</p>
 
+    <!-- ── Paramètres avancés (optionnel) ─────────────────────────────── -->
     <button type="button" class="advanced-toggle" onclick="toggleAdvanced()">&#9660; Paramètres avancés</button>
     <div class="advanced" id="advancedSection">
       <div class="section-label">Serveur</div>
       <label for="port">Port HTTP</label>
-      <input type="number" id="port" name="port" value="8000" min="1024" max="65535">
+      <input type="number" id="port" value="8000" min="1024" max="65535">
     </div>
 
     <button type="submit" class="btn" id="submitBtn">
@@ -392,29 +453,43 @@ function toggleAdvanced() {
 
 document.getElementById('setupForm').addEventListener('submit', async function(e) {
   e.preventDefault();
-  const btn = document.getElementById('submitBtn');
+  const btn     = document.getElementById('submitBtn');
   const spinner = document.getElementById('spinner');
   const btnText = document.getElementById('btnText');
-  const errBox = document.getElementById('errBox');
+  const errBox  = document.getElementById('errBox');
   const infoBox = document.getElementById('infoBox');
 
-  errBox.style.display = 'none';
+  errBox.style.display  = 'none';
   infoBox.style.display = 'none';
-  btn.disabled = true;
+  btn.disabled          = true;
   btnText.style.display = 'none';
   spinner.style.display = 'block';
 
-  const firstName = document.getElementById('firstName').value.trim();
-  const lastName  = document.getElementById('lastName').value.trim();
-  const email     = document.getElementById('email').value.trim();
-  const password  = document.getElementById('password').value;
-  const port      = document.getElementById('port').value || '8000';
+  const firstName          = document.getElementById('firstName').value.trim();
+  const lastName           = document.getElementById('lastName').value.trim();
+  const email              = document.getElementById('email').value.trim();
+  const password           = document.getElementById('password').value;
+  const port               = document.getElementById('port').value || '8000';
+  const companyName        = document.getElementById('companyName').value.trim();
+  const legalForm          = document.getElementById('legalForm').value;
+  const cheNumber          = document.getElementById('cheNumber').value.trim();
+  const addressStreet      = document.getElementById('addressStreet').value.trim();
+  const addressPostalCode  = document.getElementById('addressPostalCode').value.trim();
+  const addressCity        = document.getElementById('addressCity').value.trim();
+  const vatNumber          = document.getElementById('vatNumber').value.trim();
+  const iban               = document.getElementById('iban').value.trim();
 
   try {
     const resp = await fetch('/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ firstName, lastName, email, password, port })
+      body: JSON.stringify({
+        firstName, lastName, email, password, port,
+        companyName, legalForm, cheNumber,
+        addressStreet, addressPostalCode, addressCity,
+        vatNumber, iban,
+        fiscalYearStartMonth: 1,
+      }),
     });
     const data = await resp.json();
     if (!resp.ok) {
@@ -441,11 +516,22 @@ document.getElementById('setupForm').addEventListener('submit', async function(e
 </html>`
 
 type setupRequest struct {
+	// Admin account
 	FirstName string `json:"firstName"`
 	LastName  string `json:"lastName"`
 	Email     string `json:"email"`
 	Password  string `json:"password"`
 	Port      string `json:"port"`
+	// Company / tenant
+	CompanyName          string `json:"companyName"`
+	LegalForm            string `json:"legalForm"`
+	AddressStreet        string `json:"addressStreet"`
+	AddressPostalCode    string `json:"addressPostalCode"`
+	AddressCity          string `json:"addressCity"`
+	CheNumber            string `json:"cheNumber"`
+	VatNumber            string `json:"vatNumber"`
+	IBAN                 string `json:"iban"`
+	FiscalYearStartMonth int    `json:"fiscalYearStartMonth"`
 }
 
 // runSetupWizard starts a local HTTP server, opens the browser at the setup
@@ -483,9 +569,14 @@ func runSetupWizard() {
 		}
 
 		// Validate inputs.
-		req.FirstName = strings.TrimSpace(req.FirstName)
-		req.LastName = strings.TrimSpace(req.LastName)
-		req.Email = strings.TrimSpace(req.Email)
+		req.FirstName   = strings.TrimSpace(req.FirstName)
+		req.LastName    = strings.TrimSpace(req.LastName)
+		req.Email       = strings.TrimSpace(req.Email)
+		req.CompanyName = strings.TrimSpace(req.CompanyName)
+		if req.CompanyName == "" {
+			jsonError(w, "La raison sociale est requise.", http.StatusBadRequest)
+			return
+		}
 		if req.FirstName == "" || req.LastName == "" {
 			jsonError(w, "Prénom et nom sont requis.", http.StatusBadRequest)
 			return
@@ -545,9 +636,24 @@ func runSetupWizard() {
 			return
 		}
 
-		// Bootstrap first admin user.
+		// Bootstrap first admin user + company settings.
 		adminName := req.FirstName + " " + req.LastName
-		if err := bootstrapAdmin(appURL, req.Email, adminName, req.Password); err != nil {
+		payload := bootstrapPayload{
+			Email:                req.Email,
+			Name:                 adminName,
+			Password:             req.Password,
+			CompanyName:          req.CompanyName,
+			LegalForm:            req.LegalForm,
+			AddressStreet:        req.AddressStreet,
+			AddressPostalCode:    req.AddressPostalCode,
+			AddressCity:          req.AddressCity,
+			AddressCountry:       "CH",
+			CheNumber:            req.CheNumber,
+			VatNumber:            req.VatNumber,
+			IBAN:                 req.IBAN,
+			FiscalYearStartMonth: req.FiscalYearStartMonth,
+		}
+		if err := bootstrapAdmin(appURL, payload); err != nil {
 			logWarn("bootstrap warning: %v", err)
 		}
 

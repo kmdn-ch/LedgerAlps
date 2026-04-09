@@ -198,3 +198,23 @@ type Payment struct {
 	CreatedAt      time.Time     `db:"created_at"       json:"created_at"`
 	UpdatedAt      time.Time     `db:"updated_at"       json:"updated_at"`
 }
+
+// ─── Company settings ─────────────────────────────────────────────────────────
+
+// CompanySettings holds the one-row singleton for this installation's tenant profile.
+type CompanySettings struct {
+	ID                   string    `db:"id"                       json:"id"`
+	CompanyName          string    `db:"company_name"             json:"company_name"`
+	LegalForm            string    `db:"legal_form"               json:"legal_form"`
+	AddressStreet        string    `db:"address_street"           json:"address_street"`
+	AddressPostalCode    string    `db:"address_postal_code"      json:"address_postal_code"`
+	AddressCity          string    `db:"address_city"             json:"address_city"`
+	AddressCountry       string    `db:"address_country"          json:"address_country"`
+	CheNumber            string    `db:"che_number"               json:"che_number"`
+	VatNumber            string    `db:"vat_number"               json:"vat_number"`
+	IBAN                 string    `db:"iban"                     json:"iban"`
+	FiscalYearStartMonth int       `db:"fiscal_year_start_month"  json:"fiscal_year_start_month"`
+	Currency             string    `db:"currency"                 json:"currency"`
+	CreatedAt            time.Time `db:"created_at"               json:"created_at"`
+	UpdatedAt            time.Time `db:"updated_at"               json:"updated_at"`
+}
