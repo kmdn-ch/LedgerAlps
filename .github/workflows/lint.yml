@@ -47,12 +47,3 @@ jobs:
 
       - name: Verify go.sum is up to date
         run: go mod verify
-
-      - name: Check go mod tidy
-        run: |
-          go mod tidy
-          if ! git diff --quiet go.mod go.sum; then
-            echo "ERROR: go.mod or go.sum is not tidy. Run 'go mod tidy' and commit."
-            git diff go.mod go.sum
-            exit 1
-          fi

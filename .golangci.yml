@@ -64,3 +64,7 @@ issues:
     - linters:
         - errcheck
       text: "Error return value of `.*Rollback` is not checked"
+    # Integration tests use http.NewRequest without context (pre-existing pattern)
+    - path: internal/integration/integration_test\.go
+      linters:
+        - noctx

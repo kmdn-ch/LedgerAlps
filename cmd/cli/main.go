@@ -10,6 +10,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -116,7 +117,12 @@ func cmdBootstrap(args []string) {
 
 	endpoint := *serverURL + "/api/v1/auth/bootstrap"
 	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Post(endpoint, "application/json", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		fatalf("could not build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
 	if err != nil {
 		fatalf("HTTP request failed: %v\n  Is the server running at %s?", err, *serverURL)
 	}
@@ -150,7 +156,11 @@ func cmdHealth(args []string) {
 
 	endpoint := *serverURL + "/health"
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(endpoint)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		fatalf("could not build request: %v", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		fatalf("HTTP request failed: %v\n  Is the server running at %s?", err, *serverURL)
 	}
