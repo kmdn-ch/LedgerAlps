@@ -63,14 +63,6 @@ Swiss registries based on the CHE/IDE number entered by the user.
 
 ---
 
-## v2.0 — SaaS / Multi-tenant
-
-- Cloud-hosted option alongside self-hosted
-- Per-company data isolation at DB level
-- Subscription billing via Stripe
-
----
-
 ## Completed
 
 | Version | Feature |
