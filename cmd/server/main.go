@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -14,6 +16,20 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 	"github.com/kmdn-ch/ledgeralps/version"
 )
+
+// distDir returns the path to the frontend dist folder, located next to the
+// server binary (set by installer) or in the repo for development.
+func distDir() string {
+	exe, err := os.Executable()
+	if err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), "dist")
+		if _, err := os.Stat(filepath.Join(candidate, "index.html")); err == nil {
+			return candidate
+		}
+	}
+	// Dev fallback: look relative to current working dir.
+	return "frontend/dist"
+}
 
 func main() {
 	// ── 1. Load and validate configuration ────────────────────────────────────
@@ -149,7 +165,32 @@ func main() {
 	api.GET("/audit-logs", alh.ListAuditLogs)
 	api.GET("/audit-logs/:id/verify", alh.VerifyAuditLog)
 
-	// ── 8. Start ──────────────────────────────────────────────────────────────
+	// ── 8. Frontend static files ─────────────────────────────────────────────
+	// Serve the React build. All non-API routes fall through to index.html
+	// so that client-side routing works.
+	dist := distDir()
+	if _, err := os.Stat(dist); err == nil {
+		r.Static("/assets", filepath.Join(dist, "assets"))
+		r.StaticFile("/favicon.ico", filepath.Join(dist, "favicon.ico"))
+		// Serve logo.svg if present
+		if _, err2 := os.Stat(filepath.Join(dist, "logo.svg")); err2 == nil {
+			r.StaticFile("/logo.svg", filepath.Join(dist, "logo.svg"))
+		}
+		// SPA fallback: any unknown path serves index.html
+		r.NoRoute(func(c *gin.Context) {
+			p := c.Request.URL.Path
+			if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/health") {
+				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+				return
+			}
+			c.File(filepath.Join(dist, "index.html"))
+		})
+		fmt.Printf("LedgerAlps: serving frontend from %s\n", dist)
+	} else {
+		fmt.Printf("LedgerAlps: no frontend dist found at %s — API only\n", dist)
+	}
+
+	// ── 9. Start ──────────────────────────────────────────────────────────────
 	addr := ":" + cfg.Port
 	fmt.Printf("LedgerAlps: listening on http://localhost%s\n", addr)
 	if err := r.Run(addr); err != nil {

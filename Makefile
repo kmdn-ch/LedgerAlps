@@ -4,17 +4,20 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: help build build-server build-cli run test test-coverage lint fmt vet tidy \
+.PHONY: help build build-server build-cli build-launcher build-windows \
+        build-frontend build-installer run test test-coverage lint fmt vet tidy \
         clean docker-up docker-down docker-logs release-snapshot release-dry \
-        frontend-install frontend-build install
+        release frontend-install frontend-build install
 
 # --------------------------------------------------------------------------- #
 # Build metadata — injected at link time                                      #
 # --------------------------------------------------------------------------- #
-BINARY_SERVER := ledgeralps-server
-BINARY_CLI    := ledgeralps-cli
-DIST_DIR      := dist
-MODULE        := github.com/kmdn-ch/ledgeralps
+BINARY_SERVER   := ledgeralps-server
+BINARY_CLI      := ledgeralps-cli
+BINARY_LAUNCHER := ledgeralps
+DIST_DIR        := dist
+MODULE          := github.com/kmdn-ch/ledgeralps
+INSTALLER_VER   ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "dev")
 
 VERSION  := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
@@ -35,13 +38,13 @@ help: ## Show this help
 	@printf '\033[1mLedgerAlps $(VERSION)\033[0m — available targets:\n\n'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 	  | sort \
-	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
+	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 	@printf '\n'
 
 # --------------------------------------------------------------------------- #
-# Build                                                                       #
+# Build — native (current OS)                                                 #
 # --------------------------------------------------------------------------- #
-build: build-server build-cli ## Build both binaries into ./dist/
+build: build-server build-cli ## Build server + CLI for the current OS
 
 build-server: ## Build the API server binary
 	@mkdir -p $(DIST_DIR)
@@ -52,6 +55,38 @@ build-cli: ## Build the admin CLI binary
 	@mkdir -p $(DIST_DIR)
 	$(GO_BUILD) -o $(DIST_DIR)/$(BINARY_CLI) ./cmd/cli
 	@echo "  built  $(DIST_DIR)/$(BINARY_CLI)  [$(VERSION) @ $(COMMIT)]"
+
+# --------------------------------------------------------------------------- #
+# Build — Windows installer pipeline                                          #
+# --------------------------------------------------------------------------- #
+build-launcher: ## Build Windows launcher (ledgeralps.exe, no console window)
+	@mkdir -p $(DIST_DIR)
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+	  go build -trimpath -ldflags "$(LDFLAGS) -H=windowsgui" \
+	  -o $(DIST_DIR)/$(BINARY_LAUNCHER).exe ./cmd/launcher
+	@echo "  built  $(DIST_DIR)/$(BINARY_LAUNCHER).exe  [$(VERSION) @ $(COMMIT)]"
+
+build-windows: ## Build server + launcher for Windows (amd64)
+	@mkdir -p $(DIST_DIR)
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+	  go build -trimpath -ldflags "$(LDFLAGS)" \
+	  -o $(DIST_DIR)/$(BINARY_SERVER).exe ./cmd/server
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+	  go build -trimpath -ldflags "$(LDFLAGS) -H=windowsgui" \
+	  -o $(DIST_DIR)/$(BINARY_LAUNCHER).exe ./cmd/launcher
+	@echo "  built  $(DIST_DIR)/$(BINARY_SERVER).exe + $(DIST_DIR)/$(BINARY_LAUNCHER).exe"
+
+build-frontend: ## Build frontend for production (outputs to frontend/dist/)
+	cd frontend && npm ci && npm run build
+	@echo "  built  frontend/dist/"
+
+build-installer: build-windows build-frontend ## Build the full Windows installer (.exe) via Inno Setup
+	@mkdir -p installer/Output
+	ISCC installer/ledgeralps.iss
+	@echo "  installer: installer/Output/LedgerAlps_Setup_$(INSTALLER_VER)_windows_amd64.exe"
+
+release: build-installer ## Full release: binaries + frontend + installer
+	@echo "Release $(INSTALLER_VER) ready."
 
 # --------------------------------------------------------------------------- #
 # Run                                                                         #
@@ -126,13 +161,12 @@ release-dry: ## Dry-run goreleaser (validates, builds, no upload)
 	goreleaser release --skip=publish --clean
 
 # --------------------------------------------------------------------------- #
-# Frontend                                                                    #
+# Frontend (alias targets)                                                    #
 # --------------------------------------------------------------------------- #
 frontend-install: ## Install frontend npm dependencies
 	cd frontend && npm install
 
-frontend-build: ## Build frontend for production (outputs to frontend/dist/)
-	cd frontend && npm run build
+frontend-build: build-frontend ## Alias for build-frontend
 
 # --------------------------------------------------------------------------- #
 # Install (Linux / macOS)                                                     #
