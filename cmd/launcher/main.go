@@ -111,7 +111,8 @@ func openBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		// cmd /c start is more reliable than rundll32 in elevated/installer contexts.
+		cmd = exec.Command("cmd", "/c", "start", "", url)
 	case "darwin":
 		cmd = exec.Command("open", url)
 	default:
@@ -527,6 +528,8 @@ func runSetupWizard() {
 		// Start the server.
 		_, err = startServer(cfg)
 		if err != nil {
+			// Rollback config so next launch re-runs the wizard.
+			_ = os.Remove(configFilePath())
 			jsonError(w, "Impossible de démarrer le serveur: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -536,6 +539,8 @@ func runSetupWizard() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := waitForServer(ctx, appURL); err != nil {
+			// Rollback config so next launch re-runs the wizard.
+			_ = os.Remove(configFilePath())
 			jsonError(w, "Le serveur ne répond pas — vérifiez server.log dans "+dataDir, http.StatusServiceUnavailable)
 			return
 		}

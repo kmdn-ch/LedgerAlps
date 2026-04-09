@@ -66,10 +66,10 @@ build-launcher: ## Build Windows launcher (ledgeralps.exe, no console window)
 	  -o $(DIST_DIR)/$(BINARY_LAUNCHER).exe ./cmd/launcher
 	@echo "  built  $(DIST_DIR)/$(BINARY_LAUNCHER).exe  [$(VERSION) @ $(COMMIT)]"
 
-build-windows: ## Build server + launcher for Windows (amd64)
+build-windows: ## Build server + launcher for Windows (amd64), both windowsgui (no console)
 	@mkdir -p $(DIST_DIR)
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
-	  go build -trimpath -ldflags "$(LDFLAGS)" \
+	  go build -trimpath -ldflags "$(LDFLAGS) -H=windowsgui" \
 	  -o $(DIST_DIR)/$(BINARY_SERVER).exe ./cmd/server
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
 	  go build -trimpath -ldflags "$(LDFLAGS) -H=windowsgui" \
