@@ -12,6 +12,7 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
+	"github.com/kmdn-ch/ledgeralps/version"
 )
 
 func main() {
@@ -50,7 +51,7 @@ func main() {
 
 	// ── 5. Health ─────────────────────────────────────────────────────────────
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "1.0.0"})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": version.Version()})
 	})
 
 	// ── 6. Services ───────────────────────────────────────────────────────────
@@ -129,6 +130,24 @@ func main() {
 	// Stats dashboard
 	statsH := handlers.NewStatsHandler(database, cfg.UsePostgres())
 	api.GET("/stats", statsH.GetStats)
+
+	// Reports
+	rh := handlers.NewReportsHandler(database, cfg.UsePostgres())
+	api.GET("/reports/balance-sheet", rh.BalanceSheet)
+	api.GET("/reports/income-statement", rh.IncomeStatement)
+	api.GET("/reports/general-ledger", rh.GeneralLedger)
+	api.GET("/reports/ar-aging", rh.ARaging)
+
+	// Payments (CRUD — must be registered after /payments/export to avoid shadowing)
+	ph := handlers.NewPaymentsHandler(database, cfg.UsePostgres(), accountingSvc)
+	api.POST("/payments", ph.CreatePayment)
+	api.GET("/payments", ph.ListPayments)
+	api.GET("/payments/:id", ph.GetPayment)
+
+	// Audit logs
+	alh := handlers.NewAuditHandler(database, cfg.UsePostgres())
+	api.GET("/audit-logs", alh.ListAuditLogs)
+	api.GET("/audit-logs/:id/verify", alh.VerifyAuditLog)
 
 	// ── 8. Start ──────────────────────────────────────────────────────────────
 	addr := ":" + cfg.Port

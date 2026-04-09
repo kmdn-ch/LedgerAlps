@@ -173,3 +173,28 @@ type AuditLog struct {
 	SequenceNumber int64     `db:"sequence_number" json:"sequence_number"`
 	CreatedAt      time.Time `db:"created_at"      json:"created_at"`
 }
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+
+type PaymentMethod string
+
+const (
+	PaymentMethodBankTransfer PaymentMethod = "bank_transfer"
+	PaymentMethodCash         PaymentMethod = "cash"
+	PaymentMethodCard         PaymentMethod = "card"
+	PaymentMethodCheck        PaymentMethod = "check"
+	PaymentMethodOther        PaymentMethod = "other"
+)
+
+type Payment struct {
+	ID             string        `db:"id"               json:"id"`
+	InvoiceID      string        `db:"invoice_id"       json:"invoice_id"`
+	Amount         float64       `db:"amount"           json:"amount"`
+	PaymentDate    time.Time     `db:"payment_date"     json:"payment_date"`
+	Method         PaymentMethod `db:"method"           json:"method"`
+	Reference      *string       `db:"reference"        json:"reference,omitempty"`
+	JournalEntryID *string       `db:"journal_entry_id" json:"journal_entry_id,omitempty"`
+	CreatedByID    string        `db:"created_by_id"    json:"created_by_id"`
+	CreatedAt      time.Time     `db:"created_at"       json:"created_at"`
+	UpdatedAt      time.Time     `db:"updated_at"       json:"updated_at"`
+}

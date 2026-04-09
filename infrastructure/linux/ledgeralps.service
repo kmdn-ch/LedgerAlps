@@ -1,0 +1,44 @@
+[Unit]
+Description=LedgerAlps Swiss Accounting Server
+Documentation=https://github.com/kmdn-ch/ledgeralps
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ledgeralps
+Group=ledgeralps
+WorkingDirectory=/var/lib/ledgeralps
+
+# Load environment from /etc/ledgeralps/ledgeralps.env
+# Create this file with at minimum:
+#   JWT_SECRET=<openssl rand -hex 32>
+#   PORT=8000
+#   SQLITE_PATH=/var/lib/ledgeralps/ledgeralps.db
+EnvironmentFile=-/etc/ledgeralps/ledgeralps.env
+
+ExecStart=/usr/bin/ledgeralps-server
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=on-failure
+RestartSec=5s
+KillMode=mixed
+TimeoutStopSec=30
+
+# File descriptor limit (for high-concurrency deployments)
+LimitNOFILE=65535
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ledgeralps
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/ledgeralps /var/log/ledgeralps
+
+[Install]
+WantedBy=multi-user.target

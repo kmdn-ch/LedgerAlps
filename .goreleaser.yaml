@@ -1,0 +1,164 @@
+version: 2
+
+project_name: ledgeralps
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod verify
+
+builds:
+  - id: ledgeralps-server
+    main: ./cmd/server
+    binary: ledgeralps-server
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/kmdn-ch/ledgeralps/version.version={{.Version}}
+      - -X github.com/kmdn-ch/ledgeralps/version.commit={{.Commit}}
+      - -X github.com/kmdn-ch/ledgeralps/version.date={{.CommitDate}}
+      - -X github.com/kmdn-ch/ledgeralps/version.builtBy=goreleaser
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: ledgeralps-cli
+    main: ./cmd/cli
+    binary: ledgeralps-cli
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/kmdn-ch/ledgeralps/version.version={{.Version}}
+      - -X github.com/kmdn-ch/ledgeralps/version.commit={{.Commit}}
+      - -X github.com/kmdn-ch/ledgeralps/version.date={{.CommitDate}}
+      - -X github.com/kmdn-ch/ledgeralps/version.builtBy=goreleaser
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: ledgeralps
+    ids:
+      - ledgeralps-server
+      - ledgeralps-cli
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+      - scripts/install.sh
+
+nfpms:
+  - id: ledgeralps-packages
+    package_name: ledgeralps
+    file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    ids:
+      - ledgeralps-server
+      - ledgeralps-cli
+    vendor: LedgerAlps
+    homepage: https://github.com/kmdn-ch/ledgeralps
+    maintainer: LedgerAlps Team <hello@ledgeralps.ch>
+    description: |-
+      LedgerAlps — Swiss SME Accounting Platform.
+      Double-entry accounting with Swiss compliance (CO 957a/958f), QR-bill (SPC 0200),
+      ISO 20022 payments (pain.001/camt.053), and TVA declarations.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    section: finance
+    priority: optional
+    scripts:
+      preinstall: infrastructure/linux/preinstall.sh
+      postinstall: infrastructure/linux/postinstall.sh
+      preremove: infrastructure/linux/preremove.sh
+      postremove: infrastructure/linux/postremove.sh
+    contents:
+      - src: infrastructure/linux/ledgeralps.service
+        dst: /lib/systemd/system/ledgeralps.service
+        file_info:
+          mode: 0644
+      - src: .env.example
+        dst: /etc/ledgeralps/ledgeralps.env.example
+        type: config|noreplace
+        file_info:
+          mode: 0600
+    recommends:
+      - postgresql-client
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: "New Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Security"
+      regexp: '^.*?sec(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "Performance"
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: "Documentation"
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 4
+    - title: "Other Changes"
+      order: 999
+  filters:
+    exclude:
+      - "^chore\\(release\\):"
+      - "^chore: merge"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  github:
+    owner: kmdn-ch
+    name: ledgeralps
+  draft: false
+  prerelease: auto
+  name_template: "LedgerAlps {{.Tag}}"
+  footer: |
+    ## Installation
+
+    **Linux/macOS (one-liner):**
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/kmdn-ch/ledgeralps/main/scripts/install.sh | bash
+    ```
+
+    **Windows (PowerShell):**
+    ```powershell
+    irm https://raw.githubusercontent.com/kmdn-ch/ledgeralps/main/scripts/install.ps1 | iex
+    ```
+
+    **Docker:**
+    ```bash
+    docker compose up -d
+    ```
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev+{{ .ShortCommit }}"

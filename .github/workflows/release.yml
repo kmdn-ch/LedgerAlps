@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GORELEASER_VERSION: "v2.6.1"
+
+jobs:
+  goreleaser:
+    name: GoReleaser (Linux + macOS + Windows binaries)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # GoReleaser needs full history for changelog
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: ${{ env.GORELEASER_VERSION }}
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  windows-installer:
+    name: Windows NSIS Installer
+    runs-on: windows-latest
+    needs: goreleaser
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+
+      - name: Download Windows binaries from release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.goreleaser.outputs.version }}
+        shell: bash
+        run: |
+          mkdir -p installer-work
+          # Download and extract the windows amd64 zip from the release
+          gh release download "$VERSION" \
+            --pattern "ledgeralps_${VERSION}_windows_amd64.zip" \
+            --dir installer-work
+          cd installer-work
+          unzip -o "ledgeralps_${VERSION}_windows_amd64.zip"
+
+      - name: Build NSIS installer (amd64)
+        shell: bash
+        env:
+          VERSION: ${{ needs.goreleaser.outputs.version }}
+        run: |
+          # Copy binaries where installer.nsi expects them
+          cp installer-work/ledgeralps-server.exe infrastructure/windows/
+          cp installer-work/ledgeralps-cli.exe    infrastructure/windows/
+          cd infrastructure/windows
+          makensis //DVERSION="$VERSION" installer.nsi
+
+      - name: Upload installer to GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.goreleaser.outputs.version }}
+        shell: bash
+        run: |
+          installer=$(ls infrastructure/windows/LedgerAlps_Setup_*.exe)
+          gh release upload "$VERSION" "$installer" --clobber

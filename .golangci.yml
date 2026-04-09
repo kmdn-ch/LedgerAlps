@@ -1,0 +1,59 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - gofmt
+    - misspell
+    - bodyclose
+    - noctx
+    - sqlclosecheck
+  disable:
+    - exhaustive
+    - wrapcheck
+    - nlreturn
+    - gci
+    - godot
+    - godox
+    - funlen
+    - cyclop
+    - gocognit
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+      - shadow
+  staticcheck:
+    checks: ["all", "-SA1019"]
+  gofmt:
+    simplify: true
+  misspell:
+    locale: US
+
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 5
+  exclude-rules:
+    # Test files have less strict requirements
+    - path: _test\.go
+      linters:
+        - errcheck
+        - bodyclose
+    # Migration files are SQL, not Go
+    - path: internal/db/migrations
+      linters:
+        - all
+    # Generated files
+    - path: ".*\\.pb\\.go"
+      linters:
+        - all
