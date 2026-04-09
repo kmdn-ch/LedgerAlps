@@ -50,3 +50,12 @@ ssl/
 
 # Docker volumes
 postgres_data/
+
+# Go build artifacts in repo root
+*.exe
+ledgeralps-server
+ledgeralps-cli
+ledgeralps
+
+# npm lock (goreleaser uses --no-package-lock)
+frontend/package-lock.json
