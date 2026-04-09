@@ -46,11 +46,6 @@ jobs:
       - name: Build frontend
         run: cd frontend && npm run build
 
-      - name: Embed frontend into server binary
-        # Goreleaser's before hook does this too, but running it here makes
-        # the intent explicit and ensures the directory exists before go vet.
-        run: mkdir -p internal/frontend/dist && cp -r frontend/dist/. internal/frontend/dist/
-
       - name: Extract version
         id: version
         run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
