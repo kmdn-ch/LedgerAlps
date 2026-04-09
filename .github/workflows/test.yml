@@ -58,6 +58,9 @@ jobs:
       - name: Build CLI
         run: go build ./cmd/cli
 
+      - name: Build launcher (cross-compile for Windows)
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-H=windowsgui" ./cmd/launcher
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

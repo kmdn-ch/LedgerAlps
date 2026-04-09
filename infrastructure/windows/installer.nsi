@@ -1,7 +1,16 @@
 ; =============================================================================
 ; LedgerAlps — NSIS Windows Installer
-; Build with: makensis /DVERSION=v1.2.3 infrastructure\windows\installer.nsi
-; Requires: NSIS 3.x, placed in same directory as ledgeralps-server.exe + ledgeralps-cli.exe
+; Build with:
+;   makensis /DVERSION=1.2.3 infrastructure\windows\installer.nsi
+;
+; Expected files in infrastructure\windows\ before running makensis:
+;   ledgeralps.exe         (launcher / GUI entry point, built with -H=windowsgui)
+;   ledgeralps-server.exe  (API + static-file server)
+;   ledgeralps-cli.exe     (admin CLI)
+;   dist\                  (React frontend build — frontend/dist/ from repo)
+;     index.html
+;     assets\
+;       ...
 ; =============================================================================
 
 Unicode True
@@ -13,17 +22,16 @@ Unicode True
   !define VERSION "dev"
 !endif
 
-!define PRODUCT_NAME     "LedgerAlps"
-!define PRODUCT_VERSION  "${VERSION}"
+!define PRODUCT_NAME      "LedgerAlps"
+!define PRODUCT_VERSION   "${VERSION}"
 !define PRODUCT_PUBLISHER "LedgerAlps"
-!define PRODUCT_URL      "https://github.com/kmdn-ch/ledgeralps"
-!define PRODUCT_EXE      "ledgeralps-server.exe"
-!define PRODUCT_CLI      "ledgeralps-cli.exe"
-!define SERVICE_NAME     "LedgerAlps"
-!define SERVICE_DISPLAY  "LedgerAlps Accounting Server"
-!define INSTALL_DIR      "$PROGRAMFILES64\LedgerAlps"
-!define UNINSTALL_KEY    "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
-!define OUT_FILE         "LedgerAlps_Setup_${VERSION}_windows_amd64.exe"
+!define PRODUCT_URL       "https://github.com/kmdn-ch/ledgeralps"
+!define LAUNCHER_EXE      "ledgeralps.exe"
+!define SERVER_EXE        "ledgeralps-server.exe"
+!define CLI_EXE           "ledgeralps-cli.exe"
+!define INSTALL_DIR       "$PROGRAMFILES64\LedgerAlps"
+!define UNINSTALL_KEY     "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
+!define OUT_FILE          "LedgerAlps_Setup_${VERSION}_windows_amd64.exe"
 
 ; --------------------------------------------------------------------------- ;
 ; MUI2 configuration                                                          ;
@@ -32,8 +40,10 @@ Unicode True
 !include "WinMessages.nsh"
 
 !define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN          "$INSTDIR\${PRODUCT_EXE}"
-!define MUI_FINISHPAGE_RUN_TEXT     "Start LedgerAlps server now"
+
+; On the Finish page, offer to launch the app (via the launcher).
+!define MUI_FINISHPAGE_RUN          "$INSTDIR\${LAUNCHER_EXE}"
+!define MUI_FINISHPAGE_RUN_TEXT     "Launch LedgerAlps"
 !define MUI_FINISHPAGE_SHOWREADME   "$INSTDIR\README.md"
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "View README"
 
@@ -52,72 +62,56 @@ Unicode True
 ; --------------------------------------------------------------------------- ;
 ; Installer metadata                                                          ;
 ; --------------------------------------------------------------------------- ;
-Name            "${PRODUCT_NAME} ${PRODUCT_VERSION}"
-OutFile         "${OUT_FILE}"
-InstallDir      "${INSTALL_DIR}"
+Name             "${PRODUCT_NAME} ${PRODUCT_VERSION}"
+OutFile          "${OUT_FILE}"
+InstallDir       "${INSTALL_DIR}"
 InstallDirRegKey HKLM "${UNINSTALL_KEY}" "InstallLocation"
 RequestExecutionLevel admin
 ShowInstDetails show
 ShowUnInstDetails show
 
 ; --------------------------------------------------------------------------- ;
-; Installer sections                                                          ;
+; Pre-install: stop any running instance                                      ;
+; --------------------------------------------------------------------------- ;
+Function .onInit
+  ; Kill any running server or launcher so files can be replaced.
+  nsExec::ExecToLog 'taskkill /f /im "${SERVER_EXE}"'
+  nsExec::ExecToLog 'taskkill /f /im "${LAUNCHER_EXE}"'
+  Sleep 1000
+FunctionEnd
+
+; --------------------------------------------------------------------------- ;
+; Installer section                                                           ;
 ; --------------------------------------------------------------------------- ;
 Section "LedgerAlps (required)" SecMain
   SectionIn RO
 
   SetOutPath "$INSTDIR"
-  File "ledgeralps-server.exe"
-  File "ledgeralps-cli.exe"
+  File "${LAUNCHER_EXE}"
+  File "${SERVER_EXE}"
+  File "${CLI_EXE}"
   File "..\..\README.md"
   File "..\..\LICENSE"
 
-  ; Create data directory for SQLite database and config
-  CreateDirectory "$COMMONAPPDATA\LedgerAlps"
+  ; Frontend static files — served by ledgeralps-server.exe from $INSTDIR\dist\
+  SetOutPath "$INSTDIR\dist"
+  File /r "dist\*.*"
 
-  ; Write example environment file if it doesn't exist
-  IfFileExists "$COMMONAPPDATA\LedgerAlps\ledgeralps.env" env_exists env_missing
-  env_missing:
-    FileOpen $0 "$COMMONAPPDATA\LedgerAlps\ledgeralps.env.example" w
-    FileWrite $0 "# LedgerAlps environment configuration$\r$\n"
-    FileWrite $0 "# Copy this file to ledgeralps.env and fill in the values.$\r$\n"
-    FileWrite $0 "$\r$\n"
-    FileWrite $0 "# REQUIRED: Generate with: openssl rand -hex 32$\r$\n"
-    FileWrite $0 "JWT_SECRET=CHANGE_ME_TO_A_32_CHAR_MINIMUM_SECRET$\r$\n"
-    FileWrite $0 "$\r$\n"
-    FileWrite $0 "# Server port (default: 8000)$\r$\n"
-    FileWrite $0 "PORT=8000$\r$\n"
-    FileWrite $0 "$\r$\n"
-    FileWrite $0 "# SQLite database path$\r$\n"
-    FileWrite $0 "SQLITE_PATH=$COMMONAPPDATA\LedgerAlps\ledgeralps.db$\r$\n"
-    FileWrite $0 "$\r$\n"
-    FileWrite $0 "# OR use PostgreSQL (comment out SQLITE_PATH above)$\r$\n"
-    FileWrite $0 "# POSTGRES_DSN=postgres://user:password@localhost:5432/ledgeralps?sslmode=disable$\r$\n"
-    FileWrite $0 "$\r$\n"
-    FileWrite $0 "# CORS — allowed frontend origins (comma-separated)$\r$\n"
-    FileWrite $0 "ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000$\r$\n"
-    FileClose $0
-  env_exists:
-
-  ; Add to system PATH
-  ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path"
-  StrCpy $1 "$0;$INSTDIR"
-  WriteRegExpandStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path" "$1"
-  SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
-
-  ; Register Windows Service using sc.exe
-  ; The service reads config from the env file
-  ExecWait 'sc create "${SERVICE_NAME}" binPath= "\"$INSTDIR\${PRODUCT_EXE}\"" DisplayName= "${SERVICE_DISPLAY}" start= auto obj= LocalSystem'
-  ExecWait 'sc description "${SERVICE_NAME}" "LedgerAlps Swiss SME Accounting Platform — double-entry bookkeeping with Swiss compliance (QR-bill, ISO 20022, TVA)."'
-  ExecWait 'sc failure "${SERVICE_NAME}" reset= 60 actions= restart/5000/restart/10000/restart/30000'
-
-  ; Start Menu shortcuts
+  ; ── Shortcuts ──────────────────────────────────────────────────────────── ;
+  ; Start Menu
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
-  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\LedgerAlps Server.lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\${PRODUCT_EXE}"
-  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\Open LedgerAlps.lnk" "http://localhost:8000" "" ""
-  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall LedgerAlps.lnk" "$INSTDIR\Uninstall.exe"
+  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\LedgerAlps.lnk" \
+    "$INSTDIR\${LAUNCHER_EXE}" "" "$INSTDIR\${LAUNCHER_EXE}" 0 \
+    SW_SHOWNORMAL "" "Open LedgerAlps"
+  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall LedgerAlps.lnk" \
+    "$INSTDIR\Uninstall.exe"
 
-  ; Write uninstall registry keys
+  ; Desktop shortcut
+  CreateShortcut "$DESKTOP\LedgerAlps.lnk" \
+    "$INSTDIR\${LAUNCHER_EXE}" "" "$INSTDIR\${LAUNCHER_EXE}" 0 \
+    SW_SHOWNORMAL "" "Open LedgerAlps"
+
+  ; ── Registry — uninstall entry ─────────────────────────────────────────── ;
   WriteRegStr   HKLM "${UNINSTALL_KEY}" "DisplayName"      "${PRODUCT_NAME}"
   WriteRegStr   HKLM "${UNINSTALL_KEY}" "DisplayVersion"   "${PRODUCT_VERSION}"
   WriteRegStr   HKLM "${UNINSTALL_KEY}" "Publisher"        "${PRODUCT_PUBLISHER}"
@@ -126,48 +120,46 @@ Section "LedgerAlps (required)" SecMain
   WriteRegStr   HKLM "${UNINSTALL_KEY}" "UninstallString"  '"$INSTDIR\Uninstall.exe"'
   WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoModify"         1
   WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoRepair"         1
+  WriteRegStr   HKLM "${UNINSTALL_KEY}" "DisplayIcon"      "$INSTDIR\${LAUNCHER_EXE}"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
   DetailPrint ""
-  DetailPrint "Installation complete!"
-  DetailPrint ""
-  DetailPrint "NEXT STEPS:"
-  DetailPrint "1. Edit $COMMONAPPDATA\LedgerAlps\ledgeralps.env.example"
-  DetailPrint "   Set JWT_SECRET to a strong random value (openssl rand -hex 32)"
-  DetailPrint "   Copy to $COMMONAPPDATA\LedgerAlps\ledgeralps.env"
-  DetailPrint "2. Start the service: sc start ${SERVICE_NAME}"
-  DetailPrint "3. Open http://localhost:8000"
+  DetailPrint "Installation complete."
+  DetailPrint "Launch LedgerAlps from the Desktop or Start Menu."
+  DetailPrint "On first launch a setup wizard will open in your browser."
 SectionEnd
 
 ; --------------------------------------------------------------------------- ;
 ; Uninstaller                                                                 ;
 ; --------------------------------------------------------------------------- ;
 Section "Uninstall"
-  ; Stop and remove Windows Service
-  ExecWait 'sc stop "${SERVICE_NAME}"'
-  Sleep 2000
-  ExecWait 'sc delete "${SERVICE_NAME}"'
+  ; Stop any running server
+  nsExec::ExecToLog 'taskkill /f /im "${SERVER_EXE}"'
+  nsExec::ExecToLog 'taskkill /f /im "${LAUNCHER_EXE}"'
+  Sleep 500
 
-  ; Remove files
-  Delete "$INSTDIR\${PRODUCT_EXE}"
-  Delete "$INSTDIR\${PRODUCT_CLI}"
+  ; Remove installed files
+  Delete "$INSTDIR\${LAUNCHER_EXE}"
+  Delete "$INSTDIR\${SERVER_EXE}"
+  Delete "$INSTDIR\${CLI_EXE}"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\Uninstall.exe"
+  RMDir /r "$INSTDIR\dist"
   RMDir  "$INSTDIR"
 
-  ; Remove Start Menu shortcuts
+  ; Remove shortcuts
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\*.lnk"
   RMDir  "$SMPROGRAMS\${PRODUCT_NAME}"
+  Delete "$DESKTOP\LedgerAlps.lnk"
 
   ; Remove uninstall registry key
   DeleteRegKey HKLM "${UNINSTALL_KEY}"
 
-  ; Note: data in $COMMONAPPDATA\LedgerAlps is preserved — user must manually remove
+  ; NOTE: %APPDATA%\LedgerAlps (config.json + database) is intentionally
+  ; preserved so user data survives an uninstall/reinstall cycle.
   DetailPrint ""
   DetailPrint "LedgerAlps has been uninstalled."
-  DetailPrint "Your data in $COMMONAPPDATA\LedgerAlps has been preserved."
-  DetailPrint "Delete that folder manually if you no longer need your data."
+  DetailPrint "Your data in %APPDATA%\LedgerAlps has been preserved."
 SectionEnd
-

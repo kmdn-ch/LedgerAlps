@@ -70,14 +70,21 @@ jobs:
       - name: Install NSIS
         run: choco install nsis -y --no-progress
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build frontend
+        shell: bash
+        run: cd frontend && npm install --no-package-lock && npm run build
+
       - name: Download Windows binaries from release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.goreleaser.outputs.version }}
         shell: bash
         run: |
-          mkdir -p installer-work
           # GoReleaser .Version strips the leading 'v' (e.g. v1.1.0 → 1.1.0)
           VERSION_NUM="${VERSION#v}"
           # Download and extract the windows amd64 zip from the release
@@ -87,27 +94,36 @@ jobs:
           cd installer-work
           unzip -o "ledgeralps_${VERSION_NUM}_windows_amd64.zip"
 
-      - name: Build NSIS installer (amd64)
+      - name: Stage installer files
         shell: bash
         env:
           VERSION: ${{ needs.goreleaser.outputs.version }}
         run: |
-          # GoReleaser .Version strips the leading 'v' (e.g. v1.1.0 → 1.1.0)
           VERSION_NUM="${VERSION#v}"
-          # Copy binaries where installer.nsi expects them
-          cp installer-work/ledgeralps-server.exe infrastructure/windows/
-          cp installer-work/ledgeralps-cli.exe    infrastructure/windows/
+          STAGE="infrastructure/windows"
+          # Binaries (server + launcher + cli)
+          cp installer-work/ledgeralps-server.exe "$STAGE/"
+          cp installer-work/ledgeralps.exe         "$STAGE/"
+          cp installer-work/ledgeralps-cli.exe     "$STAGE/"
+          # Frontend static files (server serves these from <install dir>\dist\)
+          cp -r frontend/dist "$STAGE/dist"
+          echo "Staged files:"
+          ls -lh "$STAGE/"
+
+      - name: Build NSIS installer
+        shell: bash
+        env:
+          VERSION: ${{ needs.goreleaser.outputs.version }}
+        run: |
+          VERSION_NUM="${VERSION#v}"
           cd infrastructure/windows
-          # Choco installs NSIS to Program Files (x86); PATH not refreshed in bash
           "/c/Program Files (x86)/NSIS/makensis.exe" //DVERSION="$VERSION_NUM" installer.nsi
 
       - name: Upload installer to GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.goreleaser.outputs.version }}
         shell: bash
         run: |
           installer=$(ls infrastructure/windows/LedgerAlps_Setup_*.exe)
           gh release upload "$VERSION" "$installer" --clobber
-

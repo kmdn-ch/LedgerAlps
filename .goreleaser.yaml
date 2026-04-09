@@ -23,6 +23,25 @@ builds:
       - -X github.com/kmdn-ch/ledgeralps/version.builtBy=goreleaser
     mod_timestamp: "{{ .CommitTimestamp }}"
 
+  # Windows launcher — GUI entry point (setup wizard + browser opener).
+  # Built only for Windows; uses -H=windowsgui to suppress the console window.
+  - id: ledgeralps-launcher
+    main: ./cmd/launcher
+    binary: ledgeralps
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w -H=windowsgui
+      - -X github.com/kmdn-ch/ledgeralps/version.version={{.Version}}
+      - -X github.com/kmdn-ch/ledgeralps/version.commit={{.Commit}}
+      - -X github.com/kmdn-ch/ledgeralps/version.date={{.CommitDate}}
+      - -X github.com/kmdn-ch/ledgeralps/version.builtBy=goreleaser
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
   - id: ledgeralps-cli
     main: ./cmd/cli
     binary: ledgeralps-cli
