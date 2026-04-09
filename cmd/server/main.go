@@ -20,24 +20,45 @@ import (
 // distDir returns the path to the frontend dist folder. Resolution order:
 //  1. LEDGERALPS_INSTALL_DIR env var (set by the Windows launcher in production).
 //  2. Directory next to the running binary (standard installed layout).
-//  3. frontend/dist relative to the current working directory (dev fallback).
+//  3. %PROGRAMFILES%\LedgerAlps\dist (Windows production fallback).
+//  4. frontend/dist relative to the current working directory (dev fallback).
 func distDir() string {
-	// Check env var set by the Windows launcher (most reliable in production).
+	check := func(candidate string) bool {
+		_, err := os.Stat(filepath.Join(candidate, "index.html"))
+		return err == nil
+	}
+
+	// 1. Env var set by the Windows launcher — most reliable in production.
 	if installDir := os.Getenv("LEDGERALPS_INSTALL_DIR"); installDir != "" {
 		candidate := filepath.Join(installDir, "dist")
-		if _, err := os.Stat(filepath.Join(candidate, "index.html")); err == nil {
+		if check(candidate) {
 			return candidate
 		}
+		log.Printf("distDir: LEDGERALPS_INSTALL_DIR=%q set but dist/index.html not found there", installDir)
 	}
-	// Fallback: look next to the running binary.
-	exe, err := os.Executable()
-	if err == nil {
+
+	// 2. Next to the running binary (works for all OS installs).
+	if exe, err := os.Executable(); err == nil {
 		candidate := filepath.Join(filepath.Dir(exe), "dist")
-		if _, err := os.Stat(filepath.Join(candidate, "index.html")); err == nil {
+		if check(candidate) {
 			return candidate
 		}
+		log.Printf("distDir: dist/index.html not found next to binary at %q", filepath.Dir(exe))
 	}
-	// Dev fallback: look relative to current working dir.
+
+	// 3. Windows: standard ProgramFiles install location (fallback when env var
+	//    is not propagated, e.g. server launched outside the launcher).
+	for _, env := range []string{"ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"} {
+		if pf := os.Getenv(env); pf != "" {
+			candidate := filepath.Join(pf, "LedgerAlps", "dist")
+			if check(candidate) {
+				log.Printf("distDir: found frontend via %%%s%%: %s", env, candidate)
+				return candidate
+			}
+		}
+	}
+
+	// 4. Dev: relative to current working directory.
 	return "frontend/dist"
 }
 
@@ -184,6 +205,7 @@ func main() {
 	// Serve the React build. All non-API routes fall through to index.html
 	// so that client-side routing works.
 	dist := distDir()
+	distOK := false
 	if _, err := os.Stat(dist); err == nil {
 		r.Static("/assets", filepath.Join(dist, "assets"))
 		r.StaticFile("/favicon.ico", filepath.Join(dist, "favicon.ico"))
@@ -191,19 +213,43 @@ func main() {
 		if _, err2 := os.Stat(filepath.Join(dist, "logo.svg")); err2 == nil {
 			r.StaticFile("/logo.svg", filepath.Join(dist, "logo.svg"))
 		}
-		// SPA fallback: any unknown path serves index.html
-		r.NoRoute(func(c *gin.Context) {
-			p := c.Request.URL.Path
-			if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/health") {
-				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-				return
-			}
-			c.File(filepath.Join(dist, "index.html"))
-		})
+		distOK = true
 		fmt.Printf("LedgerAlps: serving frontend from %s\n", dist)
 	} else {
-		fmt.Printf("LedgerAlps: no frontend dist found at %s — API only\n", dist)
+		log.Printf("LedgerAlps: no frontend dist found at %q — serving diagnostic page", dist)
 	}
+
+	// NoRoute is always registered so the browser never receives a raw gin 404.
+	// When the dist folder is missing we return a diagnostic HTML page instead.
+	r.NoRoute(func(c *gin.Context) {
+		p := c.Request.URL.Path
+		if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/health") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		if distOK {
+			c.File(filepath.Join(dist, "index.html"))
+			return
+		}
+		// Frontend dist not found — render a diagnostic page so the user
+		// gets actionable information instead of a bare "404 page not found".
+		c.Data(http.StatusServiceUnavailable, "text/html; charset=utf-8", []byte(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>LedgerAlps — Frontend missing</title>
+<style>body{font-family:system-ui,sans-serif;max-width:600px;margin:60px auto;padding:0 20px;color:#1a2e4a}
+h1{color:#c0392b}code{background:#f0f4f8;padding:2px 6px;border-radius:4px}
+.hint{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin-top:24px}
+</style></head><body>
+<h1>Frontend not found</h1>
+<p>The LedgerAlps server is running correctly, but the React frontend
+could not be located at the expected path:</p>
+<p><code>`+dist+`</code></p>
+<div class="hint">
+<strong>Fix:</strong> Re-install LedgerAlps using the latest installer from
+<a href="https://github.com/kmdn-ch/LedgerAlps/releases">github.com/kmdn-ch/LedgerAlps/releases</a>.
+If the problem persists, check <code>%APPDATA%\LedgerAlps\server.log</code> for details.
+</div>
+</body></html>`))
+	})
 
 	// ── 9. Start ──────────────────────────────────────────────────────────────
 	addr := ":" + cfg.Port
