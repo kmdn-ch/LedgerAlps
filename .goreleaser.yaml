@@ -65,6 +65,10 @@ builds:
 archives:
   - id: ledgeralps
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # The launcher is Windows-only, so the Windows archive has 3 binaries
+    # (server + cli + launcher) while Linux/macOS archives have 2. This is
+    # intentional — allow_different_binary_count suppresses the goreleaser check.
+    allow_different_binary_count: true
     format_overrides:
       - goos: windows
         formats:
