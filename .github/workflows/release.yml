@@ -39,7 +39,9 @@ jobs:
           node-version: "20"
 
       - name: Install frontend dependencies
-        run: cd frontend && npm install
+        # --no-package-lock prevents creating/modifying package-lock.json,
+        # which would make the git worktree dirty and fail goreleaser's dirty check.
+        run: cd frontend && npm install --no-package-lock
 
       - name: Build frontend
         run: cd frontend && npm run build
