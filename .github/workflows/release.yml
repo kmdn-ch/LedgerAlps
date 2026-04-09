@@ -78,23 +78,27 @@ jobs:
         shell: bash
         run: |
           mkdir -p installer-work
+          # GoReleaser .Version strips the leading 'v' (e.g. v1.1.0 → 1.1.0)
+          VERSION_NUM="${VERSION#v}"
           # Download and extract the windows amd64 zip from the release
           gh release download "$VERSION" \
-            --pattern "ledgeralps_${VERSION}_windows_amd64.zip" \
+            --pattern "ledgeralps_${VERSION_NUM}_windows_amd64.zip" \
             --dir installer-work
           cd installer-work
-          unzip -o "ledgeralps_${VERSION}_windows_amd64.zip"
+          unzip -o "ledgeralps_${VERSION_NUM}_windows_amd64.zip"
 
       - name: Build NSIS installer (amd64)
         shell: bash
         env:
           VERSION: ${{ needs.goreleaser.outputs.version }}
         run: |
+          # GoReleaser .Version strips the leading 'v' (e.g. v1.1.0 → 1.1.0)
+          VERSION_NUM="${VERSION#v}"
           # Copy binaries where installer.nsi expects them
           cp installer-work/ledgeralps-server.exe infrastructure/windows/
           cp installer-work/ledgeralps-cli.exe    infrastructure/windows/
           cd infrastructure/windows
-          makensis //DVERSION="$VERSION" installer.nsi
+          makensis //DVERSION="$VERSION_NUM" installer.nsi
 
       - name: Upload installer to GitHub Release
         env:
@@ -105,3 +109,4 @@ jobs:
         run: |
           installer=$(ls infrastructure/windows/LedgerAlps_Setup_*.exe)
           gh release upload "$VERSION" "$installer" --clobber
+
