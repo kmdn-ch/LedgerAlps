@@ -50,9 +50,6 @@ builds:
 
 archives:
   - id: ledgeralps
-    ids:
-      - ledgeralps-server
-      - ledgeralps-cli
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
@@ -68,9 +65,6 @@ nfpms:
   - id: ledgeralps-packages
     package_name: ledgeralps
     file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    ids:
-      - ledgeralps-server
-      - ledgeralps-cli
     vendor: LedgerAlps
     homepage: https://github.com/kmdn-ch/ledgeralps
     maintainer: LedgerAlps Team <hello@ledgeralps.ch>
