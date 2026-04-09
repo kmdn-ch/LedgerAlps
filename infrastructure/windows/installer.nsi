@@ -33,8 +33,6 @@ Unicode True
 !include "WinMessages.nsh"
 
 !define MUI_ABORTWARNING
-!define MUI_ICON          "..\..\frontend\public\favicon.ico"
-!define MUI_UNICON        "..\..\frontend\public\favicon.ico"
 !define MUI_FINISHPAGE_RUN          "$INSTDIR\${PRODUCT_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT     "Start LedgerAlps server now"
 !define MUI_FINISHPAGE_SHOWREADME   "$INSTDIR\README.md"
