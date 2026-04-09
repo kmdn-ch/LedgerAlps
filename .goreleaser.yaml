@@ -2,6 +2,12 @@ version: 2
 
 project_name: ledgeralps
 
+before:
+  hooks:
+    # Copy the built frontend into the embed path before `go build`.
+    # The CI runs `npm run build` before goreleaser, so frontend/dist/ exists.
+    - bash -c "mkdir -p internal/frontend/dist && cp -r frontend/dist/. internal/frontend/dist/"
+
 builds:
   - id: ledgeralps-server
     main: ./cmd/server

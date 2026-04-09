@@ -59,3 +59,8 @@ ledgeralps
 
 # npm lock (goreleaser uses --no-package-lock)
 frontend/package-lock.json
+
+# Embedded frontend — keep the dev placeholder, ignore the real build output
+!internal/frontend/dist/
+internal/frontend/dist/*
+!internal/frontend/dist/index.html

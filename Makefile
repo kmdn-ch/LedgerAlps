@@ -46,8 +46,9 @@ help: ## Show this help
 # --------------------------------------------------------------------------- #
 build: build-server build-cli ## Build server + CLI for the current OS
 
-build-server: ## Build the API server binary
-	@mkdir -p $(DIST_DIR)
+build-server: ## Build the API server binary (embeds frontend if built)
+	@mkdir -p $(DIST_DIR) internal/frontend/dist
+	@if [ -d frontend/dist ]; then cp -r frontend/dist/. internal/frontend/dist/; fi
 	$(GO_BUILD) -o $(DIST_DIR)/$(BINARY_SERVER) ./cmd/server
 	@echo "  built  $(DIST_DIR)/$(BINARY_SERVER)  [$(VERSION) @ $(COMMIT)]"
 
@@ -67,7 +68,8 @@ build-launcher: ## Build Windows launcher (ledgeralps.exe, no console window)
 	@echo "  built  $(DIST_DIR)/$(BINARY_LAUNCHER).exe  [$(VERSION) @ $(COMMIT)]"
 
 build-windows: ## Build server + launcher for Windows (amd64), both windowsgui (no console)
-	@mkdir -p $(DIST_DIR)
+	@mkdir -p $(DIST_DIR) internal/frontend/dist
+	@if [ -d frontend/dist ]; then cp -r frontend/dist/. internal/frontend/dist/; fi
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
 	  go build -trimpath -ldflags "$(LDFLAGS) -H=windowsgui" \
 	  -o $(DIST_DIR)/$(BINARY_SERVER).exe ./cmd/server

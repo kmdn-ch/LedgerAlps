@@ -46,6 +46,11 @@ jobs:
       - name: Build frontend
         run: cd frontend && npm run build
 
+      - name: Embed frontend into server binary
+        # Goreleaser's before hook does this too, but running it here makes
+        # the intent explicit and ensures the directory exists before go vet.
+        run: mkdir -p internal/frontend/dist && cp -r frontend/dist/. internal/frontend/dist/
+
       - name: Extract version
         id: version
         run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
@@ -70,15 +75,6 @@ jobs:
       - name: Install NSIS
         run: choco install nsis -y --no-progress
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Build frontend
-        shell: bash
-        run: cd frontend && npm install --no-package-lock && npm run build
-
       - name: Download Windows binaries from release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -101,12 +97,10 @@ jobs:
         run: |
           VERSION_NUM="${VERSION#v}"
           STAGE="infrastructure/windows"
-          # Binaries (server + launcher + cli)
+          # Binaries only — frontend is embedded inside ledgeralps-server.exe
           cp installer-work/ledgeralps-server.exe "$STAGE/"
           cp installer-work/ledgeralps.exe         "$STAGE/"
           cp installer-work/ledgeralps-cli.exe     "$STAGE/"
-          # Frontend static files (server serves these from <install dir>\dist\)
-          cp -r frontend/dist "$STAGE/dist"
           echo "Staged files:"
           ls -lh "$STAGE/"
 

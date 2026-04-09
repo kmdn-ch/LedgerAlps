@@ -93,9 +93,8 @@ Section "LedgerAlps (required)" SecMain
   File "..\..\README.md"
   File "..\..\LICENSE"
 
-  ; Frontend static files — served by ledgeralps-server.exe from $INSTDIR\dist\
-  SetOutPath "$INSTDIR\dist"
-  File /r "dist\*.*"
+  ; Note: the React frontend is embedded inside ledgeralps-server.exe (Go embed).
+  ; No separate dist\ folder is needed in the install directory.
 
   ; ── Shortcuts ──────────────────────────────────────────────────────────── ;
   ; Start Menu
@@ -146,7 +145,6 @@ Section "Uninstall"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\Uninstall.exe"
-  RMDir /r "$INSTDIR\dist"
   RMDir  "$INSTDIR"
 
   ; Remove shortcuts
