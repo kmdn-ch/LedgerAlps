@@ -53,23 +53,26 @@ func NewWithAccounting(database *sql.DB, usePostgres bool, acctSvc AccountingSer
 type LineInput struct {
 	Description string
 	Quantity    float64
+	Unit        *string
 	UnitPrice   float64
-	VATRate     float64
+	DiscountPct float64 // percentage, e.g. 10 for 10%
+	VATRate     float64 // percentage, e.g. 8.1 for 8.1%
 	Sequence    int
 }
 
 type CreateInvoiceRequest struct {
-	ContactID string
-	IssueDate time.Time
-	DueDate   time.Time
-	Currency  string
-	VATRate   float64
-	Notes     *string
-	Terms     *string
-	Lines     []LineInput
+	DocumentType string // "invoice" | "quote" | "credit_note"
+	ContactID    string
+	IssueDate    time.Time
+	DueDate      time.Time
+	Currency     string
+	Notes        *string
+	Terms        *string
+	Lines        []LineInput
 }
 
-// CreateInvoice creates an invoice with totals rounded to 0.05 CHF (5-Rappen rule).
+// CreateInvoice creates an invoice or quote with totals rounded to 0.05 CHF (5-Rappen rule).
+// VAT rates are expressed as percentages (e.g. 8.1 for 8.1%).
 func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateInvoiceRequest) (*models.Invoice, error) {
 	if len(req.Lines) == 0 {
 		return nil, fmt.Errorf("invoice must have at least one line")
@@ -77,8 +80,17 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 	if req.Currency == "" {
 		req.Currency = "CHF"
 	}
+	if req.DocumentType == "" {
+		req.DocumentType = "invoice"
+	}
 
-	subtotal, vatAmount, total := computeTotals(req.Lines, req.VATRate)
+	subtotal, vatAmount, total := computeTotals(req.Lines)
+
+	// Use the first line's VAT rate as the representative rate for the invoice header.
+	primaryVATRate := 8.1
+	if len(req.Lines) > 0 && req.Lines[0].VATRate > 0 {
+		primaryVATRate = req.Lines[0].VATRate
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -87,31 +99,33 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 	defer tx.Rollback()
 
 	invoiceID := db.NewID()
-	number, err := s.nextInvoiceNumber(ctx, tx, req.IssueDate)
+	number, err := s.nextInvoiceNumber(ctx, tx, req.DocumentType, req.IssueDate)
 	if err != nil {
 		return nil, fmt.Errorf("next invoice number: %w", err)
 	}
 
 	insertInv := db.Rebind(`
-		INSERT INTO invoices (id, invoice_number, contact_id, status, issue_date, due_date,
+		INSERT INTO invoices (id, invoice_number, document_type, contact_id, status, issue_date, due_date,
 		                      currency, subtotal_amount, vat_amount, total_amount, vat_rate,
 		                      notes, terms, created_by_id)
-		VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+		VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
 	if _, err := tx.ExecContext(ctx, insertInv,
-		invoiceID, number, req.ContactID,
+		invoiceID, number, req.DocumentType, req.ContactID,
 		req.IssueDate.Format("2006-01-02"), req.DueDate.Format("2006-01-02"),
-		req.Currency, subtotal, vatAmount, total, req.VATRate,
+		req.Currency, subtotal, vatAmount, total, primaryVATRate,
 		req.Notes, req.Terms, userID); err != nil {
 		return nil, fmt.Errorf("insert invoice: %w", err)
 	}
 
 	insertLine := db.Rebind(`
-		INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit_price, vat_rate, line_total, sequence)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+		INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit, unit_price, discount_pct, vat_rate, line_total, sequence)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
 	for _, l := range req.Lines {
-		lineTotal := l.Quantity * l.UnitPrice * (1 + l.VATRate)
+		// line_total is the HT amount after discount (before VAT).
+		lineTotal := l.Quantity * l.UnitPrice * (1 - l.DiscountPct/100)
 		if _, err := tx.ExecContext(ctx, insertLine,
-			db.NewID(), invoiceID, l.Description, l.Quantity, l.UnitPrice, l.VATRate, lineTotal, l.Sequence); err != nil {
+			db.NewID(), invoiceID, l.Description, l.Quantity, l.Unit, l.UnitPrice,
+			l.DiscountPct, l.VATRate, lineTotal, l.Sequence); err != nil {
 			return nil, fmt.Errorf("insert line: %w", err)
 		}
 	}
@@ -124,6 +138,7 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 	return &models.Invoice{
 		ID:             invoiceID,
 		InvoiceNumber:  number,
+		DocumentType:   req.DocumentType,
 		ContactID:      req.ContactID,
 		Status:         models.InvoiceStatusDraft,
 		IssueDate:      req.IssueDate,
@@ -132,7 +147,7 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 		SubtotalAmount: subtotal,
 		VATAmount:      vatAmount,
 		TotalAmount:    total,
-		VATRate:        req.VATRate,
+		VATRate:        primaryVATRate,
 		Notes:          req.Notes,
 		Terms:          req.Terms,
 		CreatedByID:    userID,
@@ -271,24 +286,32 @@ func (s *Service) createReversalEntry(
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // computeTotals calculates subtotal, VAT, and total (rounded to 0.05 CHF).
-func computeTotals(lines []LineInput, vatRate float64) (subtotal, vatAmount, total float64) {
+// VAT rates must be expressed as percentages (e.g. 8.1 for 8.1%).
+func computeTotals(lines []LineInput) (subtotal, vatAmount, total float64) {
 	for _, l := range lines {
-		subtotal += l.Quantity * l.UnitPrice
+		base := l.Quantity * l.UnitPrice * (1 - l.DiscountPct/100)
+		subtotal += base
+		vatAmount += base * l.VATRate / 100
 	}
-	vatAmount = subtotal * vatRate
 	total = compliance.RoundTo5Rappen(subtotal + vatAmount)
-	// Re-derive vatAmount to be consistent with the rounded total
 	vatAmount = compliance.RoundTo5Rappen(vatAmount)
 	return
 }
 
-// nextInvoiceNumber generates FA-2026-001 style numbers.
-func (s *Service) nextInvoiceNumber(ctx context.Context, tx *sql.Tx, date time.Time) (string, error) {
+// nextInvoiceNumber generates FA-2026-0001 (invoice) or OF-2026-0001 (quote) style numbers.
+func (s *Service) nextInvoiceNumber(ctx context.Context, tx *sql.Tx, documentType string, date time.Time) (string, error) {
+	prefix := "FA"
+	if documentType == "quote" {
+		prefix = "OF"
+	} else if documentType == "credit_note" {
+		prefix = "NC"
+	}
 	year := date.Format("2006")
+	pattern := prefix + "-" + year + "-%"
 	countQ := db.Rebind("SELECT COUNT(*) FROM invoices WHERE invoice_number LIKE ?", s.usePostgres)
 	var count int
-	if err := tx.QueryRowContext(ctx, countQ, "FA-"+year+"-%").Scan(&count); err != nil {
+	if err := tx.QueryRowContext(ctx, countQ, pattern).Scan(&count); err != nil {
 		return "", fmt.Errorf("count invoices: %w", err)
 	}
-	return fmt.Sprintf("FA-%s-%04d", year, count+1), nil
+	return fmt.Sprintf("%s-%s-%04d", prefix, year, count+1), nil
 }

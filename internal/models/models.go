@@ -126,6 +126,7 @@ type Contact struct {
 type Invoice struct {
 	ID             string        `db:"id"              json:"id"`
 	InvoiceNumber  string        `db:"invoice_number"  json:"invoice_number"`
+	DocumentType   string        `db:"document_type"   json:"document_type"`
 	ContactID      string        `db:"contact_id"      json:"contact_id"`
 	Status         InvoiceStatus `db:"status"          json:"status"`
 	IssueDate      time.Time     `db:"issue_date"      json:"issue_date"`
@@ -135,6 +136,7 @@ type Invoice struct {
 	VATAmount      float64       `db:"vat_amount"      json:"vat_amount"`
 	TotalAmount    float64       `db:"total_amount"    json:"total_amount"`
 	VATRate        float64       `db:"vat_rate"        json:"vat_rate"`
+	AmountPaid     float64       `db:"amount_paid"     json:"amount_paid"`
 	Notes          *string       `db:"notes"           json:"notes,omitempty"`
 	Terms          *string       `db:"terms"           json:"terms,omitempty"`
 	QRReference    *string       `db:"qr_reference"    json:"qr_reference,omitempty"`
@@ -149,14 +151,16 @@ type Invoice struct {
 }
 
 type InvoiceLine struct {
-	ID          string  `db:"id"          json:"id"`
-	InvoiceID   string  `db:"invoice_id"  json:"invoice_id"`
-	Description string  `db:"description" json:"description"`
-	Quantity    float64 `db:"quantity"    json:"quantity"`
-	UnitPrice   float64 `db:"unit_price"  json:"unit_price"`
-	VATRate     float64 `db:"vat_rate"    json:"vat_rate"`
-	LineTotal   float64 `db:"line_total"  json:"line_total"`
-	Sequence    int     `db:"sequence"    json:"sequence"`
+	ID          string   `db:"id"           json:"id"`
+	InvoiceID   string   `db:"invoice_id"   json:"invoice_id"`
+	Description string   `db:"description"  json:"description"`
+	Quantity    float64  `db:"quantity"     json:"quantity"`
+	Unit        *string  `db:"unit"         json:"unit,omitempty"`
+	UnitPrice   float64  `db:"unit_price"   json:"unit_price"`
+	DiscountPct float64  `db:"discount_pct" json:"discount_pct"`
+	VATRate     float64  `db:"vat_rate"     json:"vat_rate"`
+	LineTotal   float64  `db:"line_total"   json:"line_total"`
+	Sequence    int      `db:"sequence"     json:"sequence"`
 }
 
 type AuditLog struct {

@@ -73,7 +73,7 @@ export function InvoiceDetailPage() {
   const handleDownload = async () => {
     if (!invoice) return
     const resp = await invoicesApi.downloadPDF(invoiceId!)
-    downloadBlob(resp.data, `facture_${invoice.number}.pdf`)
+    downloadBlob(resp.data, `facture_${invoice.invoice_number}.pdf`)
   }
 
   if (isLoading) return <LoadingSpinner />
@@ -82,7 +82,7 @@ export function InvoiceDetailPage() {
   )
 
   const actions = TRANSITIONS[invoice.status] ?? []
-  const totalRemaining = parseFloat(invoice.total) - parseFloat(invoice.amount_paid)
+  const totalRemaining = invoice.total_amount - invoice.amount_paid
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -92,8 +92,8 @@ export function InvoiceDetailPage() {
           <ArrowLeft size={15} />
         </button>
         <PageHeader
-          title={invoice.number}
-          subtitle={`Facture · émise le ${formatDate(invoice.issue_date)}`}
+          title={invoice.invoice_number}
+          subtitle={`${invoice.document_type === 'quote' ? 'Offre de prix' : 'Facture'} · émise le ${formatDate(invoice.issue_date)}`}
           actions={
             <div className="flex items-center gap-2">
               {actions.map(t => (
@@ -134,7 +134,7 @@ export function InvoiceDetailPage() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between text-alpine-600">
               <span>Sous-total HT</span>
-              <span className="font-mono tabular-nums">{formatCHF(invoice.subtotal)}</span>
+              <span className="font-mono tabular-nums">{formatCHF(invoice.subtotal_amount)}</span>
             </div>
             <div className="flex justify-between text-alpine-600">
               <span>TVA</span>
@@ -142,9 +142,9 @@ export function InvoiceDetailPage() {
             </div>
             <div className="flex justify-between text-alpine-900 font-semibold border-t border-alpine-100 pt-2">
               <span>Total TTC</span>
-              <span className="font-mono tabular-nums">{formatCHF(invoice.total)}</span>
+              <span className="font-mono tabular-nums">{formatCHF(invoice.total_amount)}</span>
             </div>
-            {parseFloat(invoice.amount_paid) > 0 && (
+            {invoice.amount_paid > 0 && (
               <>
                 <div className="flex justify-between text-success-700">
                   <span>Déjà payé</span>
@@ -206,14 +206,14 @@ export function InvoiceDetailPage() {
             <tbody>
               {invoice.lines.map(line => (
                 <tr key={line.id}>
-                  <td className="text-alpine-400 w-8">{line.position}</td>
+                  <td className="text-alpine-400 w-8">{line.sequence}</td>
                   <td className="text-alpine-800">{line.description}</td>
                   <td className="text-right tabular-nums">
                     {line.quantity}{line.unit ? ` ${line.unit}` : ''}
                   </td>
                   <td className="text-right tabular-nums font-mono">{formatCHF(line.unit_price)}</td>
                   <td className="text-right tabular-nums text-alpine-500">
-                    {parseFloat(line.discount_percent) > 0 ? `${line.discount_percent}%` : '—'}
+                    {line.discount_pct > 0 ? `${line.discount_pct}%` : '—'}
                   </td>
                   <td className="text-right tabular-nums text-alpine-500">{line.vat_rate}%</td>
                   <td className="text-right tabular-nums font-mono font-medium">{formatCHF(line.line_total)}</td>
@@ -246,7 +246,7 @@ export function InvoiceDetailPage() {
       {showPDF && (
         <PDFPreview
           fetchPDF={() => invoicesApi.downloadPDF(invoiceId!).then(r => r.data as Blob)}
-          filename={`facture_${invoice.number}.pdf`}
+          filename={`facture_${invoice.invoice_number}.pdf`}
           className="mb-6"
           onClose={() => setShowPDF(false)}
         />

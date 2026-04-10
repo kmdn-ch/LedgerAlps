@@ -22,12 +22,13 @@ const lineSchema = z.object({
 })
 
 const schema = z.object({
-  contact_id:   z.string().min(1, 'Sélectionnez un contact'),
-  issue_date:   z.string().min(1, 'Date requise'),
-  due_date:     z.string().optional(),
-  notes:        z.string().optional(),
-  terms:        z.string().optional(),
-  lines:        z.array(lineSchema).min(1, 'Au moins une ligne'),
+  document_type: z.enum(['invoice', 'quote', 'credit_note']).default('invoice'),
+  contact_id:    z.string().min(1, 'Sélectionnez un contact'),
+  issue_date:    z.string().min(1, 'Date requise'),
+  due_date:      z.string().min(1, "Échéance requise"),
+  notes:         z.string().optional(),
+  terms:         z.string().optional(),
+  lines:         z.array(lineSchema).min(1, 'Au moins une ligne'),
 })
 
 type FormData = z.infer<typeof schema>
@@ -60,7 +61,7 @@ function NewContactModal({
 
   const create = useMutation({
     mutationFn: () => contactsApi.create({
-      contact_type:      'client',
+      contact_type:      'customer',
       is_company:        fields.is_company,
       name:              fields.name.trim(),
       email:             fields.email || undefined,
@@ -169,9 +170,12 @@ export function NewInvoicePage() {
   const [showContactModal, setShowContactModal] = useState(false)
 
   const { data: contacts = [] } = useQuery<Contact[]>({
-    queryKey: ['contacts', 'customer'],
-    queryFn:  () => contactsApi.list({ contact_type: 'customer' }).then(r => r.data),
+    queryKey: ['contacts'],
+    queryFn:  () => contactsApi.list().then(r => r.data),
   })
+
+  const today = new Date().toISOString().slice(0, 10)
+  const defaultDueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   const {
     register, control, handleSubmit, setValue,
@@ -179,7 +183,9 @@ export function NewInvoicePage() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      issue_date: new Date().toISOString().slice(0, 10),
+      document_type: 'invoice',
+      issue_date:    today,
+      due_date:      defaultDueDate,
       lines: [{ description: '', quantity: 1, unit_price: 0, discount_percent: 0, vat_rate: 8.1 }],
     },
   })
@@ -200,8 +206,6 @@ export function NewInvoicePage() {
     },
   })
 
-  const today = new Date().toISOString().slice(0, 10)
-
   return (
     <div>
       {showContactModal && (
@@ -218,7 +222,7 @@ export function NewInvoicePage() {
       )}
 
       <PageHeader
-        title="Nouvelle facture"
+        title="Nouvelle facture / offre"
         actions={
           <button onClick={() => navigate(-1)} className="btn-secondary">
             <ArrowLeft size={15} /> Retour
@@ -235,8 +239,18 @@ export function NewInvoicePage() {
             <h2 className="text-sm font-semibold text-alpine-800">Informations du document</h2>
           </div>
           <div className="card-body grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Type de document */}
+            <div>
+              <label className="label">Type *</label>
+              <select className="select" {...register('document_type')}>
+                <option value="invoice">Facture</option>
+                <option value="quote">Offre de prix</option>
+                <option value="credit_note">Note de crédit</option>
+              </select>
+            </div>
+
             {/* Contact */}
-            <div className="col-span-2">
+            <div className="col-span-2 md:col-span-1">
               <label className="label">Contact *</label>
               <div className="flex gap-2">
                 <select
@@ -267,15 +281,19 @@ export function NewInvoicePage() {
               <input
                 type="date"
                 className={`input ${errors.issue_date ? 'input-error' : ''}`}
-                defaultValue={today}
                 {...register('issue_date')}
               />
             </div>
 
             {/* Échéance */}
             <div>
-              <label className="label">Échéance</label>
-              <input type="date" className="input" {...register('due_date')} />
+              <label className="label">Échéance *</label>
+              <input
+                type="date"
+                className={`input ${errors.due_date ? 'input-error' : ''}`}
+                {...register('due_date')}
+              />
+              {errors.due_date && <p className="error-msg">{errors.due_date.message}</p>}
             </div>
 
           </div>
@@ -409,7 +427,7 @@ export function NewInvoicePage() {
             disabled={create.isPending}
           >
             <Save size={15} />
-            {create.isPending ? 'Enregistrement…' : 'Enregistrer en brouillon'}
+            {create.isPending ? 'Enregistrement…' : 'Créer en brouillon'}
           </button>
         </div>
       </form>

@@ -9,7 +9,7 @@ import { contactsApi } from '@/api/client'
 import { ErrorBanner } from '@/components/ui'
 
 const schema = z.object({
-  contact_type:      z.enum(['client', 'supplier', 'both']),
+  contact_type:      z.enum(['customer', 'supplier', 'both']),
   is_company:        z.boolean(),
   name:              z.string().min(1, 'Nom requis'),
   legal_name:        z.string().optional(),
@@ -39,7 +39,7 @@ export function NewContactModal({ onClose }: Props) {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      contact_type:      'client',
+      contact_type:      'customer',
       is_company:        true,
       country:           'CH',
       currency:          'CHF',
@@ -81,7 +81,7 @@ export function NewContactModal({ onClose }: Props) {
             <div>
               <label className="label">Type *</label>
               <select className="select" {...register('contact_type')}>
-                <option value="client">Client</option>
+                <option value="customer">Client</option>
                 <option value="supplier">Fournisseur</option>
                 <option value="both">Les deux</option>
               </select>

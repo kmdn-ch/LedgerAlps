@@ -79,7 +79,7 @@ export interface JournalLineCreate {
 }
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
-export type ContactType = 'client' | 'supplier' | 'both'
+export type ContactType = 'customer' | 'supplier' | 'both'
 
 export interface Contact {
   id: string
@@ -121,63 +121,36 @@ export type DocumentType   = 'invoice' | 'quote' | 'credit_note'
 
 export interface InvoiceLine {
   id: string
-  position: number
+  invoice_id: string
   description: string
-  quantity: string
+  quantity: number
   unit: string | null
-  unit_price: string
-  discount_percent: string
-  vat_rate: string
-  vat_amount: string
-  line_total: string
+  unit_price: number
+  discount_pct: number
+  vat_rate: number
+  line_total: number
+  sequence: number
 }
 
 export interface Invoice {
   id: string
   invoice_number: string
-  /** @deprecated use invoice_number */
-  number: string
   document_type: DocumentType
-  status: DocumentStatus
   contact_id: string
+  status: DocumentStatus
   issue_date: string
   due_date: string | null
   currency: string
   subtotal_amount: number
-  /** @deprecated use subtotal_amount */
-  subtotal: string
   vat_amount: number
   total_amount: number
-  /** @deprecated use total_amount */
-  total: string
-  amount_paid: string
-  qr_iban: string | null
+  vat_rate: number
+  amount_paid: number
   notes: string | null
   terms: string | null
   lines: InvoiceLine[]
   created_at: string
-}
-
-export interface InvoiceLineCreate {
-  description: string
-  quantity: number
-  unit?: string
-  unit_price: number
-  discount_percent?: number
-  vat_rate?: number
-}
-
-export interface InvoiceCreate {
-  contact_id: string
-  issue_date: string
-  due_date?: string
-  document_type: DocumentType
-  vat_method?: 'effective' | 'tdfn'
-  qr_iban?: string
-  payment_info?: string
-  notes?: string
-  terms?: string
-  lines: InvoiceLineCreate[]
+  updated_at: string
 }
 
 // ─── TVA ──────────────────────────────────────────────────────────────────────

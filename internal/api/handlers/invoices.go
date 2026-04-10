@@ -65,8 +65,8 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 	}
 
 	listQ := db.Rebind(`
-		SELECT id, invoice_number, contact_id, status, issue_date, due_date, currency,
-		       subtotal_amount, vat_amount, total_amount, vat_rate, notes, terms, created_at, updated_at
+		SELECT id, invoice_number, document_type, contact_id, status, issue_date, due_date, currency,
+		       subtotal_amount, vat_amount, total_amount, vat_rate, amount_paid, notes, terms, created_at, updated_at
 		FROM invoices`+where+` ORDER BY issue_date DESC, created_at DESC LIMIT ? OFFSET ?`, h.usePostgres)
 	offset := (page - 1) * pageSize
 	rows, err := h.db.QueryContext(ctx, listQ, append(args, pageSize, offset)...)
@@ -79,9 +79,9 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 	invoices := []models.Invoice{}
 	for rows.Next() {
 		var inv models.Invoice
-		if err := rows.Scan(&inv.ID, &inv.InvoiceNumber, &inv.ContactID, &inv.Status,
+		if err := rows.Scan(&inv.ID, &inv.InvoiceNumber, &inv.DocumentType, &inv.ContactID, &inv.Status,
 			&inv.IssueDate, &inv.DueDate, &inv.Currency,
-			&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate,
+			&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate, &inv.AmountPaid,
 			&inv.Notes, &inv.Terms, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error"})
 			return
@@ -105,15 +105,15 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 	defer cancel()
 
 	q := db.Rebind(`
-		SELECT id, invoice_number, contact_id, status, issue_date, due_date, currency,
-		       subtotal_amount, vat_amount, total_amount, vat_rate, notes, terms, created_at, updated_at
+		SELECT id, invoice_number, document_type, contact_id, status, issue_date, due_date, currency,
+		       subtotal_amount, vat_amount, total_amount, vat_rate, amount_paid, notes, terms, created_at, updated_at
 		FROM invoices WHERE id = ?`, h.usePostgres)
 
 	var inv models.Invoice
 	err := h.db.QueryRowContext(ctx, q, id).Scan(
-		&inv.ID, &inv.InvoiceNumber, &inv.ContactID, &inv.Status,
+		&inv.ID, &inv.InvoiceNumber, &inv.DocumentType, &inv.ContactID, &inv.Status,
 		&inv.IssueDate, &inv.DueDate, &inv.Currency,
-		&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate,
+		&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate, &inv.AmountPaid,
 		&inv.Notes, &inv.Terms, &inv.CreatedAt, &inv.UpdatedAt)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
@@ -123,26 +123,50 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
+
+	// Load invoice lines.
+	linesQ := db.Rebind(`
+		SELECT id, invoice_id, description, quantity, unit, unit_price, discount_pct, vat_rate, line_total, sequence
+		FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence`, h.usePostgres)
+	lrows, err := h.db.QueryContext(ctx, linesQ, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	defer lrows.Close()
+	inv.Lines = []models.InvoiceLine{}
+	for lrows.Next() {
+		var l models.InvoiceLine
+		if err := lrows.Scan(&l.ID, &l.InvoiceID, &l.Description, &l.Quantity, &l.Unit,
+			&l.UnitPrice, &l.DiscountPct, &l.VATRate, &l.LineTotal, &l.Sequence); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error"})
+			return
+		}
+		inv.Lines = append(inv.Lines, l)
+	}
+
 	c.JSON(http.StatusOK, inv)
 }
 
 type createInvoiceRequest struct {
-	ContactID string    `json:"contact_id" binding:"required"`
-	IssueDate string    `json:"issue_date" binding:"required"`
-	DueDate   string    `json:"due_date" binding:"required"`
-	Currency  string    `json:"currency"`
-	VATRate   float64   `json:"vat_rate"`
-	Notes     *string   `json:"notes"`
-	Terms     *string   `json:"terms"`
-	Lines     []lineReq `json:"lines" binding:"required,min=1"`
+	DocumentType string    `json:"document_type"`
+	ContactID    string    `json:"contact_id" binding:"required"`
+	IssueDate    string    `json:"issue_date" binding:"required"`
+	DueDate      string    `json:"due_date" binding:"required"`
+	Currency     string    `json:"currency"`
+	Notes        *string   `json:"notes"`
+	Terms        *string   `json:"terms"`
+	Lines        []lineReq `json:"lines" binding:"required,min=1"`
 }
 
 type lineReq struct {
-	Description string  `json:"description" binding:"required"`
-	Quantity    float64 `json:"quantity" binding:"required,gt=0"`
-	UnitPrice   float64 `json:"unit_price" binding:"required"`
-	VATRate     float64 `json:"vat_rate"`
-	Sequence    int     `json:"sequence"`
+	Description string   `json:"description" binding:"required"`
+	Quantity    float64  `json:"quantity" binding:"required,gt=0"`
+	Unit        *string  `json:"unit"`
+	UnitPrice   float64  `json:"unit_price" binding:"required"`
+	DiscountPct float64  `json:"discount_pct"`
+	VATRate     float64  `json:"vat_rate"`
+	Sequence    int      `json:"sequence"`
 }
 
 // CreateInvoice POST /api/v1/invoices
@@ -169,7 +193,9 @@ func (h *InvoicesHandler) CreateInvoice(c *gin.Context) {
 		lines[i] = invoicing.LineInput{
 			Description: l.Description,
 			Quantity:    l.Quantity,
+			Unit:        l.Unit,
 			UnitPrice:   l.UnitPrice,
+			DiscountPct: l.DiscountPct,
 			VATRate:     l.VATRate,
 			Sequence:    l.Sequence,
 		}
@@ -181,14 +207,14 @@ func (h *InvoicesHandler) CreateInvoice(c *gin.Context) {
 		userID = claims.UserID
 	}
 	inv, err := h.svc.CreateInvoice(c.Request.Context(), userID, invoicing.CreateInvoiceRequest{
-		ContactID: req.ContactID,
-		IssueDate: issueDate,
-		DueDate:   dueDate,
-		Currency:  req.Currency,
-		VATRate:   req.VATRate,
-		Notes:     req.Notes,
-		Terms:     req.Terms,
-		Lines:     lines,
+		DocumentType: req.DocumentType,
+		ContactID:    req.ContactID,
+		IssueDate:    issueDate,
+		DueDate:      dueDate,
+		Currency:     req.Currency,
+		Notes:        req.Notes,
+		Terms:        req.Terms,
+		Lines:        lines,
 	})
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})

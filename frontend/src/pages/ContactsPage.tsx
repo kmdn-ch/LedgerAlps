@@ -11,7 +11,7 @@ import { NewContactModal } from '@/components/contact/NewContactModal'
 export function ContactsPage() {
   const [search,     setSearch]     = useState('')
   const [showModal,  setShowModal]  = useState(false)
-  const [typeFilter, setTypeFilter] = useState<'client' | 'supplier' | ''>('')
+  const [typeFilter, setTypeFilter] = useState<'customer' | 'supplier' | ''>('')
 
   const { data: contacts = [], isLoading } = useQuery<Contact[]>({
     queryKey: ['contacts', typeFilter],
@@ -46,7 +46,7 @@ export function ContactsPage() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        {(['', 'client', 'supplier'] as const).map(t => (
+        {(['', 'customer', 'supplier'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTypeFilter(t)}
@@ -56,7 +56,7 @@ export function ContactsPage() {
                 : 'bg-white border border-alpine-200 text-alpine-600 hover:bg-alpine-50'
             }`}
           >
-            {t === '' ? 'Tous' : t === 'client' ? 'Clients' : 'Fournisseurs'}
+            {t === '' ? 'Tous' : t === 'customer' ? 'Clients' : 'Fournisseurs'}
           </button>
         ))}
       </div>
@@ -96,8 +96,8 @@ export function ContactsPage() {
               <div className="mt-3 text-xs text-alpine-500 truncate">{c.email}</div>
             )}
             <div className="mt-3 flex items-center justify-between">
-              <span className={`badge ${c.contact_type === 'client' ? 'badge-sent' : 'badge-draft'}`}>
-                {c.contact_type === 'client' ? 'Client' : 'Fournisseur'}
+              <span className={`badge ${c.contact_type === 'customer' ? 'badge-sent' : 'badge-draft'}`}>
+                {c.contact_type === 'customer' ? 'Client' : 'Fournisseur'}
               </span>
               <span className="text-xs text-alpine-400">
                 {c.payment_term_days}j

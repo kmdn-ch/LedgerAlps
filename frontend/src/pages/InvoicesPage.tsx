@@ -27,12 +27,12 @@ export function InvoicesPage() {
   const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
     queryKey: ['invoices', status],
     // /invoices returns a paginated envelope { items, total, page, pages }
-    queryFn:  () => invoicesApi.list(status ? { status } : undefined).then(r => r.data.items as Invoice[]),
+    queryFn:  () => invoicesApi.list(status ? { status } : undefined).then(r => (r.data.items ?? []) as Invoice[]),
   })
 
-  const downloadPDF = async (id: string, number: string) => {
+  const downloadPDF = async (id: string, invoiceNumber: string) => {
     const resp = await invoicesApi.downloadPDF(id)
-    downloadBlob(resp.data, `facture_${number}.pdf`)
+    downloadBlob(resp.data, `facture_${invoiceNumber}.pdf`)
   }
 
   const markPaid = useMutation({
@@ -43,7 +43,7 @@ export function InvoicesPage() {
 
   const filtered = invoices.filter(i =>
     search === '' ||
-    i.number.toLowerCase().includes(search.toLowerCase())
+    i.invoice_number.toLowerCase().includes(search.toLowerCase())
   )
 
   return (
@@ -127,7 +127,7 @@ export function InvoicesPage() {
                     to={`/invoices/${inv.id}`}
                     className="font-mono text-accent-700 hover:text-accent-600 font-medium"
                   >
-                    {inv.number}
+                    {inv.invoice_number}
                   </Link>
                 </td>
                 <td className="text-alpine-600">{formatDate(inv.issue_date)}</td>
@@ -138,7 +138,7 @@ export function InvoicesPage() {
                 </td>
                 <td className="text-alpine-700">{inv.contact_id.slice(0, 8)}…</td>
                 <td className="text-right font-mono font-medium tabular-nums">
-                  {formatCHF(inv.total)}
+                  {formatCHF(inv.total_amount)}
                 </td>
                 <td><StatusBadge status={inv.status} /></td>
                 <td>
@@ -152,7 +152,7 @@ export function InvoicesPage() {
                       </button>
                     )}
                     <button
-                      onClick={() => downloadPDF(inv.id, inv.number)}
+                      onClick={() => downloadPDF(inv.id, inv.invoice_number)}
                       className="btn-ghost btn-sm"
                       title="Télécharger PDF"
                     >
