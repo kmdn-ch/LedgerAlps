@@ -100,13 +100,24 @@ jobs:
           ls -lh "$STAGE/"
 
       - name: Build NSIS installer
-        shell: bash
+        shell: pwsh
         env:
           VERSION: ${{ needs.goreleaser.outputs.version }}
         run: |
-          VERSION_NUM="${VERSION#v}"
-          cd infrastructure/windows
-          "/c/Program Files (x86)/NSIS/makensis.exe" //DVERSION="$VERSION_NUM" installer.nsi
+          $versionNum = $env:VERSION -replace '^v', ''
+          # Locate makensis: choco adds it to PATH, fall back to common install dirs
+          $makensis = (Get-Command makensis -ErrorAction SilentlyContinue)?.Source
+          if (-not $makensis) {
+            $makensis = @(
+              'C:\Program Files (x86)\NSIS\makensis.exe',
+              'C:\Program Files\NSIS\makensis.exe'
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $makensis) { throw "makensis.exe not found — check NSIS installation" }
+          Write-Host "Using makensis: $makensis"
+          Set-Location "infrastructure\windows"
+          & $makensis /DVERSION="$versionNum" installer.nsi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload installer to GitHub Release
         env:
