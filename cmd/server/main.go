@@ -168,12 +168,22 @@ func main() {
 	if assetsFS, err := fs.Sub(distFS, "assets"); err == nil {
 		r.StaticFS("/assets", http.FS(assetsFS))
 	}
-	r.GET("/favicon.ico", func(c *gin.Context) {
-		c.FileFromFS("favicon.ico", http.FS(distFS))
-	})
-	r.GET("/logo.svg", func(c *gin.Context) {
-		c.FileFromFS("logo.svg", http.FS(distFS))
-	})
+
+	// serveEmbedded reads a file from the embedded FS and writes it directly.
+	// We intentionally avoid c.FileFromFS / http.FileServer here because
+	// http.FileServer issues redirects (e.g. "index.html" → "/index.html")
+	// that cause ERR_TOO_MANY_REDIRECTS in the browser.
+	serveEmbedded := func(c *gin.Context, path, contentType string) {
+		data, err := fs.ReadFile(distFS, path)
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, contentType, data)
+	}
+
+	r.GET("/favicon.ico", func(c *gin.Context) { serveEmbedded(c, "favicon.ico", "image/x-icon") })
+	r.GET("/logo.svg", func(c *gin.Context) { serveEmbedded(c, "logo.svg", "image/svg+xml") })
 	fmt.Println("LedgerAlps: serving embedded frontend")
 
 	// SPA fallback: all non-API routes serve index.html for client-side routing.
@@ -183,7 +193,7 @@ func main() {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		c.FileFromFS("index.html", http.FS(distFS))
+		serveEmbedded(c, "index.html", "text/html; charset=utf-8")
 	})
 
 	// ── 9. Start ──────────────────────────────────────────────────────────────
