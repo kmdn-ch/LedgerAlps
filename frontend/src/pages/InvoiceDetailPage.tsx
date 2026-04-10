@@ -177,10 +177,10 @@ export function InvoiceDetailPage() {
                 {formatDate(invoice.due_date)}
               </dd>
             </div>
-            {invoice.qr_iban && (
+            {invoice.qr_reference && (
               <div className="flex justify-between">
-                <dt className="text-alpine-500">QR-IBAN</dt>
-                <dd className="text-alpine-700 font-mono text-xs truncate max-w-[120px]">{invoice.qr_iban}</dd>
+                <dt className="text-alpine-500">QR-Ref</dt>
+                <dd className="text-alpine-700 font-mono text-xs truncate max-w-[120px]">{invoice.qr_reference}</dd>
               </div>
             )}
           </dl>

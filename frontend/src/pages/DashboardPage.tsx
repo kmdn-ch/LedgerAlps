@@ -34,11 +34,11 @@ export function DashboardPage() {
 
   const totalDue = invoices
     .filter(i => i.status === 'sent' || i.status === 'overdue')
-    .reduce((s, i) => s + parseFloat(i.total) - parseFloat(i.amount_paid), 0)
+    .reduce((s, i) => s + i.total_amount - i.amount_paid, 0)
 
   const totalOverdue = invoices
     .filter(i => i.status === 'overdue')
-    .reduce((s, i) => s + parseFloat(i.total) - parseFloat(i.amount_paid), 0)
+    .reduce((s, i) => s + i.total_amount - i.amount_paid, 0)
 
   const recentInvoices = [...invoices]
     .sort((a, b) => b.issue_date.localeCompare(a.issue_date))
@@ -144,13 +144,13 @@ export function DashboardPage() {
               >
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-alpine-800 truncate">
-                    {inv.number}
+                    {inv.invoice_number}
                   </div>
                   <div className="text-xs text-alpine-400">{formatDate(inv.issue_date)}</div>
                 </div>
                 <div className="text-right ml-2 flex-shrink-0">
                   <div className="text-sm font-medium font-mono tabular-nums text-alpine-900">
-                    {formatCHF(String(inv.total_amount ?? inv.total))}
+                    {formatCHF(inv.total_amount)}
                   </div>
                   <StatusBadge status={inv.status} />
                 </div>

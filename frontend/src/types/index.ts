@@ -148,6 +148,7 @@ export interface Invoice {
   amount_paid: number
   notes: string | null
   terms: string | null
+  qr_reference: string | null
   lines: InvoiceLine[]
   created_at: string
   updated_at: string
