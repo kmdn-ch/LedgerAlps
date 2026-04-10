@@ -67,9 +67,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install NSIS
-        run: choco install nsis -y --no-progress
-
       - name: Download Windows binaries from release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
