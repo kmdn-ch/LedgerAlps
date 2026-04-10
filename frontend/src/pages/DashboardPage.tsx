@@ -28,7 +28,8 @@ const CHART_DATA = [
 export function DashboardPage() {
   const { data: invoices = [], isLoading: invLoading } = useQuery<Invoice[]>({
     queryKey: ['invoices', 'all'],
-    queryFn:  () => invoicesApi.list().then(r => r.data),
+    // /invoices returns a paginated envelope { items, total, page, pages }
+    queryFn:  () => invoicesApi.list().then(r => r.data.items as Invoice[]),
   })
 
   const totalDue = invoices

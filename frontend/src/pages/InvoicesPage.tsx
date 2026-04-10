@@ -26,7 +26,8 @@ export function InvoicesPage() {
 
   const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
     queryKey: ['invoices', status],
-    queryFn:  () => invoicesApi.list(status ? { status } : undefined).then(r => r.data),
+    // /invoices returns a paginated envelope { items, total, page, pages }
+    queryFn:  () => invoicesApi.list(status ? { status } : undefined).then(r => r.data.items as Invoice[]),
   })
 
   const downloadPDF = async (id: string, number: string) => {
