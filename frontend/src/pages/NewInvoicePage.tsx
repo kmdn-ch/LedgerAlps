@@ -1,11 +1,12 @@
 // LedgerAlps — Formulaire de création de facture
 
+import { useState } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, ArrowLeft, Save } from 'lucide-react'
+import { Plus, Trash2, ArrowLeft, Save, UserPlus, X } from 'lucide-react'
 import { invoicesApi, contactsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
 import { formatCHF } from '@/utils'
@@ -41,9 +42,131 @@ function computeLineTotals(line: Partial<FormData['lines'][0]>) {
   return { base: Math.round(base * 100) / 100, vat: Math.round(vat * 100) / 100, total: Math.round((base + vat) * 100) / 100 }
 }
 
+// ── Modal de création rapide de contact ────────────────────────────────────────
+const EMPTY_CONTACT = {
+  name: '', is_company: false, email: '', phone: '', city: '', country: 'CH',
+}
+
+function NewContactModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void
+  onCreated: (contact: Contact) => void
+}) {
+  const qc = useQueryClient()
+  const [fields, setFields] = useState(EMPTY_CONTACT)
+  const [err, setErr] = useState<string | null>(null)
+
+  const create = useMutation({
+    mutationFn: () => contactsApi.create({
+      contact_type:      'client',
+      is_company:        fields.is_company,
+      name:              fields.name.trim(),
+      email:             fields.email || undefined,
+      phone:             fields.phone || undefined,
+      city:              fields.city  || undefined,
+      country:           fields.country || 'CH',
+      payment_term_days: 30,
+      currency:          'CHF',
+    }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['contacts'] })
+      onCreated(res.data as Contact)
+    },
+    onError: () => setErr('Erreur lors de la création du contact.'),
+  })
+
+  const set = (key: keyof typeof EMPTY_CONTACT, value: string | boolean) =>
+    setFields(f => ({ ...f, [key]: value }))
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+        {/* En-tête */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-alpine-200">
+          <h3 className="text-sm font-semibold text-alpine-900">Nouveau contact</h3>
+          <button type="button" onClick={onClose} className="btn-ghost btn-sm p-1 text-alpine-400">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Formulaire */}
+        <div className="px-5 py-4 space-y-3">
+          {err && <p className="text-xs text-danger-600 bg-danger-50 rounded px-3 py-2">{err}</p>}
+
+          <div className="flex items-center gap-2">
+            <input
+              id="is_company"
+              type="checkbox"
+              checked={fields.is_company}
+              onChange={e => set('is_company', e.target.checked)}
+              className="rounded border-alpine-300 text-alpine-700"
+            />
+            <label htmlFor="is_company" className="text-sm text-alpine-700">Entreprise</label>
+          </div>
+
+          <div>
+            <label className="label">Nom *</label>
+            <input
+              className="input"
+              placeholder={fields.is_company ? 'Raison sociale' : 'Prénom Nom'}
+              value={fields.name}
+              onChange={e => set('name', e.target.value)}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">E-mail</label>
+              <input type="email" className="input" value={fields.email}
+                onChange={e => set('email', e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Téléphone</label>
+              <input type="tel" className="input" value={fields.phone}
+                onChange={e => set('phone', e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="label">Ville</label>
+              <input className="input" value={fields.city}
+                onChange={e => set('city', e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Pays</label>
+              <input className="input" maxLength={2} value={fields.country}
+                onChange={e => set('country', e.target.value.toUpperCase())} />
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-alpine-200">
+          <button type="button" onClick={onClose} className="btn-secondary btn-sm">
+            Annuler
+          </button>
+          <button
+            type="button"
+            disabled={!fields.name.trim() || create.isPending}
+            onClick={() => create.mutate()}
+            className="btn-primary btn-sm"
+          >
+            {create.isPending ? 'Création…' : 'Créer le contact'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Page principale ────────────────────────────────────────────────────────────
 export function NewInvoicePage() {
   const navigate  = useNavigate()
   const qc        = useQueryClient()
+  const [showContactModal, setShowContactModal] = useState(false)
 
   const { data: contacts = [] } = useQuery<Contact[]>({
     queryKey: ['contacts', 'customer'],
@@ -51,7 +174,7 @@ export function NewInvoicePage() {
   })
 
   const {
-    register, control, handleSubmit,
+    register, control, handleSubmit, setValue,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -81,6 +204,19 @@ export function NewInvoicePage() {
 
   return (
     <div>
+      {showContactModal && (
+        <NewContactModal
+          onClose={() => setShowContactModal(false)}
+          onCreated={(contact) => {
+            setShowContactModal(false)
+            // Refresh list then auto-select the new contact
+            qc.invalidateQueries({ queryKey: ['contacts'] }).then(() => {
+              setValue('contact_id', contact.id, { shouldValidate: true })
+            })
+          }}
+        />
+      )}
+
       <PageHeader
         title="Nouvelle facture"
         actions={
@@ -102,15 +238,26 @@ export function NewInvoicePage() {
             {/* Contact */}
             <div className="col-span-2">
               <label className="label">Contact *</label>
-              <select
-                className={`select ${errors.contact_id ? 'input-error' : ''}`}
-                {...register('contact_id')}
-              >
-                <option value="">— Sélectionnez un contact —</option>
-                {contacts.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              <div className="flex gap-2">
+                <select
+                  className={`select flex-1 ${errors.contact_id ? 'input-error' : ''}`}
+                  {...register('contact_id')}
+                >
+                  <option value="">— Sélectionnez un contact —</option>
+                  {contacts.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowContactModal(true)}
+                  className="btn-secondary btn-sm shrink-0 flex items-center gap-1.5"
+                  title="Créer un nouveau contact"
+                >
+                  <UserPlus size={14} />
+                  <span className="hidden sm:inline">Nouveau</span>
+                </button>
+              </div>
               {errors.contact_id && <p className="error-msg">{errors.contact_id.message}</p>}
             </div>
 
