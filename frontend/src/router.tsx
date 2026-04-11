@@ -11,7 +11,8 @@ import { AccountsPage }   from '@/pages/AccountsPage'
 import { JournalPage }    from '@/pages/JournalPage'
 import { ReportsPage }    from '@/pages/ReportsPage'
 import { SettingsPage }   from '@/pages/SettingsPage'
-import { InvoiceDetailPage } from '@/pages/InvoiceDetailPage'
+import { InvoiceDetailPage }  from '@/pages/InvoiceDetailPage'
+import { ContactDetailPage } from '@/pages/ContactDetailPage'
 import { useAuthStore }   from '@/store/auth'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -31,7 +32,8 @@ export const router = createBrowserRouter([
       { path: 'invoices/new',         element: <NewInvoicePage    /> },
       { path: 'invoices/:invoiceId',  element: <InvoiceDetailPage /> },
       { path: 'quotes',       element: <InvoicesPage   /> },
-      { path: 'contacts',     element: <ContactsPage   /> },
+      { path: 'contacts',                element: <ContactsPage      /> },
+      { path: 'contacts/:contactId',     element: <ContactDetailPage /> },
       { path: 'accounts',     element: <AccountsPage   /> },
       { path: 'journal',      element: <JournalPage    /> },
       { path: 'reports',      element: <ReportsPage    /> },

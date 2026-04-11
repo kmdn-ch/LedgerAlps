@@ -8,22 +8,26 @@ import { X } from 'lucide-react'
 import { contactsApi } from '@/api/client'
 import { ErrorBanner } from '@/components/ui'
 
+// Convert empty strings to undefined so optional fields don't trip validation.
+const opt = <T extends z.ZodTypeAny>(s: T) =>
+  z.preprocess(v => (v === '' ? undefined : v), s.optional()) as z.ZodOptional<T>
+
 const schema = z.object({
   contact_type:      z.enum(['customer', 'supplier', 'both']),
   is_company:        z.boolean().default(false),
   name:              z.string().min(1, 'Nom requis'),
-  legal_name:        z.string().optional(),
-  address:           z.string().optional(),
-  postal_code:       z.string().optional(),
-  city:              z.string().optional(),
-  country:           z.string().length(2).default('CH'),
-  uid_number:        z.string().optional(),
-  vat_number:        z.string().optional(),
-  email:             z.string().email().optional().or(z.literal('')),
-  phone:             z.string().optional(),
+  legal_name:        opt(z.string()),
+  address:           opt(z.string()),
+  postal_code:       opt(z.string()),
+  city:              opt(z.string()),
+  country:           z.string().min(2).max(2).default('CH'),
+  uid_number:        opt(z.string()),
+  vat_number:        opt(z.string()),
+  email:             opt(z.string().email('E-mail invalide')),
+  phone:             opt(z.string()),
   payment_term_days: z.coerce.number().int().min(0).max(365).default(30),
-  iban:              z.string().optional(),
-  notes:             z.string().optional(),
+  iban:              opt(z.string()),
+  notes:             opt(z.string()),
 })
 
 type FormData = z.infer<typeof schema>
@@ -72,7 +76,12 @@ export function NewContactModal({ onClose }: Props) {
         </div>
 
         <form onSubmit={handleSubmit(d => create.mutate(d))} className="px-6 py-5 space-y-5">
-          {create.error && <ErrorBanner message="Erreur lors de la création du contact." />}
+          {create.error && (
+            <ErrorBanner message={
+              (create.error as any)?.response?.data?.error
+                ?? 'Erreur lors de la création du contact.'
+            } />
+          )}
 
           {/* Type et nature */}
           <div className="grid grid-cols-2 gap-4">

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Building2, User, Search } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { contactsApi } from '@/api/client'
 import { PageHeader, LoadingSpinner, EmptyState } from '@/components/ui'
 import type { Contact } from '@/types'
@@ -76,7 +77,8 @@ export function ContactsPage() {
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filtered.map(c => (
-          <div key={c.id} className="card hover:shadow-md transition-shadow cursor-pointer p-5">
+          <Link key={c.id} to={`/contacts/${c.id}`}
+            className="card hover:shadow-md transition-shadow cursor-pointer p-5 block">
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-lg bg-alpine-100 flex items-center
                               justify-center flex-shrink-0">
@@ -103,7 +105,7 @@ export function ContactsPage() {
                 {c.payment_term_days}j
               </span>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 
