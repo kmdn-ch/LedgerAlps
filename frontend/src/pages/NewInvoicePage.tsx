@@ -17,7 +17,7 @@ const lineSchema = z.object({
   quantity:         z.coerce.number().positive(),
   unit:             z.string().optional(),
   unit_price:       z.coerce.number().positive('Prix requis'),
-  discount_percent: z.coerce.number().min(0).max(100).default(0),
+  discount_pct: z.coerce.number().min(0).max(100).default(0),
   vat_rate:         z.coerce.number().min(0).default(8.1),
 })
 
@@ -36,7 +36,7 @@ type FormData = z.infer<typeof schema>
 function computeLineTotals(line: Partial<FormData['lines'][0]>) {
   const qty      = Number(line.quantity     ?? 1)
   const price    = Number(line.unit_price   ?? 0)
-  const discount = Number(line.discount_percent ?? 0) / 100
+  const discount = Number(line.discount_pct ?? 0) / 100
   const vatRate  = Number(line.vat_rate     ?? 8.1) / 100
   const base     = qty * price * (1 - discount)
   const vat      = Math.round(base * vatRate * 20) / 20  // arrondi 5 rappen
@@ -186,7 +186,7 @@ export function NewInvoicePage() {
       document_type: 'invoice',
       issue_date:    today,
       due_date:      defaultDueDate,
-      lines: [{ description: '', quantity: 1, unit_price: 0, discount_percent: 0, vat_rate: 8.1 }],
+      lines: [{ description: '', quantity: 1, unit_price: 0, discount_pct: 0, vat_rate: 8.1 }],
     },
   })
 
@@ -306,7 +306,7 @@ export function NewInvoicePage() {
             <button
               type="button"
               className="btn-secondary btn-sm"
-              onClick={() => append({ description: '', quantity: 1, unit_price: 0, discount_percent: 0, vat_rate: 8.1 })}
+              onClick={() => append({ description: '', quantity: 1, unit_price: 0, discount_pct: 0, vat_rate: 8.1 })}
             >
               <Plus size={14} /> Ajouter une ligne
             </button>
@@ -350,7 +350,7 @@ export function NewInvoicePage() {
                         </td>
                         <td className="px-2 py-2 w-20">
                           <input type="number" step="0.1" min="0" max="100"
-                            className="input text-right" {...register(`lines.${i}.discount_percent`)} />
+                            className="input text-right" {...register(`lines.${i}.discount_pct`)} />
                         </td>
                         <td className="px-2 py-2 w-20">
                           <select className="select text-right" {...register(`lines.${i}.vat_rate`)}>

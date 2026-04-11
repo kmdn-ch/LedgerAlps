@@ -10,10 +10,10 @@ import { ErrorBanner } from '@/components/ui'
 
 const schema = z.object({
   contact_type:      z.enum(['customer', 'supplier', 'both']),
-  is_company:        z.boolean(),
+  is_company:        z.boolean().default(false),
   name:              z.string().min(1, 'Nom requis'),
   legal_name:        z.string().optional(),
-  address_line1:     z.string().optional(),
+  address:           z.string().optional(),
   postal_code:       z.string().optional(),
   city:              z.string().optional(),
   country:           z.string().length(2).default('CH'),
@@ -23,7 +23,6 @@ const schema = z.object({
   phone:             z.string().optional(),
   payment_term_days: z.coerce.number().int().min(0).max(365).default(30),
   iban:              z.string().optional(),
-  currency:          z.string().length(3).default('CHF'),
   notes:             z.string().optional(),
 })
 
@@ -40,9 +39,8 @@ export function NewContactModal({ onClose }: Props) {
     resolver: zodResolver(schema),
     defaultValues: {
       contact_type:      'customer',
-      is_company:        true,
+      is_company:        false,
       country:           'CH',
-      currency:          'CHF',
       payment_term_days: 30,
     },
   })
@@ -86,14 +84,10 @@ export function NewContactModal({ onClose }: Props) {
                 <option value="both">Les deux</option>
               </select>
             </div>
-            <div className="flex items-end pb-2 gap-4">
+            <div className="flex items-end pb-2">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" value="true" {...register('is_company')} className="accent-accent-500" defaultChecked />
+                <input type="checkbox" {...register('is_company')} className="rounded border-alpine-300 accent-accent-500" />
                 <span className="text-sm text-alpine-700">Entreprise</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" value="false" {...register('is_company')} className="accent-accent-500" />
-                <span className="text-sm text-alpine-700">Particulier</span>
               </label>
             </div>
           </div>
@@ -116,7 +110,7 @@ export function NewContactModal({ onClose }: Props) {
           <div>
             <label className="label">Adresse</label>
             <input className="input mb-2" placeholder="Rue et numéro"
-              {...register('address_line1')} />
+              {...register('address')} />
             <div className="grid grid-cols-3 gap-3">
               <input className="input" placeholder="NPA" {...register('postal_code')} />
               <input className="input col-span-2" placeholder="Localité" {...register('city')} />

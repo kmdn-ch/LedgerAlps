@@ -35,8 +35,9 @@ func (h *ContactsHandler) ListContacts(c *gin.Context) {
 		activeFilter = " WHERE 1=1"
 	}
 	q := db.Rebind(`
-		SELECT id, contact_type, name, email, phone, address, city, postal_code, country,
-		       iban, qr_iban, vat_number, payment_term_days, is_active, created_at, updated_at
+		SELECT id, contact_type, is_company, name, legal_name, email, phone, address, city, postal_code,
+		       country, iban, qr_iban, vat_number, uid_number, payment_term_days, notes, is_active,
+		       created_at, updated_at
 		FROM contacts`+activeFilter+` ORDER BY name`, h.usePostgres)
 
 	rows, err := h.db.QueryContext(ctx, q)
@@ -49,15 +50,16 @@ func (h *ContactsHandler) ListContacts(c *gin.Context) {
 	contacts := []models.Contact{}
 	for rows.Next() {
 		var ct models.Contact
-		var isActive int
-		if err := rows.Scan(&ct.ID, &ct.ContactType, &ct.Name, &ct.Email, &ct.Phone,
-			&ct.Address, &ct.City, &ct.PostalCode, &ct.Country,
-			&ct.IBAN, &ct.QRIBAN, &ct.VATNumber, &ct.PaymentTermDays, &isActive,
-			&ct.CreatedAt, &ct.UpdatedAt); err != nil {
+		var isActive, isCompany int
+		if err := rows.Scan(&ct.ID, &ct.ContactType, &isCompany, &ct.Name, &ct.LegalName,
+			&ct.Email, &ct.Phone, &ct.Address, &ct.City, &ct.PostalCode, &ct.Country,
+			&ct.IBAN, &ct.QRIBAN, &ct.VATNumber, &ct.UIDNumber, &ct.PaymentTermDays,
+			&ct.Notes, &isActive, &ct.CreatedAt, &ct.UpdatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error"})
 			return
 		}
 		ct.IsActive = isActive == 1
+		ct.IsCompany = isCompany == 1
 		contacts = append(contacts, ct)
 	}
 	c.JSON(http.StatusOK, contacts)
@@ -70,17 +72,18 @@ func (h *ContactsHandler) GetContact(c *gin.Context) {
 	defer cancel()
 
 	q := db.Rebind(`
-		SELECT id, contact_type, name, email, phone, address, city, postal_code, country,
-		       iban, qr_iban, vat_number, payment_term_days, is_active, created_at, updated_at
+		SELECT id, contact_type, is_company, name, legal_name, email, phone, address, city, postal_code,
+		       country, iban, qr_iban, vat_number, uid_number, payment_term_days, notes, is_active,
+		       created_at, updated_at
 		FROM contacts WHERE id = ?`, h.usePostgres)
 
 	var ct models.Contact
-	var isActive int
+	var isActive, isCompany int
 	err := h.db.QueryRowContext(ctx, q, id).Scan(
-		&ct.ID, &ct.ContactType, &ct.Name, &ct.Email, &ct.Phone,
-		&ct.Address, &ct.City, &ct.PostalCode, &ct.Country,
-		&ct.IBAN, &ct.QRIBAN, &ct.VATNumber, &ct.PaymentTermDays, &isActive,
-		&ct.CreatedAt, &ct.UpdatedAt)
+		&ct.ID, &ct.ContactType, &isCompany, &ct.Name, &ct.LegalName,
+		&ct.Email, &ct.Phone, &ct.Address, &ct.City, &ct.PostalCode, &ct.Country,
+		&ct.IBAN, &ct.QRIBAN, &ct.VATNumber, &ct.UIDNumber, &ct.PaymentTermDays,
+		&ct.Notes, &isActive, &ct.CreatedAt, &ct.UpdatedAt)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "contact not found"})
 		return
@@ -90,12 +93,15 @@ func (h *ContactsHandler) GetContact(c *gin.Context) {
 		return
 	}
 	ct.IsActive = isActive == 1
+	ct.IsCompany = isCompany == 1
 	c.JSON(http.StatusOK, ct)
 }
 
 type createContactRequest struct {
 	ContactType     string  `json:"contact_type" binding:"required,oneof=customer supplier both"`
+	IsCompany       bool    `json:"is_company"`
 	Name            string  `json:"name" binding:"required,min=1,max=255"`
+	LegalName       *string `json:"legal_name"`
 	Email           *string `json:"email"`
 	Phone           *string `json:"phone"`
 	Address         *string `json:"address"`
@@ -105,7 +111,9 @@ type createContactRequest struct {
 	IBAN            *string `json:"iban"`
 	QRIBAN          *string `json:"qr_iban"`
 	VATNumber       *string `json:"vat_number"`
+	UIDNumber       *string `json:"uid_number"`
 	PaymentTermDays int     `json:"payment_term_days"`
+	Notes           *string `json:"notes"`
 }
 
 // CreateContact POST /api/v1/contacts
@@ -140,28 +148,37 @@ func (h *ContactsHandler) CreateContact(c *gin.Context) {
 
 	id := db.NewID()
 	now := time.Now()
+	isCompanyInt := 0
+	if req.IsCompany {
+		isCompanyInt = 1
+	}
 	q := db.Rebind(`
-		INSERT INTO contacts (id, contact_type, name, email, phone, address, city, postal_code,
-		                      country, iban, qr_iban, vat_number, payment_term_days, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, h.usePostgres)
-	if _, err := h.db.ExecContext(ctx, q, id, req.ContactType, req.Name, req.Email, req.Phone,
-		req.Address, req.City, req.PostalCode, req.Country, req.IBAN, req.QRIBAN,
-		req.VATNumber, req.PaymentTermDays, now, now); err != nil {
+		INSERT INTO contacts (id, contact_type, is_company, name, legal_name, email, phone, address,
+		                      city, postal_code, country, iban, qr_iban, vat_number, uid_number,
+		                      payment_term_days, notes, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, h.usePostgres)
+	if _, err := h.db.ExecContext(ctx, q, id, req.ContactType, isCompanyInt, req.Name, req.LegalName,
+		req.Email, req.Phone, req.Address, req.City, req.PostalCode, req.Country,
+		req.IBAN, req.QRIBAN, req.VATNumber, req.UIDNumber, req.PaymentTermDays,
+		req.Notes, now, now); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, models.Contact{
-		ID: id, ContactType: models.ContactType(req.ContactType), Name: req.Name,
-		Email: req.Email, Phone: req.Phone, Address: req.Address,
-		City: req.City, PostalCode: req.PostalCode, Country: req.Country,
-		IBAN: req.IBAN, QRIBAN: req.QRIBAN, VATNumber: req.VATNumber,
-		PaymentTermDays: req.PaymentTermDays, IsActive: true, CreatedAt: now, UpdatedAt: now,
+		ID: id, ContactType: models.ContactType(req.ContactType), IsCompany: req.IsCompany,
+		Name: req.Name, LegalName: req.LegalName, Email: req.Email, Phone: req.Phone,
+		Address: req.Address, City: req.City, PostalCode: req.PostalCode, Country: req.Country,
+		IBAN: req.IBAN, QRIBAN: req.QRIBAN, VATNumber: req.VATNumber, UIDNumber: req.UIDNumber,
+		PaymentTermDays: req.PaymentTermDays, Notes: req.Notes, IsActive: true,
+		CreatedAt: now, UpdatedAt: now,
 	})
 }
 
 type updateContactRequest struct {
+	IsCompany       *bool   `json:"is_company"`
 	Name            *string `json:"name"`
+	LegalName       *string `json:"legal_name"`
 	Email           *string `json:"email"`
 	Phone           *string `json:"phone"`
 	Address         *string `json:"address"`
@@ -171,7 +188,9 @@ type updateContactRequest struct {
 	IBAN            *string `json:"iban"`
 	QRIBAN          *string `json:"qr_iban"`
 	VATNumber       *string `json:"vat_number"`
+	UIDNumber       *string `json:"uid_number"`
 	PaymentTermDays *int    `json:"payment_term_days"`
+	Notes           *string `json:"notes"`
 	IsActive        *bool   `json:"is_active"`
 }
 
@@ -214,8 +233,18 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 		sets = append(sets, col+" = ?")
 		args = append(args, val)
 	}
+	if req.IsCompany != nil {
+		v := 0
+		if *req.IsCompany {
+			v = 1
+		}
+		addField("is_company", v)
+	}
 	if req.Name != nil {
 		addField("name", *req.Name)
+	}
+	if req.LegalName != nil {
+		addField("legal_name", *req.LegalName)
 	}
 	if req.Email != nil {
 		addField("email", *req.Email)
@@ -244,8 +273,14 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 	if req.VATNumber != nil {
 		addField("vat_number", *req.VATNumber)
 	}
+	if req.UIDNumber != nil {
+		addField("uid_number", *req.UIDNumber)
+	}
 	if req.PaymentTermDays != nil {
 		addField("payment_term_days", *req.PaymentTermDays)
+	}
+	if req.Notes != nil {
+		addField("notes", *req.Notes)
 	}
 	if req.IsActive != nil {
 		val := 0

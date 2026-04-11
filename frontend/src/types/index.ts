@@ -86,13 +86,22 @@ export interface Contact {
   contact_type: ContactType
   is_company: boolean
   name: string
+  legal_name: string | null
+  address: string | null
+  postal_code: string | null
   city: string | null
   country: string
   email: string | null
   phone: string | null
+  iban: string | null
+  qr_iban: string | null
+  vat_number: string | null
+  uid_number: string | null
   payment_term_days: number
+  notes: string | null
   is_active: boolean
   created_at: string
+  updated_at: string
 }
 
 export interface ContactCreate {

@@ -107,7 +107,9 @@ type JournalLine struct {
 type Contact struct {
 	ID              string      `db:"id"               json:"id"`
 	ContactType     ContactType `db:"contact_type"     json:"contact_type"`
+	IsCompany       bool        `db:"is_company"       json:"is_company"`
 	Name            string      `db:"name"             json:"name"`
+	LegalName       *string     `db:"legal_name"       json:"legal_name,omitempty"`
 	Email           *string     `db:"email"            json:"email,omitempty"`
 	Phone           *string     `db:"phone"            json:"phone,omitempty"`
 	Address         *string     `db:"address"          json:"address,omitempty"`
@@ -117,7 +119,9 @@ type Contact struct {
 	IBAN            *string     `db:"iban"             json:"iban,omitempty"`
 	QRIBAN          *string     `db:"qr_iban"          json:"qr_iban,omitempty"`
 	VATNumber       *string     `db:"vat_number"       json:"vat_number,omitempty"`
+	UIDNumber       *string     `db:"uid_number"       json:"uid_number,omitempty"`
 	PaymentTermDays int         `db:"payment_term_days" json:"payment_term_days"`
+	Notes           *string     `db:"notes"            json:"notes,omitempty"`
 	IsActive        bool        `db:"is_active"        json:"is_active"`
 	CreatedAt       time.Time   `db:"created_at"       json:"created_at"`
 	UpdatedAt       time.Time   `db:"updated_at"       json:"updated_at"`
