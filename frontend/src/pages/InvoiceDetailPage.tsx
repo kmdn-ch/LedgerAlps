@@ -1,11 +1,11 @@
 // LedgerAlps — Détail d'une facture
 
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Download, Eye, EyeOff, Send, CheckCircle,
-  XCircle, Archive, Loader2,
+  XCircle, Archive, Loader2, Pencil,
 } from 'lucide-react'
 import { invoicesApi, downloadBlob } from '@/api/client'
 import {
@@ -96,6 +96,15 @@ export function InvoiceDetailPage() {
           subtitle={`${invoice.document_type === 'quote' ? 'Offre de prix' : 'Facture'} · émise le ${formatDate(invoice.issue_date)}`}
           actions={
             <div className="flex items-center gap-2">
+              {invoice.amount_paid === 0 && (
+                <Link
+                  to={`/invoices/${invoiceId}/edit`}
+                  className="btn-secondary btn-sm flex items-center gap-1.5"
+                >
+                  <Pencil size={14} />
+                  Modifier
+                </Link>
+              )}
               {actions.map(t => (
                 <button
                   key={t.status}

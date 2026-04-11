@@ -12,6 +12,7 @@ import { JournalPage }    from '@/pages/JournalPage'
 import { ReportsPage }    from '@/pages/ReportsPage'
 import { SettingsPage }   from '@/pages/SettingsPage'
 import { InvoiceDetailPage }  from '@/pages/InvoiceDetailPage'
+import { EditInvoicePage }    from '@/pages/EditInvoicePage'
 import { ContactDetailPage } from '@/pages/ContactDetailPage'
 import { useAuthStore }   from '@/store/auth'
 
@@ -29,8 +30,9 @@ export const router = createBrowserRouter([
     children: [
       { index: true,          element: <DashboardPage  /> },
       { path: 'invoices',     element: <InvoicesPage   /> },
-      { path: 'invoices/new',         element: <NewInvoicePage    /> },
-      { path: 'invoices/:invoiceId',  element: <InvoiceDetailPage /> },
+      { path: 'invoices/new',              element: <NewInvoicePage    /> },
+      { path: 'invoices/:invoiceId',      element: <InvoiceDetailPage /> },
+      { path: 'invoices/:invoiceId/edit', element: <EditInvoicePage   /> },
       { path: 'quotes',       element: <InvoicesPage   /> },
       { path: 'contacts',                element: <ContactsPage      /> },
       { path: 'contacts/:contactId',     element: <ContactDetailPage /> },

@@ -156,6 +156,85 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 	}, nil
 }
 
+// ─── UpdateInvoice ────────────────────────────────────────────────────────────
+
+var ErrInvoicePaid = fmt.Errorf("impossible de modifier une facture avec un paiement enregistré")
+
+// UpdateInvoice replaces the editable fields and all lines of an invoice.
+// Blocked if amount_paid > 0 (payment has been validated).
+func (s *Service) UpdateInvoice(ctx context.Context, invoiceID string, req CreateInvoiceRequest) (*models.Invoice, error) {
+	// Guard: check payment status before touching anything.
+	var amountPaid float64
+	chkQ := db.Rebind("SELECT amount_paid FROM invoices WHERE id = ?", s.usePostgres)
+	if err := s.db.QueryRowContext(ctx, chkQ, invoiceID).Scan(&amountPaid); err == sql.ErrNoRows {
+		return nil, ErrInvoiceNotFound
+	} else if err != nil {
+		return nil, fmt.Errorf("load invoice: %w", err)
+	}
+	if amountPaid > 0 {
+		return nil, ErrInvoicePaid
+	}
+
+	if req.Currency == "" {
+		req.Currency = "CHF"
+	}
+	if req.DocumentType == "" {
+		req.DocumentType = "invoice"
+	}
+
+	subtotal, vatAmount, total := computeTotals(req.Lines)
+	primaryVATRate := 8.1
+	if len(req.Lines) > 0 && req.Lines[0].VATRate > 0 {
+		primaryVATRate = req.Lines[0].VATRate
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	updQ := db.Rebind(`
+		UPDATE invoices SET
+			document_type = ?, contact_id = ?, issue_date = ?, due_date = ?,
+			currency = ?, subtotal_amount = ?, vat_amount = ?, total_amount = ?,
+			vat_rate = ?, notes = ?, terms = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?`, s.usePostgres)
+	if _, err := tx.ExecContext(ctx, updQ,
+		req.DocumentType, req.ContactID,
+		req.IssueDate.Format("2006-01-02"), req.DueDate.Format("2006-01-02"),
+		req.Currency, subtotal, vatAmount, total, primaryVATRate,
+		req.Notes, req.Terms, invoiceID); err != nil {
+		return nil, fmt.Errorf("update invoice: %w", err)
+	}
+
+	// Replace all lines atomically.
+	delQ := db.Rebind("DELETE FROM invoice_lines WHERE invoice_id = ?", s.usePostgres)
+	if _, err := tx.ExecContext(ctx, delQ, invoiceID); err != nil {
+		return nil, fmt.Errorf("delete lines: %w", err)
+	}
+	insertLine := db.Rebind(`
+		INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit, unit_price, discount_pct, vat_rate, line_total, sequence)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+	for i, l := range req.Lines {
+		lineTotal := l.Quantity * l.UnitPrice * (1 - l.DiscountPct/100)
+		seq := l.Sequence
+		if seq == 0 {
+			seq = i + 1
+		}
+		if _, err := tx.ExecContext(ctx, insertLine,
+			db.NewID(), invoiceID, l.Description, l.Quantity, l.Unit,
+			l.UnitPrice, l.DiscountPct, l.VATRate, lineTotal, seq); err != nil {
+			return nil, fmt.Errorf("insert line: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return nil, nil // caller reloads via GetInvoice
+}
+
 // ─── Transition ───────────────────────────────────────────────────────────────
 
 // Transition moves an invoice to the next status if the transition is valid.

@@ -223,6 +223,63 @@ func (h *InvoicesHandler) CreateInvoice(c *gin.Context) {
 	c.JSON(http.StatusCreated, inv)
 }
 
+// UpdateInvoice PATCH /api/v1/invoices/:id
+func (h *InvoicesHandler) UpdateInvoice(c *gin.Context) {
+	id := c.Param("id")
+	var req createInvoiceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	issueDate, err := time.Parse("2006-01-02", req.IssueDate)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_date must be YYYY-MM-DD"})
+		return
+	}
+	dueDate, err := time.Parse("2006-01-02", req.DueDate)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "due_date must be YYYY-MM-DD"})
+		return
+	}
+
+	lines := make([]invoicing.LineInput, len(req.Lines))
+	for i, l := range req.Lines {
+		lines[i] = invoicing.LineInput{
+			Description: l.Description,
+			Quantity:    l.Quantity,
+			Unit:        l.Unit,
+			UnitPrice:   l.UnitPrice,
+			DiscountPct: l.DiscountPct,
+			VATRate:     l.VATRate,
+			Sequence:    l.Sequence,
+		}
+	}
+
+	_, err = h.svc.UpdateInvoice(c.Request.Context(), id, invoicing.CreateInvoiceRequest{
+		DocumentType: req.DocumentType,
+		ContactID:    req.ContactID,
+		IssueDate:    issueDate,
+		DueDate:      dueDate,
+		Currency:     req.Currency,
+		Notes:        req.Notes,
+		Terms:        req.Terms,
+		Lines:        lines,
+	})
+	if err != nil {
+		switch err {
+		case invoicing.ErrInvoiceNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case invoicing.ErrInvoicePaid:
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	h.GetInvoice(c)
+}
+
 // TransitionInvoice POST /api/v1/invoices/:id/transition
 func (h *InvoicesHandler) TransitionInvoice(c *gin.Context) {
 	id := c.Param("id")

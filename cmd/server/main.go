@@ -102,6 +102,7 @@ func main() {
 	api.GET("/invoices/:id", ih.GetInvoice)
 	api.GET("/invoices/:id/pdf", ih.GetInvoicePDF)
 	api.POST("/invoices", ih.CreateInvoice)
+	api.PATCH("/invoices/:id", ih.UpdateInvoice)
 	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
 
 	// Fiscal years + VAT declaration (admin)

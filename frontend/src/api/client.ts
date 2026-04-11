@@ -122,6 +122,7 @@ export const invoicesApi = {
     api.get('/invoices', { params }),
   get:        (id: string)                    => api.get(`/invoices/${id}`),
   create:     (data: unknown)                 => api.post('/invoices', data),
+  update:     (id: string, data: unknown)    => api.patch(`/invoices/${id}`, data),
   transition: (id: string, status: string)   =>
     api.post(`/invoices/${id}/transition`, { status }),
   // Alias kept for compatibility with pages that use updateStatus
