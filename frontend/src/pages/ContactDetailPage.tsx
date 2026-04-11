@@ -14,7 +14,7 @@ import type { Contact } from '@/types'
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
 const opt = <T extends z.ZodTypeAny>(s: T) =>
-  z.preprocess(v => (v === '' ? undefined : v), s.optional()) as z.ZodOptional<T>
+  z.preprocess(v => (v === '' ? undefined : v), s.optional())
 
 const schema = z.object({
   contact_type:      z.enum(['customer', 'supplier', 'both']),
