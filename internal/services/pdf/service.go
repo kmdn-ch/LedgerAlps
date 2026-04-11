@@ -3,9 +3,11 @@ package pdf
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"image/png"
 	"math"
+	"strings"
 	"time"
 
 	gofpdf "github.com/go-pdf/fpdf"
@@ -18,13 +20,14 @@ import (
 
 // CompanyInfo holds the creditor/issuer details printed on the invoice.
 type CompanyInfo struct {
-	Name       string
-	Address    string // street + nr
-	City       string // postal code + city
-	Country    string // ISO alpha-2, e.g. "CH"
-	IBAN       string // QR-IBAN preferred; regular IBAN fallback
-	QRIBAN     string
-	VATNumber  string // e.g. "CHE-123.456.789 MWST"
+	Name      string
+	Address   string // street + nr
+	City      string // postal code + city
+	Country   string // ISO alpha-2, e.g. "CH"
+	IBAN      string // QR-IBAN preferred; regular IBAN fallback
+	QRIBAN    string
+	VATNumber string // e.g. "CHE-123.456.789 MWST"
+	LogoData  string // base64 data URL (data:image/png;base64,…) — optional
 }
 
 // InvoiceLine is a single line item rendered on the PDF.
@@ -115,20 +118,34 @@ func Generate(inv InvoiceData) ([]byte, error) {
 // ─── Section renderers ────────────────────────────────────────────────────────
 
 func renderHeader(pdf *gofpdf.Fpdf, inv InvoiceData) {
+	// Render company logo if present (top-left, 22×16 mm reserved area).
+	// Company text starts to the right of the logo when present, otherwise at x=15.
+	textX := 15.0
+	if inv.Company.LogoData != "" {
+		if imgData, imgType, err := decodeLogoDataURL(inv.Company.LogoData); err == nil {
+			imgKey := "company_logo"
+			reader := bytes.NewReader(imgData)
+			pdf.RegisterImageOptionsReader(imgKey, gofpdf.ImageOptions{ImageType: imgType}, reader)
+			// Place logo at (15, 13), 22mm wide, 16mm tall (fixed box — proportions may vary)
+			pdf.ImageOptions(imgKey, 15, 13, 22, 16, false, gofpdf.ImageOptions{ImageType: imgType}, 0, "")
+			textX = 40 // company text starts after the logo
+		}
+	}
+
 	// Company name (large)
-	pdf.SetFont("Helvetica", "B", 16)
-	pdf.SetXY(15, 15)
-	pdf.CellFormat(100, 8, inv.Company.Name, "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "B", 14)
+	pdf.SetXY(textX, 15)
+	pdf.CellFormat(115-textX+15, 7, inv.Company.Name, "", 1, "L", false, 0, "")
 
 	// Company address (small)
 	pdf.SetFont("Helvetica", "", 9)
-	pdf.SetX(15)
-	pdf.CellFormat(100, 5, inv.Company.Address, "", 1, "L", false, 0, "")
-	pdf.SetX(15)
-	pdf.CellFormat(100, 5, inv.Company.City, "", 1, "L", false, 0, "")
+	pdf.SetX(textX)
+	pdf.CellFormat(115-textX+15, 5, inv.Company.Address, "", 1, "L", false, 0, "")
+	pdf.SetX(textX)
+	pdf.CellFormat(115-textX+15, 5, inv.Company.City, "", 1, "L", false, 0, "")
 	if inv.Company.VATNumber != "" {
-		pdf.SetX(15)
-		pdf.CellFormat(100, 5, "TVA/MwSt: "+inv.Company.VATNumber, "", 1, "L", false, 0, "")
+		pdf.SetX(textX)
+		pdf.CellFormat(115-textX+15, 5, "TVA/MwSt: "+inv.Company.VATNumber, "", 1, "L", false, 0, "")
 	}
 
 	// "FACTURE" title (right)
@@ -137,6 +154,26 @@ func renderHeader(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	pdf.CellFormat(65, 12, "FACTURE", "", 1, "R", false, 0, "")
 
 	pdf.SetY(45)
+}
+
+// decodeLogoDataURL splits a base64 data URL into raw bytes and an fpdf image type string.
+// Supported formats: PNG and JPEG.
+func decodeLogoDataURL(dataURL string) ([]byte, string, error) {
+	// Expected format: "data:image/png;base64,<b64data>"
+	parts := strings.SplitN(dataURL, ",", 2)
+	if len(parts) != 2 {
+		return nil, "", fmt.Errorf("invalid data URL")
+	}
+	header := strings.ToLower(parts[0])
+	imgType := "PNG"
+	if strings.Contains(header, "jpeg") || strings.Contains(header, "jpg") {
+		imgType = "JPEG"
+	}
+	decoded, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, "", fmt.Errorf("base64 decode: %w", err)
+	}
+	return decoded, imgType, nil
 }
 
 func renderCustomerBlock(pdf *gofpdf.Fpdf, inv InvoiceData) {

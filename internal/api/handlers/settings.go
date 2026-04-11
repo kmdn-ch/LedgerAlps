@@ -3,6 +3,9 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -49,7 +52,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 		SELECT id, company_name, legal_form,
 		       address_street, address_postal_code, address_city, address_country,
 		       che_number, vat_number, iban,
-		       fiscal_year_start_month, currency,
+		       fiscal_year_start_month, currency, logo_data,
 		       created_at, updated_at
 		FROM company_settings
 		LIMIT 1`, h.usePostgres)
@@ -59,7 +62,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 		&s.ID, &s.CompanyName, &s.LegalForm,
 		&s.AddressStreet, &s.AddressPostalCode, &s.AddressCity, &s.AddressCountry,
 		&s.CheNumber, &s.VatNumber, &s.IBAN,
-		&s.FiscalYearStartMonth, &s.Currency,
+		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -136,7 +139,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	} else {
-		// Row exists — UPDATE.
+		// Row exists — UPDATE (do NOT touch logo_data).
 		updateQ := db.Rebind(`
 			UPDATE company_settings SET
 			    company_name            = ?,
@@ -170,7 +173,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		SELECT id, company_name, legal_form,
 		       address_street, address_postal_code, address_city, address_country,
 		       che_number, vat_number, iban,
-		       fiscal_year_start_month, currency,
+		       fiscal_year_start_month, currency, logo_data,
 		       created_at, updated_at
 		FROM company_settings WHERE id = ?`, h.usePostgres)
 
@@ -179,7 +182,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		&s.ID, &s.CompanyName, &s.LegalForm,
 		&s.AddressStreet, &s.AddressPostalCode, &s.AddressCity, &s.AddressCountry,
 		&s.CheNumber, &s.VatNumber, &s.IBAN,
-		&s.FiscalYearStartMonth, &s.Currency,
+		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
 		&s.CreatedAt, &s.UpdatedAt,
 	); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
@@ -187,4 +190,98 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, s)
+}
+
+// UploadLogo godoc
+// POST /api/v1/settings/logo
+// Accepts a PNG or JPEG file (max 2 MB), encodes it as a base64 data URL,
+// and stores it in company_settings.logo_data. Admin only.
+func (h *SettingsHandler) UploadLogo(c *gin.Context) {
+	file, fh, err := c.Request.FormFile("logo")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "logo file required (field name: logo)"})
+		return
+	}
+	defer file.Close()
+
+	const maxSize = 2 << 20 // 2 MB
+	if fh.Size > maxSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "logo too large (max 2 MB)"})
+		return
+	}
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "read error"})
+		return
+	}
+
+	// Detect MIME type from actual file bytes (not Content-Type header).
+	mime := http.DetectContentType(data)
+	var mimeType string
+	switch mime {
+	case "image/png":
+		mimeType = "image/png"
+	case "image/jpeg":
+		mimeType = "image/jpeg"
+	default:
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "logo must be PNG or JPEG"})
+		return
+	}
+
+	// Encode as base64 data URL for direct use in <img src="...">
+	encoded := base64.StdEncoding.EncodeToString(data)
+	dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, encoded)
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	var existingID string
+	selectQ := db.Rebind(`SELECT id FROM company_settings LIMIT 1`, h.usePostgres)
+	err = h.db.QueryRowContext(ctx, selectQ).Scan(&existingID)
+
+	now := time.Now().UTC()
+
+	if err == sql.ErrNoRows {
+		// No row yet — insert minimal settings row with just the logo.
+		newID := db.NewID()
+		insertQ := db.Rebind(`
+			INSERT INTO company_settings
+			    (id, company_name, legal_form,
+			     address_street, address_postal_code, address_city, address_country,
+			     che_number, vat_number, iban,
+			     fiscal_year_start_month, currency, logo_data,
+			     created_at, updated_at)
+			VALUES (?, '', '', '', '', '', 'CH', '', '', '', 1, 'CHF', ?, ?, ?)`, h.usePostgres)
+		if _, err := h.db.ExecContext(ctx, insertQ, newID, dataURL, now, now); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			return
+		}
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	} else {
+		updateQ := db.Rebind(`UPDATE company_settings SET logo_data = ?, updated_at = ? WHERE id = ?`, h.usePostgres)
+		if _, err := h.db.ExecContext(ctx, updateQ, dataURL, now, existingID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"logo_data": dataURL})
+}
+
+// DeleteLogo godoc
+// DELETE /api/v1/settings/logo
+// Removes the company logo. Admin only.
+func (h *SettingsHandler) DeleteLogo(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	q := db.Rebind(`UPDATE company_settings SET logo_data = NULL, updated_at = ?`, h.usePostgres)
+	if _, err := h.db.ExecContext(ctx, q, time.Now().UTC()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

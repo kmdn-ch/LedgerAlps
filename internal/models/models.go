@@ -223,6 +223,7 @@ type CompanySettings struct {
 	IBAN                 string    `db:"iban"                     json:"iban"`
 	FiscalYearStartMonth int       `db:"fiscal_year_start_month"  json:"fiscal_year_start_month"`
 	Currency             string    `db:"currency"                 json:"currency"`
+	LogoData             *string   `db:"logo_data"                json:"logo_data,omitempty"`
 	CreatedAt            time.Time `db:"created_at"               json:"created_at"`
 	UpdatedAt            time.Time `db:"updated_at"               json:"updated_at"`
 }

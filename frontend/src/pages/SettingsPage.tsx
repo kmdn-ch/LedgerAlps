@@ -1,42 +1,29 @@
 // LedgerAlps — Paramètres de la société
 
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useState } from 'react'
-import { Save, Building2, CreditCard, FileText, Shield } from 'lucide-react'
-import { PageHeader } from '@/components/ui'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  Save, Building2, CreditCard, FileText, Shield,
+  Upload, Trash2, ImageOff, Loader2,
+} from 'lucide-react'
+import { settingsApi } from '@/api/client'
+import { PageHeader, ErrorBanner } from '@/components/ui'
 
 const schema = z.object({
-  // Identité
-  name:         z.string().min(1, 'Requis'),
-  legal_name:   z.string().optional(),
-  uid_number:   z.string().optional(),
-  vat_number:   z.string().optional(),
-  // Adresse
-  address_line1: z.string().optional(),
-  postal_code:   z.string().optional(),
-  city:          z.string().optional(),
-  country:       z.string().length(2).default('CH'),
-  // Contact
-  email:  z.string().email().optional().or(z.literal('')),
-  phone:  z.string().optional(),
-  website: z.string().url().optional().or(z.literal('')),
-  // Comptabilité
-  currency:           z.string().length(3).default('CHF'),
-  fiscal_year_start:  z.string().default('01-01'),
-  vat_method:         z.enum(['effective', 'tdfn']).default('effective'),
-  default_vat_rate:   z.coerce.number().default(8.1),
-  payment_term_days:  z.coerce.number().int().min(0).default(30),
-  // Bancaire
-  iban:     z.string().optional(),
-  qr_iban:  z.string().optional(),
-  bic:      z.string().optional(),
-  bank_name: z.string().optional(),
-  // Facturation
-  invoice_prefix:  z.string().default('FA'),
-  invoice_footer:  z.string().optional(),
-  invoice_terms:   z.string().optional(),
+  company_name:          z.string().min(1, 'Requis'),
+  legal_form:            z.string().default(''),
+  che_number:            z.string().default(''),
+  vat_number:            z.string().default(''),
+  address_street:        z.string().default(''),
+  address_postal_code:   z.string().default(''),
+  address_city:          z.string().default(''),
+  address_country:       z.string().length(2).default('CH'),
+  iban:                  z.string().default(''),
+  fiscal_year_start_month: z.coerce.number().int().min(1).max(12).default(1),
+  currency:              z.string().length(3).default('CHF'),
 })
 
 type FormData = z.infer<typeof schema>
@@ -51,26 +38,79 @@ const TABS = [
 export function SettingsPage() {
   const [tab,   setTab]   = useState('identity')
   const [saved, setSaved] = useState(false)
+  const qc = useQueryClient()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { register, handleSubmit, formState: { errors, isDirty } } = useForm<FormData>({
+  // Load existing settings
+  const { data: company, isLoading } = useQuery({
+    queryKey: ['company-settings'],
+    queryFn:  () => settingsApi.getCompany().then(r => r.data),
+  })
+
+  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      country:          'CH',
-      currency:         'CHF',
-      vat_method:       'effective',
-      default_vat_rate: 8.1,
-      payment_term_days: 30,
-      invoice_prefix:   'FA',
-      fiscal_year_start: '01-01',
+      company_name: '',
+      legal_form: '',
+      che_number: '',
+      vat_number: '',
+      address_street: '',
+      address_postal_code: '',
+      address_city: '',
+      address_country: 'CH',
+      iban: '',
+      fiscal_year_start_month: 1,
+      currency: 'CHF',
     },
   })
 
-  const onSubmit = async (data: FormData) => {
-    // TODO Phase 5 : persister via API /api/v1/settings
-    console.log('Paramètres sauvegardés :', data)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+  // Pre-fill form when settings load
+  useEffect(() => {
+    if (company) {
+      reset({
+        company_name:          company.company_name           ?? '',
+        legal_form:            company.legal_form             ?? '',
+        che_number:            company.che_number             ?? '',
+        vat_number:            company.vat_number             ?? '',
+        address_street:        company.address_street         ?? '',
+        address_postal_code:   company.address_postal_code   ?? '',
+        address_city:          company.address_city           ?? '',
+        address_country:       company.address_country        ?? 'CH',
+        iban:                  company.iban                   ?? '',
+        fiscal_year_start_month: company.fiscal_year_start_month ?? 1,
+        currency:              company.currency               ?? 'CHF',
+      })
+    }
+  }, [company, reset])
+
+  const save = useMutation({
+    mutationFn: (data: FormData) => settingsApi.putCompany(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['company-settings'] })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    },
+  })
+
+  const uploadLogo = useMutation({
+    mutationFn: (file: File) => settingsApi.uploadLogo(file),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['company-settings'] }),
+  })
+
+  const deleteLogo = useMutation({
+    mutationFn: () => settingsApi.deleteLogo(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['company-settings'] }),
+  })
+
+  const handleLogoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    uploadLogo.mutate(file)
+    // Reset so same file can be re-selected
+    e.target.value = ''
   }
+
+  if (isLoading) return null
 
   return (
     <div>
@@ -81,14 +121,18 @@ export function SettingsPage() {
           <button
             form="settings-form"
             type="submit"
-            className={`btn-primary ${!isDirty ? 'opacity-50' : ''}`}
-            disabled={!isDirty}
+            className={`btn-primary flex items-center gap-1.5 ${!isDirty ? 'opacity-50' : ''}`}
+            disabled={!isDirty || save.isPending}
           >
-            <Save size={15} />
+            {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {saved ? 'Sauvegardé ✓' : 'Enregistrer'}
           </button>
         }
       />
+
+      {save.isError && (
+        <ErrorBanner message={(save.error as any)?.response?.data?.error ?? 'Erreur lors de la sauvegarde.'} />
+      )}
 
       <div className="flex gap-6">
         {/* Nav latérale */}
@@ -113,119 +157,140 @@ export function SettingsPage() {
         </nav>
 
         {/* Formulaire */}
-        <form id="settings-form" onSubmit={handleSubmit(onSubmit)} className="flex-1">
+        <form id="settings-form" onSubmit={handleSubmit(d => save.mutate(d))} className="flex-1 space-y-5">
 
           {/* ─── Identité ─────────────────────────────────────────────── */}
           {tab === 'identity' && (
-            <div className="card">
-              <div className="card-header">
-                <h2 className="text-sm font-semibold text-alpine-800">Identité de la société</h2>
-              </div>
-              <div className="card-body grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="label">Nom commercial *</label>
-                  <input className={`input ${errors.name ? 'input-error' : ''}`}
-                    placeholder="Acme SA" {...register('name')} />
+            <>
+              {/* Logo */}
+              <div className="card">
+                <div className="card-header">
+                  <h2 className="text-sm font-semibold text-alpine-800">Logo de la société</h2>
                 </div>
-                <div>
-                  <label className="label">Raison sociale légale</label>
-                  <input className="input" {...register('legal_name')} />
-                </div>
-                <div>
-                  <label className="label">N° IDE suisse (CHE-…)</label>
-                  <input className="input font-mono" placeholder="CHE-123.456.789"
-                    {...register('uid_number')} />
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Adresse</label>
-                  <input className="input mb-2" placeholder="Rue et numéro"
-                    {...register('address_line1')} />
-                  <div className="grid grid-cols-4 gap-3">
-                    <input className="input" placeholder="NPA" {...register('postal_code')} />
-                    <input className="input col-span-2" placeholder="Localité" {...register('city')} />
-                    <input className="input uppercase" placeholder="CH" maxLength={2}
-                      {...register('country')} />
+                <div className="card-body">
+                  <div className="flex items-center gap-5">
+                    {/* Preview */}
+                    <div className="w-24 h-20 border border-alpine-200 rounded-lg bg-alpine-50
+                                    flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {company?.logo_data ? (
+                        <img
+                          src={company.logo_data}
+                          alt="Logo société"
+                          className="w-full h-full object-contain p-1"
+                        />
+                      ) : (
+                        <ImageOff size={28} className="text-alpine-300" />
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="space-y-2">
+                      <p className="text-xs text-alpine-500">
+                        Format PNG ou JPEG, max 2 Mo. Affiché dans la barre de navigation et sur les factures PDF.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploadLogo.isPending}
+                          className="btn-secondary btn-sm flex items-center gap-1.5"
+                        >
+                          {uploadLogo.isPending
+                            ? <Loader2 size={13} className="animate-spin" />
+                            : <Upload size={13} />
+                          }
+                          {company?.logo_data ? 'Remplacer' : 'Télécharger'}
+                        </button>
+                        {company?.logo_data && (
+                          <button
+                            type="button"
+                            onClick={() => deleteLogo.mutate()}
+                            disabled={deleteLogo.isPending}
+                            className="btn-ghost btn-sm text-danger-600 flex items-center gap-1.5"
+                          >
+                            {deleteLogo.isPending
+                              ? <Loader2 size={13} className="animate-spin" />
+                              : <Trash2 size={13} />
+                            }
+                            Supprimer
+                          </button>
+                        )}
+                      </div>
+                      {uploadLogo.isError && (
+                        <p className="text-xs text-danger-600">
+                          {(uploadLogo.error as any)?.response?.data?.error ?? 'Erreur lors du téléchargement.'}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Hidden file input */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      className="hidden"
+                      onChange={handleLogoFile}
+                    />
                   </div>
                 </div>
-                <div>
-                  <label className="label">E-mail</label>
-                  <input type="email" className="input" {...register('email')} />
+              </div>
+
+              {/* Identity fields */}
+              <div className="card">
+                <div className="card-header">
+                  <h2 className="text-sm font-semibold text-alpine-800">Identité de la société</h2>
                 </div>
-                <div>
-                  <label className="label">Téléphone</label>
-                  <input type="tel" className="input" {...register('phone')} />
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Site web</label>
-                  <input type="url" className="input" placeholder="https://…" {...register('website')} />
+                <div className="card-body grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="label">Nom commercial *</label>
+                    <input
+                      className={`input ${errors.company_name ? 'input-error' : ''}`}
+                      placeholder="Acme SA"
+                      {...register('company_name')}
+                    />
+                    {errors.company_name && (
+                      <p className="text-xs text-danger-600 mt-1">{errors.company_name.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="label">Forme juridique</label>
+                    <input className="input" placeholder="SA, Sàrl, raison individuelle…" {...register('legal_form')} />
+                  </div>
+                  <div>
+                    <label className="label">N° IDE suisse (CHE-…)</label>
+                    <input className="input font-mono" placeholder="CHE-123.456.789" {...register('che_number')} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="label">Adresse</label>
+                    <input className="input mb-2" placeholder="Rue et numéro" {...register('address_street')} />
+                    <div className="grid grid-cols-4 gap-3">
+                      <input className="input" placeholder="NPA"      {...register('address_postal_code')} />
+                      <input className="input col-span-2" placeholder="Localité" {...register('address_city')} />
+                      <input className="input uppercase" placeholder="CH" maxLength={2} {...register('address_country')} />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            </>
           )}
 
           {/* ─── Banque ───────────────────────────────────────────────── */}
           {tab === 'banking' && (
-            <div className="space-y-4">
-              <div className="card">
-                <div className="card-header">
-                  <h2 className="text-sm font-semibold text-alpine-800">Coordonnées bancaires</h2>
-                </div>
-                <div className="card-body grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
-                    <label className="label">IBAN (compte courant)</label>
-                    <input className="input font-mono" placeholder="CH56 0483 5012 3456 7800 9"
-                      {...register('iban')} />
-                    <p className="text-xs text-alpine-400 mt-1">
-                      Utilisé pour les virements reçus et les exports ISO 20022.
-                    </p>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="label">QR-IBAN</label>
-                    <input className="input font-mono" placeholder="CH44 3100 0000 0012 3456 7"
-                      {...register('qr_iban')} />
-                    <p className="text-xs text-alpine-400 mt-1">
-                      IID entre 30000–31999. Obligatoire pour les QR-factures avec référence QRR.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="label">BIC / SWIFT</label>
-                    <input className="input font-mono" placeholder="POFICHBEXXX"
-                      {...register('bic')} />
-                  </div>
-                  <div>
-                    <label className="label">Nom de la banque</label>
-                    <input className="input" placeholder="PostFinance AG"
-                      {...register('bank_name')} />
-                  </div>
-                </div>
+            <div className="card">
+              <div className="card-header">
+                <h2 className="text-sm font-semibold text-alpine-800">Coordonnées bancaires et TVA</h2>
               </div>
-
-              <div className="card">
-                <div className="card-header">
-                  <h2 className="text-sm font-semibold text-alpine-800">Paramètres TVA</h2>
+              <div className="card-body grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="label">IBAN</label>
+                  <input className="input font-mono" placeholder="CH56 0483 5012 3456 7800 9" {...register('iban')} />
+                  <p className="text-xs text-alpine-400 mt-1">
+                    Utilisé pour les virements et les QR-factures.
+                  </p>
                 </div>
-                <div className="card-body grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="label">N° TVA AFC</label>
-                    <input className="input font-mono" placeholder="CHE-123.456.789 MWST"
-                      {...register('vat_number')} />
-                  </div>
-                  <div>
-                    <label className="label">Méthode TVA</label>
-                    <select className="select" {...register('vat_method')}>
-                      <option value="effective">Méthode effective</option>
-                      <option value="tdfn">TDFN (taux dette fiscale nette)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Taux par défaut (%)</label>
-                    <select className="select" {...register('default_vat_rate')}>
-                      <option value={8.1}>8.1% — Normal</option>
-                      <option value={2.6}>2.6% — Réduit</option>
-                      <option value={3.8}>3.8% — Hébergement</option>
-                      <option value={0}>0% — Exonéré</option>
-                    </select>
-                  </div>
+                <div className="col-span-2">
+                  <label className="label">N° TVA AFC</label>
+                  <input className="input font-mono" placeholder="CHE-123.456.789 MWST" {...register('vat_number')} />
                 </div>
               </div>
             </div>
@@ -239,29 +304,23 @@ export function SettingsPage() {
               </div>
               <div className="card-body grid grid-cols-2 gap-4">
                 <div>
-                  <label className="label">Préfixe factures</label>
-                  <input className="input font-mono" placeholder="FA"
-                    {...register('invoice_prefix')} />
-                  <p className="text-xs text-alpine-400 mt-1">
-                    Ex: FA → FA2025-0001
-                  </p>
+                  <label className="label">Devise principale</label>
+                  <select className="select" {...register('currency')}>
+                    <option value="CHF">CHF — Franc suisse</option>
+                    <option value="EUR">EUR — Euro</option>
+                  </select>
                 </div>
                 <div>
-                  <label className="label">Délai de paiement (jours)</label>
-                  <input type="number" min="0" max="365" className="input"
-                    {...register('payment_term_days')} />
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Conditions de paiement (texte par défaut)</label>
-                  <textarea rows={3} className="input resize-none"
-                    placeholder="Paiement à 30 jours. En cas de retard, des intérêts de 5% l'an seront facturés."
-                    {...register('invoice_terms')} />
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Pied de page des factures</label>
-                  <textarea rows={2} className="input resize-none"
-                    placeholder="Merci de votre confiance."
-                    {...register('invoice_footer')} />
+                  <label className="label">Début d'exercice (mois)</label>
+                  <select className="select" {...register('fiscal_year_start_month')}>
+                    {[
+                      [1,'Janvier'],[2,'Février'],[3,'Mars'],[4,'Avril'],
+                      [5,'Mai'],[6,'Juin'],[7,'Juillet'],[8,'Août'],
+                      [9,'Septembre'],[10,'Octobre'],[11,'Novembre'],[12,'Décembre'],
+                    ].map(([v, l]) => (
+                      <option key={v} value={v}>{l}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
@@ -270,28 +329,6 @@ export function SettingsPage() {
           {/* ─── Légal ────────────────────────────────────────────────── */}
           {tab === 'legal' && (
             <div className="space-y-4">
-              <div className="card">
-                <div className="card-header">
-                  <h2 className="text-sm font-semibold text-alpine-800">
-                    Exercice comptable — CO art. 957
-                  </h2>
-                </div>
-                <div className="card-body grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Début de l'exercice (JJ-MM)</label>
-                    <input className="input font-mono" placeholder="01-01"
-                      {...register('fiscal_year_start')} />
-                  </div>
-                  <div>
-                    <label className="label">Devise principale</label>
-                    <select className="select" {...register('currency')}>
-                      <option value="CHF">CHF — Franc suisse</option>
-                      <option value="EUR">EUR — Euro</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
               <div className="card border-warning-200 bg-warning-50/30">
                 <div className="card-body">
                   <h3 className="text-sm font-semibold text-warning-700 mb-2">

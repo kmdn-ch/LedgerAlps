@@ -175,6 +175,20 @@ export const fiscalYearsApi = {
     api.post('/vat/declaration', params),
 }
 
+// ─── Paramètres société ───────────────────────────────────────────────────────
+export const settingsApi = {
+  getCompany: () => api.get('/settings/company'),
+  putCompany: (data: unknown) => api.put('/settings/company', data),
+  uploadLogo: (file: File) => {
+    const form = new FormData()
+    form.append('logo', file)
+    return api.post('/settings/logo', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  deleteLogo: () => api.delete('/settings/logo'),
+}
+
 // ─── Utilitaire — télécharger un blob ─────────────────────────────────────────
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)

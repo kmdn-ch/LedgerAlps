@@ -81,7 +81,7 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 	}
 	ct.IsActive = isActive == 1
 
-	// Build company info from environment variables (falls back to defaults)
+	// Load company settings from DB; fall back to environment variables.
 	company := pdfsvc.CompanyInfo{
 		Name:      envOr("COMPANY_NAME", "LedgerAlps"),
 		Address:   envOr("COMPANY_ADDRESS", ""),
@@ -90,6 +90,38 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 		IBAN:      envOr("COMPANY_IBAN", ""),
 		QRIBAN:    envOr("COMPANY_QR_IBAN", ""),
 		VATNumber: envOr("COMPANY_VAT_NUMBER", ""),
+	}
+	settingsQ := db.Rebind(`
+		SELECT company_name, address_street, address_postal_code, address_city, address_country,
+		       iban, vat_number, logo_data
+		FROM company_settings LIMIT 1`, h.usePostgres)
+	var dbName, dbStreet, dbPostal, dbCity, dbCountry, dbIBAN, dbVAT sql.NullString
+	var dbLogo sql.NullString
+	if err := h.db.QueryRowContext(ctx, settingsQ).Scan(
+		&dbName, &dbStreet, &dbPostal, &dbCity, &dbCountry,
+		&dbIBAN, &dbVAT, &dbLogo,
+	); err == nil {
+		if dbName.Valid && dbName.String != "" {
+			company.Name = dbName.String
+		}
+		if dbStreet.Valid {
+			company.Address = dbStreet.String
+		}
+		if dbPostal.Valid || dbCity.Valid {
+			company.City = fmt.Sprintf("%s %s", dbPostal.String, dbCity.String)
+		}
+		if dbCountry.Valid && dbCountry.String != "" {
+			company.Country = dbCountry.String
+		}
+		if dbIBAN.Valid && dbIBAN.String != "" {
+			company.IBAN = dbIBAN.String
+		}
+		if dbVAT.Valid {
+			company.VATNumber = dbVAT.String
+		}
+		if dbLogo.Valid {
+			company.LogoData = dbLogo.String
+		}
 	}
 
 	// Customer info from contact
