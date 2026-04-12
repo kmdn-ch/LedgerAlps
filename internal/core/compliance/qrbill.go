@@ -259,13 +259,3 @@ func truncate(s string, maxRunes int) string {
 	return string(runes[:maxRunes])
 }
 
-// sanitizeSwico removes characters that are not allowed in Swico S1 bill info.
-func sanitizeSwico(s string) string {
-	var b strings.Builder
-	for _, ch := range s {
-		if unicode.IsLetter(ch) || unicode.IsDigit(ch) || ch == '-' || ch == '.' {
-			b.WriteRune(ch)
-		}
-	}
-	return b.String()
-}
