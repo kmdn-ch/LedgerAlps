@@ -79,8 +79,10 @@ Function .onInit
 
   ; Detect reinstall: if config.json already exists, write a sentinel so the
   ; launcher can show a "configuration preserved" notification on next launch.
-  IfFileExists "$APPDATA\LedgerAlps\config.json" 0 +2
-    WriteFile "$APPDATA\LedgerAlps\.reinstalled" ""
+  IfFileExists "$APPDATA\LedgerAlps\config.json" 0 lbl_no_reinstall
+    FileOpen $0 "$APPDATA\LedgerAlps\.reinstalled" w
+    FileClose $0
+  lbl_no_reinstall:
 FunctionEnd
 
 ; --------------------------------------------------------------------------- ;
