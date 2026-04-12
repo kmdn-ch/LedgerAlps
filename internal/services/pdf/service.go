@@ -135,17 +135,17 @@ func renderHeader(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	// Company name (large)
 	pdf.SetFont("Helvetica", "B", 14)
 	pdf.SetXY(textX, 15)
-	pdf.CellFormat(115-textX+15, 7, inv.Company.Name, "", 1, "L", false, 0, "")
+	pdf.CellFormat(115-textX+15, 7, latin1(inv.Company.Name), "", 1, "L", false, 0, "")
 
 	// Company address (small)
 	pdf.SetFont("Helvetica", "", 9)
 	pdf.SetX(textX)
-	pdf.CellFormat(115-textX+15, 5, inv.Company.Address, "", 1, "L", false, 0, "")
+	pdf.CellFormat(115-textX+15, 5, latin1(inv.Company.Address), "", 1, "L", false, 0, "")
 	pdf.SetX(textX)
-	pdf.CellFormat(115-textX+15, 5, inv.Company.City, "", 1, "L", false, 0, "")
+	pdf.CellFormat(115-textX+15, 5, latin1(inv.Company.City), "", 1, "L", false, 0, "")
 	if inv.Company.VATNumber != "" {
 		pdf.SetX(textX)
-		pdf.CellFormat(115-textX+15, 5, "TVA/MwSt: "+inv.Company.VATNumber, "", 1, "L", false, 0, "")
+		pdf.CellFormat(115-textX+15, 5, latin1("TVA/MwSt: "+inv.Company.VATNumber), "", 1, "L", false, 0, "")
 	}
 
 	// "FACTURE" title (right)
@@ -179,16 +179,16 @@ func decodeLogoDataURL(dataURL string) ([]byte, string, error) {
 func renderCustomerBlock(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	pdf.SetFont("Helvetica", "B", 10)
 	pdf.SetX(130)
-	pdf.CellFormat(65, 6, inv.Customer.Name, "", 1, "L", false, 0, "")
+	pdf.CellFormat(65, 6, latin1(inv.Customer.Name), "", 1, "L", false, 0, "")
 
 	pdf.SetFont("Helvetica", "", 10)
 	if inv.Customer.Address != "" {
 		pdf.SetX(130)
-		pdf.CellFormat(65, 5, inv.Customer.Address, "", 1, "L", false, 0, "")
+		pdf.CellFormat(65, 5, latin1(inv.Customer.Address), "", 1, "L", false, 0, "")
 	}
 	if inv.Customer.City != "" {
 		pdf.SetX(130)
-		pdf.CellFormat(65, 5, inv.Customer.City, "", 1, "L", false, 0, "")
+		pdf.CellFormat(65, 5, latin1(inv.Customer.City), "", 1, "L", false, 0, "")
 	}
 	pdf.SetY(pdf.GetY() + 5)
 }
@@ -208,9 +208,9 @@ func renderMeta(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		y += 6
 	}
 
-	metaRow("N° facture:", inv.InvoiceNumber)
+	metaRow(latin1("N\u00b0 facture:"), inv.InvoiceNumber)
 	metaRow("Date:", inv.IssueDate.Format("02.01.2006"))
-	metaRow("Échéance:", inv.DueDate.Format("02.01.2006"))
+	metaRow(latin1("\u00c9ch\u00e9ance:"), inv.DueDate.Format("02.01.2006"))
 	metaRow("Devise:", inv.Currency)
 
 	pdf.SetY(y + 5)
@@ -222,7 +222,7 @@ func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	pdf.SetFillColor(240, 240, 240)
 	pdf.SetX(15)
 	pdf.CellFormat(90, 7, "Description", "1", 0, "L", true, 0, "")
-	pdf.CellFormat(20, 7, "Qté", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(20, 7, latin1("Qt\u00e9"), "1", 0, "C", true, 0, "")
 	pdf.CellFormat(30, 7, "Prix unit.", "1", 0, "R", true, 0, "")
 	pdf.CellFormat(15, 7, "TVA%", "1", 0, "C", true, 0, "")
 	pdf.CellFormat(25, 7, "Total", "1", 1, "R", true, 0, "")
@@ -237,7 +237,7 @@ func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
 			pdf.SetFillColor(250, 250, 250)
 		}
 		pdf.SetX(15)
-		pdf.CellFormat(90, 6, line.Description, "1", 0, "L", fill, 0, "")
+		pdf.CellFormat(90, 6, latin1(line.Description), "1", 0, "L", fill, 0, "")
 		pdf.CellFormat(20, 6, fmtFloat(line.Quantity), "1", 0, "C", fill, 0, "")
 		pdf.CellFormat(30, 6, fmtMoney(line.UnitPrice, inv.Currency), "1", 0, "R", fill, 0, "")
 		pdf.CellFormat(15, 6, fmt.Sprintf("%.1f%%", line.VATRate), "1", 0, "C", fill, 0, "")
@@ -263,7 +263,7 @@ func renderTotals(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		pdf.CellFormat(w2, 6, val, "", 1, "R", false, 0, "")
 	}
 
-	totalRow("Sous-total:", fmtMoney(inv.SubtotalAmount, inv.Currency), false)
+	totalRow(latin1("Sous-total:"), fmtMoney(inv.SubtotalAmount, inv.Currency), false)
 	totalRow(fmt.Sprintf("TVA %.1f%%:", inv.VATRate), fmtMoney(inv.VATAmount, inv.Currency), false)
 
 	// Separator line
@@ -279,7 +279,7 @@ func renderNotes(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	if inv.Notes != nil && *inv.Notes != "" {
 		pdf.SetFont("Helvetica", "I", 9)
 		pdf.SetX(15)
-		pdf.MultiCell(180, 5, *inv.Notes, "", "L", false)
+		pdf.MultiCell(180, 5, latin1(*inv.Notes), "", "L", false)
 		pdf.SetY(pdf.GetY() + 3)
 	}
 }
@@ -352,10 +352,10 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	pdf.SetLineWidth(0.3)
 	pdf.Line(0, slipTop, pageWidth, slipTop)
 
-	// Scissors symbol at top of separator
-	pdf.SetFont("Helvetica", "", 8)
-	pdf.SetXY(3, slipTop-3)
-	pdf.CellFormat(10, 4, "✂", "", 0, "L", false, 0, "")
+	// Cut indicator at top of separator (plain dashes — ✂ is outside Latin-1)
+	pdf.SetFont("Helvetica", "", 6)
+	pdf.SetXY(1, slipTop-2.5)
+	pdf.CellFormat(10, 4, "- - -", "", 0, "L", false, 0, "")
 
 	// Vertical line between receipt and payment part
 	pdf.Line(receiptWidth, slipTop, receiptWidth, 297)
@@ -363,25 +363,25 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	// ── Receipt section (left 62 mm) ───────────────────────────────────────
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.SetXY(5, slipTop+5)
-	pdf.CellFormat(52, 6, "Récépissé", "", 1, "L", false, 0, "")
+	pdf.CellFormat(52, 6, latin1("R\u00e9c\u00e9piss\u00e9"), "", 1, "L", false, 0, "")
 
 	pdf.SetFont("Helvetica", "B", 8)
 	pdf.SetX(5)
-	pdf.CellFormat(52, 4, "Compte / Payable à", "", 1, "L", false, 0, "")
+	pdf.CellFormat(52, 4, latin1("Compte / Payable \u00e0"), "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 7)
 	pdf.SetX(5)
 	pdf.CellFormat(52, 4, formatIBAN(iban), "", 1, "L", false, 0, "")
 	pdf.SetX(5)
-	pdf.CellFormat(52, 4, inv.Company.Name, "", 1, "L", false, 0, "")
+	pdf.CellFormat(52, 4, latin1(inv.Company.Name), "", 1, "L", false, 0, "")
 	pdf.SetX(5)
-	pdf.CellFormat(52, 4, inv.Company.Address, "", 1, "L", false, 0, "")
+	pdf.CellFormat(52, 4, latin1(inv.Company.Address), "", 1, "L", false, 0, "")
 	pdf.SetX(5)
-	pdf.CellFormat(52, 4, inv.Company.City, "", 1, "L", false, 0, "")
+	pdf.CellFormat(52, 4, latin1(inv.Company.City), "", 1, "L", false, 0, "")
 
 	if refType != "NON" {
 		pdf.SetFont("Helvetica", "B", 8)
 		pdf.SetX(5)
-		pdf.CellFormat(52, 4, "Référence", "", 1, "L", false, 0, "")
+		pdf.CellFormat(52, 4, latin1("R\u00e9f\u00e9rence"), "", 1, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 7)
 		pdf.SetX(5)
 		pdf.CellFormat(52, 4, compliance.FormatQRRReference(ref), "", 1, "L", false, 0, "")
@@ -394,11 +394,11 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	pdf.SetFont("Helvetica", "", 7)
 	if inv.Customer.Name != "" {
 		pdf.SetX(5)
-		pdf.CellFormat(52, 4, inv.Customer.Name, "", 1, "L", false, 0, "")
+		pdf.CellFormat(52, 4, latin1(inv.Customer.Name), "", 1, "L", false, 0, "")
 		pdf.SetX(5)
-		pdf.CellFormat(52, 4, inv.Customer.Address, "", 1, "L", false, 0, "")
+		pdf.CellFormat(52, 4, latin1(inv.Customer.Address), "", 1, "L", false, 0, "")
 		pdf.SetX(5)
-		pdf.CellFormat(52, 4, inv.Customer.City, "", 1, "L", false, 0, "")
+		pdf.CellFormat(52, 4, latin1(inv.Customer.City), "", 1, "L", false, 0, "")
 	}
 
 	// Amount in receipt
@@ -443,21 +443,21 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	infoX := px + 50.0
 	pdf.SetFont("Helvetica", "B", 8)
 	pdf.SetXY(infoX, slipTop+13)
-	pdf.CellFormat(90, 4, "Compte / Payable à", "", 1, "L", false, 0, "")
+	pdf.CellFormat(90, 4, latin1("Compte / Payable \u00e0"), "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 8)
 	pdf.SetX(infoX)
 	pdf.CellFormat(90, 4, formatIBAN(iban), "", 1, "L", false, 0, "")
 	pdf.SetX(infoX)
-	pdf.CellFormat(90, 4, inv.Company.Name, "", 1, "L", false, 0, "")
+	pdf.CellFormat(90, 4, latin1(inv.Company.Name), "", 1, "L", false, 0, "")
 	pdf.SetX(infoX)
-	pdf.CellFormat(90, 4, inv.Company.Address, "", 1, "L", false, 0, "")
+	pdf.CellFormat(90, 4, latin1(inv.Company.Address), "", 1, "L", false, 0, "")
 	pdf.SetX(infoX)
-	pdf.CellFormat(90, 4, inv.Company.City, "", 1, "L", false, 0, "")
+	pdf.CellFormat(90, 4, latin1(inv.Company.City), "", 1, "L", false, 0, "")
 
 	if refType != "NON" {
 		pdf.SetFont("Helvetica", "B", 8)
 		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, "Référence", "", 1, "L", false, 0, "")
+		pdf.CellFormat(90, 4, latin1("R\u00e9f\u00e9rence"), "", 1, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 8)
 		pdf.SetX(infoX)
 		pdf.CellFormat(90, 4, compliance.FormatQRRReference(ref), "", 1, "L", false, 0, "")
@@ -478,11 +478,11 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 		pdf.CellFormat(90, 4, "Payable par", "", 1, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 8)
 		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, inv.Customer.Name, "", 1, "L", false, 0, "")
+		pdf.CellFormat(90, 4, latin1(inv.Customer.Name), "", 1, "L", false, 0, "")
 		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, inv.Customer.Address, "", 1, "L", false, 0, "")
+		pdf.CellFormat(90, 4, latin1(inv.Customer.Address), "", 1, "L", false, 0, "")
 		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, inv.Customer.City, "", 1, "L", false, 0, "")
+		pdf.CellFormat(90, 4, latin1(inv.Customer.City), "", 1, "L", false, 0, "")
 	}
 
 	// Amount row (bottom of payment part)
@@ -554,6 +554,22 @@ func extractDigits(s string) string {
 	for i := 0; i < len(s); i++ {
 		if s[i] >= '0' && s[i] <= '9' {
 			b = append(b, s[i])
+		}
+	}
+	return string(b)
+}
+
+// latin1 converts a UTF-8 string to ISO-8859-1 (Latin-1) bytes so that fpdf's
+// standard Core fonts (Helvetica, Times, Courier) render accented characters
+// correctly. Unicode code points U+0000–U+00FF map one-to-one to Latin-1 byte
+// values; code points above U+00FF are replaced with '?'.
+func latin1(s string) string {
+	b := make([]byte, 0, len(s))
+	for _, r := range s {
+		if r < 0x100 {
+			b = append(b, byte(r))
+		} else {
+			b = append(b, '?')
 		}
 	}
 	return string(b)
