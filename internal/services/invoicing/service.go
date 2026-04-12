@@ -20,7 +20,7 @@ var validTransitions = map[models.InvoiceStatus][]models.InvoiceStatus{
 	models.InvoiceStatusDraft:     {models.InvoiceStatusSent, models.InvoiceStatusCancelled},
 	models.InvoiceStatusSent:      {models.InvoiceStatusPaid, models.InvoiceStatusCancelled},
 	models.InvoiceStatusPaid:      {models.InvoiceStatusArchived},
-	models.InvoiceStatusCancelled: {},
+	models.InvoiceStatusCancelled: {models.InvoiceStatusDraft},
 	models.InvoiceStatusArchived:  {},
 }
 

@@ -5,7 +5,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Download, Eye, EyeOff, Send, CheckCircle,
-  XCircle, Archive, Loader2, Pencil,
+  XCircle, Archive, Loader2, Pencil, RotateCcw,
 } from 'lucide-react'
 import { invoicesApi, downloadBlob } from '@/api/client'
 import {
@@ -35,7 +35,8 @@ const TRANSITIONS: Record<DocumentStatus, { status: DocumentStatus; label: strin
     { status: 'archived',  label: 'Archiver',          icon: Archive,     className: 'btn-ghost' },
   ],
   cancelled: [
-    { status: 'archived',  label: 'Archiver',          icon: Archive,     className: 'btn-ghost' },
+    { status: 'draft',    label: 'Réactiver',           icon: RotateCcw,   className: 'btn-secondary' },
+    { status: 'archived', label: 'Archiver',            icon: Archive,     className: 'btn-ghost' },
   ],
   archived:  [],
 }

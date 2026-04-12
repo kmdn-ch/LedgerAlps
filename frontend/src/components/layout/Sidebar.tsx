@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/utils'
 import { useAuthStore } from '@/store/auth'
-import { settingsApi } from '@/api/client'
+import { settingsApi, healthApi } from '@/api/client'
 
 const NAV = [
   { to: '/',          icon: LayoutDashboard, label: 'Tableau de bord' },
@@ -28,6 +28,12 @@ export function Sidebar() {
     queryKey: ['company-settings'],
     queryFn:  () => settingsApi.getCompany().then(r => r.data),
     staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: health } = useQuery({
+    queryKey: ['health'],
+    queryFn:  () => healthApi.get().then(r => r.data),
+    staleTime: Infinity,
   })
 
   const companyName = company?.company_name || 'LedgerAlps'
@@ -102,6 +108,11 @@ export function Sidebar() {
           <div className="px-3 py-2 mt-1 border-t border-alpine-700/50">
             <div className="text-xs font-medium text-white truncate">{user.name}</div>
             <div className="text-[10px] text-alpine-400 truncate">{user.email}</div>
+            {health?.version && (
+              <div className="text-[9px] text-alpine-600 mt-1.5 tabular-nums">
+                {health.version}
+              </div>
+            )}
           </div>
         )}
       </div>

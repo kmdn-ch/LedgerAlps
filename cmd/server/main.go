@@ -157,8 +157,8 @@ func main() {
 	sh := handlers.NewSettingsHandler(database, cfg.UsePostgres())
 	api.GET("/settings/company", sh.GetCompany)
 	api.PUT("/settings/company", middleware.RequireAdmin(cfg.JWTSecret), sh.PutCompany)
-	api.POST("/settings/logo", middleware.RequireAdmin(cfg.JWTSecret), sh.UploadLogo)
-	api.DELETE("/settings/logo", middleware.RequireAdmin(cfg.JWTSecret), sh.DeleteLogo)
+	api.POST("/settings/logo", sh.UploadLogo)
+	api.DELETE("/settings/logo", sh.DeleteLogo)
 
 	// ── 8. Frontend (embedded) ───────────────────────────────────────────────
 	// The React build is compiled directly into the binary via //go:embed.

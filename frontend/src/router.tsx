@@ -33,7 +33,7 @@ export const router = createBrowserRouter([
       { path: 'invoices/new',              element: <NewInvoicePage    /> },
       { path: 'invoices/:invoiceId',      element: <InvoiceDetailPage /> },
       { path: 'invoices/:invoiceId/edit', element: <EditInvoicePage   /> },
-      { path: 'quotes',       element: <InvoicesPage   /> },
+      { path: 'quotes',       element: <InvoicesPage mode="quote" /> },
       { path: 'contacts',                element: <ContactsPage      /> },
       { path: 'contacts/:contactId',     element: <ContactDetailPage /> },
       { path: 'accounts',     element: <AccountsPage   /> },

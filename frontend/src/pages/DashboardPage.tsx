@@ -10,26 +10,29 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts'
-import { invoicesApi } from '@/api/client'
+import { invoicesApi, statsApi } from '@/api/client'
 import { PageHeader, StatCard, StatusBadge, LoadingSpinner } from '@/components/ui'
 import { formatCHF, formatDate } from '@/utils'
 import type { Invoice } from '@/types'
 
-// Données de démonstration pour le graphique
-const CHART_DATA = [
-  { month: 'Jan', ca: 12400, paid: 11200 },
-  { month: 'Fév', ca: 18200, paid: 16800 },
-  { month: 'Mar', ca: 15600, paid: 15600 },
-  { month: 'Avr', ca: 22100, paid: 19400 },
-  { month: 'Mai', ca: 19800, paid: 18200 },
-  { month: 'Jun', ca: 25400, paid: 21000 },
-]
+// Format "YYYY-MM" → short French month label
+function shortMonth(yyyyMM: string): string {
+  const [y, m] = yyyyMM.split('-').map(Number)
+  const d = new Date(y, m - 1, 1)
+  return d.toLocaleDateString('fr-CH', { month: 'short' })
+    .replace('.', '')
+    .replace(/^./, s => s.toUpperCase())
+}
 
 export function DashboardPage() {
   const { data: invoices = [], isLoading: invLoading } = useQuery<Invoice[]>({
     queryKey: ['invoices', 'all'],
-    // /invoices returns a paginated envelope { items, total, page, pages }
     queryFn:  () => invoicesApi.list().then(r => r.data.items as Invoice[]),
+  })
+
+  const { data: stats } = useQuery({
+    queryKey: ['stats'],
+    queryFn:  () => statsApi.get().then(r => r.data),
   })
 
   const totalDue = invoices
@@ -43,6 +46,15 @@ export function DashboardPage() {
   const recentInvoices = [...invoices]
     .sort((a, b) => b.issue_date.localeCompare(a.issue_date))
     .slice(0, 5)
+
+  // Real chart data from stats API
+  const chartData = (stats?.monthly_revenue ?? []).map((p: { month: string; total: number; paid: number }) => ({
+    month: shortMonth(p.month),
+    ca:    p.total,
+    paid:  p.paid,
+  }))
+
+  const hasChartData = chartData.some((p: { ca: number }) => p.ca > 0)
 
   return (
     <div>
@@ -79,13 +91,13 @@ export function DashboardPage() {
         />
         <StatCard
           label="Clients actifs"
-          value="—"
+          value={String(stats?.contacts?.customers ?? '—')}
           icon={<Users size={18} />}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Graphique CA */}
+        {/* Graphique CA réel */}
         <div className="lg:col-span-2 card">
           <div className="card-header">
             <h2 className="text-sm font-semibold text-alpine-800">
@@ -93,34 +105,42 @@ export function DashboardPage() {
             </h2>
           </div>
           <div className="card-body">
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={CHART_DATA} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gradCA" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#334e68" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#334e68" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="gradPaid" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#f97316" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#627d98' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#627d98' }} axisLine={false} tickLine={false}
-                       tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-                <Tooltip
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #d9e2ec' }}
-                  formatter={(v: number, name: string) => [
-                    formatCHF(v), name === 'ca' ? 'Facturé' : 'Encaissé'
-                  ]}
-                />
-                <Area type="monotone" dataKey="ca"   stroke="#334e68" strokeWidth={2}
-                      fill="url(#gradCA)"   dot={false} />
-                <Area type="monotone" dataKey="paid" stroke="#f97316" strokeWidth={2}
-                      fill="url(#gradPaid)" dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
+            {hasChartData ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradCA" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#334e68" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#334e68" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gradPaid" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#f97316" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#627d98' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#627d98' }} axisLine={false} tickLine={false}
+                         tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : String(v)} />
+                  <Tooltip
+                    contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #d9e2ec' }}
+                    formatter={(v: number, name: string) => [
+                      formatCHF(v), name === 'ca' ? 'Facturé' : 'Encaissé'
+                    ]}
+                  />
+                  <Area type="monotone" dataKey="ca"   stroke="#334e68" strokeWidth={2}
+                        fill="url(#gradCA)"   dot={false} />
+                  <Area type="monotone" dataKey="paid" stroke="#f97316" strokeWidth={2}
+                        fill="url(#gradPaid)" dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[220px] flex flex-col items-center justify-center text-alpine-400">
+                <TrendingUp size={32} className="mb-2 opacity-30" />
+                <p className="text-sm">Aucune donnée de facturation sur les 6 derniers mois.</p>
+                <p className="text-xs mt-1">Le graphique s'affichera dès la première facture émise.</p>
+              </div>
+            )}
           </div>
         </div>
 

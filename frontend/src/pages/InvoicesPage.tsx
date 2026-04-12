@@ -19,16 +19,23 @@ const STATUS_FILTERS: { value: DocumentStatus | ''; label: string }[] = [
   { value: 'overdue',   label: 'En retard'    },
 ]
 
-export function InvoicesPage() {
+interface Props { mode?: 'invoice' | 'quote' }
+
+export function InvoicesPage({ mode = 'invoice' }: Props) {
+  const isQuote = mode === 'quote'
   const [status,  setStatus]  = useState<DocumentStatus | ''>('')
   const [search,  setSearch]  = useState('')
   const qc = useQueryClient()
 
-  const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
-    queryKey: ['invoices', status],
-    // /invoices returns a paginated envelope { items, total, page, pages }
+  const { data: allItems = [], isLoading } = useQuery<Invoice[]>({
+    queryKey: ['invoices', status, mode],
     queryFn:  () => invoicesApi.list(status ? { status } : undefined).then(r => (r.data.items ?? []) as Invoice[]),
   })
+
+  // Client-side filter by document_type
+  const invoices = allItems.filter(i =>
+    isQuote ? i.document_type === 'quote' : i.document_type !== 'quote'
+  )
 
   const downloadPDF = async (id: string, invoiceNumber: string) => {
     const resp = await invoicesApi.downloadPDF(id)
@@ -49,11 +56,11 @@ export function InvoicesPage() {
   return (
     <div>
       <PageHeader
-        title="Factures"
+        title={isQuote ? 'Offres de prix' : 'Factures'}
         subtitle={`${invoices.length} document${invoices.length !== 1 ? 's' : ''}`}
         actions={
           <Link to="/invoices/new" className="btn-primary">
-            <Plus size={15} /> Nouvelle facture
+            <Plus size={15} /> {isQuote ? 'Nouvelle offre' : 'Nouvelle facture'}
           </Link>
         }
       />
@@ -109,8 +116,10 @@ export function InvoicesPage() {
               <tr>
                 <td colSpan={7}>
                   <EmptyState
-                    title="Aucune facture"
-                    description="Créez votre première facture pour démarrer."
+                    title={isQuote ? 'Aucune offre de prix' : 'Aucune facture'}
+                    description={isQuote
+                      ? 'Créez votre première offre de prix.'
+                      : 'Créez votre première facture pour démarrer.'}
                     action={
                       <Link to="/invoices/new" className="btn-primary btn-sm">
                         <Plus size={13} /> Créer

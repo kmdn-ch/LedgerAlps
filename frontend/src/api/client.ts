@@ -175,6 +175,16 @@ export const fiscalYearsApi = {
     api.post('/vat/declaration', params),
 }
 
+// ─── Stats ────────────────────────────────────────────────────────────────────
+export const statsApi = {
+  get: () => api.get('/stats'),
+}
+
+// ─── Health / version ─────────────────────────────────────────────────────────
+export const healthApi = {
+  get: () => axios.get('/health'),
+}
+
 // ─── Paramètres société ───────────────────────────────────────────────────────
 export const settingsApi = {
   getCompany: () => api.get('/settings/company'),
@@ -182,9 +192,8 @@ export const settingsApi = {
   uploadLogo: (file: File) => {
     const form = new FormData()
     form.append('logo', file)
-    return api.post('/settings/logo', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    // Do NOT set Content-Type manually — Axios must add the multipart boundary automatically.
+    return api.post('/settings/logo', form)
   },
   deleteLogo: () => api.delete('/settings/logo'),
 }

@@ -47,12 +47,19 @@ type statsFiscalYear struct {
 	Status       string `json:"status"`
 }
 
+type revenuePoint struct {
+	Month string  `json:"month"` // "YYYY-MM"
+	Total float64 `json:"total"` // invoiced (non-draft, non-cancelled)
+	Paid  float64 `json:"paid"`  // amount_paid
+}
+
 type statsResponse struct {
-	Invoices   statsInvoices    `json:"invoices"`
-	Journal    statsJournal     `json:"journal"`
-	Accounts   statsAccounts    `json:"accounts"`
-	Contacts   statsContacts    `json:"contacts"`
-	FiscalYear *statsFiscalYear `json:"fiscal_year"`
+	Invoices       statsInvoices    `json:"invoices"`
+	Journal        statsJournal     `json:"journal"`
+	Accounts       statsAccounts    `json:"accounts"`
+	Contacts       statsContacts    `json:"contacts"`
+	FiscalYear     *statsFiscalYear `json:"fiscal_year"`
+	MonthlyRevenue []revenuePoint   `json:"monthly_revenue"`
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -212,6 +219,67 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 			log.Printf("stats: fiscal year query failed: %v", err)
 		}
 		// nil FiscalYear stays nil when no open year exists
+	}
+
+	// ── Monthly revenue: last 6 months (real data) ───────────────────────────
+	{
+		// Build the last 6 calendar months in order (oldest first).
+		now := time.Now().UTC()
+		months := make([]string, 6)
+		for i := 5; i >= 0; i-- {
+			t := now.AddDate(0, -i, 0)
+			months[5-i] = fmt.Sprintf("%04d-%02d", t.Year(), t.Month())
+		}
+
+		// Query invoiced + paid amounts per month for invoices (not cancelled/draft).
+		var q string
+		if h.usesPG {
+			q = `
+				SELECT to_char(issue_date, 'YYYY-MM') as m,
+				       COALESCE(SUM(total_amount), 0),
+				       COALESCE(SUM(amount_paid), 0)
+				FROM invoices
+				WHERE document_type = 'invoice'
+				  AND status NOT IN ('draft', 'cancelled')
+				  AND issue_date >= date_trunc('month', now() - interval '5 months')
+				GROUP BY m ORDER BY m`
+		} else {
+			q = `
+				SELECT strftime('%Y-%m', issue_date) as m,
+				       COALESCE(SUM(total_amount), 0),
+				       COALESCE(SUM(amount_paid), 0)
+				FROM invoices
+				WHERE document_type = 'invoice'
+				  AND status NOT IN ('draft', 'cancelled')
+				  AND issue_date >= date('now', 'start of month', '-5 months')
+				GROUP BY m ORDER BY m`
+		}
+
+		dataByMonth := make(map[string]revenuePoint)
+		rows, err := h.db.QueryContext(ctx, q)
+		if err != nil {
+			log.Printf("stats: monthly revenue query failed: %v", err)
+		} else {
+			defer rows.Close()
+			for rows.Next() {
+				var p revenuePoint
+				if err := rows.Scan(&p.Month, &p.Total, &p.Paid); err != nil {
+					log.Printf("stats: monthly revenue scan: %v", err)
+					continue
+				}
+				dataByMonth[p.Month] = p
+			}
+		}
+
+		// Fill all 6 months, inserting zeros for months with no data.
+		resp.MonthlyRevenue = make([]revenuePoint, 6)
+		for i, m := range months {
+			if p, ok := dataByMonth[m]; ok {
+				resp.MonthlyRevenue[i] = p
+			} else {
+				resp.MonthlyRevenue[i] = revenuePoint{Month: m}
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, resp)
