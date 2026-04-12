@@ -298,6 +298,17 @@ const (
 	pageWidth    = 210.0
 )
 
+// renderPaymentSlip draws the Swiss QR-bill payment slip (SPC 0200) at the bottom
+// 105 mm of the page, following the exact layout from manuelbl/SwissQRBill BillLayout.java:
+//
+//   MARGIN                = 5 mm
+//   RECEIPT_WIDTH         = 62 mm
+//   RECEIPT_TEXT_WIDTH    = 52 mm   (RECEIPT_WIDTH – 2×MARGIN)
+//   QR code               = 46×46 mm, left edge at x=67, top at y=slipTop+17
+//   QR_CODE_BOTTOM        = 42 mm from slip bottom → top at 105-42-46 = 17 mm from slip top
+//   PP_DETAIL_TEXT_X      = 118 mm  (62 + 46 + 2×5)
+//   AMOUNT_SECTION_TOP    = 37 mm from slip bottom → y = 297-37 = 260 mm
+//   Font: title=11pt; PP label=8pt, PP body=10pt; RC label=6pt, RC body=8pt
 func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	// Determine which IBAN and reference to use
 	iban := inv.Company.IBAN
@@ -311,7 +322,6 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	refType := "NON"
 	var ref string
 	if inv.Company.QRIBAN != "" {
-		// Generate QRR reference from invoice number
 		qrRef, err := compliance.GenerateQRRReference(extractDigits(inv.InvoiceNumber))
 		if err == nil {
 			refType = "QRR"
@@ -341,149 +351,167 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 		return err
 	}
 
-	// Generate QR code PNG
-	qrPNG, err := qrcode.Encode(payload, qrcode.Medium, 256)
+	// Generate QR code at 512 px for crisp print output (SPC 0200 requires ECC Level M)
+	qrPNG, err := qrcode.Encode(payload, qrcode.Medium, 512)
 	if err != nil {
 		return fmt.Errorf("qr encode: %w", err)
 	}
 
-	// ── Draw separator line ────────────────────────────────────────────────
+	// ── Layout constants (all mm, matching BillLayout.java) ───────────────
+	const (
+		margin      = 5.0  // slip inner margin
+		rcWidth     = 52.0 // receipt text width  (62 - 2×5)
+		qrSize      = 46.0 // QR code side length
+		qrLeft      = receiptWidth + margin // 67 mm from page left
+		qrTop       = slipTop + 17.0        // 209 mm from page top (QR_CODE_BOTTOM=42 mm from slip bottom)
+		infoX       = 118.0                 // receipt(62)+qr(46)+2×margin(10)
+		amountY     = 260.0                 // 297 - AMOUNT_SECTION_TOP(37)
+		amountValY  = 265.0                 // value row 5 mm below labels
+		ppX         = receiptWidth + margin // 67 mm — payment part text left edge
+	)
+	infoW := pageWidth - margin - infoX // 87 mm  (matches PP_INFO_SECTION_WIDTH)
+
+	// ── Separator lines ───────────────────────────────────────────────────
 	pdf.SetDrawColor(0, 0, 0)
 	pdf.SetLineWidth(0.3)
 	pdf.Line(0, slipTop, pageWidth, slipTop)
 
-	// Cut indicator at top of separator (plain dashes — ✂ is outside Latin-1)
 	pdf.SetFont("Helvetica", "", 6)
 	pdf.SetXY(1, slipTop-2.5)
 	pdf.CellFormat(10, 4, "- - -", "", 0, "L", false, 0, "")
 
-	// Vertical line between receipt and payment part
 	pdf.Line(receiptWidth, slipTop, receiptWidth, 297)
 
-	// ── Receipt section (left 62 mm) ───────────────────────────────────────
+	// ── Receipt section (x = 5…57 mm) ────────────────────────────────────
+	// Title
 	pdf.SetFont("Helvetica", "B", 11)
-	pdf.SetXY(5, slipTop+5)
-	pdf.CellFormat(52, 6, latin1("R\u00e9c\u00e9piss\u00e9"), "", 1, "L", false, 0, "")
+	pdf.SetXY(margin, slipTop+margin)
+	pdf.CellFormat(rcWidth, 6, latin1("R\u00e9c\u00e9piss\u00e9"), "", 1, "L", false, 0, "")
 
-	pdf.SetFont("Helvetica", "B", 8)
-	pdf.SetX(5)
-	pdf.CellFormat(52, 4, latin1("Compte / Payable \u00e0"), "", 1, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 7)
-	pdf.SetX(5)
-	pdf.CellFormat(52, 4, formatIBAN(iban), "", 1, "L", false, 0, "")
-	pdf.SetX(5)
-	pdf.CellFormat(52, 4, latin1(inv.Company.Name), "", 1, "L", false, 0, "")
-	pdf.SetX(5)
-	pdf.CellFormat(52, 4, latin1(inv.Company.Address), "", 1, "L", false, 0, "")
-	pdf.SetX(5)
-	pdf.CellFormat(52, 4, latin1(inv.Company.City), "", 1, "L", false, 0, "")
+	// "Compte / Payable à" block — RC labels 6pt, RC body 8pt
+	pdf.SetFont("Helvetica", "B", 6)
+	pdf.SetX(margin)
+	pdf.CellFormat(rcWidth, 3.5, latin1("Compte / Payable \u00e0"), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 8)
+	for _, line := range []string{
+		formatIBAN(iban),
+		inv.Company.Name,
+		inv.Company.Address,
+		inv.Company.City,
+	} {
+		if line == "" {
+			continue
+		}
+		pdf.SetX(margin)
+		pdf.CellFormat(rcWidth, 4, latin1(line), "", 1, "L", false, 0, "")
+	}
 
 	if refType != "NON" {
-		pdf.SetFont("Helvetica", "B", 8)
-		pdf.SetX(5)
-		pdf.CellFormat(52, 4, latin1("R\u00e9f\u00e9rence"), "", 1, "L", false, 0, "")
-		pdf.SetFont("Helvetica", "", 7)
-		pdf.SetX(5)
-		pdf.CellFormat(52, 4, compliance.FormatQRRReference(ref), "", 1, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "B", 6)
+		pdf.SetX(margin)
+		pdf.CellFormat(rcWidth, 3.5, latin1("R\u00e9f\u00e9rence"), "", 1, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "", 8)
+		pdf.SetX(margin)
+		pdf.CellFormat(rcWidth, 4, compliance.FormatQRRReference(ref), "", 1, "L", false, 0, "")
 	}
 
-	// Payable by (debtor)
-	pdf.SetFont("Helvetica", "B", 8)
-	pdf.SetX(5)
-	pdf.CellFormat(52, 4, "Payable par", "", 1, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 7)
-	if inv.Customer.Name != "" {
-		pdf.SetX(5)
-		pdf.CellFormat(52, 4, latin1(inv.Customer.Name), "", 1, "L", false, 0, "")
-		pdf.SetX(5)
-		pdf.CellFormat(52, 4, latin1(inv.Customer.Address), "", 1, "L", false, 0, "")
-		pdf.SetX(5)
-		pdf.CellFormat(52, 4, latin1(inv.Customer.City), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "B", 6)
+	pdf.SetX(margin)
+	pdf.CellFormat(rcWidth, 3.5, "Payable par", "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 8)
+	for _, line := range []string{inv.Customer.Name, inv.Customer.Address, inv.Customer.City} {
+		if line == "" {
+			continue
+		}
+		pdf.SetX(margin)
+		pdf.CellFormat(rcWidth, 4, latin1(line), "", 1, "L", false, 0, "")
 	}
 
-	// Amount in receipt
-	pdf.SetFont("Helvetica", "B", 8)
-	pdf.SetXY(5, 265)
-	pdf.CellFormat(20, 4, "Monnaie", "", 0, "L", false, 0, "")
-	pdf.SetX(28)
-	pdf.CellFormat(28, 4, "Montant", "", 1, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 9)
-	pdf.SetXY(5, 270)
+	// Receipt amount (AMOUNT_SECTION_TOP = 37 mm from slip bottom → y=260)
+	pdf.SetFont("Helvetica", "B", 6)
+	pdf.SetXY(margin, amountY)
+	pdf.CellFormat(20, 3.5, "Monnaie", "", 0, "L", false, 0, "")
+	pdf.SetX(margin + 22)
+	pdf.CellFormat(28, 3.5, "Montant", "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.SetXY(margin, amountValY)
 	pdf.CellFormat(20, 5, inv.Currency, "", 0, "L", false, 0, "")
-	pdf.SetX(28)
+	pdf.SetX(margin + 22)
 	pdf.CellFormat(28, 5, fmtMoney(inv.TotalAmount, ""), "", 1, "L", false, 0, "")
 
-	// ── Payment part (right 148 mm starting at x=62) ───────────────────────
-	px := receiptWidth + 5 // ~67 mm
-
-	// "Partie paiement" title
+	// ── Payment part (x ≥ 62 mm) ──────────────────────────────────────────
+	// Title
 	pdf.SetFont("Helvetica", "B", 11)
-	pdf.SetXY(px, slipTop+5)
-	pdf.CellFormat(90, 6, "Partie paiement", "", 1, "L", false, 0, "")
+	pdf.SetXY(ppX, slipTop+margin)
+	pdf.CellFormat(qrSize+infoW+margin, 6, "Partie paiement", "", 1, "L", false, 0, "")
 
-	// Register and place QR code image
+	// QR code — top at slipTop+17 mm (QR_CODE_BOTTOM = 42 mm from slip bottom)
 	imgKey := "qr_" + inv.InvoiceNumber
-	_ = png.Decode // ensure image/png is initialized
+	_ = png.Decode // ensure image/png is registered
 	reader := bytes.NewReader(qrPNG)
 	pdf.RegisterImageOptionsReader(imgKey, gofpdf.ImageOptions{ImageType: "PNG"}, reader)
-	pdf.ImageOptions(imgKey, px, slipTop+13, 46, 46, false, gofpdf.ImageOptions{ImageType: "PNG"}, 0, "")
+	pdf.ImageOptions(imgKey, qrLeft, qrTop, qrSize, qrSize, false, gofpdf.ImageOptions{ImageType: "PNG"}, 0, "")
 
-	// Creditor info (to the right of QR code)
-	infoX := px + 50.0
+	// Creditor info column (x = 118 mm) — PP labels 8pt bold, PP body 10pt
 	pdf.SetFont("Helvetica", "B", 8)
-	pdf.SetXY(infoX, slipTop+13)
-	pdf.CellFormat(90, 4, latin1("Compte / Payable \u00e0"), "", 1, "L", false, 0, "")
-	pdf.SetFont("Helvetica", "", 8)
-	pdf.SetX(infoX)
-	pdf.CellFormat(90, 4, formatIBAN(iban), "", 1, "L", false, 0, "")
-	pdf.SetX(infoX)
-	pdf.CellFormat(90, 4, latin1(inv.Company.Name), "", 1, "L", false, 0, "")
-	pdf.SetX(infoX)
-	pdf.CellFormat(90, 4, latin1(inv.Company.Address), "", 1, "L", false, 0, "")
-	pdf.SetX(infoX)
-	pdf.CellFormat(90, 4, latin1(inv.Company.City), "", 1, "L", false, 0, "")
+	pdf.SetXY(infoX, slipTop+margin+7) // start just below title
+	pdf.CellFormat(infoW, 4.5, latin1("Compte / Payable \u00e0"), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	for _, line := range []string{
+		formatIBAN(iban),
+		inv.Company.Name,
+		inv.Company.Address,
+		inv.Company.City,
+	} {
+		if line == "" {
+			continue
+		}
+		pdf.SetX(infoX)
+		pdf.CellFormat(infoW, 4.5, latin1(line), "", 1, "L", false, 0, "")
+	}
 
 	if refType != "NON" {
 		pdf.SetFont("Helvetica", "B", 8)
 		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, latin1("R\u00e9f\u00e9rence"), "", 1, "L", false, 0, "")
-		pdf.SetFont("Helvetica", "", 8)
+		pdf.CellFormat(infoW, 4.5, latin1("R\u00e9f\u00e9rence"), "", 1, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "", 10)
 		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, compliance.FormatQRRReference(ref), "", 1, "L", false, 0, "")
+		pdf.CellFormat(infoW, 4.5, compliance.FormatQRRReference(ref), "", 1, "L", false, 0, "")
 	}
 
 	if inv.InvoiceNumber != "" {
 		pdf.SetFont("Helvetica", "B", 8)
 		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, "Message", "", 1, "L", false, 0, "")
-		pdf.SetFont("Helvetica", "", 8)
+		pdf.CellFormat(infoW, 4.5, "Message", "", 1, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "", 10)
 		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, inv.InvoiceNumber, "", 1, "L", false, 0, "")
+		pdf.CellFormat(infoW, 4.5, inv.InvoiceNumber, "", 1, "L", false, 0, "")
 	}
 
 	if inv.Customer.Name != "" {
 		pdf.SetFont("Helvetica", "B", 8)
 		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, "Payable par", "", 1, "L", false, 0, "")
-		pdf.SetFont("Helvetica", "", 8)
-		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, latin1(inv.Customer.Name), "", 1, "L", false, 0, "")
-		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, latin1(inv.Customer.Address), "", 1, "L", false, 0, "")
-		pdf.SetX(infoX)
-		pdf.CellFormat(90, 4, latin1(inv.Customer.City), "", 1, "L", false, 0, "")
+		pdf.CellFormat(infoW, 4.5, "Payable par", "", 1, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "", 10)
+		for _, line := range []string{inv.Customer.Name, inv.Customer.Address, inv.Customer.City} {
+			if line == "" {
+				continue
+			}
+			pdf.SetX(infoX)
+			pdf.CellFormat(infoW, 4.5, latin1(line), "", 1, "L", false, 0, "")
+		}
 	}
 
-	// Amount row (bottom of payment part)
+	// Payment part amount (same AMOUNT_SECTION_TOP = y=260)
 	pdf.SetFont("Helvetica", "B", 8)
-	pdf.SetXY(px, 262)
+	pdf.SetXY(ppX, amountY)
 	pdf.CellFormat(20, 4, "Monnaie", "", 0, "L", false, 0, "")
-	pdf.SetX(px + 22)
+	pdf.SetX(ppX + 22)
 	pdf.CellFormat(30, 4, "Montant", "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
-	pdf.SetXY(px, 267)
+	pdf.SetXY(ppX, amountValY)
 	pdf.CellFormat(20, 5, inv.Currency, "", 0, "L", false, 0, "")
-	pdf.SetX(px + 22)
+	pdf.SetX(ppX + 22)
 	pdf.CellFormat(30, 5, fmtMoney(inv.TotalAmount, ""), "", 1, "L", false, 0, "")
 
 	return nil
