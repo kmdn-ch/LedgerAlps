@@ -428,17 +428,6 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	pdf.RegisterImageOptionsReader(imgKey, gofpdf.ImageOptions{ImageType: "PNG"}, reader)
 	pdf.ImageOptions(imgKey, px, slipTop+13, 46, 46, false, gofpdf.ImageOptions{ImageType: "PNG"}, 0, "")
 
-	// Swiss cross in center of QR (optional visual marker — draw small white rect)
-	crossX := px + 46/2 - 3.5
-	crossY := slipTop + 13 + 46/2 - 3.5
-	pdf.SetFillColor(255, 255, 255)
-	pdf.Rect(crossX, crossY, 7, 7, "F")
-	pdf.SetFillColor(220, 0, 0) // Swiss red
-	// horizontal bar
-	pdf.Rect(crossX+1.5, crossY+2.5, 4, 2, "F")
-	// vertical bar
-	pdf.Rect(crossX+2.5, crossY+1.5, 2, 4, "F")
-
 	// Creditor info (to the right of QR code)
 	infoX := px + 50.0
 	pdf.SetFont("Helvetica", "B", 8)
