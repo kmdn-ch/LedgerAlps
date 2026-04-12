@@ -20,6 +20,7 @@ func SecurityHeaders() gin.HandlerFunc {
 				"img-src 'self' data: blob:; "+
 				"font-src 'self' data:; "+
 				"connect-src 'self'; "+
+				"frame-src 'self' blob:; "+ // PDF preview uses blob: iframe
 				"object-src 'none'; "+
 				"base-uri 'self'")
 
