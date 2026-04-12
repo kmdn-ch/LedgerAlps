@@ -44,81 +44,90 @@ type QRBillData struct {
 
 // GenerateQRBillPayload returns the newline-delimited text payload that is
 // encoded into the Swiss QR code (SPC 0200 spec, section 4).
+//
+// Field structure follows QRCodeText.java from manuelbl/SwissQRBill exactly:
+//   - fields are separated by LF (0x0A)
+//   - NO trailing LF after the last field (SPC 0200 §4.1)
 func GenerateQRBillPayload(d QRBillData) (string, error) {
 	if err := validateQRBillData(d); err != nil {
 		return "", fmt.Errorf("qr-bill: %w", err)
 	}
 
+	// field appends LF *before* each field except the first — this guarantees
+	// that the final field never has a trailing LF, matching the reference
+	// implementation and the SPC 0200 §4.1 requirement.
 	var b strings.Builder
-	line := func(s string) { b.WriteString(s); b.WriteByte('\n') }
+	first := true
+	field := func(s string) {
+		if !first {
+			b.WriteByte('\n')
+		}
+		b.WriteString(s)
+		first = false
+	}
 
 	// ── Header ────────────────────────────────────────────────────────────────
-	line("SPC")  // Swiss Payments Code
-	line("0200") // version
-	line("1")    // coding: 1=Latin
+	field("SPC")  // Swiss Payments Code
+	field("0200") // version
+	field("1")    // coding: 1 = Latin (ISO 8859-1)
 
 	// ── Creditor ──────────────────────────────────────────────────────────────
 	clean := strings.ToUpper(ibanClean.ReplaceAllString(d.CreditorIBAN, ""))
-	line(clean)  // IBAN / QR-IBAN (no spaces)
-	line("K")    // address type: K = combined fields
-	line(d.CreditorName)
-	line(d.CreditorAddress)
-	line(d.CreditorCity)
-	line("")     // addr3 (unused for type K)
-	line("")     // addr4 (unused for type K)
-	line(d.CreditorCountry)
+	field(clean) // IBAN / QR-IBAN (no spaces, uppercase)
+	field("K")   // address type: K = combined elements
+	field(d.CreditorName)
+	field(d.CreditorAddress) // street + building number
+	field(d.CreditorCity)    // postal code + city (combined for K)
+	field("")                // StrtNm / BldgNb — unused for K
+	field("")                // PstCd / TwnNm   — unused for K
+	field(d.CreditorCountry)
 
-	// ── Ultimate creditor (SPC 0200 §4.3.3 — not in use, 6 blank lines + country blank) ──
-	line("") // UC addr type
-	line("") // UC name
-	line("") // UC addr1
-	line("") // UC addr2
-	line("") // UC addr3
-	line("") // UC addr4
-	line("") // UC country
+	// ── Ultimate creditor (§4.3.3 — reserved, all 7 fields empty) ────────────
+	field("") // UC address type
+	field("") // UC name
+	field("") // UC address line 1
+	field("") // UC address line 2
+	field("") // UC zip / town
+	field("") // UC town / unused
+	field("") // UC country
 
 	// ── Amount ────────────────────────────────────────────────────────────────
 	if d.Amount > 0 {
-		// Format: at most 12 digits, 2 decimal places, decimal point is "."
-		line(fmt.Sprintf("%.2f", math.Round(d.Amount*100)/100))
+		field(fmt.Sprintf("%.2f", math.Round(d.Amount*100)/100))
 	} else {
-		line("") // open amount
+		field("") // open amount
 	}
-	line(d.Currency)
+	field(d.Currency)
 
 	// ── Debtor ────────────────────────────────────────────────────────────────
 	if d.DebtorName != "" {
-		line("K")
-		line(d.DebtorName)
-		line(d.DebtorAddress)
-		line(d.DebtorCity)
-		line("") // addr3
-		line("") // addr4
-		line(d.DebtorCountry)
+		field("K")
+		field(d.DebtorName)
+		field(d.DebtorAddress)
+		field(d.DebtorCity)
+		field("") // unused for K
+		field("") // unused for K
+		field(d.DebtorCountry)
 	} else {
-		// Unknown debtor — 7 blank lines
+		// Unknown debtor — 7 blank fields
 		for i := 0; i < 7; i++ {
-			line("")
+			field("")
 		}
 	}
 
 	// ── Payment reference ─────────────────────────────────────────────────────
-	line(d.ReferenceType) // QRR / SCOR / NON
-	line(d.Reference)     // reference number (empty for NON)
+	field(d.ReferenceType) // QRR / SCOR / NON
+	field(d.Reference)     // reference number (empty for NON)
 
 	// ── Additional information ────────────────────────────────────────────────
-	line(truncate(d.Message, 140))
-	line("EPD") // End Payment Data — mandatory trailer
+	field(truncate(d.Message, 140))
+	field("EPD") // End Payment Data — mandatory trailer; last field, no trailing LF
 
-	// ── Bill information (optional, after EPD) ────────────────────────────────
-	// Swico S1 format: //S1/10/<invoice_nr>/11/<YYMMDD>
-	if d.InvoiceNumber != "" && !d.InvoiceDate.IsZero() {
-		swico := fmt.Sprintf("//S1/10/%s/11/%s",
-			sanitizeSwico(d.InvoiceNumber),
-			d.InvoiceDate.Format("060102")) // YYMMDD
-		b.WriteString(swico)
-		// No trailing newline — EPD was the last mandatory line
-	}
+	// Bill information (§4.4.11, optional) is intentionally omitted:
+	// the invoice number is already encoded in the Message field above.
+	// Including a Swico S1 string here causes strict validators in some
+	// Swiss banking apps to reject the QR bill when the invoice number
+	// contains non-numeric characters.
 
 	return b.String(), nil
 }
