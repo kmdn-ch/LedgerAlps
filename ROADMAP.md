@@ -114,3 +114,11 @@ Si l'utilisateur clique « Conserver » (défaut), seuls les fichiers programme 
 | v1.1.6 | Fix ERR_TOO_MANY_REDIRECTS après soumission wizard | avr. 2026 |
 | v1.2.x | Pipeline release GoReleaser + NSIS, CLI (`migrate`, `bootstrap`, `health`), endpoints reports / payments / audit-logs | avr. 2026 |
 | v1.3.x | PDF QR-bill : encodage Latin-1, conformité SPC 0200, layout BillLayout.java, validation IBAN, avertissements UI | avr. 2026 |
+
+### Points v1.2 non livrés — reportés dans les milestones ci-dessus
+
+| Point | Statut | Milestone |
+|---|---|---|
+| Auto-remplissage CHE depuis UID/IDE (uid.admin.ch / ZEFIX) | ❌ Non livré — champ CHE manuel | v1.5 |
+| Notification "Configuration existante détectée" au réinstall | ⚠️ Partiel — détection OK, message absent | v1.6 |
+| Dialogue NSIS de suppression des données à la désinstallation | ❌ Non livré — données silencieusement conservées | v1.6 |
