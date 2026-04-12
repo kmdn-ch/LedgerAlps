@@ -121,8 +121,8 @@ export function SettingsPage() {
           <button
             form="settings-form"
             type="submit"
-            className={`btn-primary flex items-center gap-1.5 ${!isDirty ? 'opacity-50' : ''}`}
-            disabled={!isDirty || save.isPending}
+            className="btn-primary flex items-center gap-1.5"
+            disabled={save.isPending}
           >
             {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {saved ? 'Sauvegardé ✓' : 'Enregistrer'}

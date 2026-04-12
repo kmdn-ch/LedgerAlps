@@ -11,7 +11,17 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-		c.Header("Content-Security-Policy", "default-src 'self'")
+		// img-src includes data: for base64 company logos stored as data URLs.
+		// style-src includes 'unsafe-inline' for Tailwind utility classes injected at runtime.
+		c.Header("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self'; "+
+				"style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' data: blob:; "+
+				"font-src 'self' data:; "+
+				"connect-src 'self'; "+
+				"object-src 'none'; "+
+				"base-uri 'self'")
 
 		// HSTS only over HTTPS (conditional — avoids breaking plain HTTP dev)
 		if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
