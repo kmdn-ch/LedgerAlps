@@ -192,6 +192,9 @@ func TestGenerateQRBillPayload_WithDebtor(t *testing.T) {
 }
 
 func TestGenerateQRBillPayload_WithBillInfo(t *testing.T) {
+	// Swico S1 bill info was removed (caused strict Swiss banking apps to
+	// reject QR bills with non-numeric invoice numbers). The invoice number
+	// is encoded in the Message field instead.
 	d := validQRBillData()
 	d.InvoiceNumber = "INV-2024-001"
 	d.InvoiceDate = time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC)
@@ -201,11 +204,22 @@ func TestGenerateQRBillPayload_WithBillInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(payload, "//S1/10/") {
-		t.Error("Swico S1 bill info should be present")
+	// Message field must be present
+	if !strings.Contains(payload, "Facture mars 2024") {
+		t.Error("message should appear in payload")
 	}
-	if !strings.Contains(payload, "240315") {
-		t.Error("invoice date YYMMDD should appear in bill info")
+	// Swico S1 is intentionally absent to maximise scanner compatibility
+	if strings.Contains(payload, "//S1/") {
+		t.Error("Swico S1 bill info must not be present (breaks strict validators)")
+	}
+	// SPC 0200 §4.1: no trailing LF after last field
+	if strings.HasSuffix(payload, "\n") {
+		t.Error("payload must not end with a trailing LF (SPC 0200 §4.1)")
+	}
+	// EPD must be the last line
+	lines := strings.Split(payload, "\n")
+	if lines[len(lines)-1] != "EPD" {
+		t.Errorf("last field must be EPD, got %q", lines[len(lines)-1])
 	}
 }
 
