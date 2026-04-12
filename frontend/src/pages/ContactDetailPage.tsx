@@ -217,6 +217,9 @@ export function ContactDetailPage() {
                 <input className="input" placeholder="NPA" {...register('postal_code')} />
                 <input className="input col-span-2" placeholder="Localité" {...register('city')} />
               </div>
+              <p className="text-xs text-alpine-400 mt-1.5">
+                Rue, NPA et localité sont requis pour inclure le débiteur dans le QR code de paiement SPC 0200.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>

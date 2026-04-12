@@ -194,6 +194,12 @@ func validateQRBillData(d QRBillData) error {
 	if d.CreditorIBAN == "" {
 		return fmt.Errorf("creditor IBAN is required")
 	}
+	// Validate IBAN checksum (MOD-97, ISO 13616) — an invalid IBAN produces a
+	// technically scannable but standards-non-compliant QR bill that all
+	// Swiss banking apps and validators will reject.
+	if err := ValidateIBAN(d.CreditorIBAN); err != nil {
+		return fmt.Errorf("creditor IBAN: %w", err)
+	}
 	if d.CreditorName == "" {
 		return fmt.Errorf("creditor name is required")
 	}
@@ -202,6 +208,10 @@ func validateQRBillData(d QRBillData) error {
 	}
 	if d.Currency != "CHF" && d.Currency != "EUR" {
 		return fmt.Errorf("currency must be CHF or EUR, got %q", d.Currency)
+	}
+	// SPC 0200 §4.3.5: if debtor is identified, country must be a valid 2-char ISO code.
+	if d.DebtorName != "" && len(d.DebtorCountry) != 2 {
+		return fmt.Errorf("debtor country (ISO 3166-1 alpha-2) is required when debtor is identified")
 	}
 	switch d.ReferenceType {
 	case "QRR":

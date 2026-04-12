@@ -6,11 +6,11 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Plus, Trash2, ArrowLeft, Save, UserPlus, X } from 'lucide-react'
-import { invoicesApi, contactsApi } from '@/api/client'
+import { Plus, Trash2, ArrowLeft, Save, UserPlus, X, AlertTriangle } from 'lucide-react'
+import { invoicesApi, contactsApi, settingsApi } from '@/api/client'
 import { PageHeader, ErrorBanner, LoadingSpinner } from '@/components/ui'
 import { formatCHF } from '@/utils'
-import type { Contact, Invoice } from '@/types'
+import type { Contact, CompanySettings, Invoice } from '@/types'
 
 // ── Schéma identique à NewInvoicePage ─────────────────────────────────────────
 
@@ -147,6 +147,11 @@ export function EditInvoicePage() {
     queryFn:  () => contactsApi.list().then(r => r.data),
   })
 
+  const { data: company } = useQuery<CompanySettings>({
+    queryKey: ['company-settings'],
+    queryFn:  () => settingsApi.getCompany().then(r => r.data),
+  })
+
   const {
     register, control, handleSubmit, setValue, reset,
     formState: { errors },
@@ -180,9 +185,22 @@ export function EditInvoicePage() {
   }, [invoice, reset])
 
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
-  const watchedLines = useWatch({ control, name: 'lines' })
+  const watchedLines     = useWatch({ control, name: 'lines' })
+  const watchedContactId = useWatch({ control, name: 'contact_id' })
+  const watchedDocType   = useWatch({ control, name: 'document_type' })
 
   const totals     = (watchedLines ?? []).map(computeLineTotals)
+
+  // QR bill readiness: check what's missing so the payment slip can be generated.
+  const selectedContact = contacts.find(c => c.id === watchedContactId)
+  const qrIssues: string[] = []
+  if (watchedDocType === 'invoice') {
+    if (!company?.iban) qrIssues.push("Aucun IBAN configuré dans Paramètres > Banque")
+    if (selectedContact) {
+      if (!selectedContact.address) qrIssues.push("Adresse (rue) manquante sur le contact")
+      if (!selectedContact.postal_code || !selectedContact.city) qrIssues.push("NPA / localité manquant sur le contact")
+    }
+  }
   const subtotal   = totals.reduce((s, t) => s + t.base,  0)
   const totalVAT   = totals.reduce((s, t) => s + t.vat,   0)
   const grandTotal = totals.reduce((s, t) => s + t.total, 0)
@@ -292,6 +310,19 @@ export function EditInvoicePage() {
             </div>
           </div>
         </div>
+
+        {/* QR bill readiness warning */}
+        {watchedDocType === 'invoice' && qrIssues.length > 0 && (
+          <div className="flex items-start gap-2.5 rounded-lg border border-warning-200 bg-warning-50/70 px-4 py-3 text-sm">
+            <AlertTriangle size={15} className="mt-0.5 flex-shrink-0 text-warning-500" />
+            <div>
+              <p className="font-medium text-warning-800">QR code de paiement incomplet</p>
+              <ul className="mt-1 space-y-0.5 list-disc list-inside text-xs text-warning-700">
+                {qrIssues.map((issue, i) => <li key={i}>{issue}</li>)}
+              </ul>
+            </div>
+          </div>
+        )}
 
         {/* Lignes */}
         <div className="card">

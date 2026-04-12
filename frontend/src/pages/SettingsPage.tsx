@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Building2, CreditCard, FileText, Shield,
-  Upload, Trash2, ImageOff, Loader2,
+  Upload, Trash2, ImageOff, Loader2, AlertTriangle,
 } from 'lucide-react'
 import { settingsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
@@ -132,6 +132,17 @@ export function SettingsPage() {
 
       {save.isError && (
         <ErrorBanner message={(save.error as any)?.response?.data?.error ?? 'Erreur lors de la sauvegarde.'} />
+      )}
+
+      {/* IBAN missing warning — shown until an IBAN is saved */}
+      {company && !company.iban && (
+        <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-800">
+          <AlertTriangle size={15} className="mt-0.5 flex-shrink-0 text-warning-500" />
+          <span>
+            Aucun IBAN configuré. Sans IBAN, les factures PDF ne contiendront pas de QR code de paiement suisse.
+            Configurez-le dans l'onglet <strong>Banque</strong>.
+          </span>
+        </div>
       )}
 
       <div className="flex gap-6">
@@ -282,10 +293,10 @@ export function SettingsPage() {
               </div>
               <div className="card-body grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="label">IBAN</label>
+                  <label className="label">IBAN <span className="text-warning-600 font-normal">(requis pour le QR code de paiement)</span></label>
                   <input className="input font-mono" placeholder="CH56 0483 5012 3456 7800 9" {...register('iban')} />
                   <p className="text-xs text-alpine-400 mt-1">
-                    Utilisé pour les virements et les QR-factures.
+                    Requis pour le QR code de paiement SPC 0200 sur les factures PDF. Format : CH + 19 chiffres.
                   </p>
                 </div>
                 <div className="col-span-2">

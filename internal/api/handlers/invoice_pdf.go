@@ -124,10 +124,15 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 		}
 	}
 
-	// Customer info from contact
+	// Customer info from contact.
+	// SPC 0200 requires a 2-char country when debtor is identified; default CH.
+	ctCountry := ct.Country
+	if len(ctCountry) != 2 {
+		ctCountry = "CH"
+	}
 	customer := pdfsvc.CustomerInfo{
 		Name:    ct.Name,
-		Country: ct.Country,
+		Country: ctCountry,
 	}
 	if ct.Address != nil {
 		customer.Address = *ct.Address

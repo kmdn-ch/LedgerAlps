@@ -181,6 +181,23 @@ export interface Paginated<T> {
   pages: number
 }
 
+// ─── Paramètres société ───────────────────────────────────────────────────────
+export interface CompanySettings {
+  id: string
+  company_name: string
+  legal_form: string
+  address_street: string
+  address_postal_code: string
+  address_city: string
+  address_country: string
+  che_number: string
+  vat_number: string
+  iban: string
+  fiscal_year_start_month: number
+  currency: string
+  logo_data?: string | null
+}
+
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 export interface SelectOption {
   value: string
