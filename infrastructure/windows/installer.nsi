@@ -44,8 +44,6 @@ Unicode True
 ; On the Finish page, offer to launch the app (via the launcher).
 !define MUI_FINISHPAGE_RUN          "$INSTDIR\${LAUNCHER_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT     "Launch LedgerAlps"
-!define MUI_FINISHPAGE_SHOWREADME   "$INSTDIR\README.md"
-!define MUI_FINISHPAGE_SHOWREADME_TEXT "View README"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\..\LICENSE"
@@ -90,7 +88,6 @@ Section "LedgerAlps (required)" SecMain
   File "${LAUNCHER_EXE}"
   File "${SERVER_EXE}"
   File "${CLI_EXE}"
-  File "..\..\README.md"
   File "..\..\LICENSE"
 
   ; Note: the React frontend is embedded inside ledgeralps-server.exe (Go embed).
@@ -142,7 +139,6 @@ Section "Uninstall"
   Delete "$INSTDIR\${LAUNCHER_EXE}"
   Delete "$INSTDIR\${SERVER_EXE}"
   Delete "$INSTDIR\${CLI_EXE}"
-  Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir  "$INSTDIR"
