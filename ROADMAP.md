@@ -1,128 +1,116 @@
 # LedgerAlps — Roadmap
 
-> Versions are indicative. Features move between milestones based on priority.
+> Les versions sont indicatives. Les fonctionnalités peuvent changer de milestone selon les priorités.
 
 ---
 
-## v1.2 — Smart Setup Wizard & Installer UX (next)
+## En cours — v1.4 : Interface multilingue (FR / DE / IT / EN)
 
-### Auto-fill company info at first launch
-On first launch, the setup wizard will auto-populate company fields from public
-Swiss registries based on the CHE/IDE number entered by the user.
+La Suisse compte quatre langues officielles. LedgerAlps supportera FR, DE, IT et EN.
+
+| Langue | Code | Statut |
+|---|---|---|
+| Français | `fr` | ✅ Défaut actuel |
+| Deutsch | `de` | Planifié |
+| Italiano | `it` | Planifié |
+| English | `en` | Partiel (chaînes UI) |
+
+**Périmètre**
+- Traduction complète : menus, formulaires, libellés, messages d'erreur, gabarits de factures
+- Bulletin de paiement QR : textes créancier/débiteur dans la langue choisie
+- PDF factures : langue liée au paramètre société ou par facture
+- Wizard premier démarrage : langue détectée depuis la locale Windows
+- Sélecteur de langue dans la barre de navigation
+
+**Plan technique**
+- `react-i18next` en frontend, fichiers `public/locales/{fr,de,it,en}/translation.json`
+- Backend : génération PDF language-aware (en-tête facture, textes QR-bill)
+- NSIS : packs DE, FR, EN déjà présents — ajouter IT
+
+---
+
+## v1.5 — Smart Setup Wizard : auto-remplissage depuis les registres suisses
+
+Au premier démarrage, le wizard pré-remplira les champs société depuis les registres publics suisses.
 
 **Sources**
-| Registry | Data | URL |
+| Registre | Données | URL |
 |---|---|---|
-| UID/IDE Register (admin.ch) | Official company name, legal form, CHE number, address, VAT status | `https://www.uid.admin.ch/` (SOAP/REST API) |
-| Registre vaudois (prestations.vd.ch) | Cantonal entry, RC number, purpose, date of constitution | `https://prestations.vd.ch/pub/101266/` |
+| UID/IDE Register (admin.ch) | Raison sociale, forme juridique, CHE, adresse, statut TVA | `https://www.uid.admin.ch/` |
+| Registre vaudois (prestations.vd.ch) | Inscription RC, but, date de constitution | `https://prestations.vd.ch/pub/101266/` |
 
-**User flow**
-1. User types CHE number (e.g. `CHE-123.456.789`) in the wizard
-2. Wizard calls UID API → pre-fills company name, legal form, address, VAT
-3. If vaudois registry returns extra detail → pre-fills cantonal fields
-4. User reviews, corrects if needed, clicks "Start"
+**Flux utilisateur**
+1. L'utilisateur saisit son CHE (ex. `CHE-123.456.789`) dans le wizard
+2. Le wizard appelle l'API UID → pré-remplit nom, forme juridique, adresse, TVA
+3. Si le registre vaudois renvoie des données → pré-remplit les champs cantonaux
+4. L'utilisateur vérifie, corrige si besoin, clique « Démarrer »
 
-**Technical plan**
-- New server endpoint `GET /api/uid-lookup?che=CHE-123.456.789` (proxies to ZEFIX/UID)
-- Frontend: debounced input on CHE field → auto-fill on valid match
-- All lookups proxied through the Go server to avoid CORS
+**Plan technique**
+- Endpoint `GET /api/uid-lookup?che=CHE-123.456.789` (proxy vers ZEFIX/UID, évite CORS)
+- Frontend : input CHE avec debounce → auto-fill sur match valide
 
-### Detect and reuse existing data on install
-When reinstalling or upgrading, if `%APPDATA%\LedgerAlps\config.json` already
-exists, the installer skips the setup wizard and reuses the existing database
-and configuration. The user sees a notification: *"Configuration existante
-détectée — vos données ont été conservées."*
+---
 
-**Technical plan**
-- Launcher checks for `config.json` at startup (already implemented)
-- Installer page: detect existing install and display a "mise à niveau" message
-- No wizard bypass needed — the current flow already handles this, but the UX
-  should make it explicit with a clear "upgrade vs fresh install" message
+## v1.6 — Installer UX : gestion des données à la désinstallation
 
-### Ask to delete data on uninstall
-The NSIS uninstaller currently preserves `%APPDATA%\LedgerAlps\` silently.
-A confirmation dialog (in French, the primary language) will let the user choose:
+L'installeur NSIS affichera une boîte de dialogue de confirmation en français lors de la désinstallation :
 
 > **Souhaitez-vous supprimer vos données comptables ?**
 > *(base de données, configuration, journaux)*
 >
 > [ **Supprimer les données** ]   [ **Conserver les données** ]
 
-If the user clicks "Supprimer", `%APPDATA%\LedgerAlps\` is removed entirely.
-If they click "Conserver" (default), only the program files are removed and
-the database survives a reinstall.
+Si l'utilisateur clique « Supprimer », `%APPDATA%\LedgerAlps\` est effacé.
+Si l'utilisateur clique « Conserver » (défaut), seuls les fichiers programme sont supprimés.
 
-**Technical plan**
-- Add a custom NSIS page with `MessageBox` or custom `nsDialogs` page
-- French as primary language; fallback to English if locale detection fails
-- Log the user's choice to the Windows event log
+**Plan technique**
+- Page personnalisée NSIS avec `nsDialogs`
+- Français en langue principale ; fallback anglais si détection locale échoue
+- Journalisation du choix dans l'event log Windows
 
 ---
 
-## v1.3 — Multilingual Interface (DE / IT / FR / EN)
+## v1.7 — Mobile / PWA
 
-Switzerland has four official languages. LedgerAlps will support all three
-main ones plus English.
+- Manifest Progressive Web App (pin sur écran d'accueil)
+- Layout responsive pour consultation des factures sur mobile
+- Saisie journal en mode hors-ligne avec sync au reconnect
 
-| Language | Code | Status |
+---
+
+## v1.8 — Multi-utilisateurs & Permissions
+
+- Rôles : Admin / Comptable / Lecture seule
+- Audit trail par utilisateur
+- Invitation par e-mail (onboarding par token)
+
+---
+
+## v1.9 — Rapprochement bancaire UI
+
+- Matching visuel des écritures camt.053 contre le journal
+- Workflow « matcher & passer » en un clic
+- Écritures non rapprochées mises en évidence
+
+---
+
+## v2.0 — E-facturation (ZUGFeRD / Factur-X)
+
+- Factures hybrides PDF+XML embarqué
+- Import de factures fournisseurs → création automatique d'écritures journal
+- Conformité pilote eDEF suisse
+
+---
+
+## Complété
+
+| Version | Fonctionnalité | Date |
 |---|---|---|
-| Français | `fr` | ✅ Current default |
-| Deutsch | `de` | Planned |
-| Italiano | `it` | Planned |
-| English | `en` | Partial (UI strings) |
-
-**Scope**
-- Full UI translation: menus, forms, labels, error messages, invoice templates
-- QR-bill payment slip: creditor/debtor text in the correct language
-- PDF invoices: language follows company setting or per-invoice override
-- Setup wizard: language auto-detected from Windows locale (`LANG` / `USERPROFILE`)
-- Language switcher in the top navigation bar (flag icons)
-
-**Technical plan**
-- i18n library in React frontend (e.g. `react-i18next`)
-- Translation files: `public/locales/de/translation.json`, etc.
-- Backend: language-aware PDF generation (invoice header, QR-bill text)
-- NSIS installer: already includes DE, FR, EN language packs — add IT
-
----
-
-## v1.4 — Mobile / PWA
-
-- Progressive Web App manifest so users can pin to home screen
-- Responsive layout for invoice consultation on mobile
-- Offline-capable journal entry (sync on reconnect)
-
----
-
-## v1.5 — Multi-user & Permissions
-
-- Role-based access: Admin / Accountant / Read-only
-- Per-user audit trail attribution
-- Invite by email (token-based onboarding)
-
----
-
-## v1.6 — Bank Reconciliation UI
-
-- Visual matching of camt.053 bank entries against journal entries
-- One-click "match & post" workflow
-- Unmatched entries highlighted for review
-
----
-
-## v1.7 — E-invoicing (ZUGFeRD / Factur-X)
-
-- Generate hybrid PDF/XML invoices (PDF + embedded XML)
-- Import supplier invoices for automatic journal creation
-- Swiss eDEF pilot compliance
-
----
-
-## Completed
-
-| Version | Feature |
-|---|---|
-| v1.0 | Core accounting engine, double-entry, CO compliance |
-| v1.1 | Windows installer, setup wizard, QR-bill PDF, ISO 20022 |
-| v1.1.5 | Embedded frontend (//go:embed) — eliminates install-dir 404 |
-| v1.1.6 | Fix ERR_TOO_MANY_REDIRECTS after setup wizard submit |
+| v0.1.0 | Backend FastAPI, SQLAlchemy, modèles, API REST complète | avr. 2026 |
+| v1.0.0 | Réécriture Go — moteur comptable double-entrée, JWT, hash chain SHA-256, CO art. 957 | avr. 2026 |
+| v1.1.0 | ISO 20022 pain.001 / camt.053, export légal ZIP, dashboard stats | avr. 2026 |
+| v1.1.1 | Lanceur Windows (`-H=windowsgui`), wizard premier démarrage, config JSON, frontend embarqué (go:embed) | avr. 2026 |
+| v1.1.5 | Fix 404 frontend après installation — `go:embed dist/` | avr. 2026 |
+| v1.1.6 | Fix ERR_TOO_MANY_REDIRECTS après soumission wizard | avr. 2026 |
+| v1.2.x | Pipeline release GoReleaser + NSIS, CLI (`migrate`, `bootstrap`, `health`), endpoints reports / payments / audit-logs | avr. 2026 |
+| v1.3.x | PDF QR-bill : encodage Latin-1, conformité SPC 0200, layout BillLayout.java, validation IBAN, avertissements UI | avr. 2026 |
