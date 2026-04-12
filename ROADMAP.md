@@ -2,8 +2,8 @@
 
 > **Politique de versionnage**
 > - `vX.Y.0` — livraison d'un milestone fonctionnel complet
-> - `vX.Y.Z` (Z > 0) — correctifs et améliorations groupés dans le cycle du milestone
-> - On ne pose **pas** un tag par commit : on groupe les patches et on tague quand l'ensemble est stable
+> - `vX.Y.Z` (Z > 0) — correctifs groupés dans le cycle du milestone, taggés une fois stables
+> - On ne pose **jamais** un tag par commit isolé
 
 ---
 
@@ -20,47 +20,28 @@ La Suisse compte quatre langues officielles. LedgerAlps supportera FR, DE, IT et
 
 **Périmètre**
 - Traduction complète : menus, formulaires, libellés, messages d'erreur, gabarits de factures
-- Bulletin de paiement QR : textes créancier/débiteur dans la langue choisie
+- Bulletin de paiement QR : libellés créancier/débiteur dans la langue choisie
 - PDF factures : langue liée au paramètre société ou par facture
 - Wizard premier démarrage : langue détectée depuis la locale Windows
 - Sélecteur de langue dans la barre de navigation
 
 **Plan technique**
 - `react-i18next` en frontend, fichiers `public/locales/{fr,de,it,en}/translation.json`
-- Backend : génération PDF language-aware (en-tête facture, textes QR-bill)
+- Backend : génération PDF language-aware (en-tête facture, libellés QR-bill)
 - NSIS : packs DE, FR, EN déjà présents — ajouter IT
 
 ---
 
-## v1.5 — Mobile / PWA
+## Planifié
 
-- Manifest Progressive Web App (pin sur écran d'accueil)
-- Layout responsive pour consultation des factures sur mobile
-- Saisie journal en mode hors-ligne avec sync au reconnect
+| Priorité | Fonctionnalité | Description |
+|---|---|---|
+| 1 | Mobile / PWA | Manifest PWA, layout responsive, saisie journal hors-ligne avec sync |
+| 2 | Multi-utilisateurs & Permissions | Rôles Admin / Comptable / Lecture seule, audit trail, invitation par e-mail |
+| 3 | Rapprochement bancaire UI | Matching visuel camt.053 contre journal, workflow « matcher & passer » |
+| 4 | E-facturation ZUGFeRD / Factur-X | Factures hybrides PDF+XML, import fournisseurs → écritures auto, conformité eDEF |
 
----
-
-## v1.6 — Multi-utilisateurs & Permissions
-
-- Rôles : Admin / Comptable / Lecture seule
-- Audit trail par utilisateur
-- Invitation par e-mail (onboarding par token)
-
----
-
-## v1.7 — Rapprochement bancaire UI
-
-- Matching visuel des écritures camt.053 contre le journal
-- Workflow « matcher & passer » en un clic
-- Écritures non rapprochées mises en évidence
-
----
-
-## v2.0 — E-facturation (ZUGFeRD / Factur-X)
-
-- Factures hybrides PDF+XML embarqué
-- Import de factures fournisseurs → création automatique d'écritures journal
-- Conformité pilote eDEF suisse
+> Les numéros de version des milestones planifiés seront attribués à la livraison, pas à l'avance.
 
 ---
 
@@ -76,3 +57,4 @@ La Suisse compte quatre langues officielles. LedgerAlps supportera FR, DE, IT et
 | v1.3.0 | Logo société — sidebar, PDF, upload settings | avr. 2026 |
 | v1.3.1–v1.3.11 | PDF QR-bill : encodage Latin-1, conformité SPC 0200, layout BillLayout.java, suppression Swico S1, validation IBAN, avertissements UI | avr. 2026 |
 | v1.3.12 | CHE auto-fill ZEFIX, notification réinstallation, dialogue NSIS suppression données | avr. 2026 |
+| v1.3.13 | **Fix QR-bill SPC 0200 v2.3** : remplacement type adresse K→S (type K retiré en v2.3), croix suisse restaurée (`image/draw`), séparation NPA/localité pour adresse structurée | avr. 2026 |
