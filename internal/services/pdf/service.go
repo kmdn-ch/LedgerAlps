@@ -5,6 +5,9 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
 	"image/png"
 	"math"
 	"strings"
@@ -285,38 +288,35 @@ func renderNotes(pdf *gofpdf.Fpdf, inv InvoiceData) {
 }
 
 // ─── Swiss QR payment slip ────────────────────────────────────────────────────
-// Layout per SIX-Group Swiss Payment Standards:
-// - Slip height: 105 mm from bottom of A4 (297 mm)
-// - Receipt section: 62 mm wide (left)
-// - Separator: vertical line
-// - Payment part: 148 mm wide (right)
-// - QR code: 46×46 mm starting at x=67, y=297-105+17
+// Layout dimensions (SPC 0200 v2.3 §3.5, BillLayout.java reference):
+//
+//	Slip height             = 105 mm (bottom of A4)
+//	Receipt width           = 62 mm
+//	Payment part width      = 148 mm
+//	Margin (slip inner)     = 5 mm
+//	QR code size            = 46 × 46 mm
+//	QR left edge            = 67 mm (receiptWidth + margin)
+//	QR top edge             = slipTop + 17 mm
+//	Info column X           = 118 mm (62 + 46 + 2×5)
+//	Amount section Y        = 260 mm (297 − 37)
+//	Font: title 11pt bold; PP labels 8pt bold, PP values 10pt; RC labels 6pt bold, RC values 8pt
 
 const (
-	slipTop      = 192.0 // 297 - 105
+	slipTop      = 192.0 // 297 − 105 mm
 	receiptWidth = 62.0
 	pageWidth    = 210.0
 )
 
-// renderPaymentSlip draws the Swiss QR-bill payment slip (SPC 0200) at the bottom
-// 105 mm of the page, following the exact layout from manuelbl/SwissQRBill BillLayout.java:
-//
-//   MARGIN                = 5 mm
-//   RECEIPT_WIDTH         = 62 mm
-//   RECEIPT_TEXT_WIDTH    = 52 mm   (RECEIPT_WIDTH – 2×MARGIN)
-//   QR code               = 46×46 mm, left edge at x=67, top at y=slipTop+17
-//   QR_CODE_BOTTOM        = 42 mm from slip bottom → top at 105-42-46 = 17 mm from slip top
-//   PP_DETAIL_TEXT_X      = 118 mm  (62 + 46 + 2×5)
-//   AMOUNT_SECTION_TOP    = 37 mm from slip bottom → y = 297-37 = 260 mm
-//   Font: title=11pt; PP label=8pt, PP body=10pt; RC label=6pt, RC body=8pt
+// renderPaymentSlip draws the Swiss QR-bill payment slip at the bottom 105 mm.
+// Uses SPC 0200 v2.3 structured address type S throughout.
 func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
-	// Determine which IBAN and reference to use
+	// ── Determine IBAN and reference type ─────────────────────────────────────
 	iban := inv.Company.IBAN
 	if inv.Company.QRIBAN != "" {
 		iban = inv.Company.QRIBAN
 	}
 	if iban == "" {
-		return nil // no IBAN configured — skip slip
+		return nil // no IBAN configured — skip slip silently
 	}
 
 	refType := "NON"
@@ -329,79 +329,92 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 		}
 	}
 
+	// ── Split combined "postal town" strings into separate fields for S type ──
+	// CompanyInfo.City is stored as "8001 Zürich"; the QR payload needs them split.
+	credPostal, credTown := splitPostalCity(inv.Company.City)
+	debtorPostal, debtorTown := splitPostalCity(inv.Customer.City)
+
+	// Default country to CH when empty (required by structured address)
+	credCountry := inv.Company.Country
+	if credCountry == "" {
+		credCountry = "CH"
+	}
+	debtorCountry := inv.Customer.Country
+	if debtorCountry == "" {
+		debtorCountry = "CH"
+	}
+
 	payload, err := compliance.GenerateQRBillPayload(compliance.QRBillData{
-		CreditorIBAN:    iban,
-		CreditorName:    inv.Company.Name,
-		CreditorAddress: inv.Company.Address,
-		CreditorCity:    inv.Company.City,
-		CreditorCountry: inv.Company.Country,
-		Amount:          inv.TotalAmount,
-		Currency:        inv.Currency,
-		DebtorName:      inv.Customer.Name,
-		DebtorAddress:   inv.Customer.Address,
-		DebtorCity:      inv.Customer.City,
-		DebtorCountry:   inv.Customer.Country,
-		ReferenceType:   refType,
-		Reference:       ref,
-		Message:         inv.InvoiceNumber,
-		InvoiceNumber:   inv.InvoiceNumber,
-		InvoiceDate:     inv.IssueDate,
+		// Creditor — structured address (S), building nr included in Street per §4.2.2
+		CreditorIBAN:       iban,
+		CreditorName:       inv.Company.Name,
+		CreditorStreet:     inv.Company.Address, // "Bahnhofstrasse 1" — building nr allowed in StrtNm
+		CreditorPostalCode: credPostal,
+		CreditorTown:       credTown,
+		CreditorCountry:    credCountry,
+		// Amount
+		Amount:   inv.TotalAmount,
+		Currency: inv.Currency,
+		// Debtor — only include when name is non-empty and address is complete enough
+		DebtorName:       inv.Customer.Name,
+		DebtorStreet:     inv.Customer.Address,
+		DebtorPostalCode: debtorPostal,
+		DebtorTown:       debtorTown,
+		DebtorCountry:    debtorCountry,
+		// Reference
+		ReferenceType: refType,
+		Reference:     ref,
+		// Message — unstructured, max 140 chars
+		Message:       inv.InvoiceNumber,
+		InvoiceNumber: inv.InvoiceNumber,
+		InvoiceDate:   inv.IssueDate,
 	})
 	if err != nil {
 		return err
 	}
 
-	// Generate QR code at 512 px for crisp print output (SPC 0200 requires ECC Level M)
+	// ── Generate QR code (ECC Level M, 512 px for crisp print at 46 mm) ──────
 	qrPNG, err := qrcode.Encode(payload, qrcode.Medium, 512)
 	if err != nil {
 		return fmt.Errorf("qr encode: %w", err)
 	}
 
-	// ── Layout constants (all mm, matching BillLayout.java) ───────────────
-	const (
-		margin      = 5.0  // slip inner margin
-		rcWidth     = 52.0 // receipt text width  (62 - 2×5)
-		qrSize      = 46.0 // QR code side length
-		qrLeft      = receiptWidth + margin // 67 mm from page left
-		qrTop       = slipTop + 17.0        // 209 mm from page top (QR_CODE_BOTTOM=42 mm from slip bottom)
-		infoX       = 118.0                 // receipt(62)+qr(46)+2×margin(10)
-		amountY     = 260.0                 // 297 - AMOUNT_SECTION_TOP(37)
-		amountValY  = 265.0                 // value row 5 mm below labels
-		ppX         = receiptWidth + margin // 67 mm — payment part text left edge
-	)
-	infoW := pageWidth - margin - infoX // 87 mm  (matches PP_INFO_SECTION_WIDTH)
+	// Overlay the Swiss cross (7×7 mm centred) — required by SPC 0200 v2.3 §6.4.2
+	qrPNG = addSwissCross(qrPNG)
 
-	// ── Separator lines ───────────────────────────────────────────────────
+	// ── Layout constants (mm) ─────────────────────────────────────────────────
+	const (
+		margin     = 5.0
+		rcWidth    = 52.0  // receipt text area (62 − 2×5)
+		qrSize     = 46.0  // QR code printed size
+		qrLeft     = receiptWidth + margin // 67 mm
+		qrTop      = slipTop + 17.0        // 209 mm
+		infoX      = 118.0                 // 62 + 46 + 2×5
+		amountY    = 260.0                 // 297 − 37
+		amountValY = 265.0
+		ppX        = receiptWidth + margin // 67 mm
+	)
+	infoW := pageWidth - margin - infoX // 87 mm
+
+	// ── Separator lines ───────────────────────────────────────────────────────
 	pdf.SetDrawColor(0, 0, 0)
 	pdf.SetLineWidth(0.3)
 	pdf.Line(0, slipTop, pageWidth, slipTop)
-
 	pdf.SetFont("Helvetica", "", 6)
 	pdf.SetXY(1, slipTop-2.5)
 	pdf.CellFormat(10, 4, "- - -", "", 0, "L", false, 0, "")
-
 	pdf.Line(receiptWidth, slipTop, receiptWidth, 297)
 
-	// ── Receipt section (x = 5…57 mm) ────────────────────────────────────
-	// Title
+	// ── Receipt section ───────────────────────────────────────────────────────
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.SetXY(margin, slipTop+margin)
 	pdf.CellFormat(rcWidth, 6, latin1("R\u00e9c\u00e9piss\u00e9"), "", 1, "L", false, 0, "")
 
-	// "Compte / Payable à" block — RC labels 6pt, RC body 8pt
 	pdf.SetFont("Helvetica", "B", 6)
 	pdf.SetX(margin)
 	pdf.CellFormat(rcWidth, 3.5, latin1("Compte / Payable \u00e0"), "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 8)
-	for _, line := range []string{
-		formatIBAN(iban),
-		inv.Company.Name,
-		inv.Company.Address,
-		inv.Company.City,
-	} {
-		if line == "" {
-			continue
-		}
+	for _, line := range companyLines(iban, inv.Company) {
 		pdf.SetX(margin)
 		pdf.CellFormat(rcWidth, 4, latin1(line), "", 1, "L", false, 0, "")
 	}
@@ -419,15 +432,12 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	pdf.SetX(margin)
 	pdf.CellFormat(rcWidth, 3.5, "Payable par", "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 8)
-	for _, line := range []string{inv.Customer.Name, inv.Customer.Address, inv.Customer.City} {
-		if line == "" {
-			continue
-		}
+	for _, line := range customerLines(inv.Customer) {
 		pdf.SetX(margin)
 		pdf.CellFormat(rcWidth, 4, latin1(line), "", 1, "L", false, 0, "")
 	}
 
-	// Receipt amount (AMOUNT_SECTION_TOP = 37 mm from slip bottom → y=260)
+	// Receipt amount
 	pdf.SetFont("Helvetica", "B", 6)
 	pdf.SetXY(margin, amountY)
 	pdf.CellFormat(20, 3.5, "Monnaie", "", 0, "L", false, 0, "")
@@ -439,33 +449,23 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	pdf.SetX(margin + 22)
 	pdf.CellFormat(28, 5, fmtMoney(inv.TotalAmount, ""), "", 1, "L", false, 0, "")
 
-	// ── Payment part (x ≥ 62 mm) ──────────────────────────────────────────
-	// Title
+	// ── Payment part ──────────────────────────────────────────────────────────
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.SetXY(ppX, slipTop+margin)
 	pdf.CellFormat(qrSize+infoW+margin, 6, "Partie paiement", "", 1, "L", false, 0, "")
 
-	// QR code — top at slipTop+17 mm (QR_CODE_BOTTOM = 42 mm from slip bottom)
+	// QR code image (with Swiss cross already embedded)
 	imgKey := "qr_" + inv.InvoiceNumber
-	_ = png.Decode // ensure image/png is registered
 	reader := bytes.NewReader(qrPNG)
 	pdf.RegisterImageOptionsReader(imgKey, gofpdf.ImageOptions{ImageType: "PNG"}, reader)
 	pdf.ImageOptions(imgKey, qrLeft, qrTop, qrSize, qrSize, false, gofpdf.ImageOptions{ImageType: "PNG"}, 0, "")
 
-	// Creditor info column (x = 118 mm) — PP labels 8pt bold, PP body 10pt
+	// Info column — creditor
 	pdf.SetFont("Helvetica", "B", 8)
-	pdf.SetXY(infoX, slipTop+margin+7) // start just below title
+	pdf.SetXY(infoX, slipTop+margin+7)
 	pdf.CellFormat(infoW, 4.5, latin1("Compte / Payable \u00e0"), "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
-	for _, line := range []string{
-		formatIBAN(iban),
-		inv.Company.Name,
-		inv.Company.Address,
-		inv.Company.City,
-	} {
-		if line == "" {
-			continue
-		}
+	for _, line := range companyLines(iban, inv.Company) {
 		pdf.SetX(infoX)
 		pdf.CellFormat(infoW, 4.5, latin1(line), "", 1, "L", false, 0, "")
 	}
@@ -493,16 +493,13 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 		pdf.SetX(infoX)
 		pdf.CellFormat(infoW, 4.5, "Payable par", "", 1, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 10)
-		for _, line := range []string{inv.Customer.Name, inv.Customer.Address, inv.Customer.City} {
-			if line == "" {
-				continue
-			}
+		for _, line := range customerLines(inv.Customer) {
 			pdf.SetX(infoX)
 			pdf.CellFormat(infoW, 4.5, latin1(line), "", 1, "L", false, 0, "")
 		}
 	}
 
-	// Payment part amount (same AMOUNT_SECTION_TOP = y=260)
+	// Payment part amount
 	pdf.SetFont("Helvetica", "B", 8)
 	pdf.SetXY(ppX, amountY)
 	pdf.CellFormat(20, 4, "Monnaie", "", 0, "L", false, 0, "")
@@ -515,6 +512,133 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	pdf.CellFormat(30, 5, fmtMoney(inv.TotalAmount, ""), "", 1, "L", false, 0, "")
 
 	return nil
+}
+
+// companyLines returns the creditor display lines for the payment slip.
+func companyLines(iban string, c CompanyInfo) []string {
+	var lines []string
+	if iban != "" {
+		lines = append(lines, formatIBAN(iban))
+	}
+	if c.Name != "" {
+		lines = append(lines, c.Name)
+	}
+	if c.Address != "" {
+		lines = append(lines, c.Address)
+	}
+	if c.City != "" {
+		lines = append(lines, c.City)
+	}
+	return lines
+}
+
+// customerLines returns the debtor display lines for the payment slip.
+func customerLines(c CustomerInfo) []string {
+	var lines []string
+	if c.Name != "" {
+		lines = append(lines, c.Name)
+	}
+	if c.Address != "" {
+		lines = append(lines, c.Address)
+	}
+	if c.City != "" {
+		lines = append(lines, c.City)
+	}
+	return lines
+}
+
+// splitPostalCity splits a combined "4001 Basel" string into ("4001", "Basel").
+// Swiss postal codes are the first whitespace-delimited token.
+func splitPostalCity(s string) (postalCode, town string) {
+	s = strings.TrimSpace(s)
+	idx := strings.IndexByte(s, ' ')
+	if idx <= 0 {
+		return s, ""
+	}
+	return strings.TrimSpace(s[:idx]), strings.TrimSpace(s[idx+1:])
+}
+
+// addSwissCross overlays the mandatory Swiss cross logo (SPC 0200 v2.3 §6.4.2)
+// centred on the QR code image. Dimensions: 7×7 mm at 46×46 mm printed size.
+//
+// Cross geometry (from SIX-Group reference implementation):
+//
+//	Outer square  = 7.0 mm (black)
+//	White border  = 0.5 mm on each side
+//	Cross arm width = 1.276 mm (white, centred in 6×6 mm inner area)
+//
+// Falls back to the original image on any decode/encode error.
+func addSwissCross(qrPNG []byte) []byte {
+	src, err := png.Decode(bytes.NewReader(qrPNG))
+	if err != nil {
+		return qrPNG
+	}
+
+	bounds := src.Bounds()
+	w := bounds.Dx()
+
+	dst := image.NewRGBA(bounds)
+	draw.Draw(dst, bounds, src, bounds.Min, draw.Src)
+
+	// Scale factor: QR image width covers 46 mm
+	pxPerMm := float64(w) / 46.0
+
+	crossPx  := iround(7.0 * pxPerMm)   // outer black square
+	borderPx := iround(0.5 * pxPerMm)   // white border
+	armPx    := iround(1.276 * pxPerMm) // cross arm width
+	if armPx < 2 {
+		armPx = 2
+	}
+
+	// Top-left of centred square
+	cx := (w - crossPx) / 2
+	cy := (bounds.Dy() - crossPx) / 2
+
+	black := color.RGBA{0, 0, 0, 255}
+	white := color.RGBA{255, 255, 255, 255}
+
+	// 1. Black outer square
+	fillRect(dst, cx, cy, crossPx, crossPx, black)
+
+	// 2. White cross arms centred in the inner area (after border)
+	innerX  := cx + borderPx
+	innerY  := cy + borderPx
+	innerSz := crossPx - 2*borderPx
+	if innerSz <= 0 {
+		innerSz = crossPx
+		innerX = cx
+		innerY = cy
+	}
+	armOffset := (innerSz - armPx) / 2
+	if armOffset < 0 {
+		armOffset = 0
+	}
+	// Horizontal arm
+	fillRect(dst, innerX, innerY+armOffset, innerSz, armPx, white)
+	// Vertical arm
+	fillRect(dst, innerX+armOffset, innerY, armPx, innerSz, white)
+
+	var out bytes.Buffer
+	if err := png.Encode(&out, dst); err != nil {
+		return qrPNG
+	}
+	return out.Bytes()
+}
+
+func fillRect(img *image.RGBA, x, y, w, h int, c color.RGBA) {
+	b := img.Bounds()
+	for dy := 0; dy < h; dy++ {
+		for dx := 0; dx < w; dx++ {
+			px, py := x+dx, y+dy
+			if px >= b.Min.X && px < b.Max.X && py >= b.Min.Y && py < b.Max.Y {
+				img.Set(px, py, c)
+			}
+		}
+	}
+}
+
+func iround(f float64) int {
+	return int(math.Round(f))
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
