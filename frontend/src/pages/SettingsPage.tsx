@@ -47,7 +47,7 @@ export function SettingsPage() {
     queryFn:  () => settingsApi.getCompany().then(r => r.data),
   })
 
-  const { register, handleSubmit, reset, formState: { errors, isDirty } } = useForm<FormData>({
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       company_name: '',
