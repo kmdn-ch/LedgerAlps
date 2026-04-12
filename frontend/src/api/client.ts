@@ -189,12 +189,16 @@ export const healthApi = {
 export const settingsApi = {
   getCompany: () => api.get('/settings/company'),
   putCompany: (data: unknown) => api.put('/settings/company', data),
-  uploadLogo: (file: File) => {
-    const form = new FormData()
-    form.append('logo', file)
-    // Do NOT set Content-Type manually — Axios must add the multipart boundary automatically.
-    return api.post('/settings/logo', form)
-  },
+  uploadLogo: (file: File): Promise<import('axios').AxiosResponse> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const logoData = e.target?.result as string
+        api.post('/settings/logo', { logo_data: logoData }).then(resolve).catch(reject)
+      }
+      reader.onerror = () => reject(new Error('Impossible de lire le fichier'))
+      reader.readAsDataURL(file)
+    }),
   deleteLogo: () => api.delete('/settings/logo'),
 }
 

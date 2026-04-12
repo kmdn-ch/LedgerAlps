@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -194,44 +194,60 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 
 // UploadLogo godoc
 // POST /api/v1/settings/logo
-// Accepts a PNG or JPEG file (max 2 MB), encodes it as a base64 data URL,
-// and stores it in company_settings.logo_data. Admin only.
+// Accepts a JSON body {"logo_data": "data:image/png;base64,..."}.
+// The frontend reads the file via FileReader.readAsDataURL() and sends the result directly.
+// Max decoded size: 2 MB. Accepted formats: PNG or JPEG.
 func (h *SettingsHandler) UploadLogo(c *gin.Context) {
-	file, fh, err := c.Request.FormFile("logo")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "logo file required (field name: logo)"})
-		return
+	var req struct {
+		LogoData string `json:"logo_data" binding:"required"`
 	}
-	defer file.Close()
-
-	const maxSize = 2 << 20 // 2 MB
-	if fh.Size > maxSize {
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "logo too large (max 2 MB)"})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "logo_data (base64 data URL) required"})
 		return
 	}
 
-	data, err := io.ReadAll(file)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "read error"})
+	// Validate data URL format: "data:<mime>;base64,<data>"
+	dataURL := req.LogoData
+	if len(dataURL) < 22 {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid logo data URL"})
 		return
 	}
+	// Split header from base64 payload
+	commaIdx := -1
+	for i, ch := range dataURL {
+		if ch == ',' {
+			commaIdx = i
+			break
+		}
+	}
+	if commaIdx < 0 {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid logo data URL"})
+		return
+	}
+	header := dataURL[:commaIdx] // e.g. "data:image/png;base64"
+	b64Data := dataURL[commaIdx+1:]
 
-	// Detect MIME type from actual file bytes (not Content-Type header).
-	mime := http.DetectContentType(data)
-	var mimeType string
-	switch mime {
-	case "image/png":
-		mimeType = "image/png"
-	case "image/jpeg":
-		mimeType = "image/jpeg"
-	default:
+	// Validate MIME type from header
+	if !strings.Contains(header, "image/png") && !strings.Contains(header, "image/jpeg") {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "logo must be PNG or JPEG"})
 		return
 	}
 
-	// Encode as base64 data URL for direct use in <img src="...">
-	encoded := base64.StdEncoding.EncodeToString(data)
-	dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, encoded)
+	// Decode and check size (max 2 MB uncompressed)
+	decoded, err := base64.StdEncoding.DecodeString(b64Data)
+	if err != nil {
+		// Try without padding
+		decoded, err = base64.RawStdEncoding.DecodeString(b64Data)
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid base64 data"})
+			return
+		}
+	}
+	const maxSize = 2 << 20 // 2 MB
+	if len(decoded) > maxSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "logo too large (max 2 MB)"})
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
