@@ -76,6 +76,11 @@ Function .onInit
   nsExec::ExecToLog 'taskkill /f /im "${SERVER_EXE}"'
   nsExec::ExecToLog 'taskkill /f /im "${LAUNCHER_EXE}"'
   Sleep 1000
+
+  ; Detect reinstall: if config.json already exists, write a sentinel so the
+  ; launcher can show a "configuration preserved" notification on next launch.
+  IfFileExists "$APPDATA\LedgerAlps\config.json" 0 +2
+    WriteFile "$APPDATA\LedgerAlps\.reinstalled" ""
 FunctionEnd
 
 ; --------------------------------------------------------------------------- ;
@@ -135,6 +140,21 @@ Section "Uninstall"
   nsExec::ExecToLog 'taskkill /f /im "${LAUNCHER_EXE}"'
   Sleep 500
 
+  ; ── Ask user whether to delete accounting data ─────────────────────────── ;
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 \
+    "Souhaitez-vous supprimer vos données comptables ?$\n(base de données, configuration, journaux)" \
+    IDYES lbl_delete_data IDNO lbl_keep_data
+
+  lbl_delete_data:
+    RMDir /r "$APPDATA\LedgerAlps"
+    DetailPrint "Données supprimées : $APPDATA\LedgerAlps"
+    Goto lbl_done_data
+
+  lbl_keep_data:
+    DetailPrint "Vos données dans $APPDATA\LedgerAlps ont été conservées."
+
+  lbl_done_data:
+
   ; Remove installed files
   Delete "$INSTDIR\${LAUNCHER_EXE}"
   Delete "$INSTDIR\${SERVER_EXE}"
@@ -151,9 +171,6 @@ Section "Uninstall"
   ; Remove uninstall registry key
   DeleteRegKey HKLM "${UNINSTALL_KEY}"
 
-  ; NOTE: %APPDATA%\LedgerAlps (config.json + database) is intentionally
-  ; preserved so user data survives an uninstall/reinstall cycle.
   DetailPrint ""
-  DetailPrint "LedgerAlps has been uninstalled."
-  DetailPrint "Your data in %APPDATA%\LedgerAlps has been preserved."
+  DetailPrint "LedgerAlps a été désinstallé."
 SectionEnd

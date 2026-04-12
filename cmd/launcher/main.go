@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -55,6 +56,10 @@ func appDataDir() string {
 
 func configFilePath() string {
 	return filepath.Join(appDataDir(), "config.json")
+}
+
+func reinstalledMarkerPath() string {
+	return filepath.Join(appDataDir(), ".reinstalled")
 }
 
 func loadConfig() (*config, error) {
@@ -231,6 +236,227 @@ func bootstrapAdmin(baseURL string, payload bootstrapPayload) error {
 	return nil
 }
 
+// ── UID/IDE registry proxy ────────────────────────────────────────────────────
+
+var (
+	reCHELookup     = regexp.MustCompile(`(?i)^CHE[-.]?(\d{3})\.?(\d{3})\.?(\d{3})$`)
+	uidHTTPClient   = &http.Client{Timeout: 8 * time.Second}
+)
+
+// proxyUIDLookup resolves a CHE number via the ZEFIX REST API and returns a
+// simplified JSON object. Used by the setup wizard before the API server is
+// running (no JWT required here).
+func proxyUIDLookup(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	raw := strings.TrimSpace(r.URL.Query().Get("che"))
+	if raw == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = fmt.Fprint(w, `{"error":"paramètre 'che' requis"}`)
+		return
+	}
+
+	m := reCHELookup.FindStringSubmatch(raw)
+	if m == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = fmt.Fprint(w, `{"error":"format CHE invalide — attendu CHE-XXX.XXX.XXX"}`)
+		return
+	}
+	uid := fmt.Sprintf("CHE-%s%s%s", m[1], m[2], m[3])
+
+	apiURL := "https://www.zefix.admin.ch/ZefixREST/api/v1/firm/uid/" + uid + ".json"
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, apiURL, nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = fmt.Fprint(w, `{"error":"erreur interne"}`)
+		return
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "LedgerAlps/1.0")
+
+	resp, err := uidHTTPClient.Do(req)
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = fmt.Fprint(w, `{"error":"registre IDE inaccessible — réessayez ou saisissez manuellement"}`)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = fmt.Fprint(w, `{"error":"numéro IDE non trouvé dans le registre"}`)
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = fmt.Fprintf(w, `{"error":"registre IDE: réponse %d"}`, resp.StatusCode)
+		return
+	}
+
+	var firm struct {
+		Name      string `json:"name"`
+		LegalForm struct {
+			AbbrevName string `json:"abbrevName"`
+		} `json:"legalForm"`
+		Address struct {
+			Street      string `json:"street"`
+			HouseNumber string `json:"houseNumber"`
+			SwissZip    string `json:"swissZip"`
+			Town        string `json:"town"`
+		} `json:"address"`
+		LegalSeat string `json:"legalSeat"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&firm); err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = fmt.Fprint(w, `{"error":"réponse du registre illisible"}`)
+		return
+	}
+
+	street := firm.Address.Street
+	if firm.Address.HouseNumber != "" {
+		street += " " + firm.Address.HouseNumber
+	}
+	city := firm.Address.Town
+	if city == "" {
+		city = firm.LegalSeat
+	}
+
+	out, _ := json.Marshal(map[string]string{
+		"name":                firm.Name,
+		"legal_form":          firm.LegalForm.AbbrevName,
+		"address_street":      strings.TrimSpace(street),
+		"address_postal_code": firm.Address.SwissZip,
+		"address_city":        city,
+		"address_country":     "CH",
+	})
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(out)
+}
+
+// ── Reinstall notification ────────────────────────────────────────────────────
+
+const notifyHTML = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LedgerAlps — Mise à jour détectée</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f4f8;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.10);
+    padding: 2.5rem;
+    width: 100%;
+    max-width: 440px;
+    text-align: center;
+  }
+  .icon { font-size: 2.5rem; margin-bottom: 1rem; }
+  h1 { font-size: 1.15rem; font-weight: 700; color: #1a2e4a; margin-bottom: .5rem; }
+  p  { font-size: .9rem; color: #64748b; margin-bottom: 1.5rem; line-height: 1.5; }
+  .notice {
+    background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+    border-radius: 8px; padding: .75rem 1rem; font-size: .85rem;
+    margin-bottom: 1.5rem; text-align: left;
+  }
+  .countdown { font-size: .82rem; color: #94a3b8; }
+  .bar-wrap { background: #e2e8f0; border-radius: 99px; height: 4px; margin-top: .75rem; overflow: hidden; }
+  .bar { height: 4px; background: #2563eb; border-radius: 99px; width: 100%; transition: width linear; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">&#x2705;</div>
+  <h1>LedgerAlps mis à jour</h1>
+  <p>L'installation s'est déroulée correctement.</p>
+  <div class="notice">
+    &#x1F4BE; Configuration existante détectée — vos données comptables ont été conservées.
+  </div>
+  <p class="countdown">Ouverture de LedgerAlps dans <span id="n">5</span> secondes…</p>
+  <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+</div>
+<script>
+  const appURL = {{.AppURL}};
+  const total  = 5000;
+  const bar    = document.getElementById('bar');
+  const n      = document.getElementById('n');
+  const start  = Date.now();
+  bar.style.transitionDuration = total + 'ms';
+  requestAnimationFrame(() => { bar.style.width = '0%'; });
+  const iv = setInterval(() => {
+    const left = Math.ceil((total - (Date.now() - start)) / 1000);
+    n.textContent = Math.max(left, 0);
+    if (Date.now() - start >= total) {
+      clearInterval(iv);
+      window.location.href = appURL;
+    }
+  }, 250);
+</script>
+</body>
+</html>`
+
+// runReinstallNotification serves a brief "configuration preserved" page, opens
+// the browser, waits for the countdown to expire, then returns so main() opens
+// the app normally.
+func runReinstallNotification(appURL string) {
+	// Delete the sentinel immediately so a normal re-launch won't re-show it.
+	_ = os.Remove(reinstalledMarkerPath())
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		// If we can't serve the page, skip the notification silently.
+		return
+	}
+	notifyURL := fmt.Sprintf("http://127.0.0.1:%d", ln.Addr().(*net.TCPAddr).Port)
+	done := make(chan struct{})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		type data struct{ AppURL template.JS }
+		t, _ := template.New("notify").Parse(notifyHTML)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = t.Execute(w, data{AppURL: template.JS(`"` + appURL + `"`)})
+		// Signal done after first render so we shut down shortly after the
+		// browser has loaded the page (the JS will redirect itself).
+		go func() {
+			time.Sleep(7 * time.Second)
+			select {
+			case <-done:
+			default:
+				close(done)
+			}
+		}()
+	})
+
+	srv := &http.Server{Handler: mux}
+	go func() {
+		<-done
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	}()
+
+	go func() {
+		time.Sleep(400 * time.Millisecond)
+		openBrowser(notifyURL)
+	}()
+
+	logInfo("Reinstall notification page at %s", notifyURL)
+	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+		logWarn("notify server: %v", err)
+	}
+}
+
 // ── Setup wizard ──────────────────────────────────────────────────────────────
 
 const setupHTML = `<!DOCTYPE html>
@@ -380,7 +606,8 @@ const setupHTML = `<!DOCTYPE html>
       </div>
       <div>
         <label for="cheNumber">Numéro IDE <span class="opt">(CHE-xxx.xxx.xxx)</span></label>
-        <input type="text" id="cheNumber" placeholder="CHE-123.456.789">
+        <input type="text" id="cheNumber" placeholder="CHE-123.456.789" autocomplete="off">
+        <p class="hint" id="cheHint" style="display:none"></p>
       </div>
     </div>
 
@@ -450,6 +677,59 @@ function toggleAdvanced() {
   const s = document.getElementById('advancedSection');
   s.style.display = s.style.display === 'block' ? 'none' : 'block';
 }
+
+// ── CHE auto-fill ──────────────────────────────────────────────────────────
+(function() {
+  const cheInput  = document.getElementById('cheNumber');
+  const cheHint   = document.getElementById('cheHint');
+  const reCHE     = /^CHE[-. ]?\d{3}[. ]?\d{3}[. ]?\d{3}$/i;
+  let debounce;
+
+  function setHint(msg, ok) {
+    cheHint.textContent = msg;
+    cheHint.style.color = ok ? '#15803d' : '#b91c1c';
+    cheHint.style.display = msg ? 'block' : 'none';
+  }
+
+  cheInput.addEventListener('input', function() {
+    clearTimeout(debounce);
+    const val = cheInput.value.trim();
+    setHint('', false);
+    if (!reCHE.test(val)) return;
+
+    setHint('Recherche dans le registre IDE…', true);
+    debounce = setTimeout(async () => {
+      try {
+        // The wizard runs on a different port than the API server, so we
+        // call the wizard's own /uid-lookup proxy which forwards to the server.
+        const resp = await fetch('/uid-lookup?che=' + encodeURIComponent(val));
+        const data = await resp.json();
+        if (!resp.ok) {
+          setHint(data.error || 'Non trouvé dans le registre.', false);
+          return;
+        }
+        if (data.name) {
+          const n = document.getElementById('companyName');
+          if (!n.value) n.value = data.name;
+        }
+        if (data.legal_form) {
+          const sel = document.getElementById('legalForm');
+          for (let i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === data.legal_form) {
+              sel.selectedIndex = i; break;
+            }
+          }
+        }
+        if (data.address_street)      document.getElementById('addressStreet').value     = data.address_street;
+        if (data.address_postal_code) document.getElementById('addressPostalCode').value = data.address_postal_code;
+        if (data.address_city)        document.getElementById('addressCity').value        = data.address_city;
+        setHint('✓ Données pré-remplies depuis le registre IDE', true);
+      } catch (e) {
+        setHint('Registre IDE inaccessible — saisie manuelle.', false);
+      }
+    }, 600);
+  });
+})();
 
 document.getElementById('setupForm').addEventListener('submit', async function(e) {
   e.preventDefault();
@@ -553,6 +833,11 @@ func runSetupWizard() {
 		t, _ := template.New("setup").Parse(setupHTML)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = t.Execute(w, nil)
+	})
+
+	// Proxy UID/IDE lookup to the ZEFIX registry — avoids CORS from the browser.
+	mux.HandleFunc("/uid-lookup", func(w http.ResponseWriter, r *http.Request) {
+		proxyUIDLookup(w, r)
 	})
 
 	// Handle setup form submission.
@@ -705,6 +990,25 @@ func main() {
 
 	// Config exists — ensure server is running, then open browser.
 	appURL := fmt.Sprintf("http://localhost:%s", cfg.Port)
+
+	// If a reinstall sentinel exists, start the server first then show the
+	// "configuration preserved" notification page.
+	if _, err := os.Stat(reinstalledMarkerPath()); err == nil {
+		if !isServerRunning(appURL) {
+			logInfo("Starting server after reinstall…")
+			if _, err := startServer(cfg); err != nil {
+				logFatal("Cannot start server: %v", err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			if err := waitForServer(ctx, appURL); err != nil {
+				logFatal("Server did not become ready: %v", err)
+			}
+		}
+		runReinstallNotification(appURL)
+		// After notification, the browser is already open — nothing more to do.
+		return
+	}
 
 	if !isServerRunning(appURL) {
 		logInfo("Starting server…")

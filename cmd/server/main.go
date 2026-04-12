@@ -71,6 +71,9 @@ func main() {
 	v1.POST("/auth/register", authHandler.Register)
 	v1.POST("/auth/bootstrap", authHandler.Bootstrap) // one-shot: creates first admin user
 
+	// Swiss registry proxy — public (called from setup wizard, no auth yet)
+	v1.GET("/uid-lookup", handlers.UIDLookup)
+
 	// Protected routes — JWT required
 	api := v1.Group("")
 	api.Use(middleware.RequireAuth(cfg.JWTSecret))
