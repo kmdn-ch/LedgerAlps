@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
