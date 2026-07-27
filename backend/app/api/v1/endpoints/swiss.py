@@ -65,7 +65,7 @@ async def generate_qr_payload(
             creditor=QRAddress(
                 name=payload.creditor_name,
                 address_type="S",
-                street_or_address_line1=payload.creditor_address,
+                street=payload.creditor_address,
                 postal_code=payload.creditor_postal_code,
                 city=payload.creditor_city,
                 country=payload.creditor_country,
@@ -80,7 +80,7 @@ async def generate_qr_payload(
         return {
             "payload": qr_txt,
             "reference": reference,
-            "reference_formatted": QRReferenceGenerator.format_qrr_display(reference),
+            "reference_formatted": QRReferenceGenerator.format_display(reference),
             "amount": str(invoice.total),
             "currency": invoice.currency,
         }
@@ -128,7 +128,7 @@ async def generate_qrr_reference(
     ref = QRReferenceGenerator.generate_qrr(customer_ref, participant_id)
     return {
         "reference": ref,
-        "reference_formatted": QRReferenceGenerator.format_qrr_display(ref),
+        "reference_formatted": QRReferenceGenerator.format_display(ref),
         "type": "QRR",
     }
 

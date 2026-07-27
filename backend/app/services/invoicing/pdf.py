@@ -67,7 +67,7 @@ def _filter_qrr_format(ref: str | None) -> str:
     if not ref:
         return ""
     from app.services.swiss_standards.qr_invoice import QRReferenceGenerator
-    return QRReferenceGenerator.format_qrr_display(ref)
+    return QRReferenceGenerator.format_display(ref)
 
 
 # ─── Moteur de rendu ─────────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ class InvoicePDFService:
                     creditor=QRAddress(
                         name=company["name"],
                         address_type="S",
-                        street_or_address_line1=company.get("address_line1", ""),
+                        street=company.get("address_line1", ""),
                         postal_code=company.get("postal_code", ""),
                         city=company.get("city", ""),
                         country=company.get("country", "CH"),
@@ -169,7 +169,7 @@ class InvoicePDFService:
                     debtor=QRAddress(
                         name=contact["name"],
                         address_type="S",
-                        street_or_address_line1=contact.get("address_line1", ""),
+                        street=contact.get("address_line1", ""),
                         postal_code=contact.get("postal_code", ""),
                         city=contact.get("city", ""),
                         country=contact.get("country", "CH"),
