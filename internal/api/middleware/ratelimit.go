@@ -41,6 +41,19 @@ type LoginRateLimiter struct {
 	window      time.Duration
 	lockout     time.Duration
 	now         func() time.Time // injectable for tests
+
+	// onLockout, when set, is invoked once each time a client crosses the
+	// threshold. It lets the caller persist the event without giving this
+	// package a database dependency. Never called while holding the mutex.
+	onLockout func(ip string, until time.Time)
+}
+
+// OnLockout registers a callback fired when a client is locked out. Intended for
+// security telemetry; it must not block, as it runs on the request path.
+func (l *LoginRateLimiter) OnLockout(fn func(ip string, until time.Time)) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.onLockout = fn
 }
 
 type attemptRecord struct {
@@ -128,7 +141,6 @@ func (l *LoginRateLimiter) locked(key string) (time.Duration, bool) {
 // previous one has elapsed, and locks the key once the threshold is reached.
 func (l *LoginRateLimiter) recordFailure(key string) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 
 	now := l.now()
 	rec, ok := l.records[key]
@@ -143,10 +155,24 @@ func (l *LoginRateLimiter) recordFailure(key string) {
 	}
 	rec.failures++
 	rec.lastSeen = now
+
+	var (
+		lockedNow bool
+		until     time.Time
+		notify    = l.onLockout
+	)
 	if rec.failures >= l.maxAttempts {
 		rec.lockedUntil = now.Add(l.lockout)
 		rec.failures = 0
 		rec.windowStart = now
+		lockedNow, until = true, rec.lockedUntil
+	}
+	l.mu.Unlock()
+
+	// Invoked outside the lock: the callback does I/O and must not stall
+	// concurrent requests, nor deadlock if it re-enters the limiter.
+	if lockedNow && notify != nil {
+		notify(key, until)
 	}
 }
 

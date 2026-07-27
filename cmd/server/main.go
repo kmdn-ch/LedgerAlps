@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/api/handlers"
@@ -86,6 +87,10 @@ func main() {
 		middleware.DefaultLoginWindow,
 		middleware.DefaultLoginLockout,
 	)
+	// Persist lockouts so brute-force attempts are visible to an administrator.
+	loginLimiter.OnLockout(func(ip string, until time.Time) {
+		handlers.RecordLoginLockout(database, cfg.UsePostgres(), ip, until)
+	})
 	v1.POST("/auth/login", loginLimiter.Middleware(), authHandler.Login)
 	v1.POST("/auth/refresh", loginLimiter.Middleware(), authHandler.Refresh)
 	v1.POST("/auth/logout", authHandler.Logout)
@@ -176,6 +181,10 @@ func main() {
 	alh := handlers.NewAuditHandler(database, cfg.UsePostgres())
 	api.GET("/audit-logs", alh.ListAuditLogs)
 	api.GET("/audit-logs/:id/verify", alh.VerifyAuditLog)
+
+	// Security telemetry — admin only: lockout records expose client IPs (nLPD).
+	seh := handlers.NewSecurityEventHandler(database, cfg.UsePostgres())
+	api.GET("/security-events", middleware.RequireAdmin(cfg.JWTSecret), seh.ListSecurityEvents)
 
 	// Company settings
 	sh := handlers.NewSettingsHandler(database, cfg.UsePostgres())

@@ -1,4 +1,4 @@
-; =============================================================================
+﻿; =============================================================================
 ; LedgerAlps — NSIS Windows Installer
 ; Build with:
 ;   makensis /DVERSION=1.2.3 infrastructure\windows\installer.nsi
@@ -56,6 +56,30 @@ Unicode True
 
 !insertmacro MUI_LANGUAGE "English"
 !insertmacro MUI_LANGUAGE "French"
+
+; --------------------------------------------------------------------------- ;
+; Localised strings                                                           ;
+;                                                                             ;
+; This file is UTF-8 *with BOM* — that is load-bearing. NSIS 3 only reads a    ;
+; script as UTF-8 when a BOM is present; without one it falls back to the      ;
+; system ANSI codepage and every accented character is mangled (the classic    ;
+; "donnÃ©es" for "données"). Keep the BOM when editing.                        ;
+;                                                                             ;
+; LangStrings must be declared after the MUI_LANGUAGE macros above.           ;
+; --------------------------------------------------------------------------- ;
+LangString DeleteDataQuestion ${LANG_ENGLISH} \
+  "Do you want to delete your accounting data?$\n(database, configuration, logs)"
+LangString DeleteDataQuestion ${LANG_FRENCH} \
+  "Souhaitez-vous supprimer vos données comptables ?$\n(base de données, configuration, journaux)"
+
+LangString DataDeleted ${LANG_ENGLISH} "Data deleted: $APPDATA\LedgerAlps"
+LangString DataDeleted ${LANG_FRENCH}  "Données supprimées : $APPDATA\LedgerAlps"
+
+LangString DataKept ${LANG_ENGLISH} "Your data in $APPDATA\LedgerAlps has been kept."
+LangString DataKept ${LANG_FRENCH}  "Vos données dans $APPDATA\LedgerAlps ont été conservées."
+
+LangString UninstallDone ${LANG_ENGLISH} "LedgerAlps has been uninstalled."
+LangString UninstallDone ${LANG_FRENCH}  "LedgerAlps a été désinstallé."
 
 ; --------------------------------------------------------------------------- ;
 ; Installer metadata                                                          ;
@@ -144,16 +168,16 @@ Section "Uninstall"
 
   ; ── Ask user whether to delete accounting data ─────────────────────────── ;
   MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 \
-    "Souhaitez-vous supprimer vos données comptables ?$\n(base de données, configuration, journaux)" \
+    "$(DeleteDataQuestion)" \
     IDYES lbl_delete_data IDNO lbl_keep_data
 
   lbl_delete_data:
     RMDir /r "$APPDATA\LedgerAlps"
-    DetailPrint "Données supprimées : $APPDATA\LedgerAlps"
+    DetailPrint "$(DataDeleted)"
     Goto lbl_done_data
 
   lbl_keep_data:
-    DetailPrint "Vos données dans $APPDATA\LedgerAlps ont été conservées."
+    DetailPrint "$(DataKept)"
 
   lbl_done_data:
 
@@ -174,5 +198,5 @@ Section "Uninstall"
   DeleteRegKey HKLM "${UNINSTALL_KEY}"
 
   DetailPrint ""
-  DetailPrint "LedgerAlps a été désinstallé."
+  DetailPrint "$(UninstallDone)"
 SectionEnd

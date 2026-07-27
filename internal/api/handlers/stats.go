@@ -203,16 +203,24 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 
 	// ── Fiscal year: current open year ───────────────────────────────────────
 	{
+		// The table has name/is_closed — there are no label/status columns.
+		// Querying those made this block fail on every request, so the
+		// dashboard's fiscal-year card was always empty.
 		q := db.Rebind(`
-			SELECT label, status FROM fiscal_years
-			WHERE status = 'open'
+			SELECT name, is_closed FROM fiscal_years
+			WHERE is_closed = 0
 			ORDER BY start_date DESC
 			LIMIT 1`, h.usesPG)
-		var label, status string
-		err := h.db.QueryRowContext(ctx, q).Scan(&label, &status)
+		var name string
+		var isClosed bool
+		err := h.db.QueryRowContext(ctx, q).Scan(&name, &isClosed)
 		if err == nil {
+			status := "open"
+			if isClosed {
+				status = "closed"
+			}
 			resp.FiscalYear = &statsFiscalYear{
-				CurrentLabel: label,
+				CurrentLabel: name,
 				Status:       status,
 			}
 		} else if err != sql.ErrNoRows {

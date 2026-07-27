@@ -128,6 +128,45 @@ func TestPerClientIsolation(t *testing.T) {
 	}
 }
 
+func TestOnLockoutFiresOncePerLockout(t *testing.T) {
+	l := NewLoginRateLimiter(2, time.Minute, time.Minute)
+
+	var mu sync.Mutex
+	var events []string
+	l.OnLockout(func(ip string, until time.Time) {
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, ip)
+	})
+
+	r := newTestRouter(l, func() int { return http.StatusUnauthorized })
+	post(r)
+	post(r) // threshold crossed here
+	post(r) // already locked — refused by the limiter, must not re-fire
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(events) != 1 {
+		t.Fatalf("expected exactly 1 lockout event, got %d (%v)", len(events), events)
+	}
+	if events[0] != "192.0.2.10" {
+		t.Errorf("lockout reported ip %q, want the client address", events[0])
+	}
+}
+
+func TestOnLockoutNotCalledBelowThreshold(t *testing.T) {
+	l := NewLoginRateLimiter(5, time.Minute, time.Minute)
+	called := false
+	l.OnLockout(func(string, time.Time) { called = true })
+
+	r := newTestRouter(l, func() int { return http.StatusUnauthorized })
+	post(r)
+	post(r)
+	if called {
+		t.Error("lockout callback fired before the threshold was reached")
+	}
+}
+
 func TestConcurrentAccessIsRaceFree(t *testing.T) {
 	l := NewLoginRateLimiter(100, time.Minute, time.Minute)
 	r := newTestRouter(l, func() int { return http.StatusUnauthorized })
