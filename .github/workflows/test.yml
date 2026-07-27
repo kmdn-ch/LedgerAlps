@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # `test` is the integration branch: work is validated there before being
+    # promoted to `main`, so it must get exactly the same checks as `main`.
+    branches: [main, test]
   pull_request:
 
 concurrency:

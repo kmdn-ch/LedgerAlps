@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-27",
+  "notice": "Every advisory MUST cite a source that a reader can open and verify. Advisories are written by a maintainer after reading the source — never generated automatically from a change-detection signal. See compliance/README.md.",
+  "advisories": [
+    {
+      "id": "qr-bill-address-type-s",
+      "domain": "qr_bill",
+      "severity": "info",
+      "title": {
+        "fr": "QR-facture : l'adresse combinée (type K) n'est plus admise",
+        "en": "QR-bill: combined address (type K) is no longer accepted"
+      },
+      "body": {
+        "fr": "Depuis le 21 novembre 2025, seule l'adresse structurée (type S) est admise dans le Swiss QR Code. Les applications bancaires refusent les QR-factures utilisant l'adresse combinée. LedgerAlps génère exclusivement des adresses structurées depuis la version 1.3.13.",
+        "en": "Since 21 November 2025 only the structured address (type S) is permitted in the Swiss QR Code. Banking apps reject QR-bills using the combined address. LedgerAlps has emitted structured addresses only since version 1.3.13."
+      },
+      "source_name": "SIX — Swiss Implementation Guidelines for the QR-bill, §4.2.2",
+      "source_url": "https://www.six-group.com/en/products-services/banking-services/payment-standardization/standards/qr-bill.html",
+      "published_at": "2025-11-21",
+      "effective_from": "2025-11-21",
+      "resolved_in_version": "1.3.13"
+    },
+    {
+      "id": "qr-bill-qrr-chf-only",
+      "domain": "qr_bill",
+      "severity": "action_required",
+      "title": {
+        "fr": "QR-facture : la référence QRR est réservée aux factures en CHF",
+        "en": "QR-bill: the QR reference is restricted to CHF invoices"
+      },
+      "body": {
+        "fr": "Les Implementation Guidelines v2.4 (24.02.2026) restreignent la référence QRR aux factures en francs suisses. Pour une facture en euros, seules les combinaisons IBAN + référence SCOR ou IBAN + message non structuré sont admises. Une QR-facture en EUR utilisant une QRR sera rejetée par la banque. LedgerAlps applique cette règle depuis la version 1.3.14.",
+        "en": "Implementation Guidelines v2.4 (24.02.2026) restrict the QR reference to invoices in Swiss francs. For an invoice in euros only IBAN + SCOR reference or IBAN + unstructured message are permitted. A EUR QR-bill carrying a QRR reference will be rejected by the bank. LedgerAlps enforces this from version 1.3.14."
+      },
+      "source_name": "SIX — Swiss Implementation Guidelines for the QR-bill v2.4, §4.2.2 (champ 29)",
+      "source_url": "https://www.six-group.com/dam/download/banking-services/standardization/qr-bill/ig-qr-bill-v2.4-en.pdf",
+      "published_at": "2026-02-24",
+      "effective_from": "2026-02-24",
+      "resolved_in_version": "1.3.14"
+    },
+    {
+      "id": "qr-bill-sps-2026",
+      "domain": "qr_bill",
+      "severity": "info",
+      "title": {
+        "fr": "QR-facture : une nouvelle version des Swiss Payment Standards est en préparation",
+        "en": "QR-bill: a new version of the Swiss Payment Standards is in preparation"
+      },
+      "body": {
+        "fr": "SIX prépare la version « SPS 2026 » des Swiss Payment Standards, qui couvre les messages client-banque et les Implementation Guidelines de la QR-facture. Aucune action n'est requise aujourd'hui : cette entrée signale une évolution suivie automatiquement par LedgerAlps. Une mise à jour sera publiée si le format du QR change.",
+        "en": "SIX is preparing the \"SPS 2026\" release of the Swiss Payment Standards, covering customer-bank messages and the QR-bill Implementation Guidelines. No action is required today: this entry flags a change LedgerAlps tracks automatically. An update will be published if the QR payload format changes."
+      },
+      "source_name": "SIX — Payment standardization (Swiss Payment Standards)",
+      "source_url": "https://www.six-group.com/en/products-services/banking-services/payment-standardization.html",
+      "published_at": "2026-07-27",
+      "effective_from": null,
+      "resolved_in_version": null
+    },
+    {
+      "id": "nlpd-art8-data-security",
+      "domain": "privacy",
+      "severity": "action_required",
+      "title": {
+        "fr": "nLPD art. 8 : sécurité des données — sauvegardes non chiffrées",
+        "en": "nLPD art. 8: data security — unencrypted backups"
+      },
+      "body": {
+        "fr": "L'art. 8 LPD impose des mesures techniques et organisationnelles appropriées pour garantir une sécurité adaptée au risque ; l'OPDo précise ces exigences (confidentialité, disponibilité, intégrité). LedgerAlps stocke aujourd'hui la base et ses sauvegardes en clair sur le disque : sur un poste volé ou une sauvegarde égarée, les données de vos clients sont lisibles. Mesure recommandée : conserver les sauvegardes sur un support chiffré (BitLocker, VeraCrypt, disque chiffré) en attendant le chiffrement natif. Cette entrée décrit une obligation générale de moyens, non une échéance datée.",
+        "en": "Art. 8 of the Swiss Data Protection Act requires appropriate technical and organisational measures ensuring security proportionate to the risk; the OPDo ordinance details these (confidentiality, availability, integrity). LedgerAlps currently stores the database and its backups unencrypted on disk: on a stolen machine or a misplaced backup, your clients' data is readable. Recommended measure: keep backups on encrypted media (BitLocker, VeraCrypt, an encrypted drive) until native encryption ships. This entry describes a general obligation of means, not a dated deadline."
+      },
+      "source_name": "RS 235.1 — Loi fédérale sur la protection des données, art. 8 ; RS 235.11 OPDo",
+      "source_url": "https://www.fedlex.admin.ch/eli/cc/2022/491/fr",
+      "published_at": "2026-07-27",
+      "effective_from": "2023-09-01",
+      "resolved_in_version": null
+    }
+  ]
+}

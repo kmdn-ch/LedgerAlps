@@ -194,6 +194,11 @@ func main() {
 	seh := handlers.NewSecurityEventHandler(database, cfg.UsePostgres())
 	api.GET("/security-events", middleware.RequireAdmin(cfg.JWTSecret), seh.ListSecurityEvents)
 
+	// Compliance advisories — served from the feed embedded in the binary,
+	// so this works with no network access.
+	cplh := handlers.NewComplianceHandler()
+	api.GET("/compliance/advisories", cplh.ListAdvisories)
+
 	// Company settings
 	sh := handlers.NewSettingsHandler(database, cfg.UsePostgres())
 	api.GET("/settings/company", sh.GetCompany)

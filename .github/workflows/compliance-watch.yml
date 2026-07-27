@@ -1,0 +1,125 @@
+name: Compliance Watch
+
+# Detects changes in the authoritative sources LedgerAlps compliance depends on
+# (Fedlex for Swiss law, SIX for the QR-bill specification, EUR-Lex for GDPR)
+# and opens an issue for a human to interpret.
+#
+# This workflow never writes an advisory itself. It reports that a source moved;
+# deciding what that means — and telling accountants what the law requires — is a
+# human judgement backed by a cited source. See compliance/README.md.
+
+on:
+  schedule:
+    # Mondays at 06:00 UTC. Legal texts change on the order of months, so a
+    # weekly cadence is ample and keeps the signal-to-noise ratio high.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+  push:
+    # Validate the watcher itself whenever it or the registry changes.
+    paths:
+      - "compliance/sources.json"
+      - "scripts/compliance_watch.py"
+      - ".github/workflows/compliance-watch.yml"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: compliance-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Check authoritative sources
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The watcher is deliberately stdlib-only: a compliance check that breaks
+      # because a third-party package published a bad release is worse than none.
+      - name: Check sources
+        id: check
+        run: |
+          set +e
+          python scripts/compliance_watch.py --json > result.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          echo "--- result ---"
+          cat result.json
+
+      - name: Render report
+        if: steps.check.outputs.exit_code != '0'
+        id: report
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import json
+          data = json.load(open("result.json", encoding="utf-8"))
+          lines = []
+          for c in data["changes"]:
+              lines.append(f"### {c['name']}")
+              lines.append("")
+              lines.append(f"- **Reliability:** {c['reliability']}")
+              lines.append(f"- **Domain:** {c['domain']}")
+              lines.append(f"- **Recorded:** `{c['previous']}`")
+              lines.append(f"- **Now:** `{c['current']}`")
+              lines.append(f"- **Source:** {c['url']}")
+              lines.append("")
+          for f in data["failures"]:
+              lines.append(f"### ⚠️ Could not check: {f.get('name', f['id'])}")
+              lines.append("")
+              lines.append(f"```\n{f['error']}\n```")
+              lines.append("")
+              lines.append("_A failed check is not evidence of a change — most often a transient network or upstream outage._")
+              lines.append("")
+          body = "\n".join(lines)
+          print("REPORT<<EOF")
+          print(body)
+          print("EOF")
+          PY
+
+      - name: Open or update issue
+        if: steps.check.outputs.exit_code == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="Compliance: monitored source changed"
+          # Reuse the open issue if one exists, so a long-unhandled change does
+          # not spawn a new issue every week.
+          NUM=$(gh issue list --state open --label compliance \
+                  --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          BODY="A source LedgerAlps compliance depends on has changed.
+
+          $REPORT
+
+          ---
+          **Next steps**
+          1. Read the source and determine whether LedgerAlps is affected.
+          2. If code must change, fix it and add a regression test.
+          3. If users must be told, add an entry to \`compliance/advisories.json\`
+             with a citation — advisories are never generated automatically.
+          4. Record the new fingerprint: \`python scripts/compliance_watch.py --update\`
+
+          _Opened automatically by Compliance Watch (run ${{ github.run_id }})._"
+
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" \
+              --label compliance || \
+            gh issue create --title "$TITLE" --body "$BODY"
+          fi
+
+      - name: Flag check failures
+        if: steps.check.outputs.exit_code == '2'
+        run: |
+          echo "::warning title=Compliance sources unreachable::One or more sources could not be checked. This is not evidence of a legal change."
+          cat result.json
+          # Do not fail the run: an upstream outage should not turn the whole
+          # repository red, and the warning is visible in the run summary.

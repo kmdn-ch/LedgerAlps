@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "description": "Authoritative sources monitored for changes affecting LedgerAlps compliance. Fingerprints are updated by scripts/compliance_watch.py; a change opens an issue for human review. See compliance/README.md for the reliability ranking and the rule that no advisory is ever published without a cited source.",
+  "sources": [
+    {
+      "id": "fedlex-lpd",
+      "name": "nLPD — Loi fédérale sur la protection des données",
+      "domain": "privacy",
+      "authority": "official",
+      "reliability": "primary",
+      "rationale": "Fedlex is the official publication platform of the Swiss Confederation. The consolidated text it serves is the legally binding version.",
+      "kind": "fedlex_sparql",
+      "sr_number": "235.1",
+      "human_url": "https://www.fedlex.admin.ch/eli/cc/2022/491/fr",
+      "last_seen": "2025-07-07"
+    },
+    {
+      "id": "fedlex-opdo",
+      "name": "OPDo — Ordonnance sur la protection des données",
+      "domain": "privacy",
+      "authority": "official",
+      "reliability": "primary",
+      "rationale": "Implementing ordinance for the LPD; sets the concrete data-security obligations (art. 1–6 OPDo).",
+      "kind": "fedlex_sparql",
+      "sr_number": "235.11",
+      "human_url": "https://www.fedlex.admin.ch/eli/cc/2022/568/fr",
+      "last_seen": "2025-12-01"
+    },
+    {
+      "id": "fedlex-ltva",
+      "name": "LTVA — Loi fédérale régissant la taxe sur la valeur ajoutée",
+      "domain": "vat",
+      "authority": "official",
+      "reliability": "primary",
+      "rationale": "Governs VAT rates, the TDFN net-rate method (art. 37) and declaration duties.",
+      "kind": "fedlex_sparql",
+      "sr_number": "641.20",
+      "human_url": "https://www.fedlex.admin.ch/eli/cc/2009/615/fr",
+      "last_seen": "2025-03-31"
+    },
+    {
+      "id": "fedlex-co",
+      "name": "CO — Code des obligations (comptabilité, art. 957–963)",
+      "domain": "accounting",
+      "authority": "official",
+      "reliability": "primary",
+      "rationale": "Bookkeeping, integrity and the ten-year retention duty (art. 958f) the product is built around.",
+      "kind": "fedlex_sparql",
+      "sr_number": "220",
+      "human_url": "https://www.fedlex.admin.ch/eli/cc/27/317_321_377/fr",
+      "last_seen": "2026-10-01"
+    },
+    {
+      "id": "six-qr-bill-ig",
+      "name": "SIX — Swiss Implementation Guidelines for the QR-bill",
+      "domain": "qr_bill",
+      "authority": "official",
+      "reliability": "primary",
+      "rationale": "SIX Group owns the Swiss Payment Standards. This PDF is the normative specification the QR payload must satisfy; banks reject non-conforming bills.",
+      "kind": "http_sha256",
+      "url": "https://www.six-group.com/dam/download/banking-services/standardization/qr-bill/ig-qr-bill-v2.4-en.pdf",
+      "human_url": "https://www.six-group.com/en/products-services/banking-services/payment-standardization/standards/qr-bill.html",
+      "current_version": "2.4",
+      "last_seen": "a41e5887a4a2d16a"
+    },
+    {
+      "id": "six-qr-bill-index",
+      "name": "SIX — QR-bill standards landing page (new-version detection)",
+      "domain": "qr_bill",
+      "authority": "official",
+      "reliability": "secondary",
+      "rationale": "Hashing the whole page is noisy (marketing markup churns), so the watcher extracts the ig-qr-bill-v*.pdf links instead: a new version number appearing is the signal that matters.",
+      "kind": "http_links",
+      "url": "https://www.six-group.com/en/products-services/banking-services/payment-standardization/standards/qr-bill.html",
+      "link_pattern": "ig-qr-bill-v([0-9]+\\.[0-9]+)-en\\.pdf",
+      "last_seen": "2.4"
+    },
+    {
+      "id": "eurlex-gdpr",
+      "name": "GDPR — Regulation (EU) 2016/679 (consolidated versions)",
+      "domain": "privacy",
+      "authority": "official",
+      "reliability": "primary",
+      "rationale": "Authoritative for the EU text; relevant to LedgerAlps users with EU clients. Hashing the rendered HTML was tried and rejected: two fetches of the same URL minutes apart produce different digests, so it would raise a false 'the law changed' alert on every run. Instead the watcher reads the consolidated-version identifiers (02016R0679-YYYYMMDD) off the base CELEX page — a new one appears only when a real consolidation is published.",
+      "kind": "http_links",
+      "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32016R0679",
+      "link_pattern": "02016R0679-(\\d{8})",
+      "human_url": "https://eur-lex.europa.eu/eli/reg/2016/679/oj",
+      "last_seen": "20160504"
+    }
+  ]
+}

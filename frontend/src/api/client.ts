@@ -211,3 +211,9 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.click()
   URL.revokeObjectURL(url)
 }
+
+// ─── Avis de conformité ───────────────────────────────────────────────────────
+// Servis depuis le flux embarqué dans le binaire : fonctionne hors ligne.
+export const complianceApi = {
+  advisories: (lang = 'fr') => api.get('/compliance/advisories', { params: { lang } }),
+}

@@ -49,6 +49,7 @@ peut **pas perdre**, et des données que **personne d'autre ne détient**.
 | 6 | Multi-utilisateurs & Permissions | Rôles Admin / Comptable / Lecture seule. Cas d'usage central en Suisse : donner un accès **lecture seule à la fiduciaire** sans partager le compte admin. |
 | 7 | Rapprochement bancaire UI | L'import camt.053 existe déjà côté backend mais aucune interface ne permet de l'exploiter. Matching visuel contre le journal, workflow « matcher & passer ». |
 | 8 | **eBill** (remplace ZUGFeRD / Factur-X) | Réseau e-facturation suisse opéré par SIX, adopté par la majorité des banques CH. Plus pertinent pour une PME suisse que ZUGFeRD / Factur-X, orientés marché européen. |
+| 9 | **Veille de conformité automatisée** | 🧪 En validation sur `test`. Surveillance hebdomadaire des sources faisant autorité (Fedlex SPARQL pour nLPD/OPDo/LTVA/CO, SIX pour la QR-facture, EUR-Lex pour le RGPD) ; une évolution ouvre une issue, un mainteneur rédige l'avis en citant la source. Avis affichés dans l'application via un flux embarqué (fonctionne hors ligne). Reste : **signature Ed25519 du flux distant** (clé de publication + rafraîchissement opt-in) pour atteindre les binaires déjà installés, et sélecteur de langue lié à v1.4. Voir [`compliance/README.md`](compliance/README.md). |
 
 **Écarté** — *Mobile / PWA* : incompatible avec l'architecture. LedgerAlps est un
 binaire local écouté sur `localhost` ; une « saisie hors-ligne avec sync »
