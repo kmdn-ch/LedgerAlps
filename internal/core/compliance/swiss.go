@@ -61,6 +61,21 @@ func ValidateIBAN(iban string) error {
 	return nil
 }
 
+// IsQRIBAN reports whether the IBAN carries a QR-IID (30000–31999), which marks
+// it as a QR-IBAN. Unlike ValidateQRIBAN it performs no checksum validation and
+// never errors — use it to decide which reference type an account requires.
+func IsQRIBAN(iban string) bool {
+	clean := strings.ToUpper(ibanClean.ReplaceAllString(iban, ""))
+	if len(clean) < 9 || (!strings.HasPrefix(clean, "CH") && !strings.HasPrefix(clean, "LI")) {
+		return false
+	}
+	iid, err := strconv.Atoi(clean[4:9])
+	if err != nil {
+		return false
+	}
+	return iid >= 30000 && iid <= 31999
+}
+
 // ValidateQRIBAN validates a Swiss QR-IBAN (must start with CH, IID 30000–31999).
 func ValidateQRIBAN(qrIBAN string) error {
 	if err := ValidateIBAN(qrIBAN); err != nil {

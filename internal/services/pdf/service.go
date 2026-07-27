@@ -319,11 +319,26 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 		return nil // no IBAN configured — skip slip silently
 	}
 
+	// Reference type must match the account type (IG v2.4 §4.2.2, field 28):
+	// a QR-IBAN mandates QRR, a regular IBAN mandates SCOR or NON. The QR
+	// reference is also restricted to CHF since IG v2.4.
 	refType := "NON"
 	var ref string
 	if inv.Company.QRIBAN != "" {
-		qrRef, err := compliance.GenerateQRRReference(extractDigits(inv.InvoiceNumber))
-		if err == nil {
+		if inv.Currency != "CHF" {
+			// QRR is CHF-only; a QR-IBAN cannot carry any other reference type,
+			// so fall back to the regular IBAN rather than emit an invalid pairing.
+			iban = inv.Company.IBAN
+			if iban == "" {
+				return fmt.Errorf("QR-IBAN cannot be used for %s invoices (QRR is CHF-only) and no regular IBAN is configured", inv.Currency)
+			}
+		} else {
+			qrRef, err := compliance.GenerateQRRReference(extractDigits(inv.InvoiceNumber))
+			if err != nil {
+				// A QR-IBAN with a non-QRR reference is rejected by banks, so
+				// surface the failure instead of silently emitting an invalid slip.
+				return fmt.Errorf("QR-IBAN requires a QRR reference but generation failed for invoice %q: %w", inv.InvoiceNumber, err)
+			}
 			refType = "QRR"
 			ref = qrRef
 		}

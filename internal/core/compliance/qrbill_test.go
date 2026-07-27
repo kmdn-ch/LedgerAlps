@@ -275,6 +275,148 @@ func TestGenerateQRBillPayload_AddressTypeS(t *testing.T) {
 	}
 }
 
+// regularIBAN is a valid Swiss IBAN whose IID (00762) is outside the QR-IID
+// range, so it must be paired with SCOR or NON — never QRR.
+const regularIBAN = "CH9300762011623852957"
+
+// validSCORRef is a valid ISO 11649 Creditor Reference (modulo 97-10).
+const validSCORRef = "RF18539007547034"
+
+// TestReferenceTypeMatchesAccountType covers IG v2.4 §4.2.2 field 28: a QR-IBAN
+// mandates QRR, a regular IBAN mandates SCOR or NON. Mismatched pairings are the
+// single most common cause of banks rejecting a QR-bill.
+func TestReferenceTypeMatchesAccountType(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*QRBillData)
+		wantErr string
+	}{
+		{
+			"QRR with regular IBAN is rejected",
+			func(d *QRBillData) { d.CreditorIBAN = regularIBAN },
+			"requires a QR-IBAN",
+		},
+		{
+			"SCOR with QR-IBAN is rejected",
+			func(d *QRBillData) {
+				d.ReferenceType = "SCOR"
+				d.Reference = validSCORRef
+			},
+			"SCOR cannot be used with QR-IBAN",
+		},
+		{
+			"NON with QR-IBAN is rejected",
+			func(d *QRBillData) {
+				d.ReferenceType = "NON"
+				d.Reference = ""
+			},
+			"NON cannot be used with QR-IBAN",
+		},
+		{
+			"NON must not carry a reference",
+			func(d *QRBillData) {
+				d.CreditorIBAN = regularIBAN
+				d.ReferenceType = "NON"
+				d.Reference = "SOMETHING"
+			},
+			"reference must be empty",
+		},
+		{
+			"QRR is CHF-only since IG v2.4",
+			func(d *QRBillData) { d.Currency = "EUR" },
+			"only be used for invoices in CHF",
+		},
+		{
+			"non-CH/LI IBAN is rejected",
+			func(d *QRBillData) {
+				d.CreditorIBAN = "DE89370400440532013000"
+				d.ReferenceType = "NON"
+				d.Reference = ""
+			},
+			"must be Swiss or Liechtenstein",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := validQRBillData()
+			tc.mutate(&d)
+			_, err := GenerateQRBillPayload(d)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("error %q should contain %q", err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestGenerateQRBillPayload_SCOR(t *testing.T) {
+	d := validQRBillData()
+	d.CreditorIBAN = regularIBAN
+	d.ReferenceType = "SCOR"
+	d.Reference = validSCORRef
+
+	payload, err := GenerateQRBillPayload(d)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(payload, "\nSCOR\n") {
+		t.Error("payload should contain SCOR reference type")
+	}
+	if !strings.Contains(payload, validSCORRef) {
+		t.Error("payload should contain the SCOR reference")
+	}
+}
+
+func TestValidateCreditorReference(t *testing.T) {
+	tests := []struct {
+		name    string
+		ref     string
+		wantErr bool
+	}{
+		{"valid ISO 11649", validSCORRef, false},
+		{"valid lowercase and spaced", "rf18 5390 0754 7034", false},
+		{"wrong check digits", "RF19539007547034", true},
+		{"missing RF prefix", "XX18539007547034", true},
+		{"too short", "RF18", true},
+		{"non-alphanumeric", "RF18-539007547034", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateCreditorReference(tc.ref)
+			if tc.wantErr && err == nil {
+				t.Errorf("ValidateCreditorReference(%q): expected error, got nil", tc.ref)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("ValidateCreditorReference(%q): unexpected error: %v", tc.ref, err)
+			}
+		})
+	}
+}
+
+func TestIsQRIBAN(t *testing.T) {
+	tests := []struct {
+		iban string
+		want bool
+	}{
+		{"CH4431999123000889012", true},  // IID 31999 — upper bound
+		{regularIBAN, false},             // IID 00762
+		{"CH0030000000000000000", true},  // IID 30000 — lower bound
+		{"CH0029999000000000000", false}, // just below range
+		{"CH0032000000000000000", false}, // just above range
+		{"DE89370400440532013000", false},
+		{"CH1", false}, // too short — must not panic
+	}
+	for _, tc := range tests {
+		t.Run(tc.iban, func(t *testing.T) {
+			if got := IsQRIBAN(tc.iban); got != tc.want {
+				t.Errorf("IsQRIBAN(%q) = %v, want %v", tc.iban, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestGenerateQRBillPayload_Validation(t *testing.T) {
 	tests := []struct {
 		name    string

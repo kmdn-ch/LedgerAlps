@@ -9,6 +9,7 @@ package compliance
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -217,15 +218,56 @@ func FormatQRRReference(ref27 string) string {
 		ref27[22:27])
 }
 
+// ValidateCreditorReference validates an ISO 11649 Creditor Reference (SCOR),
+// as required for reference type SCOR (IG v2.4 §4.2.2, field 29):
+// 5–25 alphanumeric characters, "RF" prefix, check digits at positions 3–4
+// verified with modulo 97-10.
+func ValidateCreditorReference(ref string) error {
+	r := strings.ToUpper(ibanClean.ReplaceAllString(ref, ""))
+	if len(r) < 5 || len(r) > 25 {
+		return fmt.Errorf("SCOR reference must be 5–25 characters, got %d", len(r))
+	}
+	if !strings.HasPrefix(r, "RF") {
+		return fmt.Errorf("SCOR reference must start with %q", "RF")
+	}
+	for _, ch := range r {
+		if (ch < '0' || ch > '9') && (ch < 'A' || ch > 'Z') {
+			return fmt.Errorf("SCOR reference must be alphanumeric, got %q", string(ch))
+		}
+	}
+	// Modulo 97-10 (ISO 7064): move the first 4 chars to the end, map A–Z to 10–35.
+	rearranged := r[4:] + r[:4]
+	var numeric strings.Builder
+	for _, ch := range rearranged {
+		if ch >= 'A' && ch <= 'Z' {
+			numeric.WriteString(strconv.Itoa(int(ch-'A') + 10))
+		} else {
+			numeric.WriteRune(ch)
+		}
+	}
+	if mod97(numeric.String()) != 1 {
+		return fmt.Errorf("SCOR reference check digits invalid (modulo 97-10)")
+	}
+	return nil
+}
+
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 func validateQRBillData(d QRBillData) error {
-	// Creditor IBAN
+	// Creditor IBAN — IG v2.4 §4.2.2 field 4: exactly 21 characters, no spaces,
+	// only CH or LI country codes are permitted in a Swiss QR Code.
 	if d.CreditorIBAN == "" {
 		return fmt.Errorf("creditor IBAN is required")
 	}
 	if err := ValidateIBAN(d.CreditorIBAN); err != nil {
 		return fmt.Errorf("creditor IBAN: %w", err)
+	}
+	cleanIBAN := strings.ToUpper(ibanClean.ReplaceAllString(d.CreditorIBAN, ""))
+	if !strings.HasPrefix(cleanIBAN, "CH") && !strings.HasPrefix(cleanIBAN, "LI") {
+		return fmt.Errorf("creditor IBAN must be Swiss or Liechtenstein (CH/LI), got %q", cleanIBAN[:2])
+	}
+	if len(cleanIBAN) != 21 {
+		return fmt.Errorf("creditor IBAN must be 21 characters, got %d", len(cleanIBAN))
 	}
 
 	// Creditor name
@@ -252,6 +294,17 @@ func validateQRBillData(d QRBillData) error {
 		return fmt.Errorf("currency must be CHF or EUR, got %q", d.Currency)
 	}
 
+	// Amount — IG v2.4 §4.2.2 field 19: between 0.01 and 999,999,999.99.
+	// Amount 0 is the open-amount case and is emitted as an empty field.
+	if d.Amount != 0 {
+		if d.Amount < 0.01 {
+			return fmt.Errorf("amount must be at least 0.01, got %.2f", d.Amount)
+		}
+		if d.Amount > 999999999.99 {
+			return fmt.Errorf("amount must not exceed 999999999.99, got %.2f", d.Amount)
+		}
+	}
+
 	// Debtor — when identified, postal code, town and country are all mandatory
 	if d.DebtorName != "" {
 		if d.DebtorPostalCode == "" {
@@ -265,9 +318,25 @@ func validateQRBillData(d QRBillData) error {
 		}
 	}
 
-	// Reference type
+	// Reference type — IG v2.4 §4.2.2 field 28:
+	// "Must contain the code QRR where a QR-IBAN is used; where the IBAN is used,
+	//  either the SCOR or NON code can be entered."
+	// Pairing the wrong reference type with the account causes banks to reject
+	// the QR-bill outright, so both directions are enforced here.
+	isQRIBAN := IsQRIBAN(cleanIBAN)
+
 	switch d.ReferenceType {
 	case "QRR":
+		if !isQRIBAN {
+			return fmt.Errorf(
+				"reference type QRR requires a QR-IBAN (QR-IID 30000–31999); %s is a regular IBAN — use SCOR or NON",
+				cleanIBAN)
+		}
+		// IG v2.4 §4.2.2 field 29: the QR reference may only be used for
+		// invoices in CHF (new restriction introduced in version 2.4).
+		if d.Currency != "CHF" {
+			return fmt.Errorf("reference type QRR may only be used for invoices in CHF, got %s", d.Currency)
+		}
 		if len(d.Reference) != 27 {
 			return fmt.Errorf("QRR reference must be 27 digits, got %d", len(d.Reference))
 		}
@@ -282,11 +351,28 @@ func validateQRBillData(d QRBillData) error {
 			return fmt.Errorf("QRR reference check digit invalid (expected %d, got %d)", check, expected)
 		}
 	case "SCOR":
+		if isQRIBAN {
+			return fmt.Errorf(
+				"reference type SCOR cannot be used with QR-IBAN %s; a QR-IBAN requires the QRR reference type",
+				cleanIBAN)
+		}
 		if d.Reference == "" {
 			return fmt.Errorf("SCOR reference type requires a reference value")
 		}
+		if err := ValidateCreditorReference(d.Reference); err != nil {
+			return err
+		}
 	case "NON":
-		// no reference required
+		if isQRIBAN {
+			return fmt.Errorf(
+				"reference type NON cannot be used with QR-IBAN %s; a QR-IBAN requires the QRR reference type",
+				cleanIBAN)
+		}
+		// IG v2.4 §4.2.2 field 29: "The element must not be filled for the
+		// reference type NON."
+		if d.Reference != "" {
+			return fmt.Errorf("reference must be empty for reference type NON, got %q", d.Reference)
+		}
 	default:
 		return fmt.Errorf("reference type must be QRR, SCOR, or NON; got %q", d.ReferenceType)
 	}
