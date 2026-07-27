@@ -41,11 +41,11 @@ peut **pas perdre**, et des données que **personne d'autre ne détient**.
 
 | Priorité | Fonctionnalité | Description |
 |---|---|---|
-| 1 | **Factures fournisseurs & charges** | Saisie des factures d'achat et notes de frais. Sans elle, l'**impôt préalable** ne peut pas être capturé et la déclaration TVA reste incomplète — la lacune fonctionnelle la plus importante du produit. |
+| 1 | **Factures fournisseurs & charges** | ✅ Backend livré (API + TVA déductible). L'**impôt préalable** alimente désormais le chiffre 400 de la déclaration : auparavant figé à zéro, la TVA due était surévaluée. Reste : **interface de saisie**, écriture au journal à la comptabilisation (charge + TVA déductible / créanciers), notes de frais, pièces jointes (scan de facture). |
 | 2 | **Sauvegarde & restauration** | ✅ Livré en v1.3.14 (CLI + snapshot automatique). Reste : UI de restauration, sauvegarde vers un dossier externe (NAS / clé USB), test de restauration planifié. |
 | 3 | **Limitation des tentatives de connexion** | ✅ Livré en v1.3.14. Reste : journalisation des verrouillages dans l'audit trail. |
 | 4 | **Chiffrement au repos** | Base SQLite chiffrée (SQLCipher ou équivalent). Aujourd'hui les données clients sont en clair sur le disque : un portable volé est une violation nLPD annonçable. Argument différenciant face au cloud. |
-| 5 | **Suppression & droit à l'effacement (nLPD)** | Endpoints `DELETE` (une seule route `DELETE` existe aujourd'hui). Effacement d'un contact avec conservation des pièces comptables exigées par le CO art. 958f — anonymisation plutôt que suppression physique. |
+| 5 | **Suppression & droit à l'effacement (nLPD)** | Endpoints `DELETE` (seules les routes logo et facture fournisseur brouillon en disposent). Effacement d'un contact avec conservation des pièces comptables exigées par le CO art. 958f — anonymisation plutôt que suppression physique. |
 | 6 | Multi-utilisateurs & Permissions | Rôles Admin / Comptable / Lecture seule. Cas d'usage central en Suisse : donner un accès **lecture seule à la fiduciaire** sans partager le compte admin. |
 | 7 | Rapprochement bancaire UI | L'import camt.053 existe déjà côté backend mais aucune interface ne permet de l'exploiter. Matching visuel contre le journal, workflow « matcher & passer ». |
 | 8 | **eBill** (remplace ZUGFeRD / Factur-X) | Réseau e-facturation suisse opéré par SIX, adopté par la majorité des banques CH. Plus pertinent pour une PME suisse que ZUGFeRD / Factur-X, orientés marché européen. |

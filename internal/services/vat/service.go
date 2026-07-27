@@ -125,14 +125,29 @@ func (s *Service) GenerateDeclaration(ctx context.Context, periodStart, periodEn
 	}
 
 	// ── Impôt préalable déductible (chiffre 400) ──────────────────────────────
-	// Aggregate VAT paid on supplier invoices (purchase VAT) — currently
-	// represented by journal lines on accounts of type 'asset' linked to VAT.
-	// As a pragmatic approximation we query purchase invoices with negative
-	// amounts or a dedicated input-tax account. For now this field is left at
-	// zero until a dedicated supplier-invoice module is implemented; callers
-	// can supply it via an optional update. VATDeductible is intentionally
-	// not computed here to avoid over-claiming.
-	decl.VATDeductible = 0
+	// Input VAT comes from supplier invoices that have been booked into the
+	// accounts. Drafts are excluded (not yet in the books) and so are cancelled
+	// ones, matching the accrual basis used for collected VAT above.
+	//
+	// Under the TDFN method the net-rate already embeds an allowance for input
+	// tax, so claiming it again would be double-counting (art. 37 LTVA).
+	if method == "effective" {
+		dedQ := db.Rebind(`
+			SELECT COALESCE(SUM(vat_amount), 0)
+			FROM supplier_invoices
+			WHERE status IN ('booked', 'paid')
+			  AND issue_date BETWEEN ? AND ?
+		`, s.usePostgres)
+
+		var deductible float64
+		if err := s.db.QueryRowContext(ctx, dedQ,
+			periodStart.Format("2006-01-02"),
+			periodEnd.Format("2006-01-02"),
+		).Scan(&deductible); err != nil {
+			return nil, fmt.Errorf("aggregate supplier invoices: %w", err)
+		}
+		decl.VATDeductible = compliance.RoundTo5Rappen(deductible)
+	}
 
 	// ── VATPayable = collected − deductible ───────────────────────────────────
 	decl.VATPayable = compliance.RoundTo5Rappen(decl.VATCollected.Total - decl.VATDeductible)

@@ -127,6 +127,14 @@ func main() {
 
 	// Invoices
 	ih := handlers.NewInvoicesHandler(database, cfg.UsePostgres(), accountingSvc)
+	// Supplier invoices (factures d'achat) — source of deductible input VAT
+	sih := handlers.NewSupplierInvoicesHandler(database, cfg.UsePostgres())
+	api.GET("/supplier-invoices", sih.ListSupplierInvoices)
+	api.GET("/supplier-invoices/:id", sih.GetSupplierInvoice)
+	api.POST("/supplier-invoices", sih.CreateSupplierInvoice)
+	api.POST("/supplier-invoices/:id/transition", sih.TransitionSupplierInvoice)
+	api.DELETE("/supplier-invoices/:id", sih.DeleteSupplierInvoice)
+
 	api.GET("/invoices", ih.ListInvoices)
 	api.GET("/invoices/:id", ih.GetInvoice)
 	api.GET("/invoices/:id/pdf", ih.GetInvoicePDF)
