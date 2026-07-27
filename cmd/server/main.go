@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log"
@@ -36,6 +37,19 @@ func main() {
 	}
 	fmt.Println("LedgerAlps: migrations up-to-date.")
 
+	// ── 3b. Automatic backup ──────────────────────────────────────────────────
+	// LedgerAlps is local-first: this SQLite file is the only copy of records the
+	// CO (art. 958f) requires be kept for ten years. Take a snapshot at startup
+	// when the newest one is older than a day. A failure here must never stop the
+	// server — the user still needs access to their books.
+	if path, err := db.MaybeAutoBackup(
+		context.Background(), database, cfg, db.BackupDir(), db.DefaultInterval, db.DefaultKeep,
+	); err != nil {
+		log.Printf("WARNING: automatic backup failed: %v", err)
+	} else if path != "" {
+		fmt.Printf("LedgerAlps: backup written to %s\n", path)
+	}
+
 	// ── 4. Gin ────────────────────────────────────────────────────────────────
 	if !cfg.Debug {
 		gin.SetMode(gin.ReleaseMode)
@@ -63,13 +77,20 @@ func main() {
 	// ── 7. API v1 ─────────────────────────────────────────────────────────────
 	v1 := r.Group("/api/v1")
 
-	// Auth — public endpoints
+	// Auth — public endpoints.
+	// Credential-checking routes sit behind a per-IP rate limiter so an attacker
+	// cannot brute-force a password against a locally exposed instance.
 	authHandler := handlers.NewAuthHandler(database, cfg)
-	v1.POST("/auth/login", authHandler.Login)
-	v1.POST("/auth/refresh", authHandler.Refresh)
+	loginLimiter := middleware.NewLoginRateLimiter(
+		middleware.DefaultLoginMaxAttempts,
+		middleware.DefaultLoginWindow,
+		middleware.DefaultLoginLockout,
+	)
+	v1.POST("/auth/login", loginLimiter.Middleware(), authHandler.Login)
+	v1.POST("/auth/refresh", loginLimiter.Middleware(), authHandler.Refresh)
 	v1.POST("/auth/logout", authHandler.Logout)
-	v1.POST("/auth/register", authHandler.Register)
-	v1.POST("/auth/bootstrap", authHandler.Bootstrap) // one-shot: creates first admin user
+	v1.POST("/auth/register", loginLimiter.Middleware(), authHandler.Register)
+	v1.POST("/auth/bootstrap", loginLimiter.Middleware(), authHandler.Bootstrap) // one-shot: creates first admin user
 
 	// Swiss registry proxy — public (called from setup wizard, no auth yet)
 	v1.GET("/uid-lookup", handlers.UIDLookup)

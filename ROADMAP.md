@@ -34,12 +34,25 @@ La Suisse compte quatre langues officielles. LedgerAlps supportera FR, DE, IT et
 
 ## Planifié
 
+Priorités arrêtées après audit de conformité (juil. 2026). L'ordre reflète un
+principe simple : ce qui fait qu'un indépendant suisse choisit LedgerAlps plutôt
+qu'une solution cloud, c'est une comptabilité **complète**, des données qu'il ne
+peut **pas perdre**, et des données que **personne d'autre ne détient**.
+
 | Priorité | Fonctionnalité | Description |
 |---|---|---|
-| 1 | Mobile / PWA | Manifest PWA, layout responsive, saisie journal hors-ligne avec sync |
-| 2 | Multi-utilisateurs & Permissions | Rôles Admin / Comptable / Lecture seule, audit trail, invitation par e-mail |
-| 3 | Rapprochement bancaire UI | Matching visuel camt.053 contre journal, workflow « matcher & passer » |
-| 4 | E-facturation ZUGFeRD / Factur-X | Factures hybrides PDF+XML, import fournisseurs → écritures auto, conformité eDEF |
+| 1 | **Factures fournisseurs & charges** | Saisie des factures d'achat et notes de frais. Sans elle, l'**impôt préalable** ne peut pas être capturé et la déclaration TVA reste incomplète — la lacune fonctionnelle la plus importante du produit. |
+| 2 | **Sauvegarde & restauration** | ✅ Livré en v1.3.14 (CLI + snapshot automatique). Reste : UI de restauration, sauvegarde vers un dossier externe (NAS / clé USB), test de restauration planifié. |
+| 3 | **Limitation des tentatives de connexion** | ✅ Livré en v1.3.14. Reste : journalisation des verrouillages dans l'audit trail. |
+| 4 | **Chiffrement au repos** | Base SQLite chiffrée (SQLCipher ou équivalent). Aujourd'hui les données clients sont en clair sur le disque : un portable volé est une violation nLPD annonçable. Argument différenciant face au cloud. |
+| 5 | **Suppression & droit à l'effacement (nLPD)** | Endpoints `DELETE` (une seule route `DELETE` existe aujourd'hui). Effacement d'un contact avec conservation des pièces comptables exigées par le CO art. 958f — anonymisation plutôt que suppression physique. |
+| 6 | Multi-utilisateurs & Permissions | Rôles Admin / Comptable / Lecture seule. Cas d'usage central en Suisse : donner un accès **lecture seule à la fiduciaire** sans partager le compte admin. |
+| 7 | Rapprochement bancaire UI | L'import camt.053 existe déjà côté backend mais aucune interface ne permet de l'exploiter. Matching visuel contre le journal, workflow « matcher & passer ». |
+| 8 | **eBill** (remplace ZUGFeRD / Factur-X) | Réseau e-facturation suisse opéré par SIX, adopté par la majorité des banques CH. Plus pertinent pour une PME suisse que ZUGFeRD / Factur-X, orientés marché européen. |
+
+**Écarté** — *Mobile / PWA* : incompatible avec l'architecture. LedgerAlps est un
+binaire local écouté sur `localhost` ; une « saisie hors-ligne avec sync »
+suppose un serveur central que le produit n'a pas, et ne veut pas avoir.
 
 > Les numéros de version des milestones planifiés seront attribués à la livraison, pas à l'avance.
 
@@ -58,3 +71,4 @@ La Suisse compte quatre langues officielles. LedgerAlps supportera FR, DE, IT et
 | v1.3.1–v1.3.11 | PDF QR-bill : encodage Latin-1, conformité SPC 0200, layout BillLayout.java, suppression Swico S1, validation IBAN, avertissements UI | avr. 2026 |
 | v1.3.12 | CHE auto-fill ZEFIX, notification réinstallation, dialogue NSIS suppression données | avr. 2026 |
 | v1.3.13 | **Fix QR-bill SPC 0200 v2.3** : remplacement type adresse K→S (type K retiré en v2.3), croix suisse restaurée (`image/draw`), séparation NPA/localité pour adresse structurée | avr. 2026 |
+| v1.3.14 | **Conformité QR-facture IG v2.4** : appariement référence/compte imposé (QRR ⇄ QR-IBAN, SCOR/NON ⇄ IBAN standard), QRR restreinte au CHF, validation SCOR ISO 11649 (mod 97-10), IBAN CH/LI 21 car. — **sauvegarde & restauration** (snapshot `VACUUM INTO`, rétention, CLI `backup`/`backups`/`restore`, snapshot auto au démarrage) — **limitation des tentatives de connexion** (verrouillage par IP) | juil. 2026 |

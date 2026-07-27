@@ -38,6 +38,12 @@ func main() {
 		cmdBootstrap(os.Args[2:])
 	case "health":
 		cmdHealth(os.Args[2:])
+	case "backup":
+		cmdBackup(os.Args[2:])
+	case "backups":
+		cmdBackups(os.Args[2:])
+	case "restore":
+		cmdRestore(os.Args[2:])
 	case "help", "-h", "--help":
 		printUsage()
 	default:
@@ -59,6 +65,11 @@ COMMANDS:
   bootstrap  --email=  --password=         Create the first admin user via the API
              [--name=Admin] [--url=http://localhost:8000]
   health     [--url=http://localhost:8000] Check the server health endpoint
+  backup     [--keep=14] [--dir=]          Snapshot the database (safe while running)
+             [--sqlite-path=]
+  backups    [--dir=]                      List available snapshots, newest first
+  restore    --file=<snapshot> --confirm   Restore a snapshot (STOP THE SERVER FIRST)
+             [--dir=] [--sqlite-path=]     Prints the target and aborts without --confirm
 
 ENVIRONMENT (used by migrate):
   SQLITE_PATH   Path to SQLite database file  (default: ledgeralps.db)
@@ -174,6 +185,138 @@ func cmdHealth(args []string) {
 			resp.StatusCode, string(body))
 		os.Exit(1)
 	}
+}
+
+// cmdBackup writes a consistent snapshot of the database. Safe to run while the
+// server is serving requests — SQLite's VACUUM INTO takes care of consistency.
+func cmdBackup(args []string) {
+	fs := flag.NewFlagSet("backup", flag.ExitOnError)
+	keep := fs.Int("keep", db.DefaultKeep, "number of snapshots to retain")
+	dir := fs.String("dir", "", "backup directory (default: <app data>/backups)")
+	sqlitePath := fs.String("sqlite-path", "", "database to back up (default: the configured one)")
+	_ = fs.Parse(args)
+
+	cfg := config.Load()
+	applySQLitePath(cfg, *sqlitePath)
+	target := backupDirOrDefault(*dir)
+	fmt.Printf("ledgeralps-cli: backing up %s\n", cfg.SQLitePath)
+
+	database, err := db.Open(cfg)
+	if err != nil {
+		fatalf("cannot open database: %v", err)
+	}
+	defer database.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	path, err := db.Backup(ctx, database, cfg, target)
+	if err != nil {
+		fatalf("backup failed: %v", err)
+	}
+	if err := db.Verify(ctx, path); err != nil {
+		fatalf("backup written to %s but failed verification: %v", path, err)
+	}
+	fmt.Printf("ledgeralps-cli: backup written and verified: %s\n", path)
+
+	removed, err := db.Prune(target, *keep)
+	if err != nil {
+		fatalf("backup succeeded but pruning failed: %v", err)
+	}
+	for _, name := range removed {
+		fmt.Printf("  pruned old snapshot: %s\n", name)
+	}
+}
+
+// cmdBackups lists snapshots, newest first.
+func cmdBackups(args []string) {
+	fs := flag.NewFlagSet("backups", flag.ExitOnError)
+	dir := fs.String("dir", "", "backup directory (default: <app data>/backups)")
+	_ = fs.Parse(args)
+
+	target := backupDirOrDefault(*dir)
+	list, err := db.ListBackups(target)
+	if err != nil {
+		fatalf("cannot list backups: %v", err)
+	}
+	if len(list) == 0 {
+		fmt.Printf("ledgeralps-cli: no backups found in %s\n", target)
+		return
+	}
+	fmt.Printf("ledgeralps-cli: %d backup(s) in %s\n\n", len(list), target)
+	for _, b := range list {
+		fmt.Printf("  %-52s %8.2f MB  %s\n",
+			b.Name, float64(b.SizeBytes)/(1024*1024), b.CreatedAt.Format(time.RFC3339))
+	}
+}
+
+// cmdRestore replaces the live database with a snapshot. This swaps the file
+// out from under any open connection, so the server must be stopped first.
+func cmdRestore(args []string) {
+	fs := flag.NewFlagSet("restore", flag.ExitOnError)
+	file := fs.String("file", "", "snapshot to restore (required)")
+	dir := fs.String("dir", "", "backup directory (default: <app data>/backups)")
+	sqlitePath := fs.String("sqlite-path", "", "database to overwrite (default: the configured one)")
+	confirm := fs.Bool("confirm", false, "required: acknowledge that the target database will be overwritten")
+	_ = fs.Parse(args)
+
+	if *file == "" {
+		fatalf("restore requires --file=<snapshot>; run 'ledgeralps-cli backups' to list them")
+	}
+
+	cfg := config.Load()
+	applySQLitePath(cfg, *sqlitePath)
+	target := backupDirOrDefault(*dir)
+
+	// Restore overwrites live accounting records, so the destination is printed
+	// and an explicit --confirm is required. Without it the command is a no-op:
+	// the configured database is not always the one the caller has in mind.
+	if !*confirm {
+		fmt.Fprintf(os.Stderr, `ledgeralps-cli: restore would OVERWRITE this database:
+
+    %s
+
+  with the snapshot:
+
+    %s
+
+  The server must be stopped first — restoring under a running server corrupts state.
+  Re-run with --confirm to proceed, or pass --sqlite-path to target another database.
+`, cfg.SQLitePath, *file)
+		os.Exit(1)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	fmt.Printf("ledgeralps-cli: restoring %s over %s\n", *file, cfg.SQLitePath)
+
+	prev, err := db.Restore(ctx, cfg, *file, target)
+	if err != nil {
+		fatalf("restore failed: %v", err)
+	}
+	if prev != "" {
+		fmt.Printf("  previous database saved to: %s\n", prev)
+	}
+	fmt.Println("ledgeralps-cli: restore complete.")
+}
+
+// applySQLitePath lets a caller point backup/restore at a specific database.
+// config.Load() prefers the config file over environment variables, so an
+// explicit flag is the only reliable way to override the configured path.
+func applySQLitePath(cfg *config.Config, path string) {
+	if path == "" {
+		return
+	}
+	cfg.SQLitePath = path
+	cfg.PostgresDSN = "" // an explicit SQLite path implies SQLite
+}
+
+func backupDirOrDefault(dir string) string {
+	if dir != "" {
+		return dir
+	}
+	return db.BackupDir()
 }
 
 func fatalf(format string, args ...any) {
