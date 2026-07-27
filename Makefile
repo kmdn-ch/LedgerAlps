@@ -5,9 +5,9 @@
 
 .DEFAULT_GOAL := help
 .PHONY: help build build-server build-cli build-launcher build-windows \
-        build-frontend build-installer run test test-coverage lint fmt vet tidy \
-        clean docker-up docker-down docker-logs release-snapshot release-dry \
-        release frontend-install frontend-build install
+        build-frontend run test test-coverage lint fmt vet tidy \
+        clean release-snapshot release-dry \
+        frontend-install frontend-build install
 
 # --------------------------------------------------------------------------- #
 # Build metadata — injected at link time                                      #
@@ -17,7 +17,6 @@ BINARY_CLI      := ledgeralps-cli
 BINARY_LAUNCHER := ledgeralps
 DIST_DIR        := dist
 MODULE          := github.com/kmdn-ch/ledgeralps
-INSTALLER_VER   ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "dev")
 
 VERSION  := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
@@ -82,13 +81,9 @@ build-frontend: ## Build frontend for production (outputs to frontend/dist/)
 	cd frontend && npm ci && npm run build
 	@echo "  built  frontend/dist/"
 
-build-installer: build-windows build-frontend ## Build the full Windows installer (.exe) via Inno Setup
-	@mkdir -p installer/Output
-	ISCC installer/ledgeralps.iss
-	@echo "  installer: installer/Output/LedgerAlps_Setup_$(INSTALLER_VER)_windows_amd64.exe"
-
-release: build-installer ## Full release: binaries + frontend + installer
-	@echo "Release $(INSTALLER_VER) ready."
+# The Windows installer is built by CI (NSIS, infrastructure/windows/installer.nsi),
+# not locally: see docs/DEVELOPMENT.md. To rehearse a full release without
+# publishing, use the "Release (dry run)" workflow.
 
 # --------------------------------------------------------------------------- #
 # Run                                                                         #
@@ -133,21 +128,6 @@ tidy: ## Tidy module dependencies
 # --------------------------------------------------------------------------- #
 clean: ## Remove build artifacts
 	rm -rf $(DIST_DIR)/ coverage.out
-
-# --------------------------------------------------------------------------- #
-# Docker                                                                      #
-# --------------------------------------------------------------------------- #
-docker-up: ## Start all services (builds images)
-	cp -n .env.example .env 2>/dev/null || true
-	docker compose up -d --build
-	@echo "  server:   http://localhost:8000"
-	@echo "  frontend: http://localhost:5173"
-
-docker-down: ## Stop all docker compose services
-	docker compose down
-
-docker-logs: ## Follow docker compose logs
-	docker compose logs -f
 
 # --------------------------------------------------------------------------- #
 # GoReleaser                                                                  #

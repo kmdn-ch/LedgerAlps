@@ -9,6 +9,65 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
+## [1.3.16-rc1] — 2026-07-27
+
+> Pré-version publiée depuis la branche `test` pour validation.
+
+### Ajouté
+- **Veille de conformité automatisée** — surveillance hebdomadaire des sources faisant autorité : Fedlex (SPARQL) pour nLPD RS 235.1, OPDo 235.11, LTVA 641.20 et CO 220 ; SIX pour les Implementation Guidelines QR-facture ; EUR-Lex pour le RGPD. Une évolution ouvre une issue ; l'avis est ensuite **rédigé par un humain avec citation de la source** — jamais généré automatiquement
+- **Avis de conformité dans l'application** — bannière affichant les évolutions qui concernent l'utilisateur, servie depuis un flux embarqué dans le binaire (fonctionne hors ligne). `GET /api/v1/compliance/advisories`
+- **Répétition de release sans publication** — workflow « Release (dry run) » produisant tous les artefacts, y compris l'installeur NSIS, sans créer de release ni de tag
+
+### Modifié
+- La CI et le lint s'exécutent désormais sur la branche `test` avec les mêmes contrôles que `main`
+- `release.yml` refuse un tag **final** dont le commit n'est pas atteignable depuis `main` ; les pré-versions en sont exemptées
+
+### Documentation
+- Suppression du code Python/FastAPI (`backend/`), de `docker-compose.yml` et du script Inno Setup orphelin : remplacés par la réécriture Go depuis la v1.0.0, ni construits ni livrés
+- Réécriture de `ARCHITECTURE.md` et `PRODUCTION.md`, qui décrivaient encore la pile Python abandonnée
+- README recentré sur l'utilisateur ; contenu technique déplacé vers `docs/`
+- Nouveaux documents : `docs/DEVELOPMENT.md`, `docs/API.md`, `docs/BRANCHING.md`
+
+---
+
+## [1.3.15] — 2026-07-27
+
+### Ajouté
+- **Factures fournisseurs** — l'impôt préalable alimente enfin le chiffre 400 de la déclaration TVA. Il était figé à zéro : la TVA due était systématiquement surévaluée. Lignes multi-taux, garde anti-doublon `UNIQUE(fournisseur, référence)`
+- Journalisation des verrouillages de connexion (`security_events`, endpoint réservé aux administrateurs)
+
+### Corrigé
+- **Installeur Windows** — le désinstalleur affichait « donnÃ©es ». Le script était en UTF-8 mais sans BOM, et NSIS retombait alors sur la codepage ANSI du système. Les messages sont désormais localisés EN/FR
+- **Tableau de bord** — la carte « année fiscale » interrogeait les colonnes `label`/`status`, inexistantes : la requête échouait à chaque appel et la carte restait vide
+
+---
+
+## [1.3.14] — 2026-07-27
+
+### Corrigé
+- **Conformité QR-facture (IG v2.4)** — l'appariement référence/compte n'était pas vérifié, première cause de rejet par les banques. QRR exige désormais un QR-IBAN, SCOR et NON sont refusés sur un QR-IBAN, la référence QRR est restreinte au CHF (nouveauté v2.4), les références SCOR sont validées selon ISO 11649
+- Un QR-IBAN ne peut plus retomber silencieusement sur une référence NON lors de la génération du PDF
+
+### Ajouté
+- **Sauvegarde et restauration** — instantanés `VACUUM INTO` cohérents sans interruption de service, vérification d'intégrité, instantané automatique au démarrage, commandes CLI `backup` / `backups` / `restore`
+- **Limitation des tentatives de connexion** — verrouillage par IP après 5 échecs en 15 minutes
+
+---
+
+## [1.2.0] – [1.3.13] — avril 2026
+
+Pipeline de release (GoReleaser + NSIS), CLI d'administration, endpoints
+rapports / paiements / journal d'audit, logo d'entreprise, édition des factures
+et devis, auto-remplissage IDE/ZEFIX, et une longue série de corrections de la
+QR-facture (encodage Latin-1, layout du bulletin, suppression de Swico S1,
+validation IBAN, passage à l'adresse structurée de type S).
+
+Le détail commit par commit est disponible sur la page
+[Releases](https://github.com/kmdn-ch/LedgerAlps/releases), générée
+automatiquement à chaque publication.
+
+---
+
 ## [1.1.1] — 2026-04-09
 
 ### Ajouté

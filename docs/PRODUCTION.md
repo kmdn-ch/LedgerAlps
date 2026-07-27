@@ -1,171 +1,147 @@
-# LedgerAlps — Checklist de mise en production
+# Déploiement serveur
 
-## 1. Sécurité
+> **La plupart des utilisateurs n'ont pas besoin de ce document.** Sur Windows,
+> l'installeur fait tout : voir le [README](../README.md). Cette page s'adresse
+> à qui veut faire tourner LedgerAlps sur un serveur Linux ou macOS, par exemple
+> pour y accéder depuis plusieurs postes du bureau.
 
-### Variables d'environnement obligatoires
-```bash
-# Générer une clé secrète robuste (minimum 32 caractères)
-python -c "import secrets; print(secrets.token_hex(32))"
-
-# .env production
-SECRET_KEY=<clé générée ci-dessus>
-POSTGRES_PASSWORD=<mot de passe fort — min 20 chars>
-DEBUG=false
-LOG_LEVEL=WARNING
-```
-
-### Certificats TLS
-```bash
-# Auto-signé pour local/intranet
-./scripts/generate-certs.sh
-
-# Let's Encrypt pour accès internet
-certbot certonly --standalone -d ledgeralps.votre-domaine.ch
-# Puis référencer les chemins dans docker/nginx/nginx.conf
-```
-
-### Vérifications sécurité
-- [ ] `SECRET_KEY` ≥ 32 caractères, aléatoire
-- [ ] `DEBUG=false` en production
-- [ ] `POSTGRES_PASSWORD` robuste, unique
-- [ ] TLS actif (HTTPS)
-- [ ] Ports 8000 et 5432 non exposés publiquement (nginx en façade)
-- [ ] Backup automatique PostgreSQL configuré
+LedgerAlps reste **local-first** : même déployé sur un serveur, il est conçu
+pour votre réseau, pas pour être exposé sur Internet.
 
 ---
 
-## 2. Base de données
+## 1. Installer le binaire
+
+Téléchargez l'archive correspondant à votre système depuis la page
+[Releases](https://github.com/kmdn-ch/LedgerAlps/releases/latest), ou utilisez
+le paquet `.deb` / `.rpm`.
 
 ```bash
-# 1. Lancer PostgreSQL
-docker compose up -d db
-
-# 2. Appliquer les migrations
-make migrate
-
-# 3. Charger le plan comptable initial (une seule fois)
-make seed
-
-# 4. Créer le premier utilisateur administrateur
-docker compose exec backend python -c "
-import asyncio
-from app.db.session import AsyncSessionLocal
-from app.models import User
-from app.core.security import hash_password
-
-async def create_admin():
-    async with AsyncSessionLocal() as db:
-        admin = User(
-            email='admin@votre-entreprise.ch',
-            name='Administrateur',
-            password_hash=hash_password('CHANGER_CE_MOT_DE_PASSE'),
-            is_admin=True,
-        )
-        db.add(admin)
-        await db.commit()
-
-asyncio.run(create_admin())
-"
+tar xzf ledgeralps_*_linux_amd64.tar.gz
+sudo install -m 0755 ledgeralps-server ledgeralps-cli /usr/local/bin/
 ```
 
----
+## 2. Générer un secret
 
-## 3. Déploiement complet
+Le serveur **refuse de démarrer** si `JWT_SECRET` fait moins de 32 caractères
+ou figure parmi les valeurs faibles connues. C'est délibéré : un secret faible
+permettrait de forger des jetons d'authentification.
 
 ```bash
-# Cloner et configurer
-git clone https://github.com/votre-repo/ledgeralps.git
-cd ledgeralps
-cp .env.example .env
-# Éditer .env avec les valeurs de production
-
-# Générer les certificats
-./scripts/generate-certs.sh
-
-# Lancer en production (avec nginx)
-docker compose --profile production up -d --build
-
-# Vérifier les services
-docker compose ps
-curl -k https://ledgeralps.local/health
+export JWT_SECRET=$(openssl rand -hex 32)
 ```
 
----
+## 3. Choisir la base de données
 
-## 4. Sauvegardes (CO art. 958f — 10 ans)
-
-### Backup PostgreSQL automatique
-```bash
-# Ajouter dans crontab (chaque nuit à 2h)
-0 2 * * * docker exec ledgeralps_db pg_dump -U ledgeralps ledgeralps | \
-  gzip > /backups/ledgeralps_$(date +%Y%m%d).sql.gz
-
-# Vérifier l'intégrité
-gunzip -t /backups/ledgeralps_$(date +%Y%m%d).sql.gz && echo "OK"
-```
-
-### Archive légale annuelle
-1. Dans LedgerAlps → Rapports → Archive légale
-2. Sélectionner l'exercice clôturé
-3. Télécharger le ZIP (journal + Grand Livre + balance + manifest SHA-256)
-4. Stocker sur support immuable (NAS, stockage chiffré)
-5. **Durée minimale : 10 ans** (CO art. 958f)
-
----
-
-## 5. Monitoring
-
-### Healthcheck Docker
-```yaml
-# Déjà configuré dans docker-compose.yml
-healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-  interval: 30s
-  timeout: 10s
-  retries: 3
-```
-
-### Logs
-```bash
-# Suivre les logs en production
-docker compose logs -f backend | grep -E "ERROR|WARNING|Auth failure"
-
-# Logs nginx (accès)
-docker compose exec nginx tail -f /var/log/nginx/access.log
-```
-
----
-
-## 6. Mise à jour
+**SQLite (recommandé)** — aucun serveur à administrer, sauvegarde = un fichier.
 
 ```bash
-# Tirer les nouvelles images
-git pull
-docker compose pull
-
-# Appliquer les migrations AVANT de redémarrer
-docker compose run --rm backend alembic upgrade head
-
-# Redémarrer sans interruption
-docker compose up -d --build --no-deps backend frontend
+export SQLITE_PATH=/var/lib/ledgeralps/ledgeralps.db
 ```
 
----
+**PostgreSQL** — si vous en avez déjà un. Définir `POSTGRES_DSN` bascule
+automatiquement le moteur.
 
-## 7. Conformité légale suisse
+```bash
+export POSTGRES_DSN="postgres://ledgeralps:motdepasse@localhost:5432/ledgeralps"
+```
 
-| Obligation | Implémentation | Statut |
-|------------|----------------|--------|
-| CO art. 957 — Comptabilité | Partie double vérifiée | ✅ |
-| CO art. 957a — Immuabilité | Hash SHA-256 + statut POSTED | ✅ |
-| CO art. 958f — Conservation 10 ans | Archive ZIP + manifest | ✅ |
-| nLPD — Local-first | Pas de cloud, données locales | ✅ |
-| nLPD — Chiffrement | pgcrypto activé | ✅ |
-| TVA CH 2024 — Taux | 8.1% / 2.6% / 3.8% | ✅ |
-| TVA — Arrondi 0.05 CHF | Implémenté | ✅ |
-| QR-facture — Six-Group SPC 0200 | Validé, tests OK | ✅ |
-| ISO 20022 — pain.001.001.09 | Compatible banques CH | ✅ |
-| ISO 20022 — camt.053.001.08 | Parser avec réconciliation | ✅ |
+> Les migrations sont embarquées dans le binaire et s'appliquent au démarrage.
+> Rien à lancer manuellement.
 
-**Avertissement** : Ce logiciel est conçu pour respecter les normes suisses.
-L'utilisateur reste responsable de la validation fiduciaire et des déclarations fiscales.
+## 4. Créer le premier administrateur
+
+```bash
+ledgeralps-server &                       # démarre sur le port 8000
+ledgeralps-cli bootstrap --email=admin@entreprise.ch --password='…'
+```
+
+## 5. Service systemd
+
+```ini
+# /etc/systemd/system/ledgeralps.service
+[Unit]
+Description=LedgerAlps
+After=network.target
+
+[Service]
+Type=simple
+User=ledgeralps
+ExecStart=/usr/local/bin/ledgeralps-server
+Restart=on-failure
+
+# Le secret vit dans un fichier lisible par le seul utilisateur du service,
+# et non dans la ligne de commande (visible de tous via /proc).
+EnvironmentFile=/etc/ledgeralps/env
+
+# Durcissement : le service n'a besoin d'écrire que dans son répertoire de données.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ledgeralps
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo install -d -m 0750 -o ledgeralps -g ledgeralps /var/lib/ledgeralps /etc/ledgeralps
+printf 'JWT_SECRET=%s\nSQLITE_PATH=/var/lib/ledgeralps/ledgeralps.db\n' "$(openssl rand -hex 32)" \
+  | sudo tee /etc/ledgeralps/env > /dev/null
+sudo chmod 0600 /etc/ledgeralps/env
+sudo systemctl enable --now ledgeralps
+```
+
+## 6. Accès réseau
+
+LedgerAlps n'implémente pas TLS lui-même. Pour un accès hors de la machine,
+placez un reverse proxy devant (nginx, Caddy) et laissez-lui gérer le
+certificat.
+
+```bash
+export ALLOWED_ORIGINS="https://compta.entreprise.local"
+```
+
+⚠️ **N'exposez pas LedgerAlps directement sur Internet.** Il n'y a ni
+authentification à deux facteurs, ni gestion multi-utilisateurs à rôles
+(prévue, voir la [roadmap](../ROADMAP.md)). Le mode d'emploi prévu est le
+réseau local, éventuellement via VPN.
+
+## 7. Sauvegardes
+
+Le fichier SQLite est **l'unique copie** de pièces que le CO art. 958f impose de
+conserver dix ans.
+
+```bash
+ledgeralps-cli backup --keep=14        # instantané cohérent, serveur en marche
+ledgeralps-cli backups                 # lister
+ledgeralps-cli restore --file=… --confirm   # serveur ARRÊTÉ
+```
+
+Un instantané est pris automatiquement au démarrage si le dernier date de plus
+de 24 h. Les sauvegardes vont dans `<données applicatives>/backups`.
+
+**À faire vous-même :** copier ces instantanés hors de la machine (NAS, disque
+externe chiffré). Une sauvegarde qui vit sur le disque qui meurt ne sauve rien.
+
+**nLPD art. 8** : les sauvegardes ne sont pas chiffrées aujourd'hui. Sur un
+support amovible, utilisez un volume chiffré (LUKS, VeraCrypt, BitLocker). Le
+chiffrement natif est à la [roadmap](../ROADMAP.md).
+
+## Variables d'environnement
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `JWT_SECRET` | — | **Obligatoire**, ≥ 32 caractères |
+| `SQLITE_PATH` | `ledgeralps.db` | Chemin de la base SQLite |
+| `POSTGRES_DSN` | vide | Si défini, PostgreSQL remplace SQLite |
+| `PORT` | `8000` | Port d'écoute |
+| `ALLOWED_ORIGINS` | `http://localhost:5173` | Origines CORS, séparées par des virgules |
+| `DEBUG` | `false` | Journalisation verbeuse |
+| `LOG_LEVEL` | `INFO` | Niveau de journal |
+
+> **Attention à la précédence.** Si un fichier `config.json` existe dans le
+> répertoire de données applicatives, il **prime sur ces variables**. C'est
+> surprenant et cela a déjà conduit à viser la mauvaise base : pour cibler une
+> base précise en ligne de commande, passez `--sqlite-path` à `ledgeralps-cli`.
