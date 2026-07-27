@@ -1,0 +1,197 @@
+name: Release (dry run)
+
+# Répétition complète d'une release SANS rien publier.
+#
+# Produit exactement les mêmes artefacts que `release.yml` — binaires Linux /
+# macOS / Windows, paquets .deb/.rpm, installeur NSIS — mais les dépose comme
+# artefacts de workflow au lieu de créer une GitHub Release. Rien n'apparaît
+# publiquement, aucun tag n'est posé.
+#
+# À lancer depuis n'importe quelle branche (typiquement `test`) :
+#   gh workflow run "Release (dry run)" --ref test
+# ou via Actions → Release (dry run) → Run workflow.
+#
+# Pourquoi c'est nécessaire : `release.yml` se déclenche sur tout tag `v*`,
+# quelle que soit la branche, et `.goreleaser.yaml` a `draft: false`. Poser un
+# tag pour « voir si ça passe » publie donc une release réelle et visible.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_installer:
+        description: "Construire aussi l'installeur Windows NSIS"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read # aucune écriture : ce workflow ne publie rien
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GORELEASER_VERSION: "v2.6.1"
+
+jobs:
+  build:
+    name: Build artefacts (snapshot)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # GoReleaser a besoin de l'historique complet
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm install --no-package-lock
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      # --snapshot ignore l'absence de tag et n'appelle jamais l'API GitHub :
+      # les artefacts sont écrits dans dist/ et rien n'est publié.
+      - name: Run GoReleaser (snapshot)
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: ${{ env.GORELEASER_VERSION }}
+          args: release --snapshot --clean
+
+      # La version snapshot est dérivée par goreleaser
+      # (snapshot.version_template : {{ incpatch .Version }}-dev+{{ .ShortCommit }}),
+      # on la relit depuis les métadonnées plutôt que de la recalculer.
+      - name: Extract snapshot version
+        id: version
+        run: |
+          version=$(jq -r '.version' dist/metadata.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Version snapshot : $version"
+
+      - name: Summarise artefacts
+        run: |
+          {
+            echo "### Artefacts construits (non publiés)"
+            echo ""
+            echo '```'
+            ls -lh dist/*.tar.gz dist/*.zip dist/*.deb dist/*.rpm dist/*checksums* 2>/dev/null || ls -lh dist/
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dryrun-binaries
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.deb
+            dist/*.rpm
+            dist/*checksums*
+          retention-days: 7
+          if-no-files-found: error
+
+  windows-installer:
+    name: Windows NSIS Installer (dry run)
+    runs-on: windows-latest
+    needs: build
+    if: inputs.build_installer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          if (Test-Path 'C:\Program Files (x86)\NSIS\makensis.exe') {
+            Write-Host "NSIS already installed at default path"
+          } else {
+            winget install NSIS.NSIS `
+              --silent --accept-package-agreements `
+              --accept-source-agreements --disable-interactivity 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              choco install nsis -y --no-progress 2>&1
+              if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
+            }
+          }
+          $nsisDir = 'C:\Program Files (x86)\NSIS'
+          if (Test-Path $nsisDir) { Add-Content -Path $env:GITHUB_PATH -Value $nsisDir }
+
+      # Différence clé avec release.yml : les binaires viennent de l'artefact du
+      # job précédent, pas d'une GitHub Release — puisqu'aucune n'existe.
+      - name: Download binaries from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: dryrun-binaries
+          path: installer-work
+
+      - name: Stage installer files
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          cd installer-work
+          zip=$(ls ledgeralps_*_windows_amd64.zip)
+          echo "Archive Windows : $zip"
+          unzip -o "$zip"
+          cd ..
+          STAGE="infrastructure/windows"
+          cp installer-work/ledgeralps-server.exe "$STAGE/"
+          cp installer-work/ledgeralps.exe         "$STAGE/"
+          cp installer-work/ledgeralps-cli.exe     "$STAGE/"
+          ls -lh "$STAGE/"
+
+      - name: Build NSIS installer
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          # NSIS refuse les caractères '+' dans un nom de fichier de sortie ;
+          # la version snapshot contient '-dev+<sha>', on ne garde donc que la
+          # partie numérique pour le nom de l'installeur.
+          $versionNum = ($env:VERSION -replace '^v', '') -replace '\+.*$', ''
+          Write-Host "Version installeur : $versionNum"
+          $makensis = (Get-Command makensis -ErrorAction SilentlyContinue)?.Source
+          if (-not $makensis) {
+            $makensis = @(
+              'C:\Program Files (x86)\NSIS\makensis.exe',
+              'C:\Program Files\NSIS\makensis.exe'
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $makensis) { throw "makensis.exe not found" }
+          Set-Location "infrastructure\windows"
+          & $makensis /DVERSION="$versionNum" installer.nsi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Vérifie que le script a bien été lu en UTF-8. Sans BOM, NSIS retombe sur
+      # la codepage ANSI et les accents français sont massacrés (« donnÃ©es ») —
+      # régression déjà survenue, donc contrôlée à chaque répétition.
+      - name: Check installer encoding
+        shell: pwsh
+        run: |
+          $bytes = [System.IO.File]::ReadAllBytes("infrastructure/windows/installer.nsi")
+          if ($bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+            throw "installer.nsi a perdu son BOM UTF-8 — les accents seront corrompus dans l'installeur."
+          }
+          Write-Host "BOM UTF-8 présent : les accents seront corrects."
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: dryrun-windows-installer
+          path: infrastructure/windows/LedgerAlps_Setup_*.exe
+          retention-days: 7
+          if-no-files-found: error

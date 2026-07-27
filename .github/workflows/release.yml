@@ -27,6 +27,34 @@ jobs:
         with:
           fetch-depth: 0  # GoReleaser needs full history for changelog
 
+      # A tag is branch-agnostic in git, so `git tag v1.4.0` while sitting on a
+      # feature branch would publish unvalidated code as a real release. Final
+      # releases must therefore be reachable from main.
+      #
+      # Pre-release tags (v1.4.0-rc1) are exempt on purpose: cutting a release
+      # candidate from `test` is how a release is rehearsed end to end, and
+      # goreleaser's `prerelease: auto` keeps it off the "Latest" badge.
+      - name: Verify the tag is releasable
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # `--` terminates option parsing: the pattern starts with a hyphen and
+          # grep would otherwise read it as a flag, silently failing to match and
+          # subjecting release candidates to the main-only check.
+          if printf '%s' "$TAG" | grep -qE -- '-(rc|alpha|beta|pre)'; then
+            echo "$TAG is a pre-release — branch check skipped."
+            exit 0
+          fi
+          git fetch origin main --depth=0 --quiet
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "$TAG is on main — proceeding."
+          else
+            echo "::error title=Tag not on main::$TAG points at a commit that is not on main."
+            echo "Final releases ship from main only (see docs/BRANCHING.md)."
+            echo "To rehearse from another branch, run the 'Release (dry run)' workflow,"
+            echo "or tag a release candidate such as ${TAG}-rc1."
+            exit 1
+          fi
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:

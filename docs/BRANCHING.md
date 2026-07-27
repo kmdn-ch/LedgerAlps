@@ -54,6 +54,53 @@ git merge --ff-only main
 git push origin test
 ```
 
+## Tester une release depuis `test`
+
+Un tag git est indépendant de la branche : `git tag v1.4.0` depuis `test`
+publierait une release réelle et publique. Deux moyens de répéter sans publier.
+
+### 1. Répétition à blanc — ne publie rien (recommandé)
+
+```bash
+gh workflow run "Release (dry run)" --ref test
+```
+
+Construit **exactement** les mêmes artefacts que la vraie release — binaires
+Linux/macOS/Windows, `.deb`, `.rpm`, checksums, installeur NSIS — et les dépose
+comme artefacts de workflow téléchargeables 7 jours. Aucune GitHub Release,
+aucun tag. Le workflow tourne avec `permissions: contents: read` : il lui est
+techniquement impossible de publier.
+
+Récupérer les artefacts :
+
+```bash
+gh run list --workflow "Release (dry run)" --limit 1
+gh run download <run-id>            # tout
+gh run download <run-id> -n dryrun-windows-installer   # l'installeur seul
+```
+
+La répétition vérifie aussi que `installer.nsi` a toujours son BOM UTF-8 —
+sans lui, NSIS lit le script en codepage ANSI et les accents français sont
+corrompus (« donnÃ©es »). Cette régression a déjà eu lieu.
+
+### 2. Release candidate — publiée, mais pas « Latest »
+
+```bash
+git tag -a v1.4.0-rc1 -m "RC1" && git push origin v1.4.0-rc1
+```
+
+`.goreleaser.yaml` a `prerelease: auto` : un tag contenant `-rc` est marqué
+**Pre-release** sur GitHub, ne prend pas le badge « Latest » et n'affecte pas le
+lien `/releases/latest` du README. À utiliser quand il faut valider le cycle
+complet de publication, pas seulement les artefacts.
+
+### Garde-fou
+
+`release.yml` refuse un tag **final** dont le commit n'est pas atteignable
+depuis `main`, avec un message expliquant les deux options ci-dessus. Les tags
+de pré-version en sont dispensés, précisément pour permettre la répétition
+depuis `test`.
+
 ## Politique de version
 
 Rappel de [`ROADMAP.md`](../ROADMAP.md) :
