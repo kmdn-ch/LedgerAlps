@@ -37,6 +37,12 @@ type Config struct {
 	// Application
 	LogLevel       string
 	AllowedOrigins string // comma-separated CORS origins
+
+	// UpdateCheck controls the single outbound request LedgerAlps ever makes:
+	// asking whether a newer release exists, so a user is told to update when a
+	// compliance fix ships. It sends no identifiers and no user data. Set to
+	// false for a fully air-gapped installation.
+	UpdateCheck bool
 }
 
 // fileConfig is the JSON structure stored in the config file.
@@ -47,6 +53,9 @@ type fileConfig struct {
 	Port           string `json:"port"`
 	Debug          bool   `json:"debug"`
 	AllowedOrigins string `json:"allowed_origins"`
+	// Pointer so that an absent key keeps the default (enabled) while an
+	// explicit `"update_check": false` is honoured.
+	UpdateCheck    *bool  `json:"update_check,omitempty"`
 }
 
 // AppDataDir returns the platform-specific application data directory for LedgerAlps.
@@ -85,6 +94,7 @@ func Load() *Config {
 			JWTRefreshDays:   30,
 			LogLevel:         "INFO",
 			AllowedOrigins:   fc.AllowedOrigins,
+			UpdateCheck:      fc.UpdateCheck == nil || *fc.UpdateCheck,
 		}
 		if cfg.Port == "" {
 			cfg.Port = "8000"
@@ -107,6 +117,7 @@ func Load() *Config {
 		JWTRefreshDays:   30,
 		LogLevel:         getEnv("LOG_LEVEL", "INFO"),
 		AllowedOrigins:   getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
+		UpdateCheck:      getEnv("UPDATE_CHECK", "true") != "false",
 	}
 	cfg.validateSecrets()
 	return cfg

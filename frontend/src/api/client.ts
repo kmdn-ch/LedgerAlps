@@ -217,3 +217,9 @@ export function downloadBlob(blob: Blob, filename: string): void {
 export const complianceApi = {
   advisories: (lang = 'fr') => api.get('/compliance/advisories', { params: { lang } }),
 }
+
+// Vérification de mise à jour — unique appel sortant de LedgerAlps.
+// Désactivable côté serveur (update_check: false) ; ne transmet aucune donnée.
+export const updateApi = {
+  check: () => api.get('/compliance/update-check'),
+}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/services/updatecheck"
 )
 
 // These tests pin the JSON contract ComplianceBanner.tsx reads. The banner is
@@ -16,7 +17,7 @@ import (
 func newComplianceRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.GET("/compliance/advisories", NewComplianceHandler().ListAdvisories)
+	r.GET("/compliance/advisories", NewComplianceHandler(nil).ListAdvisories)
 	return r
 }
 
@@ -105,5 +106,30 @@ func TestUnknownLanguageStillReturnsText(t *testing.T) {
 	first := items[0].(map[string]any)
 	if s, _ := first["title"].(string); s == "" {
 		t.Error("unknown language produced an empty title instead of falling back")
+	}
+}
+
+// With checking switched off the endpoint must still answer — and must never
+// claim an update exists, because it never looked.
+func TestUpdateCheckDisabledIsInert(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/update-check", NewComplianceHandler(updatecheck.New(false, "", 0)).CheckForUpdate)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/update-check", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if body["enabled"] != false {
+		t.Errorf("enabled = %v, want false", body["enabled"])
+	}
+	if body["update_available"] != false {
+		t.Errorf("update_available = %v, want false", body["update_available"])
 	}
 }

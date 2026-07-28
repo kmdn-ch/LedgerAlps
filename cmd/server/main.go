@@ -16,9 +16,9 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	embeddedFrontend "github.com/kmdn-ch/ledgeralps/internal/frontend"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
+	"github.com/kmdn-ch/ledgeralps/internal/services/updatecheck"
 	"github.com/kmdn-ch/ledgeralps/version"
 )
-
 
 func main() {
 	// ── 1. Load and validate configuration ────────────────────────────────────
@@ -114,7 +114,7 @@ func main() {
 	// Accounts
 	ah := handlers.NewAccountsHandler(database, cfg.UsePostgres())
 	api.GET("/accounts", ah.ListAccounts)
-	api.GET("/accounts/trial-balance", ah.TrialBalance)     // BEFORE /:code to avoid shadowing
+	api.GET("/accounts/trial-balance", ah.TrialBalance) // BEFORE /:code to avoid shadowing
 	api.GET("/accounts/:code/balance", ah.AccountBalance)
 	api.POST("/accounts", ah.CreateAccount)
 
@@ -153,8 +153,8 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"rates": []gin.H{
 				{"code": "standard", "rate": 8.1, "label": "Taux normal (TVA 2024)"},
-				{"code": "reduced",  "rate": 2.6, "label": "Taux réduit (alimentation, livres)"},
-				{"code": "special",  "rate": 3.8, "label": "Taux spécial (hébergement)"},
+				{"code": "reduced", "rate": 2.6, "label": "Taux réduit (alimentation, livres)"},
+				{"code": "special", "rate": 3.8, "label": "Taux spécial (hébergement)"},
 			},
 		})
 	})
@@ -196,8 +196,10 @@ func main() {
 
 	// Compliance advisories — served from the feed embedded in the binary,
 	// so this works with no network access.
-	cplh := handlers.NewComplianceHandler()
+	updates := updatecheck.New(cfg.UpdateCheck, updatecheck.DefaultEndpoint, updatecheck.DefaultInterval)
+	cplh := handlers.NewComplianceHandler(updates)
 	api.GET("/compliance/advisories", cplh.ListAdvisories)
+	api.GET("/compliance/update-check", cplh.CheckForUpdate)
 
 	// Company settings
 	sh := handlers.NewSettingsHandler(database, cfg.UsePostgres())

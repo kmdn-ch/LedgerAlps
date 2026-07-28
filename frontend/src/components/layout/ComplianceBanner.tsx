@@ -10,8 +10,8 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Info, ShieldAlert, X, ExternalLink } from 'lucide-react'
-import { complianceApi } from '@/api/client'
+import { AlertTriangle, Download, Info, ShieldAlert, X, ExternalLink } from 'lucide-react'
+import { complianceApi, updateApi } from '@/api/client'
 import { cn } from '@/utils'
 
 export interface Advisory {
@@ -88,6 +88,15 @@ export function ComplianceBanner() {
     retry: false,
   })
 
+  // Dernier maillon de la chaîne de conformité : la veille prévient l'équipe,
+  // l'équipe publie une version conforme, ceci dit à l'utilisateur de l'installer.
+  const { data: update } = useQuery({
+    queryKey: ['update-check'],
+    queryFn: () => updateApi.check().then((r) => r.data),
+    staleTime: 6 * 60 * 60 * 1000,
+    retry: false,
+  })
+
   const advisories: Advisory[] = data?.items ?? []
 
   // La clé de rejet inclut la date de publication : un avis révisé réapparaît.
@@ -95,7 +104,19 @@ export function ComplianceBanner() {
     (a) => dismissed[a.id] !== (a.published_at ?? 'v1'),
   )
 
-  if (visible.length === 0) return null
+  const updateVersion: string | undefined = update?.update_available
+    ? update.latest_version
+    : undefined
+  const showUpdate = Boolean(updateVersion) && dismissed['__update__'] !== updateVersion
+
+  if (visible.length === 0 && !showUpdate) return null
+
+  function dismissUpdate() {
+    if (!updateVersion) return
+    const next = { ...dismissed, __update__: updateVersion }
+    setDismissed(next)
+    saveDismissed(next)
+  }
 
   function dismiss(a: Advisory) {
     const next = { ...dismissed, [a.id]: a.published_at ?? 'v1' }
@@ -105,6 +126,45 @@ export function ComplianceBanner() {
 
   return (
     <div className="space-y-3 mb-6">
+      {showUpdate && (
+        <div role="status" className="border rounded-lg px-4 py-3 flex gap-3 border-alpine-500 bg-alpine-100 text-alpine-700">
+          <Download className="w-5 h-5 shrink-0 mt-0.5" aria-hidden />
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-semibold uppercase tracking-wide opacity-70">
+              Mise à jour
+            </span>
+            <p className="font-semibold text-sm mt-0.5">
+              La version {updateVersion} est disponible
+            </p>
+            <p className="text-sm mt-1 leading-relaxed">
+              Les mises à jour contiennent les correctifs de conformité (QR-facture,
+              TVA, obligations légales). Installer la dernière version garantit que
+              vos factures restent acceptées par les banques.
+            </p>
+            {update?.release_url && (
+              <a
+                href={update.release_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs mt-2 underline opacity-80 hover:opacity-100"
+              >
+                Voir les nouveautés et télécharger
+                <ExternalLink className="w-3 h-3" aria-hidden />
+              </a>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={dismissUpdate}
+            aria-label="Masquer cette notification"
+            title="Masquer cette notification"
+            className="shrink-0 opacity-50 hover:opacity-100 transition-opacity self-start"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {visible.map((a) => {
         const style = STYLES[a.severity] ?? STYLES.info
         const Icon = style.icon

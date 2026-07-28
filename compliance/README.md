@@ -87,24 +87,45 @@ ans. Deux mécanismes, par ordre de confiance :
 `go:embed`. Aucun réseau requis, LedgerAlps fonctionne entièrement hors ligne.
 Reflète l'état des connaissances à la date de la version.
 
-**2. Rafraîchissement signé (optionnel)**
-Le binaire peut récupérer un flux mis à jour et le fusionner, pour qu'un avis
-rédigé *après* la version installée atteigne quand même l'utilisateur.
+**2. Vérification de mise à jour**
+L'application demande à GitHub s'il existe une version plus récente. Si oui,
+une bannière invite à l'installer en expliquant que les mises à jour portent
+les correctifs de conformité.
 
-Le flux distant est signé en Ed25519 et vérifié contre une clé publique
-compilée dans le binaire (`VerifySignedFeed`). Sans cette vérification,
-quiconque intercepte la connexion pourrait injecter de fausses instructions
-juridiques dans un logiciel de comptabilité : **un flux non signé serait pire
-que pas de flux du tout.**
+C'est le **dernier maillon de la chaîne** : la veille prévient l'équipe, l'équipe
+publie une version conforme, ceci dit à l'utilisateur de l'installer. Sans lui,
+quelqu'un qui ne met jamais à jour continue d'émettre des factures que les
+banques rejettent, sans jamais comprendre pourquoi.
 
-La requête est un simple `GET` d'un document statique — aucun identifiant,
-aucune télémétrie, aucune donnée utilisateur — et tout échec laisse le flux
-embarqué en place.
+Propriétés : un seul `GET` d'un endpoint public, aucun identifiant, aucune
+télémétrie ; résultat mis en cache 24 h ; échec silencieux (être hors ligne est
+l'état normal de ce produit) ; désactivable par `update_check: false` ou
+`UPDATE_CHECK=false`.
 
-> **Limite d'amorçage.** Les versions antérieures à celle qui introduit ce
-> mécanisme ne peuvent recevoir aucun avis : elles n'ont pas le code pour les
-> lire. La première version capable d'être prévenue est celle qui embarque ce
-> système. Pour les versions plus anciennes, le canal reste la page Releases.
+### Pourquoi pas un flux d'avis signé
+
+Un flux distant signé en Ed25519 permettrait de livrer un avis **sans** mise à
+jour du binaire. Ce n'est pas activé, pour trois raisons :
+
+1. **Les changements légaux ont des mois de préavis.** La suppression du type
+   d'adresse K a été annoncée environ un an avant son entrée en vigueur. Le cas
+   où un avis ne peut pas attendre la version suivante est quasi inexistant.
+2. **Quand un avis compte, il faut de toute façon un nouveau binaire.** Si le
+   format QR change, savoir ne suffit pas : il faut le code corrigé. Un flux
+   distant livrerait le message sans le remède.
+3. **Cela créerait une clé privée à protéger** — la cible de plus haute valeur
+   dans un logiciel de comptabilité, puisque son détenteur pourrait pousser de
+   fausses instructions juridiques. Ne pas avoir de clé est la posture de
+   sécurité la plus solide.
+
+`VerifySignedFeed` reste implémenté et testé (flux altéré, mauvaise clé, clé
+malformée). Si l'usage démontre le besoin, le branchement est prêt — mais
+construire cette machinerie avant d'avoir constaté le besoin reviendrait à payer
+un coût de sécurité permanent pour un bénéfice hypothétique.
+
+> **Limite d'amorçage.** Les versions antérieures à celle qui introduit ces
+> mécanismes n'ont pas le code pour les lire. Pour elles, le canal reste la page
+> Releases.
 
 ---
 

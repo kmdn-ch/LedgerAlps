@@ -129,6 +129,20 @@ externe chiffré). Une sauvegarde qui vit sur le disque qui meurt ne sauve rien.
 support amovible, utilisez un volume chiffré (LUKS, VeraCrypt, BitLocker). Le
 chiffrement natif est à la [roadmap](../ROADMAP.md).
 
+## Vérification de mise à jour
+
+C'est le **seul** appel réseau sortant de LedgerAlps. Il demande à GitHub s'il
+existe une version plus récente et, le cas échéant, affiche une bannière : les
+mises à jour portent les correctifs de conformité (QR-facture, TVA), et une
+version périmée finit par produire des factures que les banques refusent.
+
+Aucun identifiant ni donnée utilisateur n'est transmis, le résultat est mis en
+cache 24 h et tout échec est silencieux. Pour une installation totalement isolée :
+
+```bash
+export UPDATE_CHECK=false
+```
+
 ## Variables d'environnement
 
 | Variable | Défaut | Rôle |
@@ -140,6 +154,7 @@ chiffrement natif est à la [roadmap](../ROADMAP.md).
 | `ALLOWED_ORIGINS` | `http://localhost:5173` | Origines CORS, séparées par des virgules |
 | `DEBUG` | `false` | Journalisation verbeuse |
 | `LOG_LEVEL` | `INFO` | Niveau de journal |
+| `UPDATE_CHECK` | `true` | Vérifier l'existence d'une version plus récente. `false` = aucun appel réseau |
 
 > **Attention à la précédence.** Si un fichier `config.json` existe dans le
 > répertoire de données applicatives, il **prime sur ces variables**. C'est
