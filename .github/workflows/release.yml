@@ -44,7 +44,11 @@ jobs:
             echo "$TAG is a pre-release — branch check skipped."
             exit 0
           fi
-          git fetch origin main --depth=0 --quiet
+          # No --depth here: the checkout above already uses fetch-depth: 0, so
+          # the clone is complete. `--depth=0` is not "unlimited" — git rejects
+          # it outright ("depth 0 is not a positive number"), which is how this
+          # guard broke the very first final release it was asked to check.
+          git fetch origin main --quiet
           if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "$TAG is on main — proceeding."
           else
