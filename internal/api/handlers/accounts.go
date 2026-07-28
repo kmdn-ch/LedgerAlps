@@ -76,10 +76,10 @@ func (h *AccountsHandler) ListAccounts(c *gin.Context) {
 }
 
 type createAccountRequest struct {
-	Code        string `json:"code" binding:"required"`
-	Name        string `json:"name" binding:"required"`
-	AccountType string `json:"account_type" binding:"required,oneof=asset liability equity revenue expense"`
-	Description string `json:"description"`
+	Code        string  `json:"code" binding:"required"`
+	Name        string  `json:"name" binding:"required"`
+	AccountType string  `json:"account_type" binding:"required,oneof=asset liability equity revenue expense"`
+	Description string  `json:"description"`
 	ParentID    *string `json:"parent_id"`
 }
 

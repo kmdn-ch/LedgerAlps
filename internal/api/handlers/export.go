@@ -53,7 +53,7 @@ type exportContact struct {
 	City            *string            `json:"city,omitempty"`
 	PostalCode      *string            `json:"postal_code,omitempty"`
 	Country         string             `json:"country"`
-	IBANMasked      *string            `json:"iban,omitempty"`   // last 4 digits only (nLPD)
+	IBANMasked      *string            `json:"iban,omitempty"`    // last 4 digits only (nLPD)
 	QRIBANMasked    *string            `json:"qr_iban,omitempty"` // last 4 digits only (nLPD)
 	VATNumber       *string            `json:"vat_number,omitempty"`
 	PaymentTermDays int                `json:"payment_term_days"`

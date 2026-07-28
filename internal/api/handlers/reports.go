@@ -24,19 +24,19 @@ func NewReportsHandler(database *sql.DB, usePostgres bool) *ReportsHandler {
 // ─── Response DTOs ────────────────────────────────────────────────────────────
 
 type reportAccountLine struct {
-	AccountID   string  `json:"account_id"`
-	Code        string  `json:"code"`
-	Name        string  `json:"name"`
-	Balance     float64 `json:"balance"`
+	AccountID string  `json:"account_id"`
+	Code      string  `json:"code"`
+	Name      string  `json:"name"`
+	Balance   float64 `json:"balance"`
 }
 
 type balanceSheetResponse struct {
-	AsOf                  string              `json:"as_of"`
-	Assets                []reportAccountLine `json:"assets"`
-	Liabilities           []reportAccountLine `json:"liabilities"`
-	Equity                []reportAccountLine `json:"equity"`
-	TotalAssets           float64             `json:"total_assets"`
-	TotalLiabilitiesEquity float64            `json:"total_liabilities_equity"`
+	AsOf                   string              `json:"as_of"`
+	Assets                 []reportAccountLine `json:"assets"`
+	Liabilities            []reportAccountLine `json:"liabilities"`
+	Equity                 []reportAccountLine `json:"equity"`
+	TotalAssets            float64             `json:"total_assets"`
+	TotalLiabilitiesEquity float64             `json:"total_liabilities_equity"`
 }
 
 type incomeStatementLine struct {
@@ -47,13 +47,13 @@ type incomeStatementLine struct {
 }
 
 type incomeStatementResponse struct {
-	From      string                `json:"from"`
-	To        string                `json:"to"`
-	Revenue   []incomeStatementLine `json:"revenue"`
-	Expenses  []incomeStatementLine `json:"expenses"`
-	TotalRevenue  float64           `json:"total_revenue"`
-	TotalExpenses float64           `json:"total_expenses"`
-	NetIncome     float64           `json:"net_income"`
+	From          string                `json:"from"`
+	To            string                `json:"to"`
+	Revenue       []incomeStatementLine `json:"revenue"`
+	Expenses      []incomeStatementLine `json:"expenses"`
+	TotalRevenue  float64               `json:"total_revenue"`
+	TotalExpenses float64               `json:"total_expenses"`
+	NetIncome     float64               `json:"net_income"`
 }
 
 type generalLedgerLine struct {
@@ -87,18 +87,18 @@ type arAgingLine struct {
 }
 
 type arAgingResponse struct {
-	AsOf      string        `json:"as_of"`
-	Current   []arAgingLine `json:"current"`
-	Days1To30 []arAgingLine `json:"days_1_to_30"`
-	Days31To60 []arAgingLine `json:"days_31_to_60"`
-	Days61To90 []arAgingLine `json:"days_61_to_90"`
-	Days91Plus []arAgingLine `json:"days_91_plus"`
-	TotalCurrent   float64 `json:"total_current"`
-	TotalDays1To30 float64 `json:"total_days_1_to_30"`
-	TotalDays31To60 float64 `json:"total_days_31_to_60"`
-	TotalDays61To90 float64 `json:"total_days_61_to_90"`
-	TotalDays91Plus float64 `json:"total_days_91_plus"`
-	GrandTotal      float64 `json:"grand_total"`
+	AsOf            string        `json:"as_of"`
+	Current         []arAgingLine `json:"current"`
+	Days1To30       []arAgingLine `json:"days_1_to_30"`
+	Days31To60      []arAgingLine `json:"days_31_to_60"`
+	Days61To90      []arAgingLine `json:"days_61_to_90"`
+	Days91Plus      []arAgingLine `json:"days_91_plus"`
+	TotalCurrent    float64       `json:"total_current"`
+	TotalDays1To30  float64       `json:"total_days_1_to_30"`
+	TotalDays31To60 float64       `json:"total_days_31_to_60"`
+	TotalDays61To90 float64       `json:"total_days_61_to_90"`
+	TotalDays91Plus float64       `json:"total_days_91_plus"`
+	GrandTotal      float64       `json:"grand_total"`
 }
 
 // ─── GET /api/v1/reports/balance-sheet ───────────────────────────────────────
@@ -447,9 +447,9 @@ func (h *ReportsHandler) ARaging(c *gin.Context) {
 	todayTime, _ := time.Parse("2006-01-02", today)
 
 	resp := arAgingResponse{
-		AsOf:      today,
-		Current:   []arAgingLine{},
-		Days1To30: []arAgingLine{},
+		AsOf:       today,
+		Current:    []arAgingLine{},
+		Days1To30:  []arAgingLine{},
 		Days31To60: []arAgingLine{},
 		Days61To90: []arAgingLine{},
 		Days91Plus: []arAgingLine{},

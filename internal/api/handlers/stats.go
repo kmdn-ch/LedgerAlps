@@ -15,12 +15,12 @@ import (
 // ─── Response DTOs ────────────────────────────────────────────────────────────
 
 type statsInvoices struct {
-	Draft          int    `json:"draft"`
-	Sent           int    `json:"sent"`
-	Overdue        int    `json:"overdue"`
-	Paid           int    `json:"paid"`
-	Cancelled      int    `json:"cancelled"`
-	Archived       int    `json:"archived"`
+	Draft           int    `json:"draft"`
+	Sent            int    `json:"sent"`
+	Overdue         int    `json:"overdue"`
+	Paid            int    `json:"paid"`
+	Cancelled       int    `json:"cancelled"`
+	Archived        int    `json:"archived"`
 	TotalReceivable string `json:"total_receivable"`
 }
 

@@ -202,9 +202,9 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 		paidQ := db.Rebind(`UPDATE invoices SET status = 'paid', updated_at = ? WHERE id = ?`, h.usePostgres)
 		if _, err := h.db.ExecContext(ctx, paidQ, time.Now(), req.InvoiceID); err != nil {
 			c.JSON(http.StatusCreated, gin.H{
-				"payment":         payment,
+				"payment":          payment,
 				"journal_entry_id": entry.ID,
-				"warning":         fmt.Sprintf("payment and journal entry recorded but invoice status update failed: %v", err),
+				"warning":          fmt.Sprintf("payment and journal entry recorded but invoice status update failed: %v", err),
 			})
 			return
 		}

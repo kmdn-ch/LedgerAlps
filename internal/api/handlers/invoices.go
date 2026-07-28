@@ -160,13 +160,13 @@ type createInvoiceRequest struct {
 }
 
 type lineReq struct {
-	Description string   `json:"description" binding:"required"`
-	Quantity    float64  `json:"quantity" binding:"required,gt=0"`
-	Unit        *string  `json:"unit"`
-	UnitPrice   float64  `json:"unit_price" binding:"required"`
-	DiscountPct float64  `json:"discount_pct"`
-	VATRate     float64  `json:"vat_rate"`
-	Sequence    int      `json:"sequence"`
+	Description string  `json:"description" binding:"required"`
+	Quantity    float64 `json:"quantity" binding:"required,gt=0"`
+	Unit        *string `json:"unit"`
+	UnitPrice   float64 `json:"unit_price" binding:"required"`
+	DiscountPct float64 `json:"discount_pct"`
+	VATRate     float64 `json:"vat_rate"`
+	Sequence    int     `json:"sequence"`
 }
 
 // CreateInvoice POST /api/v1/invoices
@@ -304,4 +304,3 @@ func (h *InvoicesHandler) TransitionInvoice(c *gin.Context) {
 	}
 	h.GetInvoice(c)
 }
-

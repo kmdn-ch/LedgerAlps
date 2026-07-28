@@ -179,23 +179,30 @@ release:
   draft: false
   prerelease: auto
   name_template: "LedgerAlps {{.Tag}}"
+  # Note: no Docker instructions here. docker-compose.yml existed only to run
+  # the Python/FastAPI implementation superseded in v1.0.0 and was removed with
+  # it, so "docker compose up -d" pointed at a file that no longer exists.
   footer: |
     ## Installation
 
-    **Linux/macOS (one-liner):**
+    **Windows — recommandé**
+
+    Téléchargez `LedgerAlps_Setup_{{ .Version }}_windows_amd64.exe` ci-dessous,
+    puis double-cliquez. L'assistant s'occupe du reste : au premier lancement,
+    LedgerAlps ouvre votre navigateur et vous demande de créer votre compte.
+
+    Vos données sont enregistrées dans `%APPDATA%\LedgerAlps\` et sont conservées
+    lors des mises à jour comme des désinstallations.
+
+    **Linux / macOS**
+
     ```bash
     curl -fsSL https://raw.githubusercontent.com/kmdn-ch/ledgeralps/main/scripts/install.sh | bash
     ```
 
-    **Windows (PowerShell):**
-    ```powershell
-    irm https://raw.githubusercontent.com/kmdn-ch/ledgeralps/main/scripts/install.ps1 | iex
-    ```
-
-    **Docker:**
-    ```bash
-    docker compose up -d
-    ```
+    Paquets `.deb` et `.rpm` également disponibles ci-dessous.
+    Pour un déploiement serveur (systemd, PostgreSQL, sauvegardes), voir
+    [docs/PRODUCTION.md](https://github.com/kmdn-ch/LedgerAlps/blob/main/docs/PRODUCTION.md).
 
 snapshot:
   version_template: "{{ incpatch .Version }}-dev+{{ .ShortCommit }}"
