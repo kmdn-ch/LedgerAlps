@@ -359,28 +359,43 @@ export function NewInvoicePage() {
                     const t = totals[i] ?? { base: 0, vat: 0, total: 0 }
                     return (
                       <tr key={field.id} className="border-b border-alpine-100 last:border-0">
+                        {/* aria-label sur chaque champ : sans lui, un lecteur
+                            d'écran annonce « 1 », « 0 », « 0 » sans dire de
+                            quelle colonne il s'agit — l'en-tête du tableau ne
+                            suffit pas à nommer un champ de saisie. */}
                         <td className="px-4 py-2 w-[30%]">
                           <input
                             className={`input ${errors.lines?.[i]?.description ? 'input-error' : ''}`}
                             placeholder="Description du service ou produit"
+                            aria-label={`Description de la ligne ${i + 1}`}
                             {...register(`lines.${i}.description`)}
                           />
+                          {errors.lines?.[i]?.description && (
+                            <p className="error-msg">{errors.lines[i]?.description?.message}</p>
+                          )}
                         </td>
                         <td className="px-2 py-2 w-20">
                           <input type="number" step="0.001" min="0.001"
+                            aria-label={`Quantité de la ligne ${i + 1}`}
                             className="input text-right" {...register(`lines.${i}.quantity`)} />
                         </td>
                         <td className="px-2 py-2 w-16">
                           <input className="input" placeholder="h, pce…"
+                            aria-label={`Unité de la ligne ${i + 1}`}
                             {...register(`lines.${i}.unit`)} />
                         </td>
                         <td className="px-2 py-2 w-28">
                           <input type="number" step="0.01" min="0"
+                            aria-label={`Prix unitaire de la ligne ${i + 1}`}
                             className={`input text-right font-mono ${errors.lines?.[i]?.unit_price ? 'input-error' : ''}`}
                             {...register(`lines.${i}.unit_price`)} />
+                          {errors.lines?.[i]?.unit_price && (
+                            <p className="error-msg">{errors.lines[i]?.unit_price?.message}</p>
+                          )}
                         </td>
                         <td className="px-2 py-2 w-20">
                           <input type="number" step="0.1" min="0" max="100"
+                            aria-label={`Rabais en pourcent de la ligne ${i + 1}`}
                             className="input text-right" {...register(`lines.${i}.discount_pct`)} />
                         </td>
                         <td className="px-2 py-2 w-20">

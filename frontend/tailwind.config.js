@@ -35,10 +35,24 @@ export default {
         danger:  { 500: '#ef4444', 100: '#fee2e2', 700: '#b91c1c' },
         warning: { 500: '#f59e0b', 100: '#fef3c7', 700: '#b45309' },
       },
+      // Polices système uniquement : LedgerAlps ne charge aucune ressource
+      // depuis un tiers. Les familles nommées ici sont présentes sur les
+      // systèmes cibles, donc rien n'est téléchargé au chargement de la page.
+      // (Auparavant : DM Sans / Syne / JetBrains Mono via fonts.googleapis.com,
+      // bloquées par la CSP et donc jamais appliquées.)
       fontFamily: {
-        sans:    ['"DM Sans"', 'system-ui', 'sans-serif'],
-        mono:    ['"JetBrains Mono"', 'monospace'],
-        display: ['"Syne"', 'sans-serif'],
+        sans: [
+          'system-ui', '-apple-system', 'Segoe UI', 'Roboto',
+          'Helvetica Neue', 'Arial', 'sans-serif',
+        ],
+        mono: [
+          'ui-monospace', 'SFMono-Regular', 'Cascadia Mono', 'Consolas',
+          'Liberation Mono', 'Menlo', 'monospace',
+        ],
+        display: [
+          'system-ui', '-apple-system', 'Segoe UI', 'Roboto',
+          'Helvetica Neue', 'Arial', 'sans-serif',
+        ],
       },
       borderRadius: {
         DEFAULT: '0.375rem',

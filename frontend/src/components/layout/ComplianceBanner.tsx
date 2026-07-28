@@ -1,16 +1,21 @@
 // LedgerAlps — Bannière d'avis de conformité
 //
 // Affiche les évolutions légales et normatives qui concernent l'utilisateur :
-// changement du standard QR-facture, obligation nLPD, etc.
+// changement du standard QR-facture, obligation nLPD, mise à jour disponible.
 //
-// Les avis proviennent du flux embarqué dans le binaire (aucun appel réseau
-// externe). Un avis rejeté reste masqué localement, mais uniquement pour la
-// version d'avis concernée : si le texte est mis à jour, il réapparaît — un
-// « ne plus afficher » ne doit pas enterrer une obligation légale révisée.
+// Les avis proviennent du flux embarqué dans le binaire (aucun appel externe).
+//
+// Repliée par défaut, et c'est délibéré : la première version affichait le
+// texte complet de chaque avis en haut de CHAQUE page, ce qui consommait près
+// de la moitié de l'écran et repoussait les formulaires sous la ligne de
+// flottaison. Un avertissement qui gêne le travail quotidien est un
+// avertissement qu'on apprend à ignorer.
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Download, Info, ShieldAlert, X, ExternalLink } from 'lucide-react'
+import {
+  AlertTriangle, ChevronDown, ChevronRight, Download, Info, ShieldAlert, X, ExternalLink,
+} from 'lucide-react'
 import { complianceApi, updateApi } from '@/api/client'
 import { cn } from '@/utils'
 
@@ -44,27 +49,23 @@ function saveDismissed(map: Record<string, string>) {
   }
 }
 
-// N.B. tailwind.config.js ne définit que les nuances 100/500/700 pour danger et
-// warning. Une classe comme `bg-danger-50` ne génère alors aucun CSS et la
-// bannière s'afficherait sans couleur — le pire des défauts pour un avertissement.
-// On s'en tient donc aux nuances réellement disponibles.
+// tailwind.config.js ne définit que les nuances 100/500/700 pour danger et
+// warning : une classe comme bg-danger-50 n'émettrait aucun CSS et la bannière
+// s'afficherait sans couleur — le pire des défauts pour un avertissement.
 const STYLES = {
   critical: {
     wrap: 'border-danger-500 bg-danger-100 text-danger-700',
     icon: ShieldAlert,
-    iconClass: 'text-danger-700',
     label: 'Action requise',
   },
   action_required: {
     wrap: 'border-warning-500 bg-warning-100 text-warning-700',
     icon: AlertTriangle,
-    iconClass: 'text-warning-700',
     label: 'À vérifier',
   },
   info: {
     wrap: 'border-slate-300 bg-slate-100 text-slate-700',
     icon: Info,
-    iconClass: 'text-slate-500',
     label: 'Information',
   },
 } as const
@@ -74,6 +75,56 @@ function formatDate(iso?: string): string | null {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
   return d.toLocaleDateString('fr-CH', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+/** Ligne repliable commune aux avis et à la notification de mise à jour. */
+function CollapsibleNotice({
+  wrap, Icon, label, title, children, onDismiss, dismissLabel,
+}: {
+  wrap: string
+  Icon: typeof Info
+  label: string
+  title: string
+  children: React.ReactNode
+  onDismiss: () => void
+  dismissLabel: string
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div role="status" className={cn('border rounded-lg', wrap)}>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <Icon className="w-4 h-4 shrink-0" aria-hidden />
+
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex-1 min-w-0 flex items-center gap-2 text-left"
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wide opacity-70 shrink-0">
+            {label}
+          </span>
+          <span className="text-sm font-medium truncate">{title}</span>
+          {open
+            ? <ChevronDown className="w-4 h-4 shrink-0 opacity-60 ml-auto" aria-hidden />
+            : <ChevronRight className="w-4 h-4 shrink-0 opacity-60 ml-auto" aria-hidden />}
+        </button>
+
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label={dismissLabel}
+          title={dismissLabel}
+          className="shrink-0 opacity-50 hover:opacity-100 transition-opacity"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {open && <div className="px-3 pb-3 pl-9 text-sm leading-relaxed">{children}</div>}
+    </div>
+  )
 }
 
 export function ComplianceBanner() {
@@ -111,107 +162,70 @@ export function ComplianceBanner() {
 
   if (visible.length === 0 && !showUpdate) return null
 
-  function dismissUpdate() {
-    if (!updateVersion) return
-    const next = { ...dismissed, __update__: updateVersion }
-    setDismissed(next)
-    saveDismissed(next)
-  }
-
-  function dismiss(a: Advisory) {
-    const next = { ...dismissed, [a.id]: a.published_at ?? 'v1' }
+  function remember(key: string, value: string) {
+    const next = { ...dismissed, [key]: value }
     setDismissed(next)
     saveDismissed(next)
   }
 
   return (
-    <div className="space-y-3 mb-6">
+    <div className="space-y-2 mb-4">
       {showUpdate && (
-        <div role="status" className="border rounded-lg px-4 py-3 flex gap-3 border-alpine-500 bg-alpine-100 text-alpine-700">
-          <Download className="w-5 h-5 shrink-0 mt-0.5" aria-hidden />
-          <div className="flex-1 min-w-0">
-            <span className="text-xs font-semibold uppercase tracking-wide opacity-70">
-              Mise à jour
-            </span>
-            <p className="font-semibold text-sm mt-0.5">
-              La version {updateVersion} est disponible
-            </p>
-            <p className="text-sm mt-1 leading-relaxed">
-              Les mises à jour contiennent les correctifs de conformité (QR-facture,
-              TVA, obligations légales). Installer la dernière version garantit que
-              vos factures restent acceptées par les banques.
-            </p>
-            {update?.release_url && (
-              <a
-                href={update.release_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs mt-2 underline opacity-80 hover:opacity-100"
-              >
-                Voir les nouveautés et télécharger
-                <ExternalLink className="w-3 h-3" aria-hidden />
-              </a>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={dismissUpdate}
-            aria-label="Masquer cette notification"
-            title="Masquer cette notification"
-            className="shrink-0 opacity-50 hover:opacity-100 transition-opacity self-start"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        <CollapsibleNotice
+          wrap="border-alpine-500 bg-alpine-100 text-alpine-700"
+          Icon={Download}
+          label="Mise à jour"
+          title={`La version ${updateVersion} est disponible`}
+          onDismiss={() => remember('__update__', updateVersion!)}
+          dismissLabel="Masquer cette notification"
+        >
+          <p>
+            Les mises à jour contiennent les correctifs de conformité (QR-facture,
+            TVA, obligations légales). Installer la dernière version garantit que
+            vos factures restent acceptées par les banques.
+          </p>
+          {update?.release_url && (
+            <a
+              href={update.release_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs mt-2 underline opacity-80 hover:opacity-100"
+            >
+              Voir les nouveautés et télécharger
+              <ExternalLink className="w-3 h-3" aria-hidden />
+            </a>
+          )}
+        </CollapsibleNotice>
       )}
 
       {visible.map((a) => {
         const style = STYLES[a.severity] ?? STYLES.info
-        const Icon = style.icon
         const effective = formatDate(a.effective_from)
 
         return (
-          <div
+          <CollapsibleNotice
             key={a.id}
-            role="status"
-            className={cn('border rounded-lg px-4 py-3 flex gap-3', style.wrap)}
+            wrap={style.wrap}
+            Icon={style.icon}
+            label={style.label}
+            title={a.title}
+            onDismiss={() => remember(a.id, a.published_at ?? 'v1')}
+            dismissLabel="Masquer cet avis"
           >
-            <Icon className={cn('w-5 h-5 shrink-0 mt-0.5', style.iconClass)} aria-hidden />
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-semibold uppercase tracking-wide opacity-70">
-                  {style.label}
-                </span>
-                {effective && (
-                  <span className="text-xs opacity-70">· en vigueur depuis le {effective}</span>
-                )}
-              </div>
-
-              <p className="font-semibold text-sm mt-0.5">{a.title}</p>
-              <p className="text-sm mt-1 leading-relaxed">{a.body}</p>
-
-              <a
-                href={a.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs mt-2 underline opacity-80 hover:opacity-100"
-              >
-                {a.source_name}
-                <ExternalLink className="w-3 h-3" aria-hidden />
-              </a>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => dismiss(a)}
-              aria-label="Masquer cet avis"
-              title="Masquer cet avis"
-              className="shrink-0 opacity-50 hover:opacity-100 transition-opacity self-start"
+            {effective && (
+              <p className="text-xs opacity-70 mb-1">En vigueur depuis le {effective}</p>
+            )}
+            <p>{a.body}</p>
+            <a
+              href={a.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs mt-2 underline opacity-80 hover:opacity-100"
             >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+              {a.source_name}
+              <ExternalLink className="w-3 h-3" aria-hidden />
+            </a>
+          </CollapsibleNotice>
         )
       })}
     </div>
