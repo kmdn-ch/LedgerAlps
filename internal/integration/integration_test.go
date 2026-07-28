@@ -6,13 +6,13 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	_ "modernc.org/sqlite"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
-	_ "modernc.org/sqlite"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/api/handlers"
@@ -219,8 +219,17 @@ func TestLogin(t *testing.T) {
 	if body["access_token"] == nil || body["access_token"] == "" {
 		t.Error("login response missing access_token")
 	}
-	if body["refresh_token"] == nil || body["refresh_token"] == "" {
-		t.Error("login response missing refresh_token — refresh_tokens table not populated")
+	// The refresh token must NOT be in the body: anything returned here would be
+	// readable by script, which is exactly the exposure the cookie removes.
+	if body["refresh_token"] != nil {
+		t.Error("login response must not carry refresh_token in the body — it belongs in the HttpOnly cookie")
+	}
+	ck := refreshCookie(w)
+	if ck == nil {
+		t.Fatal("login must set the refresh cookie")
+	}
+	if !ck.HttpOnly {
+		t.Error("refresh cookie must be HttpOnly, otherwise script can read a 30-day credential")
 	}
 
 	// Wrong password → 401
@@ -251,14 +260,14 @@ func TestRefreshAndLogout(t *testing.T) {
 	}), "")
 	assertStatus(t, loginW, http.StatusOK)
 
-	loginBody := parseBody(t, loginW)
-	refreshToken, _ := loginBody["refresh_token"].(string)
-	if refreshToken == "" {
-		t.Fatal("no refresh_token in login response")
+	// The client never sees the refresh token; it rides in the cookie the browser
+	// replays automatically, so the test does the same.
+	ck := refreshCookie(loginW)
+	if ck == nil {
+		t.Fatal("login did not set the refresh cookie")
 	}
 
-	// Use refresh token to get a new access token
-	refreshW := doJSON(t, r, "POST", "/api/v1/auth/refresh", "", refreshToken)
+	refreshW := doWithCookie(t, r, "POST", "/api/v1/auth/refresh", ck)
 	assertStatus(t, refreshW, http.StatusOK)
 
 	refreshBody := parseBody(t, refreshW)
@@ -266,12 +275,17 @@ func TestRefreshAndLogout(t *testing.T) {
 		t.Error("refresh response missing access_token")
 	}
 
-	// Logout (revoke refresh token)
-	logoutW := doJSON(t, r, "POST", "/api/v1/auth/logout", "", refreshToken)
+	logoutW := doWithCookie(t, r, "POST", "/api/v1/auth/logout", ck)
 	assertStatus(t, logoutW, http.StatusNoContent)
 
-	// Refresh after logout must fail
-	refreshW2 := doJSON(t, r, "POST", "/api/v1/auth/refresh", "", refreshToken)
+	// Logout must also expire the cookie in the browser, not merely revoke the
+	// row: leaving a usable credential in the cookie jar would defeat the point.
+	if cleared := refreshCookie(logoutW); cleared == nil || cleared.MaxAge >= 0 {
+		t.Error("logout must send back an expired refresh cookie")
+	}
+
+	// And the token must be dead server-side even if someone replays the cookie.
+	refreshW2 := doWithCookie(t, r, "POST", "/api/v1/auth/refresh", ck)
 	assertStatus(t, refreshW2, http.StatusUnauthorized)
 }
 
@@ -501,4 +515,26 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
+}
+
+// ─── Refresh-cookie helpers ───────────────────────────────────────────────────
+
+// refreshCookie extracts the refresh cookie from a response, or nil.
+func refreshCookie(w *httptest.ResponseRecorder) *http.Cookie {
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "ledgeralps_refresh" {
+			return c
+		}
+	}
+	return nil
+}
+
+// doWithCookie replays a cookie the way a browser would.
+func doWithCookie(t *testing.T, r *gin.Engine, method, path string, ck *http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, path, nil)
+	req.AddCookie(&http.Cookie{Name: ck.Name, Value: ck.Value})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
 }

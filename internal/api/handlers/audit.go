@@ -27,7 +27,9 @@ func NewAuditHandler(database *sql.DB, usePostgres bool) *AuditHandler {
 
 // ListAuditLogs returns audit log entries matching optional filter parameters.
 // Query params: table_name, record_id, from (YYYY-MM-DD), to (YYYY-MM-DD),
-//              limit (default 50, max 200), offset (default 0).
+//
+//	limit (default 50, max 200), offset (default 0).
+//
 // Access: admin only.
 func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
 	if !isAdmin(c) {

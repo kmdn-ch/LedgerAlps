@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/utils'
 import { useAuthStore } from '@/store/auth'
-import { settingsApi, healthApi } from '@/api/client'
+import { settingsApi, healthApi, authApi } from '@/api/client'
 
 const NAV = [
   { to: '/',          icon: LayoutDashboard, label: 'Tableau de bord' },
@@ -23,6 +23,21 @@ const NAV = [
 
 export function Sidebar() {
   const { user, logout } = useAuthStore()
+
+  // Se déconnecter doit révoquer la session côté serveur, pas seulement effacer
+  // l'état local : sans cet appel, le jeton de rafraîchissement restait valide
+  // trente jours et le cookie HttpOnly ne serait jamais effacé — le code ne peut
+  // pas le supprimer lui-même, c'est précisément le principe.
+  async function handleLogout() {
+    try {
+      await authApi.logout()
+    } catch {
+      // Serveur injoignable ou session déjà expirée : on déconnecte quand même
+      // localement, car refuser de déconnecter serait le pire des comportements.
+    } finally {
+      logout()
+    }
+  }
 
   const { data: company } = useQuery({
     queryKey: ['company-settings'],
@@ -96,7 +111,7 @@ export function Sidebar() {
         </NavLink>
 
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm
                      text-alpine-400 hover:bg-danger-500/10 hover:text-danger-400 transition-all"
         >

@@ -9,6 +9,9 @@ export const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
   timeout: 30_000,
+  // Indispensable : le jeton de rafraîchissement est un cookie HttpOnly, et
+  // sans ceci le navigateur ne l'attacherait pas aux appels à /auth/refresh.
+  withCredentials: true,
 })
 
 // Injecter le token JWT dans chaque requête
@@ -35,13 +38,11 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    const { refreshToken, setAccessToken, logout } = useAuthStore.getState()
-    if (!refreshToken) {
-      logout()
-      window.location.href = '/login'
-      return Promise.reject(error)
-    }
+    const { setAccessToken, logout } = useAuthStore.getState()
 
+    // Plus de vérification d'un jeton en mémoire ici : c'est le cookie
+    // HttpOnly qui porte le rafraîchissement, et le code n'y a pas accès.
+    // On tente donc l'appel, et c'est le serveur qui tranche.
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         failedQueue.push({ resolve, reject })
@@ -56,7 +57,7 @@ api.interceptors.response.use(
 
     try {
       const res = await axios.post(`${BASE_URL}/auth/refresh`, null, {
-        headers: { Authorization: `Bearer ${refreshToken}` },
+        withCredentials: true,
       })
       const newToken: string = res.data.access_token
       setAccessToken(newToken)
@@ -82,10 +83,10 @@ export const authApi = {
     api.post('/auth/register', data),
   bootstrap:(data: { email: string; name: string; password: string }) =>
     api.post('/auth/bootstrap', data),
-  refresh:  (refreshToken: string) =>
-    api.post('/auth/refresh', null, { headers: { Authorization: `Bearer ${refreshToken}` } }),
-  logout:   (refreshToken: string) =>
-    api.post('/auth/logout', null, { headers: { Authorization: `Bearer ${refreshToken}` } }),
+  // Ni refresh ni logout ne prennent de jeton : le cookie HttpOnly le porte,
+  // et le code n'a aucun moyen de le lire — c'est précisément le but.
+  refresh:  () => api.post('/auth/refresh', null),
+  logout:   () => api.post('/auth/logout', null),
 }
 
 // ─── Comptes ──────────────────────────────────────────────────────────────────

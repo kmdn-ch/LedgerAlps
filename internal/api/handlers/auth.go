@@ -129,11 +129,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// The refresh token goes out as an HttpOnly cookie and is deliberately
+	// absent from the body: anything returned here would be readable by script.
+	setRefreshCookie(c, refreshToken, refreshTTL)
+
 	c.JSON(http.StatusOK, gin.H{
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
-		"token_type":    "bearer",
-		"expires_in":    int(accessTTL.Seconds()),
+		"access_token": accessToken,
+		"token_type":   "bearer",
+		"expires_in":   int(accessTTL.Seconds()),
 	})
 }
 
@@ -141,9 +144,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // POST /api/v1/auth/refresh
 // Validates a refresh token, verifies it is active in DB, and returns a new access token.
 func (h *AuthHandler) Refresh(c *gin.Context) {
-	rawToken, ok := bearerToken(c)
+	rawToken, ok := refreshTokenFromRequest(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or malformed Authorization header"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "no refresh token supplied"})
 		return
 	}
 
@@ -198,9 +201,14 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 // POST /api/v1/auth/logout
 // Revokes a refresh token by setting revoked_at to the current timestamp.
 func (h *AuthHandler) Logout(c *gin.Context) {
-	rawToken, ok := bearerToken(c)
+	// The cookie is cleared whatever happens next: a caller asking to log out
+	// must never be left holding a usable credential because the token was
+	// already malformed or expired.
+	clearRefreshCookie(c)
+
+	rawToken, ok := refreshTokenFromRequest(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or malformed Authorization header"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "no refresh token supplied"})
 		return
 	}
 
