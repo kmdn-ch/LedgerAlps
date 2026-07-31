@@ -119,10 +119,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	// Persist refresh token so Refresh/Logout endpoints can validate/revoke it.
+	//
+	// A fresh context: the one above was opened before CheckPassword, and bcrypt
+	// is deliberately slow. Reusing it meant a correct password on a slow machine
+	// could still end in "database error" — the login had already spent most of
+	// its five seconds hashing before reaching this insert.
+	insCtx, insCancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer insCancel()
+
 	insQ := db.Rebind(`
 		INSERT INTO refresh_tokens (id, user_id, jti, expires_at, created_at)
 		VALUES (?, ?, ?, ?, ?)`, h.cfg.UsePostgres())
-	if _, err := h.db.ExecContext(ctx, insQ,
+	if _, err := h.db.ExecContext(insCtx, insQ,
 		db.NewID(), userID, jti,
 		time.Now().UTC().Add(refreshTTL), time.Now().UTC()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
@@ -288,6 +296,12 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 		return
 	}
 
+	// This timeout bounds database work only. bcrypt is deliberately slow —
+	// around 100 ms here, several times that on an old laptop or under a race
+	// detector — and letting it share the budget meant the INSERT that follows
+	// could time out and surface as "database error" during first-time setup,
+	// on exactly the modest hardware this product targets. Register already
+	// hashes outside the context; Bootstrap and Login now match it.
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
@@ -302,6 +316,10 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 		return
 	}
 
+	// Hors du contexte ci-dessus : le hachage n'est pas un travail de base
+	// de données et ne doit pas en consommer le budget.
+	cancel()
+
 	hash, err := security.HashPassword(req.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
@@ -313,7 +331,10 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	q := db.Rebind(`
 		INSERT INTO users (id, email, name, password_hash, is_admin, is_active, created_at, updated_at)
 		VALUES (?, ?, ?, ?, 1, 1, ?, ?)`, h.cfg.UsePostgres())
-	if _, err := h.db.ExecContext(ctx, q, id, req.Email, req.Name, hash, now, now); err != nil {
+	insCtx, insCancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer insCancel()
+
+	if _, err := h.db.ExecContext(insCtx, q, id, req.Email, req.Name, hash, now, now); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
