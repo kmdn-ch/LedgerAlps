@@ -87,6 +87,19 @@
       "link_pattern": "02016R0679-(\\d{8})",
       "human_url": "https://eur-lex.europa.eu/eli/reg/2016/679/oj",
       "last_seen": "20160504"
+    },
+    {
+      "id": "six-validation-portal",
+      "name": "SIX — Portail de validation QR-facture",
+      "domain": "qr_bill",
+      "authority": "official",
+      "reliability": "secondary",
+      "rationale": "Page outils de SIX. Surveillée pour repérer l'apparition d'un programme de certification officiel : le label privé « QR-Ready » (Epsitec/Crésus) n'en est pas un, et sa page opérateur est morte. Un vrai label viendrait de SIX et apparaîtrait ici.",
+      "kind": "http_links",
+      "url": "https://www.six-group.com/en/products-services/banking-services/payment-standardization/expertise/tools.html",
+      "link_pattern": "(validation\\.iso-payments\\.ch)",
+      "human_url": "https://validation.iso-payments.ch/qrrechnung",
+      "last_seen": "validation.iso-payments.ch"
     }
   ]
 }

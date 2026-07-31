@@ -60,7 +60,17 @@ class CheckError(Exception):
 def _get(url: str, headers: dict | None = None) -> bytes:
     req = urllib.request.Request(url, headers={**UA, **(headers or {})})
     with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-        return r.read()
+        body = r.read()
+        # Throttling has to be named as throttling. EUR-Lex answers 202 with an
+        # empty body when it is rate-limiting; that used to reach the regex,
+        # match nothing, and be reported as "page structure may have changed" —
+        # sending a maintainer to hunt for an edit that never happened.
+        if r.status != 200:
+            raise CheckError(
+                f"HTTP {r.status} with {len(body)} bytes — the source is likely throttling, not changed")
+        if not body:
+            raise CheckError("empty response body — the source is likely throttling, not changed")
+        return body
 
 
 def fetch_fedlex(source: dict) -> str:
@@ -69,6 +79,8 @@ def fetch_fedlex(source: dict) -> str:
     try:
         raw = _get(url, {"Accept": "application/sparql-results+json"})
         rows = json.loads(raw.decode("utf-8"))["results"]["bindings"]
+    except CheckError:
+        raise  # already carries a precise message
     except Exception as e:  # noqa: BLE001 - any failure is a check failure
         raise CheckError(f"{type(e).__name__}: {e}") from e
     if not rows:
@@ -79,6 +91,8 @@ def fetch_fedlex(source: dict) -> str:
 def fetch_sha256(source: dict) -> str:
     try:
         body = _get(source["url"])
+    except CheckError:
+        raise
     except Exception as e:  # noqa: BLE001
         raise CheckError(f"{type(e).__name__}: {e}") from e
     # Short digest keeps the registry readable; 16 hex chars is ample to detect
@@ -90,16 +104,25 @@ def fetch_links(source: dict) -> str:
     """Highest version number matching link_pattern on the page."""
     try:
         body = _get(source["url"]).decode("utf-8", errors="replace")
+    except CheckError:
+        raise
     except Exception as e:  # noqa: BLE001
         raise CheckError(f"{type(e).__name__}: {e}") from e
-    versions = re.findall(source["link_pattern"], body)
-    if not versions:
+    matches = re.findall(source["link_pattern"], body)
+    if not matches:
         raise CheckError("link_pattern matched nothing — page structure may have changed")
 
-    def as_tuple(v: str):
-        return tuple(int(p) for p in v.split("."))
+    # Dotted numbers are compared numerically so 2.10 ranks above 2.9. Anything
+    # else falls back to string order rather than raising: a pattern capturing a
+    # hostname or a word used to crash int() and take the whole run down with
+    # it, so one awkward registry entry silently disabled all the others.
+    def sort_key(v: str):
+        parts = v.split(".")
+        if all(p.isdigit() for p in parts):
+            return (1, tuple(int(p) for p in parts), "")
+        return (0, (), v)
 
-    return max(versions, key=as_tuple)
+    return max(matches, key=sort_key)
 
 
 FETCHERS = {
