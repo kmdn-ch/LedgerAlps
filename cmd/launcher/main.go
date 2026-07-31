@@ -728,9 +728,15 @@ document.getElementById('setupForm').addEventListener('submit', async function(e
       spinner.style.display = 'none';
       return;
     }
-    infoBox.textContent = 'Configuration réussie ! Ouverture de LedgerAlps…';
-    infoBox.style.display = 'block';
-    setTimeout(() => { window.location.href = data.redirect; }, 1500);
+    if (data.warning) {
+      errBox.textContent = data.warning;
+      errBox.style.display = 'block';
+      setTimeout(() => { window.location.href = data.redirect; }, 6000);
+    } else {
+      infoBox.textContent = 'Configuration réussie ! Ouverture de LedgerAlps…';
+      infoBox.style.display = 'block';
+      setTimeout(() => { window.location.href = data.redirect; }, 1500);
+    }
   } catch (err) {
     errBox.textContent = 'Impossible de contacter le service de configuration.';
     errBox.style.display = 'block';
@@ -886,14 +892,21 @@ func runSetupWizard() {
 			IBAN:                 req.IBAN,
 			FiscalYearStartMonth: req.FiscalYearStartMonth,
 		}
+		// A failed bootstrap used to be logged and then followed by a success
+		// screen, so a user whose company details never reached the database was
+		// told "Configuration réussie" and only discovered the empty form later,
+		// in Settings, with no idea why.
+		warning := ""
 		if err := bootstrapAdmin(appURL, payload); err != nil {
-			logWarn("bootstrap warning: %v", err)
+			logWarn("bootstrap failed: %v", err)
+			warning = "Le compte a été créé, mais les informations de votre société n'ont pas pu être enregistrées. Vous pourrez les saisir dans Paramètres."
 		}
 
 		// Respond with redirect URL.
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintf(w, `{"redirect":"%s"}`, appURL)
+		payloadOut, _ := json.Marshal(map[string]string{"redirect": appURL, "warning": warning})
+		_, _ = w.Write(payloadOut)
 
 		// Signal that setup is done — shut down the wizard server.
 		go func() {

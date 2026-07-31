@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -339,6 +340,10 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 		return
 	}
 
+	// Reported back so the wizard can tell the user to re-enter the details in
+	// Settings rather than let them discover an empty form later.
+	companySaved := req.CompanyName != ""
+
 	// If a company name was provided, seed the company_settings singleton.
 	if req.CompanyName != "" {
 		country := req.AddressCountry
@@ -362,23 +367,36 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 			     fiscal_year_start_month, currency,
 			     created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, h.cfg.UsePostgres())
-		// Non-fatal: a failure here doesn't block the admin account creation.
-		_, _ = h.db.ExecContext(ctx, csQ,
+		// A fresh context. This insert used to run on the one opened at the top
+		// of the handler, which is now cancelled before hashing — the company
+		// details were written with a dead context and silently lost while the
+		// wizard reported success.
+		csCtx, csCancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		defer csCancel()
+
+		// Still non-fatal — losing the admin account over company details would
+		// be worse — but no longer silent. Discarding this error is what let the
+		// cancelled-context bug ship: nothing anywhere said the write had failed.
+		if _, err := h.db.ExecContext(csCtx, csQ,
 			csID, req.CompanyName, req.LegalForm,
 			req.AddressStreet, req.AddressPostalCode, req.AddressCity, country,
 			req.CheNumber, req.VatNumber, req.IBAN,
 			fyMonth, currency,
 			now, now,
-		)
+		); err != nil {
+			log.Printf("WARNING: bootstrap created the admin account but could not save company settings: %v", err)
+			companySaved = false
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"id":         id,
-		"email":      req.Email,
-		"name":       req.Name,
-		"is_admin":   true,
-		"created_at": now,
-		"message":    "Admin user created. This endpoint is now disabled.",
+		"id":            id,
+		"email":         req.Email,
+		"name":          req.Name,
+		"is_admin":      true,
+		"created_at":    now,
+		"company_saved": companySaved,
+		"message":       "Admin user created. This endpoint is now disabled.",
 	})
 }
 

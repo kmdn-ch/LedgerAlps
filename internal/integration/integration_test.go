@@ -93,6 +93,12 @@ func newTestServer(t *testing.T) (*gin.Engine, *sql.DB, *config.Config) {
 	api.GET("/contacts", ch.ListContacts)
 	api.POST("/contacts", ch.CreateContact)
 
+	// Company settings: the round trip a user sees when opening Paramètres.
+	// Absent from this harness, which is why nothing caught the bootstrap
+	// details being written with a cancelled context.
+	sh := handlers.NewSettingsHandler(database, false)
+	api.GET("/settings/company", sh.GetCompany)
+
 	ih := handlers.NewInvoicesHandler(database, false, accountingSvc)
 	api.GET("/invoices", ih.ListInvoices)
 	api.POST("/invoices", ih.CreateInvoice)
@@ -537,4 +543,68 @@ func doWithCookie(t *testing.T, r *gin.Engine, method, path string, ck *http.Coo
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w
+}
+
+// Bootstrap collects the company details the setup wizard gathered from the
+// commercial register. They were written with a context that had already been
+// cancelled, and the error was discarded, so the wizard reported success while
+// the details vanished — the user met an empty Settings form with no
+// explanation. This asserts they survive the round trip.
+func TestBootstrapPersistsCompanySettings(t *testing.T) {
+	r, database, _ := newTestServer(t)
+
+	w := doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
+		"email": "admin@test.com", "name": "Admin", "password": "adminpass1234",
+		"company_name":        "KMDN",
+		"legal_form":          "Entreprise individuelle",
+		"address_street":      "Chemin des Truits 13 A",
+		"address_postal_code": "1867",
+		"address_city":        "Ollon VD",
+		"che_number":          "CHE-354.179.657",
+		"iban":                "CH5604835012345678009",
+	}), "")
+	assertStatus(t, w, http.StatusCreated)
+
+	if saved, _ := parseBody(t, w)["company_saved"].(bool); !saved {
+		t.Error("bootstrap reported company_saved=false — the wizard must not claim success when the details were lost")
+	}
+
+	var name, street, zip, city, che string
+	err := database.QueryRow(`SELECT company_name, address_street, address_postal_code,
+	                                 address_city, che_number FROM company_settings`).
+		Scan(&name, &street, &zip, &city, &che)
+	if err != nil {
+		t.Fatalf("company settings were not written: %v", err)
+	}
+	for field, pair := range map[string][2]string{
+		"company_name":        {name, "KMDN"},
+		"address_street":      {street, "Chemin des Truits 13 A"},
+		"address_postal_code": {zip, "1867"},
+		"address_city":        {city, "Ollon VD"},
+		"che_number":          {che, "CHE-354.179.657"},
+	} {
+		if pair[0] != pair[1] {
+			t.Errorf("%s = %q, want %q", field, pair[0], pair[1])
+		}
+	}
+}
+
+// The settings endpoint must hand back what bootstrap stored: the round trip is
+// what the user actually sees when opening Paramètres.
+func TestSettingsReturnsBootstrappedCompany(t *testing.T) {
+	r, _, _ := newTestServer(t)
+
+	doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
+		"email": "admin@test.com", "name": "Admin", "password": "adminpass1234",
+		"company_name": "KMDN", "address_city": "Ollon VD",
+	}), "")
+
+	token := loginAdmin(t, r)
+	w := doJSON(t, r, "GET", "/api/v1/settings/company", "", token)
+	assertStatus(t, w, http.StatusOK)
+
+	body := parseBody(t, w)
+	if body["company_name"] != "KMDN" {
+		t.Errorf("company_name = %v, want KMDN", body["company_name"])
+	}
 }
