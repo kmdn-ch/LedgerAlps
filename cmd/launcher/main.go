@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -28,10 +29,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/kmdn-ch/ledgeralps/internal/core/zefix"
 )
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -238,14 +240,13 @@ func bootstrapAdmin(baseURL string, payload bootstrapPayload) error {
 
 // ── UID/IDE registry proxy ────────────────────────────────────────────────────
 
-var (
-	reCHELookup     = regexp.MustCompile(`(?i)^CHE[-.]?(\d{3})\.?(\d{3})\.?(\d{3})$`)
-	uidHTTPClient   = &http.Client{Timeout: 8 * time.Second}
-)
-
-// proxyUIDLookup resolves a CHE number via the ZEFIX REST API and returns a
-// simplified JSON object. Used by the setup wizard before the API server is
-// running (no JWT required here).
+// proxyUIDLookup resolves a CHE number for the setup wizard, which runs before
+// the API server and therefore cannot call its endpoint.
+//
+// The lookup itself lives in internal/core/zefix, shared with the server
+// handler. This function used to carry its own copy of that logic, hitting an
+// endpoint that answers 403 to everyone; fixing only the server's copy left
+// this one broken, which is exactly where first-time users meet it.
 func proxyUIDLookup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -256,81 +257,28 @@ func proxyUIDLookup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m := reCHELookup.FindStringSubmatch(raw)
-	if m == nil {
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+
+	company, err := zefix.Lookup(ctx, raw)
+	switch {
+	case errors.Is(err, zefix.ErrInvalidFormat):
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = fmt.Fprint(w, `{"error":"format CHE invalide — attendu CHE-XXX.XXX.XXX"}`)
-		return
-	}
-	uid := fmt.Sprintf("CHE-%s%s%s", m[1], m[2], m[3])
-
-	apiURL := "https://www.zefix.admin.ch/ZefixREST/api/v1/firm/uid/" + uid + ".json"
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, apiURL, nil)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = fmt.Fprint(w, `{"error":"erreur interne"}`)
-		return
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "LedgerAlps/1.0")
-
-	resp, err := uidHTTPClient.Do(req)
-	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
-		_, _ = fmt.Fprint(w, `{"error":"registre IDE inaccessible — réessayez ou saisissez manuellement"}`)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
+		_, _ = fmt.Fprint(w, `{"error":"format IDE invalide — attendu CHE-XXX.XXX.XXX"}`)
+	case errors.Is(err, zefix.ErrNotFound):
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = fmt.Fprint(w, `{"error":"numéro IDE non trouvé dans le registre"}`)
-		return
-	}
-	if resp.StatusCode != http.StatusOK {
+		_, _ = fmt.Fprint(w, `{"error":"numéro IDE introuvable au registre du commerce"}`)
+	case err != nil:
+		// Never surface an HTTP status code here: "registre IDE: réponse 403"
+		// read like a typing mistake to users who had typed their number
+		// perfectly. Say what happened and what they can do instead.
 		w.WriteHeader(http.StatusBadGateway)
-		_, _ = fmt.Fprintf(w, `{"error":"registre IDE: réponse %d"}`, resp.StatusCode)
-		return
+		_, _ = fmt.Fprint(w, `{"error":"registre IDE momentanément indisponible — saisissez les informations manuellement"}`)
+	default:
+		out, _ := json.Marshal(company)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(out)
 	}
-
-	var firm struct {
-		Name      string `json:"name"`
-		LegalForm struct {
-			AbbrevName string `json:"abbrevName"`
-		} `json:"legalForm"`
-		Address struct {
-			Street      string `json:"street"`
-			HouseNumber string `json:"houseNumber"`
-			SwissZip    string `json:"swissZip"`
-			Town        string `json:"town"`
-		} `json:"address"`
-		LegalSeat string `json:"legalSeat"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&firm); err != nil {
-		w.WriteHeader(http.StatusBadGateway)
-		_, _ = fmt.Fprint(w, `{"error":"réponse du registre illisible"}`)
-		return
-	}
-
-	street := firm.Address.Street
-	if firm.Address.HouseNumber != "" {
-		street += " " + firm.Address.HouseNumber
-	}
-	city := firm.Address.Town
-	if city == "" {
-		city = firm.LegalSeat
-	}
-
-	out, _ := json.Marshal(map[string]string{
-		"name":                firm.Name,
-		"legal_form":          firm.LegalForm.AbbrevName,
-		"address_street":      strings.TrimSpace(street),
-		"address_postal_code": firm.Address.SwissZip,
-		"address_city":        city,
-		"address_country":     "CH",
-	})
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(out)
 }
 
 // ── Reinstall notification ────────────────────────────────────────────────────
@@ -854,9 +802,9 @@ func runSetupWizard() {
 		}
 
 		// Validate inputs.
-		req.FirstName   = strings.TrimSpace(req.FirstName)
-		req.LastName    = strings.TrimSpace(req.LastName)
-		req.Email       = strings.TrimSpace(req.Email)
+		req.FirstName = strings.TrimSpace(req.FirstName)
+		req.LastName = strings.TrimSpace(req.LastName)
+		req.Email = strings.TrimSpace(req.Email)
 		req.CompanyName = strings.TrimSpace(req.CompanyName)
 		if req.CompanyName == "" {
 			jsonError(w, "La raison sociale est requise.", http.StatusBadRequest)
