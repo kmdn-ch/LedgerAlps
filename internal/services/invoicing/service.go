@@ -511,27 +511,12 @@ func (s *Service) ConvertQuote(ctx context.Context, quoteID, userID string, req 
 	}
 
 	// Re-read the lines rather than trusting a caller-supplied copy: the
-	// invoice must bill exactly what was offered.
-	linesQ := db.Rebind(`
-		SELECT description, quantity, unit, unit_price, discount_pct, vat_rate, sequence
-		FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence`, s.usePostgres)
-	rows, err := tx.QueryContext(ctx, linesQ, quoteID)
+	// invoice must bill exactly what was offered. Loading them in a helper
+	// closes the cursor before the inserts below — SQLite dislikes an open
+	// read cursor on a transaction that then writes.
+	lines, err := s.loadLines(ctx, tx, quoteID)
 	if err != nil {
-		return nil, fmt.Errorf("load quote lines: %w", err)
-	}
-	var lines []LineInput
-	for rows.Next() {
-		var l LineInput
-		if err := rows.Scan(&l.Description, &l.Quantity, &l.Unit, &l.UnitPrice,
-			&l.DiscountPct, &l.VATRate, &l.Sequence); err != nil {
-			rows.Close()
-			return nil, fmt.Errorf("scan quote line: %w", err)
-		}
-		lines = append(lines, l)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read quote lines: %w", err)
+		return nil, err
 	}
 	if len(lines) == 0 {
 		return nil, fmt.Errorf("l'offre ne contient aucune ligne à facturer")
@@ -631,4 +616,31 @@ func (s *Service) SetQuoteOutcome(ctx context.Context, quoteID, outcome string) 
 		return fmt.Errorf("set quote outcome: %w", err)
 	}
 	return nil
+}
+
+// loadLines reads an invoice's or offer's lines. Split out so the cursor is
+// closed by defer before the caller starts writing on the same transaction.
+func (s *Service) loadLines(ctx context.Context, tx *sql.Tx, invoiceID string) ([]LineInput, error) {
+	q := db.Rebind(`
+		SELECT description, quantity, unit, unit_price, discount_pct, vat_rate, sequence
+		FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence`, s.usePostgres)
+	rows, err := tx.QueryContext(ctx, q, invoiceID)
+	if err != nil {
+		return nil, fmt.Errorf("load lines: %w", err)
+	}
+	defer rows.Close()
+
+	var lines []LineInput
+	for rows.Next() {
+		var l LineInput
+		if err := rows.Scan(&l.Description, &l.Quantity, &l.Unit, &l.UnitPrice,
+			&l.DiscountPct, &l.VATRate, &l.Sequence); err != nil {
+			return nil, fmt.Errorf("scan line: %w", err)
+		}
+		lines = append(lines, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read lines: %w", err)
+	}
+	return lines, nil
 }
