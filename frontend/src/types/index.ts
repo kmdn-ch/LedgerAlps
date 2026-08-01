@@ -126,7 +126,17 @@ export interface ContactCreate {
 }
 
 // ─── Factures ─────────────────────────────────────────────────────────────────
-export type DocumentStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled' | 'archived'
+// Exactement les valeurs que l'API accepte et stocke. « En retard » n'en fait
+// pas partie : c'est un état *déduit* de la date d'échéance (voir isOverdue),
+// pas une décision qu'on enregistre. Le proposer ici a produit un bouton
+// « Marquer en retard » que le serveur refusait systématiquement.
+export type DocumentStatus = 'draft' | 'sent' | 'paid' | 'cancelled' | 'archived'
+
+// Ce que l'utilisateur voit. « En retard » s'y ajoute parce qu'une facture
+// envoyée dont l'échéance est passée doit se lire comme telle — mais cette
+// valeur ne remonte jamais dans un changement de statut. Elle sert aussi de
+// filtre de recherche, que le serveur traduit en « envoyée + échue ».
+export type DisplayStatus = DocumentStatus | 'overdue'
 // Une offre n'est jamais « payée » : personne ne doit rien dessus. Elle est
 // acceptée en produisant la facture, refusée, ou expirée.
 export type QuoteOutcome = 'accepted' | 'refused' | 'expired'

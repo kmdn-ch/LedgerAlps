@@ -49,7 +49,14 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 		args = append(args, uid)
 	}
 
-	if status != "" {
+	// "overdue" is a filter, never a stored state: an invoice becomes late
+	// because the due date passed, not because someone marked it. Translating
+	// it here keeps server-side pagination correct — filtering client-side
+	// would only ever search the page currently loaded.
+	if status == "overdue" {
+		where += " AND status = 'sent' AND due_date < ?"
+		args = append(args, time.Now().Format("2006-01-02"))
+	} else if status != "" {
 		where += " AND status = ?"
 		args = append(args, status)
 	}

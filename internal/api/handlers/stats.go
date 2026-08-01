@@ -100,8 +100,6 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 					resp.Invoices.Draft = count
 				case "sent":
 					resp.Invoices.Sent = count
-				case "overdue":
-					resp.Invoices.Overdue = count
 				case "paid":
 					resp.Invoices.Paid = count
 				case "cancelled":
@@ -113,7 +111,31 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 		}
 	}
 
-	// ── Invoices: total receivable (sent + overdue) ───────────────────────────
+	// ── Invoices: overdue ─────────────────────────────────────────────────────
+	// "Overdue" is not a status anybody sets — it is what the calendar does to
+	// an unpaid invoice. It used to be read from the status column, where the
+	// value can never appear (the CHECK constraint forbids it), so this counter
+	// silently reported zero no matter how many invoices were late.
+	//
+	// Sent and Overdue are kept disjoint: Sent counts what is not yet due, so
+	// the two add up to everything outstanding.
+	{
+		q := db.Rebind(`
+			SELECT COUNT(*) FROM invoices
+			WHERE document_type = 'invoice' AND status = 'sent' AND due_date < ?`, h.usesPG)
+		var overdue int
+		if err := h.db.QueryRowContext(ctx, q, time.Now().Format("2006-01-02")).Scan(&overdue); err != nil {
+			log.Printf("stats: overdue invoices query failed: %v", err)
+		} else {
+			resp.Invoices.Overdue = overdue
+			resp.Invoices.Sent -= overdue
+			if resp.Invoices.Sent < 0 {
+				resp.Invoices.Sent = 0
+			}
+		}
+	}
+
+	// ── Invoices: total receivable (sent, due or not) ─────────────────────────
 	{
 		q := db.Rebind(`
 			SELECT COALESCE(SUM(total_amount), 0)

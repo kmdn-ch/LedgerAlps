@@ -12,7 +12,7 @@ import {
 } from 'recharts'
 import { invoicesApi, statsApi } from '@/api/client'
 import { PageHeader, StatCard, StatusBadge, LoadingSpinner } from '@/components/ui'
-import { formatCHF, formatDate } from '@/utils'
+import { formatCHF, formatDate, isOverdue } from '@/utils'
 import type { Invoice } from '@/types'
 
 // Format "YYYY-MM" → short French month label
@@ -36,11 +36,13 @@ export function DashboardPage() {
   })
 
   const totalDue = invoices
-    .filter(i => i.status === 'sent' || i.status === 'overdue')
+    .filter(i => i.status === 'sent')
     .reduce((s, i) => s + i.total_amount - i.amount_paid, 0)
 
+  // Déduit de l'échéance : ce total lisait auparavant un statut 'overdue' que
+  // la base ne peut pas contenir, et affichait donc toujours 0.
   const totalOverdue = invoices
-    .filter(i => i.status === 'overdue')
+    .filter(isOverdue)
     .reduce((s, i) => s + i.total_amount - i.amount_paid, 0)
 
   const recentInvoices = [...invoices]
@@ -172,7 +174,7 @@ export function DashboardPage() {
                   <div className="text-sm font-medium font-mono tabular-nums text-alpine-900">
                     {formatCHF(inv.total_amount)}
                   </div>
-                  <StatusBadge status={inv.status} />
+                  <StatusBadge status={inv.status} overdue={isOverdue(inv)} />
                 </div>
               </Link>
             ))}

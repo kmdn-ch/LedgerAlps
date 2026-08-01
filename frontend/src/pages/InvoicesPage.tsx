@@ -8,10 +8,10 @@ import { invoicesApi, downloadBlob } from '@/api/client'
 import {
   PageHeader, StatusBadge, LoadingSpinner, EmptyState,
 } from '@/components/ui'
-import { formatCHF, formatDate } from '@/utils'
-import type { Invoice, DocumentStatus } from '@/types'
+import { formatCHF, formatDate, isOverdue } from '@/utils'
+import type { Invoice, DisplayStatus } from '@/types'
 
-const STATUS_FILTERS: { value: DocumentStatus | ''; label: string }[] = [
+const STATUS_FILTERS: { value: DisplayStatus | ''; label: string }[] = [
   { value: '',          label: 'Toutes'       },
   { value: 'draft',     label: 'Brouillons'   },
   { value: 'sent',      label: 'Envoyées'     },
@@ -23,7 +23,9 @@ interface Props { mode?: 'invoice' | 'quote' }
 
 export function InvoicesPage({ mode = 'invoice' }: Props) {
   const isQuote = mode === 'quote'
-  const [status,  setStatus]  = useState<DocumentStatus | ''>('')
+  // Le filtre accepte 'overdue' : c'est une question posée au serveur
+  // (« envoyée et échue »), pas un statut qu'on écrirait.
+  const [status,  setStatus]  = useState<DisplayStatus | ''>('')
   const [search,  setSearch]  = useState('')
   const qc = useQueryClient()
 
@@ -141,7 +143,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
                 </td>
                 <td className="text-alpine-600">{formatDate(inv.issue_date)}</td>
                 <td className={`text-alpine-600 ${
-                  inv.status === 'overdue' ? 'text-danger-600 font-medium' : ''
+                  isOverdue(inv) ? 'text-danger-600 font-medium' : ''
                 }`}>
                   {formatDate(inv.due_date)}
                 </td>
@@ -149,7 +151,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
                 <td className="text-right font-mono font-medium tabular-nums">
                   {formatCHF(inv.total_amount)}
                 </td>
-                <td><StatusBadge status={inv.status} /></td>
+                <td><StatusBadge status={inv.status} overdue={isOverdue(inv)} /></td>
                 <td>
                   <div className="flex items-center gap-1 justify-end">
                     {inv.status === 'sent' && (

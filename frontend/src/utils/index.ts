@@ -4,7 +4,7 @@ import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { DocumentStatus } from '@/types'
+import type { DisplayStatus } from '@/types'
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs))
@@ -28,7 +28,7 @@ export function formatDate(iso: string | null | undefined, fmt = 'dd.MM.yyyy'): 
 }
 
 // ─── Badge status ─────────────────────────────────────────────────────────────
-const STATUS_LABELS: Record<DocumentStatus, string> = {
+const STATUS_LABELS: Record<DisplayStatus, string> = {
   draft:     'Brouillon',
   sent:      'Envoyée',
   paid:      'Payée',
@@ -37,7 +37,7 @@ const STATUS_LABELS: Record<DocumentStatus, string> = {
   archived:  'Archivée',
 }
 
-const STATUS_CLASS: Record<DocumentStatus, string> = {
+const STATUS_CLASS: Record<DisplayStatus, string> = {
   draft:     'badge-draft',
   sent:      'badge-sent',
   paid:      'badge-paid',
@@ -46,8 +46,8 @@ const STATUS_CLASS: Record<DocumentStatus, string> = {
   archived:  'badge-archived',
 }
 
-export function statusLabel(s: DocumentStatus): string { return STATUS_LABELS[s] ?? s }
-export function statusClass(s: DocumentStatus): string { return STATUS_CLASS[s] ?? 'badge-draft' }
+export function statusLabel(s: DisplayStatus): string { return STATUS_LABELS[s] ?? s }
+export function statusClass(s: DisplayStatus): string { return STATUS_CLASS[s] ?? 'badge-draft' }
 
 // ─── IBAN formaté ─────────────────────────────────────────────────────────────
 export function formatIBAN(iban: string): string {
@@ -63,4 +63,14 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.download = filename
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// Une facture est en retard parce que la date d'échéance est passée, pas parce
+// qu'on l'a décidé. Seule une facture envoyée peut l'être : un brouillon n'a
+// jamais été réclamé, une facture payée ou annulée ne doit plus rien.
+export function isOverdue(inv: { status: string; due_date: string | null; document_type?: string }): boolean {
+  if (inv.status !== 'sent') return false
+  if (inv.document_type && inv.document_type !== 'invoice') return false
+  if (!inv.due_date) return false
+  return inv.due_date < new Date().toISOString().slice(0, 10)
 }

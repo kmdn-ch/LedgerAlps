@@ -5,14 +5,14 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Download, Eye, EyeOff, Send, CheckCircle,
-  XCircle, Archive, Loader2, Pencil, RotateCcw, FileText, Clock,
+  XCircle, Archive, Pencil, RotateCcw, FileText, Clock,
 } from 'lucide-react'
 import { invoicesApi, downloadBlob } from '@/api/client'
 import {
   PageHeader, StatusBadge, LoadingSpinner, ErrorBanner,
   SectionTitle, PDFPreview,
 } from '@/components/ui'
-import { formatCHF, formatDate } from '@/utils'
+import { formatCHF, formatDate, isOverdue } from '@/utils'
 import type { DocumentStatus, Invoice, QuoteOutcome } from '@/types'
 
 // ─── Transitions de statut autorisées ────────────────────────────────────────
@@ -23,11 +23,6 @@ const TRANSITIONS: Record<DocumentStatus, { status: DocumentStatus; label: strin
     { status: 'cancelled', label: 'Annuler',           icon: XCircle,     className: 'btn-ghost text-danger-600' },
   ],
   sent:      [
-    { status: 'paid',      label: 'Marquer payée',    icon: CheckCircle, className: 'btn-primary' },
-    { status: 'overdue',   label: 'Marquer en retard',icon: Loader2,     className: 'btn-ghost text-warning-600' },
-    { status: 'cancelled', label: 'Annuler',           icon: XCircle,     className: 'btn-ghost text-danger-600' },
-  ],
-  overdue:   [
     { status: 'paid',      label: 'Marquer payée',    icon: CheckCircle, className: 'btn-primary' },
     { status: 'cancelled', label: 'Annuler',           icon: XCircle,     className: 'btn-ghost text-danger-600' },
   ],
@@ -272,7 +267,7 @@ export function InvoiceDetailPage() {
           <dl className="text-sm space-y-2">
             <div className="flex justify-between">
               <dt className="text-alpine-500">Statut</dt>
-              <dd><StatusBadge status={invoice.status} /></dd>
+              <dd><StatusBadge status={invoice.status} overdue={isOverdue(invoice)} /></dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-alpine-500">Date d'émission</dt>
@@ -280,7 +275,7 @@ export function InvoiceDetailPage() {
             </div>
             <div className="flex justify-between">
               <dt className="text-alpine-500">Échéance</dt>
-              <dd className={`${invoice.status === 'overdue' ? 'text-danger-600 font-medium' : 'text-alpine-800'}`}>
+              <dd className={`${isOverdue(invoice) ? 'text-danger-600 font-medium' : 'text-alpine-800'}`}>
                 {formatDate(invoice.due_date)}
               </dd>
             </div>

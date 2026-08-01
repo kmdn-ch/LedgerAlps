@@ -285,3 +285,33 @@ func TestQuotesAndInvoicesUseSeparateSequences(t *testing.T) {
 		t.Error("two offers received the same number")
 	}
 }
+
+// ─── « En retard » ────────────────────────────────────────────────────────────
+
+// "overdue" was offered as a status by the UI but never existed server-side:
+// the CHECK constraint forbids it and validTransitions has no path to it, so
+// the "Marquer en retard" button could only ever fail. It is a derived state —
+// an unpaid invoice past its due date — and must stay one.
+func TestOverdueIsNotAStatusTheServerAccepts(t *testing.T) {
+	f := newFixture(t)
+	inv := f.create(t, DocumentTypeInvoice)
+	ctx := context.Background()
+	if err := f.svc.Transition(ctx, inv.ID, models.InvoiceStatusSent); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	err := f.svc.Transition(ctx, inv.ID, models.InvoiceStatus("overdue"))
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("sent → overdue returned %v, want ErrInvalidTransition", err)
+	}
+
+	// And the invoice must be untouched: a rejected transition that still wrote
+	// would leave a status the CHECK constraint forbids.
+	var status string
+	if err := f.db.QueryRow(`SELECT status FROM invoices WHERE id = ?`, inv.ID).Scan(&status); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if status != string(models.InvoiceStatusSent) {
+		t.Errorf("status = %q after a refused transition, want sent", status)
+	}
+}
