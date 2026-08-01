@@ -9,6 +9,55 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
+## [1.4.2] — 2026-08-01
+
+### Modifié
+- **Plateformes publiées réduites à Windows x86-64 et Linux x86-64.** macOS et toutes les variantes ARM sont abandonnées : ces binaires étaient produits parce que la compilation croisée Go ne coûte rien, pas parce qu'ils étaient testés — il n'existe aucune machine macOS ni ARM dans la CI. Sur un PC Windows ARM, l'installeur x86-64 fonctionne par émulation ; pour macOS ou ARM, le projet reste compilable depuis les sources
+- `scripts/install.sh` refuse macOS et ARM en indiquant la raison, au lieu de tenter un téléchargement qui répondrait 404
+
+### Corrigé
+- **L'archive `windows_arm64` ne contenait que `ledgeralps-cli.exe`** — ni serveur ni lanceur. Quiconque téléchargeait le fichier portant le nom de son architecture obtenait un outil en ligne de commande sans rien à piloter. Présent depuis la v1.3.15 au moins, passé inaperçu faute de test. Résolu par la suppression de la cible
+- **Le dossier d'installation survivait à la désinstallation.** Les installations antérieures à la v1.1.1 livraient l'interface en fichiers séparés (`index.html`, `assets\`) ; les mises à jour ne les ont jamais retirés, et le `RMDir` non récursif du désinstalleur — volontairement prudent, pour ne jamais effacer un fichier déposé par l'utilisateur — échouait donc en silence. Ces reliquats sont désormais nettoyés à l'installation comme à la désinstallation
+
+### Documentation
+- Nouvelle section « Plateformes prises en charge » dans la roadmap, avec le raisonnement de l'abandon
+- Rattrapage des entrées 1.4.0 et 1.4.1, absentes de ce fichier alors qu'il est livré dans chaque archive
+
+---
+
+## [1.4.1] — 2026-08-01
+
+### Corrigé
+- **Recherche IDE de l'assistant de premier démarrage** : l'endpoint interrogé répondait 403 à tout le monde, et non à cause d'une saisie erronée. La recherche passe désormais par la route publique du registre. Le code existait en double — serveur et lanceur — si bien que corriger un seul côté laissait l'assistant cassé ; implémentation unifiée dans `internal/core/zefix`
+- Le code postal était perdu en silence (champ JSON mal nommé)
+- Les données société saisies dans l'assistant sont bien enregistrées et visibles dans Paramètres ; en cas d'échec, l'assistant le signale au lieu d'annoncer un succès
+- Une panne du registre n'affiche plus de code HTTP : le message invite à saisir les informations manuellement
+
+### Sécurité
+- Jeton de rafraîchissement déplacé dans un cookie **HttpOnly + SameSite=Strict**, inaccessible au JavaScript de la page
+- La déconnexion révoque le jeton côté serveur
+- Suppression de tout appel à Google Fonts : ouvrir l'application ne signale plus son usage à un tiers
+- bcrypt sorti du budget de la transaction base de données (Bootstrap, Login)
+
+### Modifié
+- Bannières de conformité repliables (~40 px au lieu de ~180)
+- Messages de validation et libellés d'accessibilité
+
+---
+
+## [1.4.0] — 2026-07-28
+
+### Ajouté
+- **Veille de conformité automatisée** — surveillance hebdomadaire de Fedlex (SPARQL) pour nLPD, OPDo, LTVA et CO, de SIX pour les Implementation Guidelines QR-facture, et d'EUR-Lex pour le RGPD. Une évolution ouvre une issue ; l'avis est **rédigé par un humain avec citation de la source**, jamais généré automatiquement
+- **Avis de conformité dans l'application**, servis depuis un flux embarqué dans le binaire — fonctionne hors ligne
+- **Vérification de mise à jour** — seul appel réseau sortant du produit, sans identifiant ni télémétrie, résultat mis en cache 24 h, échec silencieux, désactivable par `UPDATE_CHECK=false`
+
+### Documentation
+- Suppression du code Python/FastAPI, de `docker-compose.yml` et du script Inno Setup orphelin
+- Réécriture d'`ARCHITECTURE.md` et `PRODUCTION.md` ; README recentré sur l'utilisateur
+
+---
+
 ## [1.3.16-rc1] — 2026-07-27
 
 > Pré-version publiée depuis la branche `test` pour validation.
@@ -161,6 +210,9 @@ automatiquement à chaque publication.
 
 ---
 
-[Unreleased]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.3.15...v1.4.0
 [1.0.0]: https://github.com/kmdn-ch/LedgerAlps/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/kmdn-ch/LedgerAlps/releases/tag/v0.1.0
