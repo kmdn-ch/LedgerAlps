@@ -123,6 +123,14 @@ Section "LedgerAlps (required)" SecMain
 
   ; Note: the React frontend is embedded inside ledgeralps-server.exe (Go embed).
   ; No separate dist\ folder is needed in the install directory.
+  ;
+  ; Builds before v1.1.1 shipped the frontend as loose files. Upgrading never
+  ; removed them, so installations that go back that far still carry a stale
+  ; index.html and assets\ that nothing reads — and, because the uninstaller
+  ; used a non-recursive RMDir, they kept the install directory alive after an
+  ; uninstall. Clearing them here retires the leftovers on the next upgrade.
+  Delete "$INSTDIR\index.html"
+  RMDir /r "$INSTDIR\assets"
 
   ; ── Shortcuts ──────────────────────────────────────────────────────────── ;
   ; Start Menu
@@ -186,6 +194,14 @@ Section "Uninstall"
   Delete "$INSTDIR\${SERVER_EXE}"
   Delete "$INSTDIR\${CLI_EXE}"
   Delete "$INSTDIR\LICENSE"
+
+  ; Pre-v1.1.1 leftovers (see the installer section). RMDir below is deliberately
+  ; non-recursive so it never deletes files a user put here themselves; without
+  ; clearing these two first, it silently fails and the folder outlives the
+  ; uninstall.
+  Delete "$INSTDIR\index.html"
+  RMDir /r "$INSTDIR\assets"
+
   Delete "$INSTDIR\Uninstall.exe"
   RMDir  "$INSTDIR"
 

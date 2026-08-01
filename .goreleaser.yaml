@@ -8,6 +8,15 @@ before:
     # The CI runs `npm run build` before goreleaser, so frontend/dist/ exists.
     - bash -c "mkdir -p internal/frontend/dist && cp -r frontend/dist/. internal/frontend/dist/"
 
+# Supported platforms: windows/amd64 and linux/amd64 — nothing else.
+#
+# macOS and every ARM variant were dropped after v1.4.1. They were produced
+# because cross-compiling them is free, not because they were tested: no macOS
+# or ARM machine exists in CI or in the project, so those artefacts shipped
+# unverified. The windows/arm64 archive made the cost concrete — it contained
+# only ledgeralps-cli.exe, with no server and no launcher, so anyone who
+# downloaded the file named for their architecture got an unusable package.
+# Publishing a binary is a promise it works; these could not keep it.
 builds:
   - id: ledgeralps-server
     main: ./cmd/server
@@ -16,10 +25,8 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-      - darwin
     goarch:
       - amd64
-      - arm64
     ldflags:
       - -s -w
       - -X github.com/kmdn-ch/ledgeralps/version.version={{.Version}}
@@ -74,11 +81,9 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-      - darwin
       - windows
     goarch:
       - amd64
-      - arm64
     ldflags:
       - -s -w
       - -X github.com/kmdn-ch/ledgeralps/version.version={{.Version}}
@@ -91,8 +96,12 @@ archives:
   - id: ledgeralps
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     # The launcher is Windows-only, so the Windows archive has 3 binaries
-    # (server + cli + launcher) while Linux/macOS archives have 2. This is
+    # (server + cli + launcher) while the Linux archive has 2. This is
     # intentional — allow_different_binary_count suppresses the goreleaser check.
+    #
+    # Keep this flag narrow in scope: it is also what let the windows/arm64
+    # archive ship with a single binary and no warning. With the matrix reduced
+    # to two platforms, a missing binary is now visible in the asset sizes.
     allow_different_binary_count: true
     format_overrides:
       - goos: windows
@@ -194,7 +203,7 @@ release:
     Vos données sont enregistrées dans `%APPDATA%\LedgerAlps\` et sont conservées
     lors des mises à jour comme des désinstallations.
 
-    **Linux / macOS**
+    **Linux (x86-64)**
 
     ```bash
     curl -fsSL https://raw.githubusercontent.com/kmdn-ch/ledgeralps/main/scripts/install.sh | bash
@@ -203,6 +212,14 @@ release:
     Paquets `.deb` et `.rpm` également disponibles ci-dessous.
     Pour un déploiement serveur (systemd, PostgreSQL, sauvegardes), voir
     [docs/PRODUCTION.md](https://github.com/kmdn-ch/LedgerAlps/blob/main/docs/PRODUCTION.md).
+
+    **Plateformes prises en charge**
+
+    Windows x86-64 et Linux x86-64 uniquement. macOS et les processeurs ARM
+    ne sont plus publiés depuis la v1.4.1 : ces binaires étaient produits sans
+    être testés, faute de machine correspondante. Sur un PC Windows ARM, c'est
+    l'installeur x86-64 ci-dessous qu'il faut utiliser — Windows l'exécute par
+    émulation.
 
 snapshot:
   version_template: "{{ incpatch .Version }}-dev+{{ .ShortCommit }}"

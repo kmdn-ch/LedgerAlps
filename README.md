@@ -26,7 +26,12 @@ tout — il n'y a rien à configurer.
 > Vos données sont enregistrées dans `%APPDATA%\LedgerAlps\` et sont conservées
 > lors des mises à jour comme des désinstallations.
 
-*Linux et macOS : voir le [guide de déploiement](docs/PRODUCTION.md).*
+*Linux : voir le [guide de déploiement](docs/PRODUCTION.md).*
+
+*LedgerAlps est publié pour **Windows x86-64** et **Linux x86-64**. Sur un PC
+Windows ARM, l'installeur ci-dessus fonctionne par émulation. Pour macOS ou
+ARM, il faut compiler depuis les sources — voir la
+[roadmap](ROADMAP.md#plateformes-prises-en-charge) pour le pourquoi.*
 
 ---
 
@@ -103,7 +108,7 @@ un outil, pas un conseil fiscal** : votre fiduciaire reste votre interlocuteur.
 
 | Document | Pour qui |
 |---|---|
-| [Déploiement serveur](docs/PRODUCTION.md) | installer sur Linux/macOS ou un serveur du bureau |
+| [Déploiement serveur](docs/PRODUCTION.md) | installer sur Linux ou un serveur du bureau |
 | [Architecture](docs/ARCHITECTURE.md) | comprendre comment c'est construit |
 | [Développement](docs/DEVELOPMENT.md) | compiler, tester, contribuer |
 | [Référence API](docs/API.md) | intégrer un autre outil |

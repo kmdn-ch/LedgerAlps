@@ -17,7 +17,7 @@ env:
 
 jobs:
   goreleaser:
-    name: GoReleaser (Linux + macOS + Windows binaries)
+    name: GoReleaser (Linux + Windows x86-64 binaries)
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}

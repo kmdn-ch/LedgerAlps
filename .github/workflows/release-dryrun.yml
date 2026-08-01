@@ -2,8 +2,8 @@ name: Release (dry run)
 
 # Répétition complète d'une release SANS rien publier.
 #
-# Produit exactement les mêmes artefacts que `release.yml` — binaires Linux /
-# macOS / Windows, paquets .deb/.rpm, installeur NSIS — mais les dépose comme
+# Produit exactement les mêmes artefacts que `release.yml` — binaires Linux et
+# Windows x86-64, paquets .deb/.rpm, installeur NSIS — mais les dépose comme
 # artefacts de workflow au lieu de créer une GitHub Release. Rien n'apparaît
 # publiquement, aucun tag n'est posé.
 #

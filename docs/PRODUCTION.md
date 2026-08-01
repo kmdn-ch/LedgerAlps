@@ -2,7 +2,7 @@
 
 > **La plupart des utilisateurs n'ont pas besoin de ce document.** Sur Windows,
 > l'installeur fait tout : voir le [README](../README.md). Cette page s'adresse
-> à qui veut faire tourner LedgerAlps sur un serveur Linux ou macOS, par exemple
+> à qui veut faire tourner LedgerAlps sur un serveur Linux x86-64, par exemple
 > pour y accéder depuis plusieurs postes du bureau.
 
 LedgerAlps reste **local-first** : même déployé sur un serveur, il est conçu

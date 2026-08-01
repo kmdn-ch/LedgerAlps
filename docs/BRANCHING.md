@@ -66,7 +66,7 @@ gh workflow run "Release (dry run)" --ref test
 ```
 
 Construit **exactement** les mêmes artefacts que la vraie release — binaires
-Linux/macOS/Windows, `.deb`, `.rpm`, checksums, installeur NSIS — et les dépose
+Linux et Windows x86-64, `.deb`, `.rpm`, checksums, installeur NSIS — et les dépose
 comme artefacts de workflow téléchargeables 7 jours. Aucune GitHub Release,
 aucun tag. Le workflow tourne avec `permissions: contents: read` : il lui est
 techniquement impossible de publier.

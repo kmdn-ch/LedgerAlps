@@ -64,6 +64,44 @@ suppose un serveur central que le produit n'a pas, et ne veut pas avoir.
 
 ---
 
+## Plateformes prises en charge
+
+**Windows x86-64** et **Linux x86-64**. Rien d'autre.
+
+| Plateforme | Livrable | Statut |
+|---|---|---|
+| Windows x86-64 | `LedgerAlps_Setup_*.exe` (+ archive `.zip`) | ✅ Pris en charge |
+| Linux x86-64 | `.deb`, `.rpm` (+ archive `.tar.gz`) | ✅ Pris en charge |
+| macOS (Intel et Apple Silicon) | — | ❌ Abandonné après v1.4.1 |
+| Windows / Linux ARM64 | — | ❌ Abandonné après v1.4.1 |
+
+**Pourquoi cet abandon.** Ces binaires étaient publiés parce que la compilation
+croisée en Go ne coûte rien, pas parce qu'ils étaient testés : il n'existe ni
+machine macOS ni machine ARM dans la CI ni dans le projet. Ils étaient donc
+livrés sans qu'aucune vérification n'ait été possible.
+
+L'archive `windows_arm64` a rendu le coût concret : elle ne contenait que
+`ledgeralps-cli.exe`, sans serveur ni lanceur — soit un outil en ligne de
+commande sans rien à piloter. Quiconque téléchargeait le fichier portant le nom
+de son architecture obtenait un paquet inutilisable, et ce depuis la v1.3.15 au
+moins. Personne ne s'en est aperçu, précisément parce que personne ne testait.
+
+Publier un binaire, c'est promettre qu'il fonctionne. Deux plateformes tenues
+valent mieux que six supposées.
+
+**Conséquences pratiques**
+- **PC Windows ARM** (Surface, portables Snapdragon) : utiliser l'installeur
+  x86-64, que Windows exécute par émulation.
+- **macOS, Linux ARM, Raspberry Pi** : compiler depuis les sources
+  (`make build`, Go 1.26+). Le code reste portable ; c'est la *publication*
+  d'artefacts non testés qui s'arrête, pas la compatibilité.
+- `scripts/install.sh` refuse désormais ces plateformes avec un message
+  explicite, au lieu de tenter un téléchargement qui répondrait 404.
+
+Une plateforme sera réintégrée le jour où elle sera testée en CI, pas avant.
+
+---
+
 ## Complété
 
 | Version | Fonctionnalité | Date |

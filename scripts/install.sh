@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# LedgerAlps — Linux / macOS installer
+# LedgerAlps — Linux x86-64 installer
 #
 # Usage (one-liner):
 #   curl -fsSL https://raw.githubusercontent.com/kmdn-ch/ledgeralps/main/scripts/install.sh | bash
@@ -37,15 +37,17 @@ detect_platform() {
   OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
   ARCH="$(uname -m)"
 
+  # Only linux/amd64 is published. Refusing here, with the reason, beats
+  # letting the download fail on a 404 the user has to decode themselves.
   case "$OS" in
     linux)  OS="linux" ;;
-    darwin) OS="darwin" ;;
-    *)      error "Unsupported OS: $OS. Use scripts/install.ps1 on Windows." ;;
+    darwin) error "macOS builds were discontinued after v1.4.1: they shipped untested, with no macOS machine in CI. Build from source with 'make build' (Go 1.26+)." ;;
+    *)      error "Unsupported OS: $OS. Use the Windows installer from the releases page." ;;
   esac
 
   case "$ARCH" in
     x86_64|amd64)  ARCH="amd64" ;;
-    aarch64|arm64) ARCH="arm64" ;;
+    aarch64|arm64) error "ARM builds were discontinued after v1.4.1: they shipped untested, with no ARM machine in CI. Build from source with 'make build' (Go 1.26+)." ;;
     *)             error "Unsupported architecture: $ARCH" ;;
   esac
 
