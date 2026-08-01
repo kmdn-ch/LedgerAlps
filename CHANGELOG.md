@@ -7,6 +7,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+---
+
+## [1.4.3] — 2026-08-01
+
 ### Ajouté
 - **Conversion d'une offre en facture** — `POST /invoices/:id/convert`, et un bouton « Convertir en facture » sur le détail d'une offre. **L'offre est conservée, pas transformée** : le client en détient une copie, et remplacer l'enregistrement le laisserait citer une référence disparue de votre système — le lien que le CO art. 958f al. 3 demande de garantir. La facture porte son propre numéro `FA-`, reprend les lignes à l'identique et référence l'offre par `converted_from_id` ; l'offre est marquée « acceptée ». Une seconde conversion est refusée (`409`) : c'est la garde contre une double facturation
 - **Issue commerciale d'une offre** — `POST /invoices/:id/outcome` enregistre `refused` ou `expired`. `accepted` n'y est pas acceptée : une offre s'accepte en produisant la facture, jamais en basculant un champ, faute de quoi une offre pourrait se lire « acceptée » sans facture derrière
@@ -230,7 +234,8 @@ automatiquement à chaque publication.
 
 ---
 
-[Unreleased]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.3...HEAD
+[1.4.3]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.3.15...v1.4.0
