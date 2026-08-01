@@ -194,6 +194,8 @@ func cmdBackup(args []string) {
 	keep := fs.Int("keep", db.DefaultKeep, "number of snapshots to retain")
 	dir := fs.String("dir", "", "backup directory (default: <app data>/backups)")
 	sqlitePath := fs.String("sqlite-path", "", "database to back up (default: the configured one)")
+	passphrase := fs.String("passphrase", "",
+		"encrypt the snapshot with this passphrase (or set BACKUP_PASSPHRASE)")
 	_ = fs.Parse(args)
 
 	cfg := config.Load()
@@ -210,14 +212,25 @@ func cmdBackup(args []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	path, err := db.Backup(ctx, database, cfg, target)
+	pass := resolvePassphrase(*passphrase)
+	path, err := db.Backup(ctx, database, cfg, target, pass)
 	if err != nil {
 		fatalf("backup failed: %v", err)
 	}
-	if err := db.Verify(ctx, path); err != nil {
-		fatalf("backup written to %s but failed verification: %v", path, err)
+	if pass == "" {
+		if err := db.Verify(ctx, path); err != nil {
+			fatalf("backup written to %s but failed verification: %v", path, err)
+		}
+		fmt.Printf("ledgeralps-cli: backup written and verified: %s\n", path)
+		fmt.Println("  NOT encrypted — on removable media, use --passphrase (nLPD art. 8)")
+	} else {
+		// An encrypted snapshot is not a database, so Verify cannot read it
+		// here. Backup already decrypted it and ran the integrity check before
+		// removing the plaintext: the same verification, done earlier.
+		fmt.Printf("ledgeralps-cli: encrypted backup written and verified: %s\n", path)
+		fmt.Println("  Keep the passphrase somewhere other than this machine.")
+		fmt.Println("  Without it the snapshot cannot be restored — by anyone, including you.")
 	}
-	fmt.Printf("ledgeralps-cli: backup written and verified: %s\n", path)
 
 	removed, err := db.Prune(target, *keep)
 	if err != nil {
@@ -258,6 +271,8 @@ func cmdRestore(args []string) {
 	dir := fs.String("dir", "", "backup directory (default: <app data>/backups)")
 	sqlitePath := fs.String("sqlite-path", "", "database to overwrite (default: the configured one)")
 	confirm := fs.Bool("confirm", false, "required: acknowledge that the target database will be overwritten")
+	restorePass := fs.String("passphrase", "",
+		"passphrase of an encrypted snapshot (or set BACKUP_PASSPHRASE)")
 	_ = fs.Parse(args)
 
 	if *file == "" {
@@ -291,7 +306,7 @@ func cmdRestore(args []string) {
 
 	fmt.Printf("ledgeralps-cli: restoring %s over %s\n", *file, cfg.SQLitePath)
 
-	prev, err := db.Restore(ctx, cfg, *file, target)
+	prev, err := db.Restore(ctx, cfg, *file, target, resolvePassphrase(*restorePass))
 	if err != nil {
 		fatalf("restore failed: %v", err)
 	}
@@ -329,4 +344,16 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// resolvePassphrase prefers the flag, falling back to BACKUP_PASSPHRASE.
+//
+// The environment variable exists because a passphrase on the command line ends
+// up in the shell history and, on Linux, in /proc where any local user can read
+// it. Scheduled backups should use the variable.
+func resolvePassphrase(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	return os.Getenv("BACKUP_PASSPHRASE")
 }

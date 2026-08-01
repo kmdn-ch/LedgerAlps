@@ -125,9 +125,32 @@ de 24 h. Les sauvegardes vont dans `<données applicatives>/backups`.
 **À faire vous-même :** copier ces instantanés hors de la machine (NAS, disque
 externe chiffré). Une sauvegarde qui vit sur le disque qui meurt ne sauve rien.
 
-**nLPD art. 8** : les sauvegardes ne sont pas chiffrées aujourd'hui. Sur un
-support amovible, utilisez un volume chiffré (LUKS, VeraCrypt, BitLocker). Le
-chiffrement natif est à la [roadmap](../ROADMAP.md).
+### Sauvegardes chiffrées
+
+```bash
+export BACKUP_PASSPHRASE='une phrase de passe distincte du mot de passe de session'
+ledgeralps-cli backup                              # instantané chiffré
+ledgeralps-cli restore --file=….db.enc --confirm   # serveur ARRÊTÉ
+```
+
+Argon2id dérive la clé, XChaCha20-Poly1305 chiffre le contenu — pur Go, aucune
+dépendance système. Le fichier prend le suffixe `.enc`, ce qui montre d'un coup
+d'œil quelles copies sont protégées.
+
+**La copie en clair n'est effacée qu'après vérification** : l'instantané chiffré
+est relu, déchiffré, et son intégrité SQLite contrôlée. Une sauvegarde qu'on ne
+peut pas restaurer n'est pas une sauvegarde, et le moment où on s'en aperçoit
+est celui où on en avait besoin.
+
+⚠️ **Conservez la phrase de passe ailleurs que sur cette machine.** Sans elle,
+l'instantané est définitivement illisible — pour vous comme pour quiconque.
+Et choisissez-la **distincte du mot de passe de session** : sinon, perdre le
+poste revient à perdre aussi les sauvegardes.
+
+> Le chiffrement de la base elle-même (au repos, en fonctionnement) n'est pas
+> disponible : il exigerait SQLCipher, une bibliothèque C, donc l'abandon de la
+> compilation croisée et du binaire unique. Voir la [roadmap](../ROADMAP.md).
+> En attendant, sur un poste mobile, chiffrez le disque (BitLocker, LUKS).
 
 ## Vérification de mise à jour
 
@@ -155,6 +178,7 @@ export UPDATE_CHECK=false
 | `DEBUG` | `false` | Journalisation verbeuse |
 | `LOG_LEVEL` | `INFO` | Niveau de journal |
 | `UPDATE_CHECK` | `true` | Vérifier l'existence d'une version plus récente. `false` = aucun appel réseau |
+| `BACKUP_PASSPHRASE` | vide | Si définie, chiffre les sauvegardes. À conserver hors de la machine |
 
 > **Attention à la précédence.** Si un fichier `config.json` existe dans le
 > répertoire de données applicatives, il **prime sur ces variables**. C'est

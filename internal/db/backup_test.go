@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,7 +37,7 @@ func TestBackupProducesVerifiableSnapshot(t *testing.T) {
 	database, cfg := newTestDB(t)
 	dir := t.TempDir()
 
-	path, err := Backup(context.Background(), database, cfg, dir)
+	path, err := Backup(context.Background(), database, cfg, dir, "")
 	if err != nil {
 		t.Fatalf("Backup: %v", err)
 	}
@@ -52,7 +53,7 @@ func TestBackupSnapshotContainsData(t *testing.T) {
 	database, cfg := newTestDB(t)
 	dir := t.TempDir()
 
-	path, err := Backup(context.Background(), database, cfg, dir)
+	path, err := Backup(context.Background(), database, cfg, dir, "")
 	if err != nil {
 		t.Fatalf("Backup: %v", err)
 	}
@@ -76,11 +77,11 @@ func TestBackupDoesNotOverwriteExistingSnapshot(t *testing.T) {
 	database, cfg := newTestDB(t)
 	dir := t.TempDir()
 
-	first, err := Backup(context.Background(), database, cfg, dir)
+	first, err := Backup(context.Background(), database, cfg, dir, "")
 	if err != nil {
 		t.Fatalf("first Backup: %v", err)
 	}
-	second, err := Backup(context.Background(), database, cfg, dir)
+	second, err := Backup(context.Background(), database, cfg, dir, "")
 	if err != nil {
 		t.Fatalf("second Backup: %v", err)
 	}
@@ -175,7 +176,7 @@ func TestRestoreReplacesLiveDatabaseAndSnapshotsPrevious(t *testing.T) {
 	dir := t.TempDir()
 
 	// Snapshot the original state, then mutate the live database.
-	snapshot, err := Backup(context.Background(), database, cfg, dir)
+	snapshot, err := Backup(context.Background(), database, cfg, dir, "")
 	if err != nil {
 		t.Fatalf("Backup: %v", err)
 	}
@@ -184,7 +185,7 @@ func TestRestoreReplacesLiveDatabaseAndSnapshotsPrevious(t *testing.T) {
 	}
 	database.Close() // restore requires the server to be stopped
 
-	prev, err := Restore(context.Background(), cfg, snapshot, dir)
+	prev, err := Restore(context.Background(), cfg, snapshot, dir, "")
 	if err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
@@ -216,7 +217,7 @@ func TestRestoreRefusesCorruptSource(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("not a database"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Restore(context.Background(), cfg, bad, dir); err == nil {
+	if _, err := Restore(context.Background(), cfg, bad, dir, ""); err == nil {
 		t.Error("Restore must refuse a snapshot that fails verification")
 	}
 }
@@ -225,7 +226,7 @@ func TestMaybeAutoBackupRespectsInterval(t *testing.T) {
 	database, cfg := newTestDB(t)
 	dir := t.TempDir()
 
-	first, err := MaybeAutoBackup(context.Background(), database, cfg, dir, time.Hour, DefaultKeep)
+	first, err := MaybeAutoBackup(context.Background(), database, cfg, dir, time.Hour, DefaultKeep, "")
 	if err != nil {
 		t.Fatalf("first MaybeAutoBackup: %v", err)
 	}
@@ -234,7 +235,7 @@ func TestMaybeAutoBackupRespectsInterval(t *testing.T) {
 	}
 
 	// A second call inside the interval must be a no-op.
-	second, err := MaybeAutoBackup(context.Background(), database, cfg, dir, time.Hour, DefaultKeep)
+	second, err := MaybeAutoBackup(context.Background(), database, cfg, dir, time.Hour, DefaultKeep, "")
 	if err != nil {
 		t.Fatalf("second MaybeAutoBackup: %v", err)
 	}
@@ -243,7 +244,7 @@ func TestMaybeAutoBackupRespectsInterval(t *testing.T) {
 	}
 
 	// With a zero-length interval a fresh snapshot is due immediately.
-	third, err := MaybeAutoBackup(context.Background(), database, cfg, dir, time.Nanosecond, DefaultKeep)
+	third, err := MaybeAutoBackup(context.Background(), database, cfg, dir, time.Nanosecond, DefaultKeep, "")
 	if err != nil {
 		t.Fatalf("third MaybeAutoBackup: %v", err)
 	}
@@ -255,7 +256,122 @@ func TestMaybeAutoBackupRespectsInterval(t *testing.T) {
 func TestBackupRejectsPostgres(t *testing.T) {
 	database, _ := newTestDB(t)
 	cfg := &config.Config{PostgresDSN: "postgres://localhost/ledgeralps"}
-	if _, err := Backup(context.Background(), database, cfg, t.TempDir()); err != ErrPostgresUnsupported {
+	if _, err := Backup(context.Background(), database, cfg, t.TempDir(), ""); err != ErrPostgresUnsupported {
 		t.Errorf("Backup on PostgreSQL = %v, want ErrPostgresUnsupported", err)
+	}
+}
+
+// ─── Sauvegardes chiffrées ────────────────────────────────────────────────────
+
+// The whole round trip on a real database: encrypt, restore, and confirm the
+// data survived. Unit tests on the cipher prove the bytes come back; this
+// proves the ledger does.
+func TestEncryptedBackupRestoresTheLedger(t *testing.T) {
+	database, cfg := newTestDB(t)
+	if _, err := database.Exec(
+		`INSERT INTO ledger (id, memo) VALUES (2, ?)`, "Client Chiffré SA"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	path, err := Backup(ctx, database, cfg, dir, "phrase de passe distincte")
+	if err != nil {
+		t.Fatalf("encrypted backup: %v", err)
+	}
+	if enc, _ := IsEncrypted(path); !enc {
+		t.Fatal("the snapshot was not encrypted")
+	}
+	// The plaintext must not have been left next to it.
+	if _, err := os.Stat(strings.TrimSuffix(path, ".enc")); !os.IsNotExist(err) {
+		t.Error("the plaintext snapshot is still on disk beside the encrypted one")
+	}
+
+	database.Close()
+	if _, err := Restore(ctx, cfg, path, dir, "phrase de passe distincte"); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+
+	reopened, err := Open(cfg)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer reopened.Close()
+	var memo string
+	if err := reopened.QueryRow(`SELECT memo FROM ledger WHERE id = 2`).Scan(&memo); err != nil {
+		t.Fatalf("the restored database lost its data: %v", err)
+	}
+	if memo != "Client Chiffré SA" {
+		t.Errorf("restored memo = %q, want the original", memo)
+	}
+}
+
+// A restore attempted with the wrong passphrase must leave the live database
+// exactly as it was — this is the moment where a mistake destroys the ledger.
+func TestFailedDecryptionLeavesTheLiveDatabaseAlone(t *testing.T) {
+	database, cfg := newTestDB(t)
+	if _, err := database.Exec(
+		`INSERT INTO ledger (id, memo) VALUES (2, ?)`, "Toujours là SA"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	path, err := Backup(ctx, database, cfg, dir, "la bonne")
+	if err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+	database.Close()
+
+	if _, err := Restore(ctx, cfg, path, dir, "la mauvaise"); err == nil {
+		t.Fatal("a restore with the wrong passphrase reported success")
+	}
+
+	reopened, err := Open(cfg)
+	if err != nil {
+		t.Fatalf("the live database no longer opens: %v", err)
+	}
+	defer reopened.Close()
+	var memo string
+	if err := reopened.QueryRow(`SELECT memo FROM ledger WHERE id = 2`).Scan(&memo); err != nil {
+		t.Errorf("the live database was damaged by a failed restore: %v", err)
+	}
+}
+
+// Restoring an encrypted snapshot without a passphrase must say so, rather than
+// fail on an integrity check that suggests a corrupt backup.
+func TestEncryptedRestoreWithoutPassphraseExplainsItself(t *testing.T) {
+	database, cfg := newTestDB(t)
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	path, err := Backup(ctx, database, cfg, dir, "pass")
+	if err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+	database.Close()
+
+	_, err = Restore(ctx, cfg, path, dir, "")
+	if err == nil || !strings.Contains(err.Error(), "passe") {
+		t.Errorf("got %v, want a message naming the missing passphrase", err)
+	}
+}
+
+// Passing a passphrase for a snapshot that is not encrypted is a
+// misunderstanding worth naming: the user may believe their backups are
+// protected when they are not.
+func TestPassphraseOnAPlainSnapshotIsRefused(t *testing.T) {
+	database, cfg := newTestDB(t)
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	path, err := Backup(ctx, database, cfg, dir, "")
+	if err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+	database.Close()
+
+	if _, err := Restore(ctx, cfg, path, dir, "inutile"); err == nil {
+		t.Error("a passphrase was silently ignored on a plain snapshot")
 	}
 }

@@ -8,10 +8,17 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 ## [Unreleased]
 
 ### Ajouté
+- **Sauvegardes chiffrées** — `BACKUP_PASSPHRASE`, ou `--passphrase` sur `ledgeralps-cli backup` et `restore`. Argon2id dérive la clé, XChaCha20-Poly1305 chiffre le contenu, le tout en Go pur. Les sauvegardes sont la copie qui *quitte* la machine (NAS, clé USB) et donc la plus exposée : un instantané égaré expose l'intégralité de la comptabilité et des données clients (nLPD art. 8, OPDo art. 1-6). **La copie en clair n'est effacée qu'après avoir déchiffré l'instantané et contrôlé son intégrité SQLite** — une sauvegarde irrécupérable n'est pas une sauvegarde. Le chiffrement est authentifié : une altération, une troncature ou un réordonnancement des blocs sont refusés, jamais silencieusement acceptés
+- **Filtrer les documents par client ou fournisseur** — sélecteur sur les pages Factures et Offres de prix, et liste des factures, offres et notes de crédit sur la fiche du contact. Le filtre est appliqué en SQL : filtrer la page affichée n'aurait jamais trouvé les pièces des pages suivantes
 - **Note de crédit rattachée à la facture qu'elle corrige** — `POST /invoices/:id/credit-note`, et un bouton « Note de crédit » sur une facture envoyée ou payée. La note référence la facture (`corrects_invoice_id`) et son PDF porte la mention « Annule la facture : FA-… » : LTVA art. 27 al. 4 définit la correction comme « un document qui mentionne et annule la facture d'origine », et le CO art. 957a al. 2 ch. 5 exige la traçabilité. Jusqu'ici une note de crédit ne référençait rien — un contrôleur constatant une TVA réduite n'avait aucun moyen de remonter à la facture concernée. La facture d'origine n'est pas modifiée
 - **Le montant d'une note de crédit est borné** par la facture : la somme des notes rattachées ne peut plus dépasser son total (`409`). Les notes annulées libèrent leur part, puisqu'elles ne créditent rien. Un crédit partiel est possible en fournissant des lignes ; les crédits partiels s'additionnent contre le même plafond, au lieu d'être jaugés chacun contre la facture entière
 
+### Corrigé
+- **La liste des factures affichait un identifiant tronqué** (`a4571078…`) à la place du nom du client. On ne peut pas chercher les factures d'un client dont le nom n'apparaît jamais
+- **Le bouton « Note de crédit » restait actif sur une facture déjà créditée en totalité**, alors que le serveur refuse (409). Les factures exposent désormais `credited_amount` et le bouton se grise, avec un bandeau l'expliquant
+
 ### Limitations connues
+- **La base de données elle-même n'est pas chiffrée** — seules les sauvegardes le sont. Chiffrer la base exigerait SQLCipher, une bibliothèque C : le projet compile avec `CGO_ENABLED=0` et un pilote SQLite en Go pur, ce qui donne la compilation croisée et le binaire unique sans dépendance. Adopter SQLCipher y mettrait fin. Sur un poste mobile, chiffrer le disque (BitLocker, LUKS) reste la mesure à prendre
 - **Une note de crédit ne passe pas d'écriture au journal** — parce qu'aucune facture n'en passe. Les ventes se saisissent manuellement au journal ; seuls les paiements sont automatisés. Contrepasser automatiquement un produit jamais enregistré créerait un produit négatif sans contrepartie, et doublerait la correction si l'utilisateur l'a déjà passée. L'automatisation doit commencer par les factures, pas par leurs corrections
 
 ---

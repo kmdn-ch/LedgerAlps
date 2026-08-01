@@ -27,6 +27,9 @@ const (
 	BackupTimeFormat = "2006-01-02T15-04-05"
 	backupPrefix     = "ledgeralps-"
 	backupSuffix     = ".db"
+	// Encrypted snapshots keep the .db name and gain a suffix, so a directory
+	// listing shows at a glance which copies are protected and which are not.
+	encryptedSuffix = ".enc"
 
 	// DefaultKeep is how many snapshots are retained by default.
 	DefaultKeep = 14
@@ -49,7 +52,12 @@ var ErrPostgresUnsupported = fmt.Errorf("automatic backup is only supported for 
 //
 // VACUUM INTO refuses to overwrite an existing file, so a collision within the
 // same second is resolved by adding a counter rather than clobbering a snapshot.
-func Backup(ctx context.Context, database *sql.DB, cfg *config.Config, dir string) (string, error) {
+//
+// A non-empty passphrase encrypts the snapshot and leaves only the encrypted
+// file behind. Backups are the copy that travels — a NAS, a USB stick — so it
+// is the copy most likely to end up somewhere its owner does not control
+// (nLPD art. 8).
+func Backup(ctx context.Context, database *sql.DB, cfg *config.Config, dir, passphrase string) (string, error) {
 	if cfg.UsePostgres() {
 		return "", ErrPostgresUnsupported
 	}
@@ -75,7 +83,47 @@ func Backup(ctx context.Context, database *sql.DB, cfg *config.Config, dir strin
 	if _, err := database.ExecContext(ctx, q); err != nil {
 		return "", fmt.Errorf("writing backup snapshot: %w", err)
 	}
-	return dest, nil
+
+	if passphrase == "" {
+		return dest, nil
+	}
+	return encryptInPlace(ctx, dest, passphrase)
+}
+
+// encryptInPlace replaces a freshly written snapshot with its encrypted form.
+//
+// The plaintext is only removed once the ciphertext has been decrypted back and
+// the result checked with SQLite's own integrity check. An encrypted backup
+// that cannot be decrypted is not a backup — and the moment you find out is
+// the moment you needed it.
+func encryptInPlace(ctx context.Context, plain, passphrase string) (string, error) {
+	enc := plain + encryptedSuffix
+
+	if err := EncryptFile(plain, enc, passphrase); err != nil {
+		_ = os.Remove(plain)
+		_ = os.Remove(enc)
+		return "", fmt.Errorf("chiffrement de la sauvegarde: %w", err)
+	}
+
+	verifyPath := plain + ".verify"
+	if err := DecryptFile(enc, verifyPath, passphrase); err != nil {
+		_ = os.Remove(plain)
+		_ = os.Remove(enc)
+		_ = os.Remove(verifyPath)
+		return "", fmt.Errorf("la sauvegarde chiffrée n'a pas pu être relue: %w", err)
+	}
+	verifyErr := Verify(ctx, verifyPath)
+	_ = os.Remove(verifyPath)
+	if verifyErr != nil {
+		_ = os.Remove(plain)
+		_ = os.Remove(enc)
+		return "", fmt.Errorf("la sauvegarde chiffrée est illisible après déchiffrement: %w", verifyErr)
+	}
+
+	if err := os.Remove(plain); err != nil {
+		return "", fmt.Errorf("suppression de la copie en clair: %w", err)
+	}
+	return enc, nil
 }
 
 // BackupInfo describes one snapshot on disk.
@@ -170,10 +218,43 @@ func Verify(ctx context.Context, path string) error {
 // connection. It is exposed only through the CLI for that reason. Before
 // overwriting, the current database is snapshotted into dir so a mistaken
 // restore is itself recoverable.
-func Restore(ctx context.Context, cfg *config.Config, src, dir string) (backupOfCurrent string, err error) {
+func Restore(ctx context.Context, cfg *config.Config, src, dir, passphrase string) (backupOfCurrent string, err error) {
 	if cfg.UsePostgres() {
 		return "", ErrPostgresUnsupported
 	}
+
+	// An encrypted snapshot is decrypted to a temporary file first: Verify and
+	// the copy below both expect a real SQLite database. The temporary file is
+	// removed on every path, including failures — it holds the whole ledger in
+	// clear.
+	encrypted, err := IsEncrypted(src)
+	if err != nil {
+		return "", fmt.Errorf("reading snapshot: %w", err)
+	}
+	if encrypted {
+		if passphrase == "" {
+			return "", fmt.Errorf("cette sauvegarde est chiffrée: indiquez la phrase de passe (--passphrase)")
+		}
+		tmp, tmpErr := os.CreateTemp(filepath.Dir(cfg.SQLitePath), "ledgeralps-restore-*.db")
+		if tmpErr != nil {
+			return "", fmt.Errorf("fichier temporaire: %w", tmpErr)
+		}
+		plain := tmp.Name()
+		tmp.Close()
+		// DecryptFile needs to create the file itself (O_EXCL).
+		_ = os.Remove(plain)
+		defer os.Remove(plain)
+
+		if err := DecryptFile(src, plain, passphrase); err != nil {
+			return "", fmt.Errorf("déchiffrement: %w", err)
+		}
+		src = plain
+	} else if passphrase != "" {
+		// Saying so beats silently ignoring it: the user may believe they are
+		// restoring an encrypted copy when they are not.
+		return "", fmt.Errorf("cette sauvegarde n'est pas chiffrée: retirez --passphrase")
+	}
+
 	if err := Verify(ctx, src); err != nil {
 		return "", fmt.Errorf("refusing to restore: %w", err)
 	}
@@ -206,7 +287,7 @@ func Restore(ctx context.Context, cfg *config.Config, src, dir string) (backupOf
 
 // MaybeAutoBackup takes a snapshot when the newest one is older than interval.
 // Returns the created path, or "" when a backup was not due.
-func MaybeAutoBackup(ctx context.Context, database *sql.DB, cfg *config.Config, dir string, interval time.Duration, keep int) (string, error) {
+func MaybeAutoBackup(ctx context.Context, database *sql.DB, cfg *config.Config, dir string, interval time.Duration, keep int, passphrase string) (string, error) {
 	if cfg.UsePostgres() {
 		return "", nil // not an error: PostgreSQL deployments back up externally
 	}
@@ -222,7 +303,7 @@ func MaybeAutoBackup(ctx context.Context, database *sql.DB, cfg *config.Config, 
 		return "", nil
 	}
 
-	path, err := Backup(ctx, database, cfg, dir)
+	path, err := Backup(ctx, database, cfg, dir, passphrase)
 	if err != nil {
 		return "", err
 	}

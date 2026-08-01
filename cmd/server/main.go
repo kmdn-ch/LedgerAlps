@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -43,8 +44,14 @@ func main() {
 	// CO (art. 958f) requires be kept for ten years. Take a snapshot at startup
 	// when the newest one is older than a day. A failure here must never stop the
 	// server — the user still needs access to their books.
+	//
+	// BACKUP_PASSPHRASE encrypts these automatic snapshots. It is opt-in rather
+	// than generated: a key the software holds protects nothing against someone
+	// holding the machine, and a passphrase the user has not written down turns
+	// a lost laptop into a lost ledger.
 	if path, err := db.MaybeAutoBackup(
 		context.Background(), database, cfg, db.BackupDir(), db.DefaultInterval, db.DefaultKeep,
+		os.Getenv("BACKUP_PASSPHRASE"),
 	); err != nil {
 		log.Printf("WARNING: automatic backup failed: %v", err)
 	} else if path != "" {
