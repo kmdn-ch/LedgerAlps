@@ -154,6 +154,34 @@ jobs:
           cp installer-work/ledgeralps-cli.exe     "$STAGE/"
           ls -lh "$STAGE/"
 
+      # Deux fichiers atteignent l'ecran de l'installeur, chacun avec sa regle.
+      #
+      # installer.nsi doit garder son BOM UTF-8 : sans lui makensis lit le
+      # script dans la codepage ANSI et les accents francais sont massacres
+      # (« donnAes »).
+      #
+      # LICENSE doit rester en ASCII pur. L'installeur est en `Unicode True`,
+      # mais NSIS ne lit un fichier de licence en UTF-8 que s'il porte un BOM.
+      # On n'en met pas ici : un BOM perturbe les detecteurs de licence
+      # (GitHub licensee, scanners SPDX) et ce fichier part aussi dans les
+      # paquets .deb et .rpm. Un tiret demi-cadratin dans « 2024-2026 » s'est
+      # ainsi affiche « 2024a EUR"2026 » sur la page de licence de la v1.4.2.
+      #
+      # Les deux regressions ont deja eu lieu : controlees avant chaque build.
+      - name: Check installer text encoding
+        shell: pwsh
+        run: |
+          $nsi = [System.IO.File]::ReadAllBytes("infrastructure/windows/installer.nsi")
+          if ($nsi[0] -ne 0xEF -or $nsi[1] -ne 0xBB -or $nsi[2] -ne 0xBF) {
+            throw "installer.nsi a perdu son BOM UTF-8 - les accents seront corrompus dans l'installeur."
+          }
+          $lic = [System.IO.File]::ReadAllBytes("LICENSE")
+          $bad = @(for ($i = 0; $i -lt $lic.Length; $i++) { if ($lic[$i] -gt 0x7F) { $i } })
+          if ($bad.Count -gt 0) {
+            throw "LICENSE contient un octet non-ASCII (offset $($bad[0])) - il s'affichera en mojibake sur la page de licence de l'installeur. Remplacer par l'equivalent ASCII."
+          }
+          Write-Host "installer.nsi : BOM UTF-8 present. LICENSE : ASCII pur."
+
       - name: Build NSIS installer
         shell: pwsh
         env:
@@ -176,17 +204,6 @@ jobs:
           & $makensis /DVERSION="$versionNum" installer.nsi
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      # Vérifie que le script a bien été lu en UTF-8. Sans BOM, NSIS retombe sur
-      # la codepage ANSI et les accents français sont massacrés (« donnÃ©es ») —
-      # régression déjà survenue, donc contrôlée à chaque répétition.
-      - name: Check installer encoding
-        shell: pwsh
-        run: |
-          $bytes = [System.IO.File]::ReadAllBytes("infrastructure/windows/installer.nsi")
-          if ($bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
-            throw "installer.nsi a perdu son BOM UTF-8 — les accents seront corrompus dans l'installeur."
-          }
-          Write-Host "BOM UTF-8 présent : les accents seront corrects."
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
