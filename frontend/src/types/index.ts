@@ -127,6 +127,9 @@ export interface ContactCreate {
 
 // ─── Factures ─────────────────────────────────────────────────────────────────
 export type DocumentStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled' | 'archived'
+// Une offre n'est jamais « payée » : personne ne doit rien dessus. Elle est
+// acceptée en produisant la facture, refusée, ou expirée.
+export type QuoteOutcome = 'accepted' | 'refused' | 'expired'
 export type DocumentType   = 'invoice' | 'quote' | 'credit_note'
 
 export interface InvoiceLine {
@@ -159,6 +162,11 @@ export interface Invoice {
   notes: string | null
   terms: string | null
   qr_reference: string | null
+  // Offre dont cette facture est issue. L'offre n'est pas transformée : les deux
+  // documents coexistent et se citent (CO art. 957a al. 2 ch. 5).
+  converted_from_id: string | null
+  // Issue commerciale d'une offre. Toujours null sur une facture.
+  quote_outcome: QuoteOutcome | null
   lines: InvoiceLine[]
   created_at: string
   updated_at: string

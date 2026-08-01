@@ -5,7 +5,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Download, Eye, EyeOff, Send, CheckCircle,
-  XCircle, Archive, Loader2, Pencil, RotateCcw,
+  XCircle, Archive, Loader2, Pencil, RotateCcw, FileText, Clock,
 } from 'lucide-react'
 import { invoicesApi, downloadBlob } from '@/api/client'
 import {
@@ -13,7 +13,7 @@ import {
   SectionTitle, PDFPreview,
 } from '@/components/ui'
 import { formatCHF, formatDate } from '@/utils'
-import type { DocumentStatus, Invoice } from '@/types'
+import type { DocumentStatus, Invoice, QuoteOutcome } from '@/types'
 
 // ─── Transitions de statut autorisées ────────────────────────────────────────
 
@@ -41,6 +41,31 @@ const TRANSITIONS: Record<DocumentStatus, { status: DocumentStatus; label: strin
   archived:  [],
 }
 
+// Une offre de prix ne peut pas être « payée » : personne ne doit rien dessus.
+// On l'accepte en produisant la facture (bouton Convertir), pas en changeant
+// son statut — d'où une machine à états distincte.
+const QUOTE_TRANSITIONS: Record<string, { status: DocumentStatus; label: string; icon: typeof Send; className: string }[]> = {
+  draft:     [
+    { status: 'sent',      label: 'Marquer envoyée', icon: Send,    className: 'btn-primary' },
+    { status: 'cancelled', label: 'Annuler',          icon: XCircle, className: 'btn-ghost text-danger-600' },
+  ],
+  sent:      [
+    { status: 'cancelled', label: 'Annuler',          icon: XCircle, className: 'btn-ghost text-danger-600' },
+    { status: 'archived',  label: 'Archiver',         icon: Archive, className: 'btn-ghost' },
+  ],
+  cancelled: [
+    { status: 'draft',     label: 'Réactiver',        icon: RotateCcw, className: 'btn-secondary' },
+    { status: 'archived',  label: 'Archiver',         icon: Archive,   className: 'btn-ghost' },
+  ],
+  archived:  [],
+}
+
+const OUTCOME_LABEL: Record<QuoteOutcome, string> = {
+  accepted: 'Offre acceptée — facture établie',
+  refused:  'Offre refusée par le client',
+  expired:  'Offre expirée',
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function InvoiceDetailPage() {
@@ -64,6 +89,24 @@ export function InvoiceDetailPage() {
     },
   })
 
+  const convert = useMutation({
+    mutationFn: () => invoicesApi.convertQuote(invoiceId!),
+    onSuccess: (resp) => {
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['invoice', invoiceId] })
+      // On ouvre la facture créée ; l'offre reste consultable à son adresse.
+      navigate(`/invoices/${resp.data.id}`)
+    },
+  })
+
+  const setOutcome = useMutation({
+    mutationFn: (outcome: 'refused' | 'expired') => invoicesApi.setQuoteOutcome(invoiceId!, outcome),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoice', invoiceId] })
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+    },
+  })
+
   const handleTransition = (status: DocumentStatus) => {
     const extra = status === 'paid'
       ? { paymentDate: new Date().toISOString().slice(0, 10) }
@@ -74,7 +117,9 @@ export function InvoiceDetailPage() {
   const handleDownload = async () => {
     if (!invoice) return
     const resp = await invoicesApi.downloadPDF(invoiceId!)
-    downloadBlob(resp.data, `facture_${invoice.invoice_number}.pdf`)
+    const prefix = invoice.document_type === 'quote' ? 'offre'
+      : invoice.document_type === 'credit_note' ? 'note_credit' : 'facture'
+    downloadBlob(resp.data, `${prefix}_${invoice.invoice_number}.pdf`)
   }
 
   if (isLoading) return <LoadingSpinner />
@@ -82,7 +127,10 @@ export function InvoiceDetailPage() {
     <ErrorBanner message="Impossible de charger la facture." />
   )
 
-  const actions = TRANSITIONS[invoice.status] ?? []
+  const isQuote = invoice.document_type === 'quote'
+  const actions = (isQuote ? QUOTE_TRANSITIONS[invoice.status] : TRANSITIONS[invoice.status]) ?? []
+  // Une offre envoyée dont l'issue n'est pas encore connue reste actionnable.
+  const quoteOpen = isQuote && invoice.status === 'sent' && !invoice.quote_outcome
   const totalRemaining = invoice.total_amount - invoice.amount_paid
 
   return (
@@ -105,6 +153,35 @@ export function InvoiceDetailPage() {
                   <Pencil size={14} />
                   Modifier
                 </Link>
+              )}
+              {quoteOpen && (
+                <>
+                  <button
+                    onClick={() => convert.mutate()}
+                    disabled={convert.isPending}
+                    className="btn-primary btn-sm flex items-center gap-1.5"
+                    title="Crée une facture à partir de cette offre. L'offre est conservée."
+                  >
+                    <FileText size={14} />
+                    {convert.isPending ? 'Conversion…' : 'Convertir en facture'}
+                  </button>
+                  <button
+                    onClick={() => setOutcome.mutate('refused')}
+                    disabled={setOutcome.isPending}
+                    className="btn-ghost btn-sm flex items-center gap-1.5 text-danger-600"
+                  >
+                    <XCircle size={14} />
+                    Refusée
+                  </button>
+                  <button
+                    onClick={() => setOutcome.mutate('expired')}
+                    disabled={setOutcome.isPending}
+                    className="btn-ghost btn-sm flex items-center gap-1.5"
+                  >
+                    <Clock size={14} />
+                    Expirée
+                  </button>
+                </>
               )}
               {actions.map(t => (
                 <button
@@ -135,6 +212,26 @@ export function InvoiceDetailPage() {
 
       {transition.isError && (
         <ErrorBanner message="Erreur lors du changement de statut." />
+      )}
+      {convert.isError && (
+        <ErrorBanner message="La conversion a échoué. Cette offre a peut-être déjà donné lieu à une facture." />
+      )}
+
+      {/* Lien entre l'offre et la facture qui en découle. Les deux documents
+          existent séparément ; ce bandeau est ce qui les relie à l'écran. */}
+      {invoice.quote_outcome && (
+        <div className="mb-6 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
+          {OUTCOME_LABEL[invoice.quote_outcome]}
+        </div>
+      )}
+      {invoice.converted_from_id && (
+        <div className="mb-6 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
+          Facture établie à partir d'une{' '}
+          <Link to={`/invoices/${invoice.converted_from_id}`} className="underline font-medium">
+            offre de prix
+          </Link>
+          , conservée telle qu'elle a été envoyée.
+        </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">

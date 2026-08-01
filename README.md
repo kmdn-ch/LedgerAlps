@@ -38,8 +38,10 @@ ARM, il faut compiler depuis les sources — voir la
 ## Ce que fait LedgerAlps
 
 **Facturation**
-Créez vos factures et devis, suivez leur statut, générez le PDF avec le
-bulletin **QR-facture** suisse conforme au standard des banques.
+Créez vos factures et vos offres de prix, suivez leur statut, générez le PDF
+avec le bulletin **QR-facture** suisse conforme au standard des banques.
+Une offre acceptée se convertit en facture en un clic : l'offre est conservée
+telle qu'elle a été envoyée, et les deux documents restent liés.
 
 **Comptabilité**
 Journal en partie double, plan comptable PME suisse préchargé, grand livre,

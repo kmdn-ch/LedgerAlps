@@ -56,7 +56,62 @@ Toutes les routes applicatives sont préfixées par `/api/v1`.
 | POST | `/invoices` | auth | Créer |
 | PATCH | `/invoices/:id` | auth | Modifier |
 | POST | `/invoices/:id/transition` | auth | Changer de statut |
-| GET | `/invoices/:id/pdf` | auth | PDF avec bulletin QR-facture |
+| POST | `/invoices/:id/convert` | auth | Convertir une offre en facture |
+| POST | `/invoices/:id/outcome` | auth | Enregistrer l'issue d'une offre (`refused`, `expired`) |
+| GET | `/invoices/:id/pdf` | auth | PDF — bulletin QR-facture sur les factures uniquement |
+
+### Types de documents
+
+`document_type` vaut `invoice`, `quote` (offre de prix) ou `credit_note`. Chacun
+tire son numéro d'une séquence annuelle distincte : `FA-2026-0001`,
+`OF-2026-0001`, `NC-2026-0001`.
+
+Le type n'est pas cosmétique — il détermine trois comportements :
+
+- **Seule une facture porte un bulletin QR** et s'intitule « FACTURE ». Une
+  offre munie d'un bulletin de paiement et d'un montant de TVA est, pour son
+  destinataire comme pour l'AFC, une facture : il peut la payer et en déduire
+  l'impôt préalable, ce qui rend l'émetteur redevable de cet impôt
+  (LTVA art. 27 al. 2).
+- **Seules les factures et notes de crédit entrent dans la déclaration TVA.**
+  La dette d'impôt naît « au moment de la facturation » (LTVA art. 40 al. 1
+  let. a) ; une offre n'en fait naître aucune. Les notes de crédit y entrent
+  avec le signe opposé (LTVA art. 41).
+- **Une offre ne peut pas passer au statut `paid`.** Personne ne doit rien
+  dessus. Sa machine à états est distincte : `draft → sent → cancelled |
+  archived`.
+
+### Convertir une offre en facture
+
+`POST /invoices/:id/convert` — corps optionnel :
+
+```json
+{ "issue_date": "2026-08-01", "due_date": "2026-08-31" }
+```
+
+Sans corps, la facture est émise du jour, échéance à 30 jours.
+
+**L'offre n'est pas transformée : elle est conservée.** Le client en détient une
+copie ; remplacer l'enregistrement le laisserait citer une référence qui
+n'existe plus chez vous — précisément le lien que le CO art. 958f al. 3 demande
+de garantir. La facture créée porte son propre numéro `FA-`, reprend les lignes
+de l'offre à l'identique, et pointe vers elle par `converted_from_id`. L'offre
+reçoit `quote_outcome = "accepted"`.
+
+| Code | Cas |
+|---|---|
+| `201` | Facture créée (statut `draft`) |
+| `404` | Document introuvable |
+| `409` | Cette offre a déjà donné lieu à une facture |
+| `422` | Ce n'est pas une offre, ou elle n'est pas au statut `sent` |
+
+Le `409` est la garde contre une double facturation de la même prestation.
+
+`quote_outcome` vaut `accepted`, `refused` ou `expired`, et n'est jamais
+renseigné sur une facture. `accepted` n'est pas acceptée par
+`/outcome` : une offre est acceptée en produisant la facture, jamais en
+basculant un champ — sans quoi une offre pourrait se lire « acceptée » sans
+aucune facture derrière.
 
 ## Factures fournisseurs
 

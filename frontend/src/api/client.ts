@@ -129,6 +129,14 @@ export const invoicesApi = {
   // Alias kept for compatibility with pages that use updateStatus
   updateStatus: (id: string, status: string) =>
     api.post(`/invoices/${id}/transition`, { status }),
+  // Convertit une offre en facture. L'offre est conservée ; la facture créée
+  // porte son propre numéro FA- et référence l'offre.
+  convertQuote: (id: string, data?: { issue_date?: string; due_date?: string }) =>
+    api.post(`/invoices/${id}/convert`, data ?? {}),
+  // Enregistre qu'une offre a été refusée ou a expiré. « accepted » n'est pas
+  // acceptée ici : on accepte une offre en la convertissant.
+  setQuoteOutcome: (id: string, outcome: 'refused' | 'expired') =>
+    api.post(`/invoices/${id}/outcome`, { outcome }),
   // PDF — Go endpoint: GET /invoices/:id/pdf
   downloadPDF: (id: string) =>
     api.get(`/invoices/${id}/pdf`, { responseType: 'blob' }),

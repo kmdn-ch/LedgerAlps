@@ -141,6 +141,10 @@ func main() {
 	api.POST("/invoices", ih.CreateInvoice)
 	api.PATCH("/invoices/:id", ih.UpdateInvoice)
 	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
+	// Quote lifecycle: an offer becomes an invoice by producing one, not by
+	// mutating into one — both documents are kept and linked.
+	api.POST("/invoices/:id/convert", ih.ConvertQuote)
+	api.POST("/invoices/:id/outcome", ih.SetQuoteOutcome)
 
 	// Fiscal years + VAT declaration (admin)
 	fyh := handlers.NewFiscalYearHandler(database, cfg.UsePostgres())

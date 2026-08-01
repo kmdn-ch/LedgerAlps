@@ -228,7 +228,7 @@ func renderMeta(pdf *gofpdf.Fpdf, inv InvoiceData) {
 
 	metaRow(latin1(documentNumberLabel(inv.DocumentType)), inv.InvoiceNumber)
 	metaRow("Date:", inv.IssueDate.Format("02.01.2006"))
-	metaRow(latin1("\u00c9ch\u00e9ance:"), inv.DueDate.Format("02.01.2006"))
+	metaRow(latin1(dueDateLabel(inv.DocumentType)), inv.DueDate.Format("02.01.2006"))
 	metaRow("Devise:", inv.Currency)
 
 	pdf.SetY(y + 5)
@@ -771,6 +771,16 @@ func documentNumberLabel(docType string) string {
 	default:
 		return "N° facture:"
 	}
+}
+
+// dueDateLabel names what the second date means. On an offer nothing is due —
+// the date says how long the price stands, and calling it "Échéance" invites
+// the reader to treat the document as payable.
+func dueDateLabel(docType string) string {
+	if docType == "quote" {
+		return "Valable jusqu'au:"
+	}
+	return "Échéance:"
 }
 
 // wantsPaymentSlip reports whether a Swiss QR payment slip belongs on this

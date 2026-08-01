@@ -7,21 +7,24 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Ajouté
+- **Conversion d'une offre en facture** — `POST /invoices/:id/convert`, et un bouton « Convertir en facture » sur le détail d'une offre. **L'offre est conservée, pas transformée** : le client en détient une copie, et remplacer l'enregistrement le laisserait citer une référence disparue de votre système — le lien que le CO art. 958f al. 3 demande de garantir. La facture porte son propre numéro `FA-`, reprend les lignes à l'identique et référence l'offre par `converted_from_id` ; l'offre est marquée « acceptée ». Une seconde conversion est refusée (`409`) : c'est la garde contre une double facturation
+- **Issue commerciale d'une offre** — `POST /invoices/:id/outcome` enregistre `refused` ou `expired`. `accepted` n'y est pas acceptée : une offre s'accepte en produisant la facture, jamais en basculant un champ, faute de quoi une offre pourrait se lire « acceptée » sans facture derrière
+
 ### Corrigé
 - **Une offre de prix était comptée dans la déclaration TVA.** La table `invoices` héberge aussi les offres et les notes de crédit, et la déclaration ne filtrait pas `document_type` : une offre passée au statut « envoyée » — le geste naturel quand on l'adresse à un prospect — entrait au chiffre 200 avec sa TVA. L'entreprise déclarait et payait de la TVA sur un chiffre d'affaires jamais réalisé. Sous LTVA art. 40 al. 1 let. a, la dette d'impôt naît « au moment de la facturation » ; une offre n'est pas une facture
 - **Une offre de prix produisait un PDF intitulé « FACTURE » avec bulletin QR.** Le générateur ignorait `document_type` : le prospect recevait un document payable, portant le taux et le montant de TVA ainsi que le numéro IDE, indiscernable d'une facture. Il pouvait le payer et en déduire l'impôt préalable — or LTVA art. 27 al. 2 rend redevable celui qui fait figurer l'impôt sans en avoir le droit. Le titre suit désormais le type de document et le bulletin QR n'est imprimé que sur une facture
-- **Une note de crédit augmentait la TVA due** au lieu de la réduire : les montants sont stockés sans signe. Elle est exclue de la déclaration en attendant un traitement correct (voir Limitations connues)
+- **Une note de crédit augmentait la TVA due** au lieu de la réduire, les montants étant stockés sans signe. Elle la réduit désormais correctement (LTVA art. 41) : le signe est appliqué à l'agrégation, les montants restant stockés sans signe pour que le document reste lisible à l'écran comme sur papier
 - **Les offres étaient comptées comme créances client** dans la balance âgée et sur le tableau de bord — un devis envoyé à un prospect n'est dû par personne
-
-### Limitations connues
-- **Notes de crédit et TVA** : désormais exclues de la déclaration. C'est conservateur — la TVA est surévaluée plutôt que sous-évaluée — mais incorrect : une note de crédit doit réduire la dette d'impôt (LTVA art. 41). Un traitement juste demande des montants signés
-- **Aucune conversion offre → facture** : il faut ressaisir la facture à la main
-
-### Corrigé (installeur)
 - **Page de licence de l'installeur** : « Copyright (c) 2024–2026 » s'affichait « 2024â€"2026 ». Le fichier `LICENSE` contenait un tiret demi-cadratin en UTF-8, or NSIS ne lit un fichier de licence en UTF-8 que s'il porte un BOM — sans quoi il retombe sur la codepage ANSI. Le caractère est remplacé par un tiret ASCII plutôt que d'ajouter un BOM, qui perturberait les détecteurs de licence (GitHub licensee, scanners SPDX) et partirait aussi dans les paquets `.deb` et `.rpm`
 
 ### Modifié
+- **Une offre de prix ne peut plus être marquée « payée »** — personne ne doit rien sur une offre. Sa machine à états est désormais distincte de celle des factures : `brouillon → envoyée → annulée | archivée`. C'est ce chemin qui plaçait les offres dans les créances et dans la déclaration TVA
+- **PDF d'une offre** : « Échéance » devient « Valable jusqu'au ». Rien n'est dû sur une offre, et le mot « échéance » invite à la traiter comme payable
 - Le contrôle d'encodage de l'installeur vérifie désormais **`LICENSE` en plus de `installer.nsi`**, et s'exécute **avant** la compilation. Il ne vivait que dans le workflow de répétition : le vrai workflow de publication n'en avait aucun
+
+### Documentation
+- `docs/API.md` : section « Types de documents » et documentation de la conversion, avec les codes de retour et le fondement légal
 
 ---
 

@@ -68,17 +68,20 @@ func (s *Service) GenerateDeclaration(ctx context.Context, periodStart, periodEn
 	//     arises "au moment de la facturation", and an offer the prospect may
 	//     never accept is not an invoice. Counting it made the business declare
 	//     and pay VAT on revenue it had not earned.
-	//   - A credit note reduces the debt (LTVA art. 41), but amounts are stored
-	//     unsigned, so including it *added* VAT instead of subtracting it.
-	//     Excluding it keeps the declaration conservative — see ROADMAP for the
-	//     proper treatment, which needs signed amounts to be correct.
+	//   - A credit note reduces the debt (LTVA art. 41 — "modification
+	//     ultérieure de la dette d'impôt"), so it belongs here, but with the
+	//     opposite sign. Amounts are stored unsigned so the document reads
+	//     naturally on screen and on paper; the sign is applied at aggregation
+	//     instead. Summing it as-is used to *add* VAT where it should subtract.
 	aggQ := db.Rebind(`
 		SELECT
-			COALESCE(SUM(subtotal_amount), 0) AS total_ht,
-			COALESCE(SUM(vat_amount), 0)      AS total_vat,
+			COALESCE(SUM(CASE WHEN document_type = 'credit_note'
+			                  THEN -subtotal_amount ELSE subtotal_amount END), 0) AS total_ht,
+			COALESCE(SUM(CASE WHEN document_type = 'credit_note'
+			                  THEN -vat_amount ELSE vat_amount END), 0)           AS total_vat,
 			vat_rate
 		FROM invoices
-		WHERE document_type = 'invoice'
+		WHERE document_type IN ('invoice', 'credit_note')
 		  AND status IN ('sent', 'paid')
 		  AND issue_date BETWEEN ? AND ?
 		GROUP BY vat_rate

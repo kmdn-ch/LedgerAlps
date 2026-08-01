@@ -146,25 +146,34 @@ type Invoice struct {
 	QRReference    *string       `db:"qr_reference"    json:"qr_reference,omitempty"`
 	JournalEntryID *string       `db:"journal_entry_id" json:"journal_entry_id,omitempty"`
 	FiscalYearID   *string       `db:"fiscal_year_id"  json:"fiscal_year_id,omitempty"`
-	CreatedByID    string        `db:"created_by_id"   json:"created_by_id"`
-	CreatedAt      time.Time     `db:"created_at"      json:"created_at"`
-	UpdatedAt      time.Time     `db:"updated_at"      json:"updated_at"`
+
+	// ConvertedFromID points at the price offer this invoice was produced from.
+	// The offer keeps its own record and number; the two documents reference
+	// each other rather than one replacing the other (CO art. 957a al. 2 ch. 5).
+	ConvertedFromID *string `db:"converted_from_id" json:"converted_from_id,omitempty"`
+	// QuoteOutcome is how a price offer ended: accepted, refused or expired.
+	// Always nil on an invoice or a credit note.
+	QuoteOutcome *string `db:"quote_outcome" json:"quote_outcome,omitempty"`
+
+	CreatedByID string    `db:"created_by_id"   json:"created_by_id"`
+	CreatedAt   time.Time `db:"created_at"      json:"created_at"`
+	UpdatedAt   time.Time `db:"updated_at"      json:"updated_at"`
 
 	Lines   []InvoiceLine `db:"-" json:"lines,omitempty"`
 	Contact *Contact      `db:"-" json:"contact,omitempty"`
 }
 
 type InvoiceLine struct {
-	ID          string   `db:"id"           json:"id"`
-	InvoiceID   string   `db:"invoice_id"   json:"invoice_id"`
-	Description string   `db:"description"  json:"description"`
-	Quantity    float64  `db:"quantity"     json:"quantity"`
-	Unit        *string  `db:"unit"         json:"unit,omitempty"`
-	UnitPrice   float64  `db:"unit_price"   json:"unit_price"`
-	DiscountPct float64  `db:"discount_pct" json:"discount_pct"`
-	VATRate     float64  `db:"vat_rate"     json:"vat_rate"`
-	LineTotal   float64  `db:"line_total"   json:"line_total"`
-	Sequence    int      `db:"sequence"     json:"sequence"`
+	ID          string  `db:"id"           json:"id"`
+	InvoiceID   string  `db:"invoice_id"   json:"invoice_id"`
+	Description string  `db:"description"  json:"description"`
+	Quantity    float64 `db:"quantity"     json:"quantity"`
+	Unit        *string `db:"unit"         json:"unit,omitempty"`
+	UnitPrice   float64 `db:"unit_price"   json:"unit_price"`
+	DiscountPct float64 `db:"discount_pct" json:"discount_pct"`
+	VATRate     float64 `db:"vat_rate"     json:"vat_rate"`
+	LineTotal   float64 `db:"line_total"   json:"line_total"`
+	Sequence    int     `db:"sequence"     json:"sequence"`
 }
 
 type AuditLog struct {

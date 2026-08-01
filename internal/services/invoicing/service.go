@@ -15,13 +15,63 @@ import (
 var ErrInvoiceNotFound = fmt.Errorf("invoice not found")
 var ErrInvalidTransition = fmt.Errorf("invalid status transition")
 
-// validTransitions defines the allowed invoice status state machine.
+// Conversion errors (quote → invoice).
+var (
+	ErrNotAQuote           = fmt.Errorf("seuls les offres de prix peuvent être converties en facture")
+	ErrQuoteAlreadyConv    = fmt.Errorf("cette offre a déjà été convertie en facture")
+	ErrQuoteNotConvertible = fmt.Errorf("une offre au statut brouillon ou annulé ne peut pas être convertie")
+	ErrInvalidQuoteOutcome = fmt.Errorf("issue d'offre inconnue")
+)
+
+// validTransitions defines the allowed status state machine for a document
+// that can be settled — an invoice or a credit note.
 var validTransitions = map[models.InvoiceStatus][]models.InvoiceStatus{
 	models.InvoiceStatusDraft:     {models.InvoiceStatusSent, models.InvoiceStatusCancelled},
 	models.InvoiceStatusSent:      {models.InvoiceStatusPaid, models.InvoiceStatusCancelled},
 	models.InvoiceStatusPaid:      {models.InvoiceStatusArchived},
 	models.InvoiceStatusCancelled: {models.InvoiceStatusDraft},
 	models.InvoiceStatusArchived:  {},
+}
+
+// quoteTransitions is the state machine for a price offer. It deliberately has
+// no path to "paid": nobody owes anything on an offer, and marking one paid
+// used to be possible, which put it in the receivables and — before the
+// document_type filters — in the VAT declaration. An accepted offer is not
+// settled, it is converted (see Convert); its commercial fate is recorded in
+// quote_outcome, not in status.
+var quoteTransitions = map[models.InvoiceStatus][]models.InvoiceStatus{
+	models.InvoiceStatusDraft:     {models.InvoiceStatusSent, models.InvoiceStatusCancelled},
+	models.InvoiceStatusSent:      {models.InvoiceStatusCancelled, models.InvoiceStatusArchived},
+	models.InvoiceStatusCancelled: {models.InvoiceStatusDraft},
+	models.InvoiceStatusArchived:  {},
+}
+
+// transitionsFor picks the state machine matching the document type.
+func transitionsFor(documentType string) map[models.InvoiceStatus][]models.InvoiceStatus {
+	if documentType == DocumentTypeQuote {
+		return quoteTransitions
+	}
+	return validTransitions
+}
+
+// Document types stored in invoices.document_type.
+const (
+	DocumentTypeInvoice    = "invoice"
+	DocumentTypeQuote      = "quote"
+	DocumentTypeCreditNote = "credit_note"
+)
+
+// Commercial outcomes of a price offer, stored in invoices.quote_outcome.
+const (
+	QuoteOutcomeAccepted = "accepted"
+	QuoteOutcomeRefused  = "refused"
+	QuoteOutcomeExpired  = "expired"
+)
+
+var validQuoteOutcomes = map[string]bool{
+	QuoteOutcomeAccepted: true,
+	QuoteOutcomeRefused:  true,
+	QuoteOutcomeExpired:  true,
 }
 
 // AccountingServiceInterface allows the invoicing service to create and post
@@ -243,19 +293,20 @@ func (s *Service) UpdateInvoice(ctx context.Context, invoiceID string, req Creat
 func (s *Service) Transition(ctx context.Context, invoiceID string, to models.InvoiceStatus) error {
 	// Load current status, invoice_number, journal_entry_id, created_by_id, and issue_date.
 	getQ := db.Rebind(`
-		SELECT status, invoice_number, COALESCE(journal_entry_id, ''), created_by_id, issue_date
+		SELECT status, invoice_number, COALESCE(journal_entry_id, ''), created_by_id, issue_date,
+		       COALESCE(document_type, 'invoice')
 		FROM invoices WHERE id = ?`, s.usePostgres)
-	var current, invoiceNumber, journalEntryID, createdByID string
+	var current, invoiceNumber, journalEntryID, createdByID, documentType string
 	var issueDate time.Time
 	if err := s.db.QueryRowContext(ctx, getQ, invoiceID).Scan(
-		&current, &invoiceNumber, &journalEntryID, &createdByID, &issueDate,
+		&current, &invoiceNumber, &journalEntryID, &createdByID, &issueDate, &documentType,
 	); err == sql.ErrNoRows {
 		return ErrInvoiceNotFound
 	} else if err != nil {
 		return fmt.Errorf("load invoice: %w", err)
 	}
 
-	allowed := validTransitions[models.InvoiceStatus(current)]
+	allowed := transitionsFor(documentType)[models.InvoiceStatus(current)]
 	for _, a := range allowed {
 		if a == to {
 			// Apply the status transition.
@@ -393,4 +444,191 @@ func (s *Service) nextInvoiceNumber(ctx context.Context, tx *sql.Tx, documentTyp
 		return "", fmt.Errorf("count invoices: %w", err)
 	}
 	return fmt.Sprintf("%s-%s-%04d", prefix, year, count+1), nil
+}
+
+// ─── Quote lifecycle ──────────────────────────────────────────────────────────
+
+// ConvertQuoteRequest carries the dates of the invoice being created. Both are
+// optional: the offer's own dates describe how long the offer stands, which
+// says nothing about when the resulting invoice falls due.
+type ConvertQuoteRequest struct {
+	IssueDate time.Time
+	DueDate   time.Time
+}
+
+// ConvertQuote creates an invoice from a price offer and returns it.
+//
+// The offer is kept, not transformed. The client already holds a copy of it,
+// so mutating the record would leave them quoting a reference that no longer
+// exists here — exactly the link CO art. 958f al. 3 requires to stay
+// guaranteed. The two documents keep their own numbers (OF- and FA-) and point
+// at each other through converted_from_id, which is what CO art. 957a al. 2
+// ch. 5 asks of traceability.
+func (s *Service) ConvertQuote(ctx context.Context, quoteID, userID string, req ConvertQuoteRequest) (*models.Invoice, error) {
+	if req.IssueDate.IsZero() {
+		req.IssueDate = time.Now()
+	}
+	if req.DueDate.IsZero() {
+		req.DueDate = req.IssueDate.AddDate(0, 0, 30)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	loadQ := db.Rebind(`
+		SELECT COALESCE(document_type, 'invoice'), status, contact_id, currency, notes, terms
+		FROM invoices WHERE id = ?`, s.usePostgres)
+	var docType, status, contactID, currency string
+	var notes, terms *string
+	if err := tx.QueryRowContext(ctx, loadQ, quoteID).Scan(
+		&docType, &status, &contactID, &currency, &notes, &terms,
+	); err == sql.ErrNoRows {
+		return nil, ErrInvoiceNotFound
+	} else if err != nil {
+		return nil, fmt.Errorf("load quote: %w", err)
+	}
+
+	if docType != DocumentTypeQuote {
+		return nil, ErrNotAQuote
+	}
+	// A draft has not been sent to anyone yet, and a cancelled offer is dead.
+	if status != string(models.InvoiceStatusSent) {
+		return nil, ErrQuoteNotConvertible
+	}
+
+	// Converting twice would invoice the same work twice. The index on
+	// converted_from_id makes this check cheap.
+	dupQ := db.Rebind("SELECT COUNT(*) FROM invoices WHERE converted_from_id = ?", s.usePostgres)
+	var already int
+	if err := tx.QueryRowContext(ctx, dupQ, quoteID).Scan(&already); err != nil {
+		return nil, fmt.Errorf("check existing conversion: %w", err)
+	}
+	if already > 0 {
+		return nil, ErrQuoteAlreadyConv
+	}
+
+	// Re-read the lines rather than trusting a caller-supplied copy: the
+	// invoice must bill exactly what was offered.
+	linesQ := db.Rebind(`
+		SELECT description, quantity, unit, unit_price, discount_pct, vat_rate, sequence
+		FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence`, s.usePostgres)
+	rows, err := tx.QueryContext(ctx, linesQ, quoteID)
+	if err != nil {
+		return nil, fmt.Errorf("load quote lines: %w", err)
+	}
+	var lines []LineInput
+	for rows.Next() {
+		var l LineInput
+		if err := rows.Scan(&l.Description, &l.Quantity, &l.Unit, &l.UnitPrice,
+			&l.DiscountPct, &l.VATRate, &l.Sequence); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan quote line: %w", err)
+		}
+		lines = append(lines, l)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read quote lines: %w", err)
+	}
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("l'offre ne contient aucune ligne à facturer")
+	}
+
+	subtotal, vatAmount, total := computeTotals(lines)
+	primaryVATRate := 8.1
+	if lines[0].VATRate > 0 {
+		primaryVATRate = lines[0].VATRate
+	}
+
+	invoiceID := db.NewID()
+	number, err := s.nextInvoiceNumber(ctx, tx, DocumentTypeInvoice, req.IssueDate)
+	if err != nil {
+		return nil, fmt.Errorf("next invoice number: %w", err)
+	}
+
+	insertInv := db.Rebind(`
+		INSERT INTO invoices (id, invoice_number, document_type, contact_id, status, issue_date, due_date,
+		                      currency, subtotal_amount, vat_amount, total_amount, vat_rate,
+		                      notes, terms, created_by_id, converted_from_id)
+		VALUES (?, ?, 'invoice', ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+	if _, err := tx.ExecContext(ctx, insertInv,
+		invoiceID, number, contactID,
+		req.IssueDate.Format("2006-01-02"), req.DueDate.Format("2006-01-02"),
+		currency, subtotal, vatAmount, total, primaryVATRate,
+		notes, terms, userID, quoteID); err != nil {
+		return nil, fmt.Errorf("insert converted invoice: %w", err)
+	}
+
+	insertLine := db.Rebind(`
+		INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit, unit_price, discount_pct, vat_rate, line_total, sequence)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+	for _, l := range lines {
+		lineTotal := l.Quantity * l.UnitPrice * (1 - l.DiscountPct/100)
+		if _, err := tx.ExecContext(ctx, insertLine,
+			db.NewID(), invoiceID, l.Description, l.Quantity, l.Unit, l.UnitPrice,
+			l.DiscountPct, l.VATRate, lineTotal, l.Sequence); err != nil {
+			return nil, fmt.Errorf("insert converted line: %w", err)
+		}
+	}
+
+	// The offer keeps its status; what changed is its commercial outcome.
+	outQ := db.Rebind(
+		"UPDATE invoices SET quote_outcome = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", s.usePostgres)
+	if _, err := tx.ExecContext(ctx, outQ, QuoteOutcomeAccepted, quoteID); err != nil {
+		return nil, fmt.Errorf("mark quote accepted: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
+	convertedFrom := quoteID
+	return &models.Invoice{
+		ID:              invoiceID,
+		InvoiceNumber:   number,
+		DocumentType:    DocumentTypeInvoice,
+		ContactID:       contactID,
+		Status:          models.InvoiceStatusDraft,
+		IssueDate:       req.IssueDate,
+		DueDate:         req.DueDate,
+		Currency:        currency,
+		SubtotalAmount:  subtotal,
+		VATAmount:       vatAmount,
+		TotalAmount:     total,
+		VATRate:         primaryVATRate,
+		Notes:           notes,
+		Terms:           terms,
+		ConvertedFromID: &convertedFrom,
+		CreatedByID:     userID,
+	}, nil
+}
+
+// SetQuoteOutcome records how a price offer ended. "accepted" is set by
+// ConvertQuote and is not accepted here: an offer is accepted by producing the
+// invoice, never by flipping a field.
+func (s *Service) SetQuoteOutcome(ctx context.Context, quoteID, outcome string) error {
+	if !validQuoteOutcomes[outcome] || outcome == QuoteOutcomeAccepted {
+		return ErrInvalidQuoteOutcome
+	}
+
+	typeQ := db.Rebind("SELECT COALESCE(document_type, 'invoice') FROM invoices WHERE id = ?", s.usePostgres)
+	var docType string
+	if err := s.db.QueryRowContext(ctx, typeQ, quoteID).Scan(&docType); err == sql.ErrNoRows {
+		return ErrInvoiceNotFound
+	} else if err != nil {
+		return fmt.Errorf("load document type: %w", err)
+	}
+	if docType != DocumentTypeQuote {
+		return ErrNotAQuote
+	}
+
+	q := db.Rebind(
+		"UPDATE invoices SET quote_outcome = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", s.usePostgres)
+	if _, err := s.db.ExecContext(ctx, q, outcome, quoteID); err != nil {
+		return fmt.Errorf("set quote outcome: %w", err)
+	}
+	return nil
 }

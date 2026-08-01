@@ -66,7 +66,8 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 
 	listQ := db.Rebind(`
 		SELECT id, invoice_number, document_type, contact_id, status, issue_date, due_date, currency,
-		       subtotal_amount, vat_amount, total_amount, vat_rate, amount_paid, notes, terms, created_at, updated_at
+		       subtotal_amount, vat_amount, total_amount, vat_rate, amount_paid, notes, terms,
+		       converted_from_id, quote_outcome, created_at, updated_at
 		FROM invoices`+where+` ORDER BY issue_date DESC, created_at DESC LIMIT ? OFFSET ?`, h.usePostgres)
 	offset := (page - 1) * pageSize
 	rows, err := h.db.QueryContext(ctx, listQ, append(args, pageSize, offset)...)
@@ -82,7 +83,8 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 		if err := rows.Scan(&inv.ID, &inv.InvoiceNumber, &inv.DocumentType, &inv.ContactID, &inv.Status,
 			&inv.IssueDate, &inv.DueDate, &inv.Currency,
 			&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate, &inv.AmountPaid,
-			&inv.Notes, &inv.Terms, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+			&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome,
+			&inv.CreatedAt, &inv.UpdatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error"})
 			return
 		}
@@ -106,7 +108,8 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 
 	q := db.Rebind(`
 		SELECT id, invoice_number, document_type, contact_id, status, issue_date, due_date, currency,
-		       subtotal_amount, vat_amount, total_amount, vat_rate, amount_paid, notes, terms, created_at, updated_at
+		       subtotal_amount, vat_amount, total_amount, vat_rate, amount_paid, notes, terms,
+		       converted_from_id, quote_outcome, created_at, updated_at
 		FROM invoices WHERE id = ?`, h.usePostgres)
 
 	var inv models.Invoice
@@ -114,7 +117,7 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 		&inv.ID, &inv.InvoiceNumber, &inv.DocumentType, &inv.ContactID, &inv.Status,
 		&inv.IssueDate, &inv.DueDate, &inv.Currency,
 		&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate, &inv.AmountPaid,
-		&inv.Notes, &inv.Terms, &inv.CreatedAt, &inv.UpdatedAt)
+		&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome, &inv.CreatedAt, &inv.UpdatedAt)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
 		return
@@ -297,6 +300,94 @@ func (h *InvoicesHandler) TransitionInvoice(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		case invoicing.ErrInvalidTransition:
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	h.GetInvoice(c)
+}
+
+// ConvertQuote POST /api/v1/invoices/:id/convert
+//
+// Produces an invoice from a price offer. The offer is kept: the client holds
+// a copy of it, so replacing the record would leave them citing a reference
+// that no longer exists here. Both documents keep their own number and point
+// at each other (CO art. 957a al. 2 ch. 5, art. 958f al. 3).
+func (h *InvoicesHandler) ConvertQuote(c *gin.Context) {
+	id := c.Param("id")
+
+	var body struct {
+		IssueDate string `json:"issue_date"`
+		DueDate   string `json:"due_date"`
+	}
+	// An empty body is valid: the dates then default to today and today + 30d.
+	_ = c.ShouldBindJSON(&body)
+
+	var req invoicing.ConvertQuoteRequest
+	if body.IssueDate != "" {
+		d, err := time.Parse("2006-01-02", body.IssueDate)
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_date must be YYYY-MM-DD"})
+			return
+		}
+		req.IssueDate = d
+	}
+	if body.DueDate != "" {
+		d, err := time.Parse("2006-01-02", body.DueDate)
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "due_date must be YYYY-MM-DD"})
+			return
+		}
+		req.DueDate = d
+	}
+
+	claims := mw.GetClaims(c)
+	userID := ""
+	if claims != nil {
+		userID = claims.UserID
+	}
+
+	inv, err := h.svc.ConvertQuote(c.Request.Context(), id, userID, req)
+	if err != nil {
+		switch err {
+		case invoicing.ErrInvoiceNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case invoicing.ErrQuoteAlreadyConv:
+			// The offer already produced an invoice; billing it twice is the
+			// mistake this status guards against.
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case invoicing.ErrNotAQuote, invoicing.ErrQuoteNotConvertible:
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusCreated, inv)
+}
+
+// SetQuoteOutcome POST /api/v1/invoices/:id/outcome
+//
+// Records that an offer was refused or expired. "accepted" is not settable
+// here — an offer is accepted by producing the invoice, via /convert.
+func (h *InvoicesHandler) SetQuoteOutcome(c *gin.Context) {
+	id := c.Param("id")
+	var body struct {
+		Outcome string `json:"outcome" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.svc.SetQuoteOutcome(c.Request.Context(), id, body.Outcome); err != nil {
+		switch err {
+		case invoicing.ErrInvoiceNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case invoicing.ErrInvalidQuoteOutcome:
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": "issue attendue: 'refused' ou 'expired' — une offre est acceptée en la convertissant en facture"})
 		default:
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		}

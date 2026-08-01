@@ -100,6 +100,17 @@ func TestDocumentTitleAndNumberLabel(t *testing.T) {
 	}
 }
 
+func TestDueDateLabel(t *testing.T) {
+	if got := dueDateLabel("quote"); got != "Valable jusqu'au:" {
+		t.Errorf("dueDateLabel(\"quote\") = %q — nothing is due on an offer", got)
+	}
+	for _, d := range []string{"invoice", "credit_note", ""} {
+		if got := dueDateLabel(d); got != "Échéance:" {
+			t.Errorf("dueDateLabel(%q) = %q, want \"Échéance:\"", d, got)
+		}
+	}
+}
+
 func TestWantsPaymentSlip(t *testing.T) {
 	for docType, want := range map[string]bool{
 		"invoice": true, "": true, "quote": false, "credit_note": false,

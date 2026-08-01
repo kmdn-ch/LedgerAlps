@@ -259,16 +259,53 @@ func TestQuoteIsExcludedFromVATDeclaration(t *testing.T) {
 	}
 }
 
-// A credit note must not inflate the declaration either. Amounts are stored
-// unsigned, so including it added VAT where it should reduce it (LTVA art. 41).
-// Excluding it is the conservative reading until signed amounts exist; the
-// wrong direction here would understate what is owed to the AFC.
-func TestCreditNoteDoesNotIncreaseVATOwed(t *testing.T) {
+// A credit note reduces the tax debt (LTVA art. 41). Amounts are stored
+// unsigned so the document reads naturally, so the sign is applied when
+// aggregating — summing it as-is used to add VAT where it should subtract.
+func TestCreditNoteReducesVATOwed(t *testing.T) {
 	database := newTestDB(t)
 	start, end := period()
 
 	seedSalesInvoice(t, database, "sent", 10000, 810, 8.1, "2026-03-01")
+	seedCreditNote(t, database, 2000, 162, 8.1, "2026-03-15")
 
+	decl, err := vat.New(database, false).
+		GenerateDeclaration(context.Background(), start, end, "effective")
+	if err != nil {
+		t.Fatalf("generate declaration: %v", err)
+	}
+
+	if want := 648.0; decl.VATCollected.Standard != want {
+		t.Errorf("TVA collectée = %.2f, want %.2f (810 facturés − 162 crédités)",
+			decl.VATCollected.Standard, want)
+	}
+	if want := 8000.0; decl.TotalRevenue != want {
+		t.Errorf("chiffre 200 = %.2f, want %.2f", decl.TotalRevenue, want)
+	}
+}
+
+// A credit note larger than the invoices in the period is unusual but legal —
+// a big cancellation early in a quarter. It must not silently clamp to zero.
+func TestCreditNoteCanExceedInvoicesInPeriod(t *testing.T) {
+	database := newTestDB(t)
+	start, end := period()
+
+	seedSalesInvoice(t, database, "sent", 1000, 81, 8.1, "2026-03-01")
+	seedCreditNote(t, database, 3000, 243, 8.1, "2026-03-15")
+
+	decl, err := vat.New(database, false).
+		GenerateDeclaration(context.Background(), start, end, "effective")
+	if err != nil {
+		t.Fatalf("generate declaration: %v", err)
+	}
+	if decl.VATCollected.Standard >= 0 {
+		t.Errorf("TVA collectée = %.2f — un crédit net doit rester négatif, pas être écrasé à zéro",
+			decl.VATCollected.Standard)
+	}
+}
+
+func seedCreditNote(t *testing.T, database *sql.DB, ht, vatAmt, rate float64, issued string) {
+	t.Helper()
 	userID := seedUser(t, database)
 	contactID := db.NewID()
 	if _, err := database.Exec(
@@ -280,18 +317,8 @@ func TestCreditNoteDoesNotIncreaseVATOwed(t *testing.T) {
 		INSERT INTO invoices (id, invoice_number, document_type, contact_id, status, issue_date, due_date,
 		                      currency, subtotal_amount, vat_amount, total_amount, vat_rate, created_by_id)
 		VALUES (?, ?, 'credit_note', ?, 'sent', ?, ?, 'CHF', ?, ?, ?, ?, ?)`,
-		db.NewID(), "NC-"+db.NewID()[:8], contactID, "2026-03-15", "2026-03-15",
-		2000.0, 162.0, 2162.0, 8.1, userID); err != nil {
+		db.NewID(), "NC-"+db.NewID()[:8], contactID, issued, issued,
+		ht, vatAmt, ht+vatAmt, rate, userID); err != nil {
 		t.Fatalf("seed credit note: %v", err)
-	}
-
-	decl, err := vat.New(database, false).
-		GenerateDeclaration(context.Background(), start, end, "effective")
-	if err != nil {
-		t.Fatalf("generate declaration: %v", err)
-	}
-
-	if decl.VATCollected.Standard > 810.0 {
-		t.Errorf("TVA collectée = %.2f — une note de crédit ne doit jamais augmenter la TVA due", decl.VATCollected.Standard)
 	}
 }
