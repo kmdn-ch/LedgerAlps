@@ -137,6 +137,10 @@ export function InvoiceDetailPage() {
   const quoteOpen = isQuote && invoice.status === 'sent' && !invoice.quote_outcome
   // Une facture émise — envoyée ou payée — peut être corrigée. Un brouillon n'a
   // jamais été réclamé, une facture annulée est déjà sans effet.
+  // Une facture entièrement créditée ne doit plus proposer le bouton : le
+  // serveur refuserait (409), et offrir une action vouée à l'échec est pire
+  // que ne pas l'offrir. Un centime de tolérance absorbe l'arrondi à 5 ct.
+  const fullyCredited = invoice.credited_amount >= invoice.total_amount - 0.01
   const creditable = invoice.document_type === 'invoice'
     && (invoice.status === 'sent' || invoice.status === 'paid')
   const totalRemaining = invoice.total_amount - invoice.amount_paid
@@ -194,9 +198,11 @@ export function InvoiceDetailPage() {
               {creditable && (
                 <button
                   onClick={() => creditNote.mutate()}
-                  disabled={creditNote.isPending}
-                  className="btn-secondary btn-sm flex items-center gap-1.5"
-                  title="Émet une note de crédit annulant cette facture. La facture est conservée."
+                  disabled={creditNote.isPending || fullyCredited}
+                  className="btn-secondary btn-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={fullyCredited
+                    ? `Facture déjà créditée en totalité (${formatCHF(invoice.credited_amount)})`
+                    : "Émet une note de crédit annulant cette facture. La facture est conservée."}
                 >
                   <Undo2 size={14} />
                   {creditNote.isPending ? 'Création…' : 'Note de crédit'}
@@ -244,6 +250,12 @@ export function InvoiceDetailPage() {
       {invoice.quote_outcome && (
         <div className="mb-6 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
           {OUTCOME_LABEL[invoice.quote_outcome]}
+        </div>
+      )}
+      {fullyCredited && invoice.document_type === 'invoice' && (
+        <div className="mb-6 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
+          Facture créditée en totalité ({formatCHF(invoice.credited_amount)}). La facture
+          reste telle qu'elle a été émise ; la correction vit dans la note de crédit.
         </div>
       )}
       {invoice.corrects_invoice_id && (

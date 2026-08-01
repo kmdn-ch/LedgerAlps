@@ -44,9 +44,21 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 	where := " WHERE 1=1"
 	args := []any{}
 
+	// Filtrer par client ou fournisseur : sans cela on ne peut consulter que la
+	// liste globale, ce qui devient inutilisable dès quelques dizaines de pièces.
+	if contactID := c.Query("contact_id"); contactID != "" {
+		where += " AND i.contact_id = ?"
+		args = append(args, contactID)
+	}
+	// Facultatif : 'invoice', 'quote' ou 'credit_note'.
+	if docType := c.Query("document_type"); docType != "" {
+		where += " AND i.document_type = ?"
+		args = append(args, docType)
+	}
+
 	// Data isolation: non-admin users only see their own invoices (nLPD art. 6)
 	if uid := currentUserID(c); uid != "" && !isAdmin(c) {
-		where += " AND created_by_id = ?"
+		where += " AND i.created_by_id = ?"
 		args = append(args, uid)
 	}
 
@@ -55,28 +67,37 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 	// it here keeps server-side pagination correct — filtering client-side
 	// would only ever search the page currently loaded.
 	if status == "overdue" {
-		where += " AND status = 'sent' AND due_date < ?"
+		where += " AND i.status = 'sent' AND i.due_date < ?"
 		args = append(args, time.Now().Format("2006-01-02"))
 	} else if status != "" {
-		where += " AND status = ?"
+		where += " AND i.status = ?"
 		args = append(args, status)
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	countQ := db.Rebind("SELECT COUNT(*) FROM invoices"+where, h.usePostgres)
+	countQ := db.Rebind("SELECT COUNT(*) FROM invoices i"+where, h.usePostgres)
 	var total int
 	if err := h.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
 
+	// The contact join names the client; the correlated subquery reports how
+	// much of each invoice has already been credited, which is what lets the
+	// UI stop offering a credit note on an invoice that is fully credited.
 	listQ := db.Rebind(`
-		SELECT id, invoice_number, document_type, contact_id, status, issue_date, due_date, currency,
-		       subtotal_amount, vat_amount, total_amount, vat_rate, amount_paid, notes, terms,
-		       converted_from_id, quote_outcome, corrects_invoice_id, created_at, updated_at
-		FROM invoices`+where+` ORDER BY issue_date DESC, created_at DESC LIMIT ? OFFSET ?`, h.usePostgres)
+		SELECT i.id, i.invoice_number, i.document_type, i.contact_id, i.status, i.issue_date, i.due_date,
+		       i.currency, i.subtotal_amount, i.vat_amount, i.total_amount, i.vat_rate, i.amount_paid,
+		       i.notes, i.terms, i.converted_from_id, i.quote_outcome, i.corrects_invoice_id,
+		       i.created_at, i.updated_at,
+		       COALESCE(co.name, ''),
+		       COALESCE((SELECT SUM(cn.total_amount) FROM invoices cn
+		                 WHERE cn.corrects_invoice_id = i.id AND cn.status <> 'cancelled'), 0)
+		FROM invoices i
+		LEFT JOIN contacts co ON co.id = i.contact_id`+where+`
+		ORDER BY i.issue_date DESC, i.created_at DESC LIMIT ? OFFSET ?`, h.usePostgres)
 	offset := (page - 1) * pageSize
 	rows, err := h.db.QueryContext(ctx, listQ, append(args, pageSize, offset)...)
 	if err != nil {
@@ -92,7 +113,7 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 			&inv.IssueDate, &inv.DueDate, &inv.Currency,
 			&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate, &inv.AmountPaid,
 			&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome, &inv.CorrectsInvoiceID,
-			&inv.CreatedAt, &inv.UpdatedAt); err != nil {
+			&inv.CreatedAt, &inv.UpdatedAt, &inv.ContactName, &inv.CreditedAmount); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error"})
 			return
 		}
@@ -115,10 +136,16 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 	defer cancel()
 
 	q := db.Rebind(`
-		SELECT id, invoice_number, document_type, contact_id, status, issue_date, due_date, currency,
-		       subtotal_amount, vat_amount, total_amount, vat_rate, amount_paid, notes, terms,
-		       converted_from_id, quote_outcome, corrects_invoice_id, created_at, updated_at
-		FROM invoices WHERE id = ?`, h.usePostgres)
+		SELECT i.id, i.invoice_number, i.document_type, i.contact_id, i.status, i.issue_date, i.due_date,
+		       i.currency, i.subtotal_amount, i.vat_amount, i.total_amount, i.vat_rate, i.amount_paid,
+		       i.notes, i.terms, i.converted_from_id, i.quote_outcome, i.corrects_invoice_id,
+		       i.created_at, i.updated_at,
+		       COALESCE(co.name, ''),
+		       COALESCE((SELECT SUM(cn.total_amount) FROM invoices cn
+		                 WHERE cn.corrects_invoice_id = i.id AND cn.status <> 'cancelled'), 0)
+		FROM invoices i
+		LEFT JOIN contacts co ON co.id = i.contact_id
+		WHERE i.id = ?`, h.usePostgres)
 
 	var inv models.Invoice
 	err := h.db.QueryRowContext(ctx, q, id).Scan(
@@ -126,7 +153,7 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 		&inv.IssueDate, &inv.DueDate, &inv.Currency,
 		&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate, &inv.AmountPaid,
 		&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome, &inv.CorrectsInvoiceID,
-		&inv.CreatedAt, &inv.UpdatedAt)
+		&inv.CreatedAt, &inv.UpdatedAt, &inv.ContactName, &inv.CreditedAmount)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
 		return

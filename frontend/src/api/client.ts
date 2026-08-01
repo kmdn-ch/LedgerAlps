@@ -119,8 +119,10 @@ export const contactsApi = {
 
 // ─── Factures ─────────────────────────────────────────────────────────────────
 export const invoicesApi = {
-  list: (params?: { status?: string; page?: number; page_size?: number }) =>
-    api.get('/invoices', { params }),
+  list: (params?: {
+    status?: string; page?: number; page_size?: number
+    contact_id?: string; document_type?: string
+  }) => api.get('/invoices', { params }),
   get:        (id: string)                    => api.get(`/invoices/${id}`),
   create:     (data: unknown)                 => api.post('/invoices', data),
   update:     (id: string, data: unknown)    => api.patch(`/invoices/${id}`, data),

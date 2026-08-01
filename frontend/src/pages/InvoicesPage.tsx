@@ -4,12 +4,12 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Download, Search, Filter } from 'lucide-react'
-import { invoicesApi, downloadBlob } from '@/api/client'
+import { invoicesApi, contactsApi, downloadBlob } from '@/api/client'
 import {
   PageHeader, StatusBadge, LoadingSpinner, EmptyState,
 } from '@/components/ui'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
-import type { Invoice, DisplayStatus } from '@/types'
+import type { Invoice, DisplayStatus, Contact } from '@/types'
 
 const STATUS_FILTERS: { value: DisplayStatus | ''; label: string }[] = [
   { value: '',          label: 'Toutes'       },
@@ -27,11 +27,23 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
   // (« envoyée et échue »), pas un statut qu'on écrirait.
   const [status,  setStatus]  = useState<DisplayStatus | ''>('')
   const [search,  setSearch]  = useState('')
+  // Filtrer par client se fait côté serveur, pour que la pagination reste
+  // juste : un filtre appliqué à la page affichée ne verrait pas les pièces
+  // des pages suivantes.
+  const [contactId, setContactId] = useState('')
   const qc = useQueryClient()
 
+  const { data: contacts = [] } = useQuery<Contact[]>({
+    queryKey: ['contacts'],
+    queryFn:  () => contactsApi.list().then(r => (r.data.items ?? r.data ?? []) as Contact[]),
+  })
+
   const { data: allItems = [], isLoading } = useQuery<Invoice[]>({
-    queryKey: ['invoices', status, mode],
-    queryFn:  () => invoicesApi.list(status ? { status } : undefined).then(r => (r.data.items ?? []) as Invoice[]),
+    queryKey: ['invoices', status, mode, contactId],
+    queryFn:  () => invoicesApi.list({
+      ...(status ? { status } : {}),
+      ...(contactId ? { contact_id: contactId } : {}),
+    }).then(r => (r.data.items ?? []) as Invoice[]),
   })
 
   // Client-side filter by document_type
@@ -94,6 +106,18 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
             </button>
           ))}
         </div>
+
+        <select
+          className="input w-56"
+          value={contactId}
+          onChange={e => setContactId(e.target.value)}
+          aria-label={isQuote ? 'Filtrer les offres par contact' : 'Filtrer les factures par contact'}
+        >
+          <option value="">Tous les contacts</option>
+          {contacts.map(ct => (
+            <option key={ct.id} value={ct.id}>{ct.name}</option>
+          ))}
+        </select>
       </div>
 
       {/* Table */}
@@ -147,7 +171,9 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
                 }`}>
                   {formatDate(inv.due_date)}
                 </td>
-                <td className="text-alpine-700">{inv.contact_id.slice(0, 8)}…</td>
+                <td className="text-alpine-700">
+                  {inv.contact_name || <span className="text-alpine-400 italic">contact supprimé</span>}
+                </td>
                 <td className="text-right font-mono font-medium tabular-nums">
                   {formatCHF(inv.total_amount)}
                 </td>

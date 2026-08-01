@@ -179,6 +179,11 @@ export interface Invoice {
   quote_outcome: QuoteOutcome | null
   // Facture que cette note de crédit annule (LTVA art. 27 al. 4). Null ailleurs.
   corrects_invoice_id: string | null
+  // Nom du contact, résolu par jointure — la liste affichait un identifiant.
+  contact_name?: string
+  // Somme des notes de crédit rattachées, hors annulées. Une facture
+  // entièrement créditée ne doit plus proposer de note de crédit.
+  credited_amount: number
   lines: InvoiceLine[]
   created_at: string
   updated_at: string

@@ -163,6 +163,15 @@ type Invoice struct {
 	CreatedAt   time.Time `db:"created_at"      json:"created_at"`
 	UpdatedAt   time.Time `db:"updated_at"      json:"updated_at"`
 
+	// ContactName is resolved by a join so a list can name the client instead
+	// of showing a truncated identifier — you cannot look for a customer's
+	// invoices when the customer is never named.
+	ContactName string `db:"-" json:"contact_name,omitempty"`
+	// CreditedAmount is the sum of the credit notes attached to this invoice,
+	// cancelled ones excluded. It is what tells the UI an invoice is already
+	// fully credited and must not be credited again.
+	CreditedAmount float64 `db:"-" json:"credited_amount"`
+
 	Lines   []InvoiceLine `db:"-" json:"lines,omitempty"`
 	Contact *Contact      `db:"-" json:"contact,omitempty"`
 }

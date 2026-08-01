@@ -1,15 +1,16 @@
 // LedgerAlps — Détail et édition d'un contact
 
 import { useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ArrowLeft, Save, Building2, User, PowerOff } from 'lucide-react'
-import { contactsApi } from '@/api/client'
-import { PageHeader, LoadingSpinner, ErrorBanner } from '@/components/ui'
-import type { Contact } from '@/types'
+import { ArrowLeft, Save, Building2, User, PowerOff, FileText } from 'lucide-react'
+import { contactsApi, invoicesApi } from '@/api/client'
+import { PageHeader, LoadingSpinner, ErrorBanner, SectionTitle, StatusBadge, EmptyState } from '@/components/ui'
+import type { Contact, Invoice } from '@/types'
+import { formatCHF, formatDate, isOverdue } from '@/utils'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -282,6 +283,67 @@ export function ContactDetailPage() {
           </button>
         </div>
       </form>
+
+      {/* Pièces du contact — factures, offres et notes de crédit.
+          Le filtre est appliqué côté serveur : filtrer la page affichée
+          manquerait les pièces des pages suivantes. */}
+      <ContactDocuments contactId={contactId!} />
+    </div>
+  )
+}
+
+const DOC_LABEL: Record<string, string> = {
+  invoice:     'Facture',
+  quote:       'Offre',
+  credit_note: 'Note de crédit',
+}
+
+function ContactDocuments({ contactId }: { contactId: string }) {
+  const { data: docs = [], isLoading } = useQuery<Invoice[]>({
+    queryKey: ['invoices', 'contact', contactId],
+    queryFn:  () => invoicesApi.list({ contact_id: contactId, page_size: 100 })
+      .then(r => (r.data.items ?? []) as Invoice[]),
+    enabled: !!contactId,
+  })
+
+  if (isLoading) return <LoadingSpinner />
+
+  return (
+    <div className="card mb-6">
+      <SectionTitle>Documents ({docs.length})</SectionTitle>
+      {docs.length === 0 ? (
+        <EmptyState
+          icon={<FileText size={28} />}
+          title="Aucun document"
+          description="Les factures, offres de prix et notes de crédit de ce contact apparaîtront ici."
+        />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Numéro</th><th>Type</th><th>Date</th>
+                <th className="text-right">Total</th><th>Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {docs.map(d => (
+                <tr key={d.id}>
+                  <td>
+                    <Link to={`/invoices/${d.id}`} className="font-mono text-accent-700 hover:text-accent-600 font-medium">
+                      {d.invoice_number}
+                    </Link>
+                  </td>
+                  <td className="text-alpine-600">{DOC_LABEL[d.document_type] ?? d.document_type}</td>
+                  <td className="text-alpine-600">{formatDate(d.issue_date)}</td>
+                  <td className="text-right font-mono tabular-nums">{formatCHF(d.total_amount)}</td>
+                  <td><StatusBadge status={d.status} overdue={isOverdue(d)} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

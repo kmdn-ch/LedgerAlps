@@ -465,3 +465,26 @@ func TestPaidInvoiceCanBeCredited(t *testing.T) {
 		t.Errorf("a paid invoice must be creditable: %v", err)
 	}
 }
+
+// Crediting an invoice in full must leave nothing creditable. The service
+// already refuses the second attempt; this pins the figure the UI reads to
+// disable the button, so the user is not offered an action that will fail.
+func TestFullyCreditedInvoiceReportsItsCreditedAmount(t *testing.T) {
+	f := newFixture(t)
+	inv := f.sentInvoice(t)
+
+	if _, err := f.svc.CreateCreditNote(context.Background(), inv.ID, f.userID, CreateCreditNoteRequest{}); err != nil {
+		t.Fatalf("credit note: %v", err)
+	}
+
+	var credited float64
+	if err := f.db.QueryRow(`
+		SELECT COALESCE(SUM(total_amount), 0) FROM invoices
+		WHERE corrects_invoice_id = ? AND status <> 'cancelled'`, inv.ID).Scan(&credited); err != nil {
+		t.Fatalf("sum credit notes: %v", err)
+	}
+	if credited < inv.TotalAmount {
+		t.Errorf("credited = %.2f, want at least %.2f — the invoice would still look creditable",
+			credited, inv.TotalAmount)
+	}
+}
