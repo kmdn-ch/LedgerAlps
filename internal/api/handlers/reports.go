@@ -419,6 +419,11 @@ func (h *ReportsHandler) GeneralLedger(c *gin.Context) {
 
 // ARaging returns accounts receivable aging for all unpaid (status='sent') invoices.
 // Buckets: current (≤0 days overdue), 1-30, 31-60, 61-90, 91+ days.
+//
+// document_type is filtered because the invoices table also holds price offers.
+// A quote sent to a prospect is not a receivable — nobody owes anything on it —
+// yet it used to appear here as an overdue customer debt, inflating what the
+// business believed it was owed.
 func (h *ReportsHandler) ARaging(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
@@ -434,7 +439,8 @@ func (h *ReportsHandler) ARaging(c *gin.Context) {
 		    i.due_date
 		FROM invoices i
 		JOIN contacts co ON co.id = i.contact_id
-		WHERE i.status = 'sent'
+		WHERE i.document_type = 'invoice'
+		  AND i.status = 'sent'
 		ORDER BY i.due_date ASC`, h.usePostgres)
 
 	rows, err := h.db.QueryContext(ctx, q)

@@ -213,3 +213,85 @@ func TestNoSupplierInvoicesYieldsZeroDeductible(t *testing.T) {
 		t.Errorf("payable = %.2f, want 81.00", decl.VATPayable)
 	}
 }
+
+// seedQuote records a price offer — a document that commits nobody and creates
+// no VAT liability until it is turned into an invoice.
+func seedQuote(t *testing.T, database *sql.DB, status string, ht, vatAmt, rate float64, issued string) {
+	t.Helper()
+	userID := seedUser(t, database)
+	contactID := db.NewID()
+	if _, err := database.Exec(
+		`INSERT INTO contacts (id, name, contact_type) VALUES (?, ?, 'customer')`,
+		contactID, "Prospect SA"); err != nil {
+		t.Fatalf("seed prospect: %v", err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO invoices (id, invoice_number, document_type, contact_id, status, issue_date, due_date,
+		                      currency, subtotal_amount, vat_amount, total_amount, vat_rate, created_by_id)
+		VALUES (?, ?, 'quote', ?, ?, ?, ?, 'CHF', ?, ?, ?, ?, ?)`,
+		db.NewID(), "OF-"+db.NewID()[:8], contactID, status, issued, issued,
+		ht, vatAmt, ht+vatAmt, rate, userID); err != nil {
+		t.Fatalf("seed quote: %v", err)
+	}
+}
+
+// A quote sent to a prospect must never reach the VAT declaration. Under
+// LTVA art. 40 al. 1 the tax claim arises when the invoice is issued; a price
+// offer is not an invoice, and the prospect may never accept it. Counting it
+// would make the business declare — and pay — VAT on revenue it never earned.
+func TestQuoteIsExcludedFromVATDeclaration(t *testing.T) {
+	database := newTestDB(t)
+	start, end := period()
+
+	seedQuote(t, database, "sent", 10000, 810, 8.1, "2026-03-01")
+
+	decl, err := vat.New(database, false).
+		GenerateDeclaration(context.Background(), start, end, "effective")
+	if err != nil {
+		t.Fatalf("generate declaration: %v", err)
+	}
+
+	if decl.TotalRevenue != 0 {
+		t.Errorf("chiffre 200 = %.2f, want 0 — une offre de prix n'est pas un chiffre d'affaires imposable", decl.TotalRevenue)
+	}
+	if decl.VATCollected.Standard != 0 {
+		t.Errorf("TVA collectée = %.2f, want 0 — aucune créance fiscale ne naît d'une offre (LTVA art. 40)", decl.VATCollected.Standard)
+	}
+}
+
+// A credit note must not inflate the declaration either. Amounts are stored
+// unsigned, so including it added VAT where it should reduce it (LTVA art. 41).
+// Excluding it is the conservative reading until signed amounts exist; the
+// wrong direction here would understate what is owed to the AFC.
+func TestCreditNoteDoesNotIncreaseVATOwed(t *testing.T) {
+	database := newTestDB(t)
+	start, end := period()
+
+	seedSalesInvoice(t, database, "sent", 10000, 810, 8.1, "2026-03-01")
+
+	userID := seedUser(t, database)
+	contactID := db.NewID()
+	if _, err := database.Exec(
+		`INSERT INTO contacts (id, name, contact_type) VALUES (?, ?, 'customer')`,
+		contactID, "Client SA"); err != nil {
+		t.Fatalf("seed customer: %v", err)
+	}
+	if _, err := database.Exec(`
+		INSERT INTO invoices (id, invoice_number, document_type, contact_id, status, issue_date, due_date,
+		                      currency, subtotal_amount, vat_amount, total_amount, vat_rate, created_by_id)
+		VALUES (?, ?, 'credit_note', ?, 'sent', ?, ?, 'CHF', ?, ?, ?, ?, ?)`,
+		db.NewID(), "NC-"+db.NewID()[:8], contactID, "2026-03-15", "2026-03-15",
+		2000.0, 162.0, 2162.0, 8.1, userID); err != nil {
+		t.Fatalf("seed credit note: %v", err)
+	}
+
+	decl, err := vat.New(database, false).
+		GenerateDeclaration(context.Background(), start, end, "effective")
+	if err != nil {
+		t.Fatalf("generate declaration: %v", err)
+	}
+
+	if decl.VATCollected.Standard > 810.0 {
+		t.Errorf("TVA collectée = %.2f — une note de crédit ne doit jamais augmenter la TVA due", decl.VATCollected.Standard)
+	}
+}

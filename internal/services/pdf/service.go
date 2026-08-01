@@ -46,10 +46,14 @@ type InvoiceLine struct {
 type InvoiceData struct {
 	// Invoice metadata
 	InvoiceNumber string
-	IssueDate     time.Time
-	DueDate       time.Time
-	Currency      string
-	Status        string
+	// DocumentType is "invoice", "quote" or "credit_note". Empty means invoice.
+	// It decides the heading and whether a QR payment slip is drawn at all —
+	// see documentTitle and renderPaymentSlip.
+	DocumentType string
+	IssueDate    time.Time
+	DueDate      time.Time
+	Currency     string
+	Status       string
 
 	// Amounts (already calculated)
 	SubtotalAmount float64
@@ -106,9 +110,18 @@ func Generate(inv InvoiceData) ([]byte, error) {
 	renderNotes(pdf, inv)
 
 	// ── Swiss QR payment slip (bottom 105 mm) ─────────────────────────────────
-	if err := renderPaymentSlip(pdf, inv); err != nil {
-		// Non-fatal: log but still return the PDF without slip
-		_ = err
+	//
+	// Only an invoice gets one. A price offer carrying a QR slip and a VAT
+	// amount is, to the recipient and to the AFC, indistinguishable from an
+	// invoice: the prospect can pay it and can deduct the input tax shown on
+	// it. LTVA art. 27 al. 2 then makes the issuer liable for tax stated
+	// without entitlement. A credit note is excluded too — the money owed
+	// flows the other way, so a slip asking the customer to pay is backwards.
+	if wantsPaymentSlip(inv.DocumentType) {
+		if err := renderPaymentSlip(pdf, inv); err != nil {
+			// Non-fatal: log but still return the PDF without slip
+			_ = err
+		}
 	}
 
 	var buf bytes.Buffer
@@ -151,10 +164,12 @@ func renderHeader(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		pdf.CellFormat(115-textX+15, 5, latin1("TVA/MwSt: "+inv.Company.VATNumber), "", 1, "L", false, 0, "")
 	}
 
-	// "FACTURE" title (right)
+	// Document title (right). It must name what the document actually is: a
+	// price offer headed "FACTURE" is a document the recipient may pay and
+	// deduct VAT from.
 	pdf.SetFont("Helvetica", "B", 22)
 	pdf.SetXY(130, 15)
-	pdf.CellFormat(65, 12, "FACTURE", "", 1, "R", false, 0, "")
+	pdf.CellFormat(65, 12, latin1(documentTitle(inv.DocumentType)), "", 1, "R", false, 0, "")
 
 	pdf.SetY(45)
 }
@@ -211,7 +226,7 @@ func renderMeta(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		y += 6
 	}
 
-	metaRow(latin1("N\u00b0 facture:"), inv.InvoiceNumber)
+	metaRow(latin1(documentNumberLabel(inv.DocumentType)), inv.InvoiceNumber)
 	metaRow("Date:", inv.IssueDate.Format("02.01.2006"))
 	metaRow(latin1("\u00c9ch\u00e9ance:"), inv.DueDate.Format("02.01.2006"))
 	metaRow("Devise:", inv.Currency)
@@ -400,8 +415,8 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	// ── Layout constants (mm) ─────────────────────────────────────────────────
 	const (
 		margin     = 5.0
-		rcWidth    = 52.0  // receipt text area (62 − 2×5)
-		qrSize     = 46.0  // QR code printed size
+		rcWidth    = 52.0                  // receipt text area (62 − 2×5)
+		qrSize     = 46.0                  // QR code printed size
 		qrLeft     = receiptWidth + margin // 67 mm
 		qrTop      = slipTop + 17.0        // 209 mm
 		infoX      = 118.0                 // 62 + 46 + 2×5
@@ -598,9 +613,9 @@ func addSwissCross(qrPNG []byte) []byte {
 	// Scale factor: QR image width covers 46 mm
 	pxPerMm := float64(w) / 46.0
 
-	crossPx  := iround(7.0 * pxPerMm)   // outer black square
-	borderPx := iround(0.5 * pxPerMm)   // white border
-	armPx    := iround(1.276 * pxPerMm) // cross arm width
+	crossPx := iround(7.0 * pxPerMm)  // outer black square
+	borderPx := iround(0.5 * pxPerMm) // white border
+	armPx := iround(1.276 * pxPerMm)  // cross arm width
 	if armPx < 2 {
 		armPx = 2
 	}
@@ -616,8 +631,8 @@ func addSwissCross(qrPNG []byte) []byte {
 	fillRect(dst, cx, cy, crossPx, crossPx, black)
 
 	// 2. White cross arms centred in the inner area (after border)
-	innerX  := cx + borderPx
-	innerY  := cy + borderPx
+	innerX := cx + borderPx
+	innerY := cy + borderPx
 	innerSz := crossPx - 2*borderPx
 	if innerSz <= 0 {
 		innerSz = crossPx
@@ -729,4 +744,37 @@ func latin1(s string) string {
 		}
 	}
 	return string(b)
+}
+
+// ─── Document type ────────────────────────────────────────────────────────────
+
+// documentTitle names the document on the page. The heading, the number label
+// and the presence of a payment slip are the only things distinguishing a
+// quote from an invoice on paper, so they must agree with document_type.
+func documentTitle(docType string) string {
+	switch docType {
+	case "quote":
+		return "OFFRE DE PRIX"
+	case "credit_note":
+		return "NOTE DE CRÉDIT"
+	default:
+		return "FACTURE"
+	}
+}
+
+func documentNumberLabel(docType string) string {
+	switch docType {
+	case "quote":
+		return "N° offre:"
+	case "credit_note":
+		return "N° note de crédit:"
+	default:
+		return "N° facture:"
+	}
+}
+
+// wantsPaymentSlip reports whether a Swiss QR payment slip belongs on this
+// document. Only an invoice asks the recipient for money.
+func wantsPaymentSlip(docType string) bool {
+	return docType == "" || docType == "invoice"
 }

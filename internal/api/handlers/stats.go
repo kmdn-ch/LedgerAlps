@@ -82,7 +82,7 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 
 	// ── Invoices: counts by status ────────────────────────────────────────────
 	{
-		q := db.Rebind(`SELECT status, COUNT(*) FROM invoices GROUP BY status`, h.usesPG)
+		q := db.Rebind(`SELECT status, COUNT(*) FROM invoices WHERE document_type = 'invoice' GROUP BY status`, h.usesPG)
 		rows, err := h.db.QueryContext(ctx, q)
 		if err != nil {
 			log.Printf("stats: invoices group-by query failed: %v", err)
@@ -118,7 +118,8 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 		q := db.Rebind(`
 			SELECT COALESCE(SUM(total_amount), 0)
 			FROM invoices
-			WHERE status IN ('sent')`, h.usesPG)
+			WHERE document_type = 'invoice'
+			  AND status IN ('sent')`, h.usesPG)
 		var receivable float64
 		if err := h.db.QueryRowContext(ctx, q).Scan(&receivable); err != nil {
 			log.Printf("stats: invoices receivable query failed: %v", err)

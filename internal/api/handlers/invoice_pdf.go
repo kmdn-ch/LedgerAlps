@@ -26,11 +26,11 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 	// Load invoice
 	var inv models.Invoice
 	invQ := db.Rebind(`
-		SELECT id, invoice_number, contact_id, status, issue_date, due_date, currency,
+		SELECT id, invoice_number, document_type, contact_id, status, issue_date, due_date, currency,
 		       subtotal_amount, vat_amount, total_amount, vat_rate, notes, terms, created_at, updated_at
 		FROM invoices WHERE id = ?`, h.usePostgres)
 	err := h.db.QueryRowContext(ctx, invQ, id).Scan(
-		&inv.ID, &inv.InvoiceNumber, &inv.ContactID, &inv.Status,
+		&inv.ID, &inv.InvoiceNumber, &inv.DocumentType, &inv.ContactID, &inv.Status,
 		&inv.IssueDate, &inv.DueDate, &inv.Currency,
 		&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate,
 		&inv.Notes, &inv.Terms, &inv.CreatedAt, &inv.UpdatedAt)
@@ -146,6 +146,7 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 	// Render PDF
 	data := pdfsvc.InvoiceData{
 		InvoiceNumber:  inv.InvoiceNumber,
+		DocumentType:   inv.DocumentType,
 		IssueDate:      inv.IssueDate,
 		DueDate:        inv.DueDate,
 		Currency:       inv.Currency,

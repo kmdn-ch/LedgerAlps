@@ -60,13 +60,26 @@ func (s *Service) GenerateDeclaration(ctx context.Context, periodStart, periodEn
 	// ── Aggregate invoice data for the period ─────────────────────────────────
 	// We collect subtotal_amount (HT) and vat_amount with the associated vat_rate.
 	// Only sent/paid invoices count for TVA (accrual basis).
+	//
+	// document_type must be filtered here. The invoices table also holds price
+	// offers and credit notes, and both used to land in the declaration:
+	//
+	//   - A quote creates no tax debt. Under LTVA art. 40 al. 1 let. a the debt
+	//     arises "au moment de la facturation", and an offer the prospect may
+	//     never accept is not an invoice. Counting it made the business declare
+	//     and pay VAT on revenue it had not earned.
+	//   - A credit note reduces the debt (LTVA art. 41), but amounts are stored
+	//     unsigned, so including it *added* VAT instead of subtracting it.
+	//     Excluding it keeps the declaration conservative — see ROADMAP for the
+	//     proper treatment, which needs signed amounts to be correct.
 	aggQ := db.Rebind(`
 		SELECT
 			COALESCE(SUM(subtotal_amount), 0) AS total_ht,
 			COALESCE(SUM(vat_amount), 0)      AS total_vat,
 			vat_rate
 		FROM invoices
-		WHERE status IN ('sent', 'paid')
+		WHERE document_type = 'invoice'
+		  AND status IN ('sent', 'paid')
 		  AND issue_date BETWEEN ? AND ?
 		GROUP BY vat_rate
 	`, s.usePostgres)

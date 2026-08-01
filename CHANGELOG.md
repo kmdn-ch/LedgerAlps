@@ -8,6 +8,16 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 ## [Unreleased]
 
 ### Corrigé
+- **Une offre de prix était comptée dans la déclaration TVA.** La table `invoices` héberge aussi les offres et les notes de crédit, et la déclaration ne filtrait pas `document_type` : une offre passée au statut « envoyée » — le geste naturel quand on l'adresse à un prospect — entrait au chiffre 200 avec sa TVA. L'entreprise déclarait et payait de la TVA sur un chiffre d'affaires jamais réalisé. Sous LTVA art. 40 al. 1 let. a, la dette d'impôt naît « au moment de la facturation » ; une offre n'est pas une facture
+- **Une offre de prix produisait un PDF intitulé « FACTURE » avec bulletin QR.** Le générateur ignorait `document_type` : le prospect recevait un document payable, portant le taux et le montant de TVA ainsi que le numéro IDE, indiscernable d'une facture. Il pouvait le payer et en déduire l'impôt préalable — or LTVA art. 27 al. 2 rend redevable celui qui fait figurer l'impôt sans en avoir le droit. Le titre suit désormais le type de document et le bulletin QR n'est imprimé que sur une facture
+- **Une note de crédit augmentait la TVA due** au lieu de la réduire : les montants sont stockés sans signe. Elle est exclue de la déclaration en attendant un traitement correct (voir Limitations connues)
+- **Les offres étaient comptées comme créances client** dans la balance âgée et sur le tableau de bord — un devis envoyé à un prospect n'est dû par personne
+
+### Limitations connues
+- **Notes de crédit et TVA** : désormais exclues de la déclaration. C'est conservateur — la TVA est surévaluée plutôt que sous-évaluée — mais incorrect : une note de crédit doit réduire la dette d'impôt (LTVA art. 41). Un traitement juste demande des montants signés
+- **Aucune conversion offre → facture** : il faut ressaisir la facture à la main
+
+### Corrigé (installeur)
 - **Page de licence de l'installeur** : « Copyright (c) 2024–2026 » s'affichait « 2024â€"2026 ». Le fichier `LICENSE` contenait un tiret demi-cadratin en UTF-8, or NSIS ne lit un fichier de licence en UTF-8 que s'il porte un BOM — sans quoi il retombe sur la codepage ANSI. Le caractère est remplacé par un tiret ASCII plutôt que d'ajouter un BOM, qui perturberait les détecteurs de licence (GitHub licensee, scanners SPDX) et partirait aussi dans les paquets `.deb` et `.rpm`
 
 ### Modifié
