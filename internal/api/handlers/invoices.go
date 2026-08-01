@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"time"
 
@@ -74,7 +75,7 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 	listQ := db.Rebind(`
 		SELECT id, invoice_number, document_type, contact_id, status, issue_date, due_date, currency,
 		       subtotal_amount, vat_amount, total_amount, vat_rate, amount_paid, notes, terms,
-		       converted_from_id, quote_outcome, created_at, updated_at
+		       converted_from_id, quote_outcome, corrects_invoice_id, created_at, updated_at
 		FROM invoices`+where+` ORDER BY issue_date DESC, created_at DESC LIMIT ? OFFSET ?`, h.usePostgres)
 	offset := (page - 1) * pageSize
 	rows, err := h.db.QueryContext(ctx, listQ, append(args, pageSize, offset)...)
@@ -90,7 +91,7 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 		if err := rows.Scan(&inv.ID, &inv.InvoiceNumber, &inv.DocumentType, &inv.ContactID, &inv.Status,
 			&inv.IssueDate, &inv.DueDate, &inv.Currency,
 			&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate, &inv.AmountPaid,
-			&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome,
+			&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome, &inv.CorrectsInvoiceID,
 			&inv.CreatedAt, &inv.UpdatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error"})
 			return
@@ -116,7 +117,7 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 	q := db.Rebind(`
 		SELECT id, invoice_number, document_type, contact_id, status, issue_date, due_date, currency,
 		       subtotal_amount, vat_amount, total_amount, vat_rate, amount_paid, notes, terms,
-		       converted_from_id, quote_outcome, created_at, updated_at
+		       converted_from_id, quote_outcome, corrects_invoice_id, created_at, updated_at
 		FROM invoices WHERE id = ?`, h.usePostgres)
 
 	var inv models.Invoice
@@ -124,7 +125,8 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 		&inv.ID, &inv.InvoiceNumber, &inv.DocumentType, &inv.ContactID, &inv.Status,
 		&inv.IssueDate, &inv.DueDate, &inv.Currency,
 		&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate, &inv.AmountPaid,
-		&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome, &inv.CreatedAt, &inv.UpdatedAt)
+		&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome, &inv.CorrectsInvoiceID,
+		&inv.CreatedAt, &inv.UpdatedAt)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
 		return
@@ -401,4 +403,62 @@ func (h *InvoicesHandler) SetQuoteOutcome(c *gin.Context) {
 		return
 	}
 	h.GetInvoice(c)
+}
+
+// CreateCreditNote POST /api/v1/invoices/:id/credit-note
+//
+// Issues a credit note against an invoice. An empty body credits the invoice in
+// full; supplying lines credits part of it.
+func (h *InvoicesHandler) CreateCreditNote(c *gin.Context) {
+	id := c.Param("id")
+
+	var body struct {
+		IssueDate string    `json:"issue_date"`
+		Reason    *string   `json:"reason"`
+		Lines     []lineReq `json:"lines"`
+	}
+	_ = c.ShouldBindJSON(&body)
+
+	req := invoicing.CreateCreditNoteRequest{Reason: body.Reason}
+	if body.IssueDate != "" {
+		d, err := time.Parse("2006-01-02", body.IssueDate)
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_date must be YYYY-MM-DD"})
+			return
+		}
+		req.IssueDate = d
+	}
+	for _, l := range body.Lines {
+		req.Lines = append(req.Lines, invoicing.LineInput{
+			Description: l.Description,
+			Quantity:    l.Quantity,
+			Unit:        l.Unit,
+			UnitPrice:   l.UnitPrice,
+			DiscountPct: l.DiscountPct,
+			VATRate:     l.VATRate,
+			Sequence:    l.Sequence,
+		})
+	}
+
+	claims := mw.GetClaims(c)
+	userID := ""
+	if claims != nil {
+		userID = claims.UserID
+	}
+
+	note, err := h.svc.CreateCreditNote(c.Request.Context(), id, userID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, invoicing.ErrInvoiceNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, invoicing.ErrCreditExceedsInvoice):
+			// 409: the request is well-formed, it conflicts with what has
+			// already been credited against this invoice.
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusCreated, note)
 }

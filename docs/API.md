@@ -58,6 +58,7 @@ Toutes les routes applicatives sont préfixées par `/api/v1`.
 | POST | `/invoices/:id/transition` | auth | Changer de statut |
 | POST | `/invoices/:id/convert` | auth | Convertir une offre en facture |
 | POST | `/invoices/:id/outcome` | auth | Enregistrer l'issue d'une offre (`refused`, `expired`) |
+| POST | `/invoices/:id/credit-note` | auth | Émettre une note de crédit contre une facture |
 | GET | `/invoices/:id/pdf` | auth | PDF — bulletin QR-facture sur les factures uniquement |
 
 ### Types de documents
@@ -112,6 +113,47 @@ renseigné sur une facture. `accepted` n'est pas acceptée par
 `/outcome` : une offre est acceptée en produisant la facture, jamais en
 basculant un champ — sans quoi une offre pourrait se lire « acceptée » sans
 aucune facture derrière.
+
+### Émettre une note de crédit
+
+`POST /invoices/:id/credit-note` — corps optionnel :
+
+```json
+{ "issue_date": "2026-08-02", "reason": "Retour marchandise", "lines": [] }
+```
+
+`lines` vide crédite la facture **en totalité**, en reprenant ses lignes.
+Fournir des lignes crédite une partie (retour d'un article, poste contesté).
+
+La note de crédit référence la facture par `corrects_invoice_id`, et son PDF
+porte la mention « Annule la facture : FA-… ». LTVA art. 27 al. 4 définit
+en effet la correction comme « un document qui mentionne et annule la facture
+d'origine » — la mention doit donc figurer sur le document, pas seulement en
+base. La facture d'origine n'est pas modifiée : une correction ajoute un
+document, elle ne réécrit pas celui qu'elle corrige.
+
+**Le montant est borné.** La somme des notes de crédit rattachées à une facture
+ne peut pas dépasser son total ; les notes annulées ne comptent pas, puisqu'elles
+ne créditent rien. Une tolérance d'un centime absorbe l'arrondi à 5 centimes
+lorsqu'on crédite ligne à ligne.
+
+| Code | Cas |
+|---|---|
+| `201` | Note de crédit créée (statut `draft`) |
+| `404` | Facture introuvable |
+| `409` | Le total crédité dépasserait la facture |
+| `422` | La cible n'est pas une facture, ou elle est en brouillon / annulée |
+
+Seule une facture **envoyée ou payée** peut être créditée : un brouillon n'a
+jamais été émis, une facture annulée est déjà sans effet — dans les deux cas il
+n'y a aucune dette d'impôt à corriger.
+
+> **Écriture au journal** — une note de crédit ne passe pas d'écriture
+> automatique, parce qu'aucune facture n'en passe : les ventes se saisissent au
+> journal manuellement (seuls les paiements sont automatisés). Contrepasser
+> automatiquement un produit jamais enregistré créerait un produit négatif sans
+> contrepartie, et risquerait le double comptage si l'utilisateur a déjà passé
+> la correction lui-même. Voir la [roadmap](../ROADMAP.md).
 
 ## Factures fournisseurs
 

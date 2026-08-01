@@ -154,6 +154,10 @@ type Invoice struct {
 	// QuoteOutcome is how a price offer ended: accepted, refused or expired.
 	// Always nil on an invoice or a credit note.
 	QuoteOutcome *string `db:"quote_outcome" json:"quote_outcome,omitempty"`
+	// CorrectsInvoiceID points at the invoice this credit note cancels, wholly
+	// or in part. LTVA art. 27 al. 4 calls a correction "un document qui
+	// mentionne et annule la facture d'origine"; this is the mention.
+	CorrectsInvoiceID *string `db:"corrects_invoice_id" json:"corrects_invoice_id,omitempty"`
 
 	CreatedByID string    `db:"created_by_id"   json:"created_by_id"`
 	CreatedAt   time.Time `db:"created_at"      json:"created_at"`

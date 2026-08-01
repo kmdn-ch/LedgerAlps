@@ -23,6 +23,13 @@ var (
 	ErrInvalidQuoteOutcome = fmt.Errorf("issue d'offre inconnue")
 )
 
+// Credit note errors.
+var (
+	ErrNotAnInvoice         = fmt.Errorf("seule une facture peut faire l'objet d'une note de crédit")
+	ErrInvoiceNotCreditable = fmt.Errorf("une facture au statut brouillon ou annulé ne peut pas être créditée")
+	ErrCreditExceedsInvoice = fmt.Errorf("le total des notes de crédit dépasserait le montant de la facture")
+)
+
 // validTransitions defines the allowed status state machine for a document
 // that can be settled — an invoice or a credit note.
 var validTransitions = map[models.InvoiceStatus][]models.InvoiceStatus{
@@ -643,4 +650,150 @@ func (s *Service) loadLines(ctx context.Context, tx *sql.Tx, invoiceID string) (
 		return nil, fmt.Errorf("read lines: %w", err)
 	}
 	return lines, nil
+}
+
+// ─── Credit notes ─────────────────────────────────────────────────────────────
+
+// CreateCreditNoteRequest describes the correction. Leaving Lines empty credits
+// the invoice in full, which is the common case; supplying lines credits part
+// of it (a returned item, a disputed position).
+type CreateCreditNoteRequest struct {
+	IssueDate time.Time
+	Reason    *string
+	Lines     []LineInput
+}
+
+// CreateCreditNote issues a credit note against an invoice.
+//
+// The link is the point. A credit note that references nothing leaves a
+// controller unable to reach the invoice whose VAT it reduced — the
+// traceability CO art. 957a al. 2 ch. 5 requires. LTVA art. 27 al. 4 goes
+// further and describes a correction as "un document qui mentionne et annule
+// la facture d'origine".
+//
+// Having the link is also what makes the amount checkable: until now nothing
+// stopped crediting more than was invoiced.
+func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string, req CreateCreditNoteRequest) (*models.Invoice, error) {
+	if req.IssueDate.IsZero() {
+		req.IssueDate = time.Now()
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	loadQ := db.Rebind(`
+		SELECT COALESCE(document_type, 'invoice'), status, contact_id, currency, total_amount, invoice_number
+		FROM invoices WHERE id = ?`, s.usePostgres)
+	var docType, status, contactID, currency, invoiceNumber string
+	var invoiceTotal float64
+	if err := tx.QueryRowContext(ctx, loadQ, invoiceID).Scan(
+		&docType, &status, &contactID, &currency, &invoiceTotal, &invoiceNumber,
+	); err == sql.ErrNoRows {
+		return nil, ErrInvoiceNotFound
+	} else if err != nil {
+		return nil, fmt.Errorf("load invoice: %w", err)
+	}
+
+	if docType != DocumentTypeInvoice {
+		return nil, ErrNotAnInvoice
+	}
+	// A draft was never issued and a cancelled invoice is already void; in
+	// neither case is there a VAT debt to correct.
+	if status != string(models.InvoiceStatusSent) && status != string(models.InvoiceStatusPaid) {
+		return nil, ErrInvoiceNotCreditable
+	}
+
+	lines := req.Lines
+	if len(lines) == 0 {
+		// Full credit: re-read the invoice's own lines so the correction
+		// matches what was billed, rather than trusting a caller's copy.
+		lines, err = s.loadLines(ctx, tx, invoiceID)
+		if err != nil {
+			return nil, err
+		}
+		if len(lines) == 0 {
+			return nil, fmt.Errorf("la facture ne contient aucune ligne à créditer")
+		}
+	}
+
+	subtotal, vatAmount, total := computeTotals(lines)
+
+	// Guard the total against the invoice, counting credit notes already
+	// issued. Cancelled ones do not count — they credit nothing.
+	sumQ := db.Rebind(`
+		SELECT COALESCE(SUM(total_amount), 0) FROM invoices
+		WHERE corrects_invoice_id = ? AND status <> 'cancelled'`, s.usePostgres)
+	var alreadyCredited float64
+	if err := tx.QueryRowContext(ctx, sumQ, invoiceID).Scan(&alreadyCredited); err != nil {
+		return nil, fmt.Errorf("sum existing credit notes: %w", err)
+	}
+	// One rappen of tolerance: totals are rounded to 0.05 CHF, so crediting an
+	// invoice line by line can land a couple of centimes above the original
+	// without anyone over-crediting anything.
+	if alreadyCredited+total > invoiceTotal+0.01 {
+		return nil, fmt.Errorf("%w: %.2f déjà crédités + %.2f demandés > %.2f facturés (%s)",
+			ErrCreditExceedsInvoice, alreadyCredited, total, invoiceTotal, invoiceNumber)
+	}
+
+	primaryVATRate := 8.1
+	if lines[0].VATRate > 0 {
+		primaryVATRate = lines[0].VATRate
+	}
+
+	creditNoteID := db.NewID()
+	number, err := s.nextInvoiceNumber(ctx, tx, DocumentTypeCreditNote, req.IssueDate)
+	if err != nil {
+		return nil, fmt.Errorf("next credit note number: %w", err)
+	}
+
+	insertQ := db.Rebind(`
+		INSERT INTO invoices (id, invoice_number, document_type, contact_id, status, issue_date, due_date,
+		                      currency, subtotal_amount, vat_amount, total_amount, vat_rate,
+		                      notes, created_by_id, corrects_invoice_id)
+		VALUES (?, ?, 'credit_note', ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+	issued := req.IssueDate.Format("2006-01-02")
+	if _, err := tx.ExecContext(ctx, insertQ,
+		creditNoteID, number, contactID, issued, issued,
+		currency, subtotal, vatAmount, total, primaryVATRate,
+		req.Reason, userID, invoiceID); err != nil {
+		return nil, fmt.Errorf("insert credit note: %w", err)
+	}
+
+	insertLine := db.Rebind(`
+		INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit, unit_price, discount_pct, vat_rate, line_total, sequence)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+	for _, l := range lines {
+		lineTotal := l.Quantity * l.UnitPrice * (1 - l.DiscountPct/100)
+		if _, err := tx.ExecContext(ctx, insertLine,
+			db.NewID(), creditNoteID, l.Description, l.Quantity, l.Unit, l.UnitPrice,
+			l.DiscountPct, l.VATRate, lineTotal, l.Sequence); err != nil {
+			return nil, fmt.Errorf("insert credit note line: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
+	corrects := invoiceID
+	return &models.Invoice{
+		ID:                creditNoteID,
+		InvoiceNumber:     number,
+		DocumentType:      DocumentTypeCreditNote,
+		ContactID:         contactID,
+		Status:            models.InvoiceStatusDraft,
+		IssueDate:         req.IssueDate,
+		DueDate:           req.IssueDate,
+		Currency:          currency,
+		SubtotalAmount:    subtotal,
+		VATAmount:         vatAmount,
+		TotalAmount:       total,
+		VATRate:           primaryVATRate,
+		Notes:             req.Reason,
+		CorrectsInvoiceID: &corrects,
+		CreatedByID:       userID,
+	}, nil
 }

@@ -50,10 +50,15 @@ type InvoiceData struct {
 	// It decides the heading and whether a QR payment slip is drawn at all —
 	// see documentTitle and renderPaymentSlip.
 	DocumentType string
-	IssueDate    time.Time
-	DueDate      time.Time
-	Currency     string
-	Status       string
+	// CorrectsInvoiceNumber names the invoice a credit note cancels. LTVA
+	// art. 27 al. 4 defines a correction as "un document qui mentionne et
+	// annule la facture d'origine", so the mention belongs on the page, not
+	// only in the database.
+	CorrectsInvoiceNumber string
+	IssueDate             time.Time
+	DueDate               time.Time
+	Currency              string
+	Status                string
 
 	// Amounts (already calculated)
 	SubtotalAmount float64
@@ -228,7 +233,14 @@ func renderMeta(pdf *gofpdf.Fpdf, inv InvoiceData) {
 
 	metaRow(latin1(documentNumberLabel(inv.DocumentType)), inv.InvoiceNumber)
 	metaRow("Date:", inv.IssueDate.Format("02.01.2006"))
-	metaRow(latin1(dueDateLabel(inv.DocumentType)), inv.DueDate.Format("02.01.2006"))
+	if inv.DocumentType == "credit_note" {
+		// A credit note has no due date; what matters is what it cancels.
+		if inv.CorrectsInvoiceNumber != "" {
+			metaRow(latin1("Annule la facture:"), inv.CorrectsInvoiceNumber)
+		}
+	} else {
+		metaRow(latin1(dueDateLabel(inv.DocumentType)), inv.DueDate.Format("02.01.2006"))
+	}
 	metaRow("Devise:", inv.Currency)
 
 	pdf.SetY(y + 5)

@@ -25,15 +25,21 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 
 	// Load invoice
 	var inv models.Invoice
+	// The join resolves the number of the invoice a credit note cancels: LTVA
+	// art. 27 al. 4 wants that mention on the document itself.
 	invQ := db.Rebind(`
-		SELECT id, invoice_number, document_type, contact_id, status, issue_date, due_date, currency,
-		       subtotal_amount, vat_amount, total_amount, vat_rate, notes, terms, created_at, updated_at
-		FROM invoices WHERE id = ?`, h.usePostgres)
+		SELECT i.id, i.invoice_number, i.document_type, i.contact_id, i.status, i.issue_date, i.due_date,
+		       i.currency, i.subtotal_amount, i.vat_amount, i.total_amount, i.vat_rate, i.notes, i.terms,
+		       i.created_at, i.updated_at, COALESCE(orig.invoice_number, '')
+		FROM invoices i
+		LEFT JOIN invoices orig ON orig.id = i.corrects_invoice_id
+		WHERE i.id = ?`, h.usePostgres)
+	var correctsNumber string
 	err := h.db.QueryRowContext(ctx, invQ, id).Scan(
 		&inv.ID, &inv.InvoiceNumber, &inv.DocumentType, &inv.ContactID, &inv.Status,
 		&inv.IssueDate, &inv.DueDate, &inv.Currency,
 		&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate,
-		&inv.Notes, &inv.Terms, &inv.CreatedAt, &inv.UpdatedAt)
+		&inv.Notes, &inv.Terms, &inv.CreatedAt, &inv.UpdatedAt, &correctsNumber)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
 		return
@@ -145,21 +151,22 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 
 	// Render PDF
 	data := pdfsvc.InvoiceData{
-		InvoiceNumber:  inv.InvoiceNumber,
-		DocumentType:   inv.DocumentType,
-		IssueDate:      inv.IssueDate,
-		DueDate:        inv.DueDate,
-		Currency:       inv.Currency,
-		Status:         string(inv.Status),
-		SubtotalAmount: inv.SubtotalAmount,
-		VATAmount:      inv.VATAmount,
-		TotalAmount:    inv.TotalAmount,
-		VATRate:        inv.VATRate,
-		Notes:          inv.Notes,
-		Terms:          inv.Terms,
-		Lines:          pdfLines,
-		Company:        company,
-		Customer:       customer,
+		InvoiceNumber:         inv.InvoiceNumber,
+		DocumentType:          inv.DocumentType,
+		CorrectsInvoiceNumber: correctsNumber,
+		IssueDate:             inv.IssueDate,
+		DueDate:               inv.DueDate,
+		Currency:              inv.Currency,
+		Status:                string(inv.Status),
+		SubtotalAmount:        inv.SubtotalAmount,
+		VATAmount:             inv.VATAmount,
+		TotalAmount:           inv.TotalAmount,
+		VATRate:               inv.VATRate,
+		Notes:                 inv.Notes,
+		Terms:                 inv.Terms,
+		Lines:                 pdfLines,
+		Company:               company,
+		Customer:              customer,
 	}
 
 	pdfBytes, err := pdfsvc.Generate(data)

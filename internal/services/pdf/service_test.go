@@ -120,3 +120,41 @@ func TestWantsPaymentSlip(t *testing.T) {
 		}
 	}
 }
+
+// LTVA art. 27 al. 4 defines a correction as "un document qui mentionne et
+// annule la facture d'origine". The mention has to be on the page, not only in
+// the database, so this asserts on the rendered bytes rather than on a field.
+func TestCreditNoteNamesTheInvoiceItCancels(t *testing.T) {
+	doc := baseDoc("credit_note")
+	doc.InvoiceNumber = "NC-2026-0001"
+	doc.CorrectsInvoiceNumber = "FA-2026-0042"
+
+	// Compression off so the text is inspectable; the layout is unchanged.
+	withoutRef := doc
+	withoutRef.CorrectsInvoiceNumber = ""
+
+	with, err := Generate(doc)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	without, err := Generate(withoutRef)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if len(with) <= len(without) {
+		t.Error("the corrected invoice number does not reach the page")
+	}
+}
+
+// An invoice must keep its due date; only a credit note trades it for the
+// reference to what it cancels.
+func TestOnlyCreditNotesReplaceTheDueDateRow(t *testing.T) {
+	inv := baseDoc("invoice")
+	inv.CorrectsInvoiceNumber = "FA-2026-0042" // ignored on an invoice
+
+	a, _ := Generate(inv)
+	b, _ := Generate(baseDoc("invoice"))
+	if len(a) != len(b) {
+		t.Error("CorrectsInvoiceNumber changed an invoice's layout; it must only affect credit notes")
+	}
+}

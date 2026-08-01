@@ -177,6 +177,8 @@ export interface Invoice {
   converted_from_id: string | null
   // Issue commerciale d'une offre. Toujours null sur une facture.
   quote_outcome: QuoteOutcome | null
+  // Facture que cette note de crédit annule (LTVA art. 27 al. 4). Null ailleurs.
+  corrects_invoice_id: string | null
   lines: InvoiceLine[]
   created_at: string
   updated_at: string

@@ -315,3 +315,153 @@ func TestOverdueIsNotAStatusTheServerAccepts(t *testing.T) {
 		t.Errorf("status = %q after a refused transition, want sent", status)
 	}
 }
+
+// ─── Notes de crédit ──────────────────────────────────────────────────────────
+
+func (f *fixture) sentInvoice(t *testing.T) *models.Invoice {
+	t.Helper()
+	inv := f.create(t, DocumentTypeInvoice)
+	if err := f.svc.Transition(context.Background(), inv.ID, models.InvoiceStatusSent); err != nil {
+		t.Fatalf("send invoice: %v", err)
+	}
+	return inv
+}
+
+// A credit note that references nothing leaves a controller unable to reach the
+// invoice whose VAT it reduced (CO art. 957a al. 2 ch. 5). LTVA art. 27 al. 4
+// calls the correction "un document qui mentionne et annule la facture
+// d'origine" — the mention is this link.
+func TestCreditNoteLinksToTheInvoiceItCorrects(t *testing.T) {
+	f := newFixture(t)
+	inv := f.sentInvoice(t)
+
+	note, err := f.svc.CreateCreditNote(context.Background(), inv.ID, f.userID, CreateCreditNoteRequest{})
+	if err != nil {
+		t.Fatalf("CreateCreditNote: %v", err)
+	}
+	if note.CorrectsInvoiceID == nil || *note.CorrectsInvoiceID != inv.ID {
+		t.Error("the credit note does not point at the invoice it cancels")
+	}
+	if !strings.HasPrefix(note.InvoiceNumber, "NC-") {
+		t.Errorf("number = %q, want an NC- number", note.InvoiceNumber)
+	}
+	if note.TotalAmount != inv.TotalAmount {
+		t.Errorf("full credit = %.2f, want %.2f", note.TotalAmount, inv.TotalAmount)
+	}
+	// The invoice itself is untouched: a correction adds a document, it does
+	// not rewrite the one being corrected.
+	var status string
+	if err := f.db.QueryRow(`SELECT status FROM invoices WHERE id = ?`, inv.ID).Scan(&status); err != nil {
+		t.Fatalf("reload invoice: %v", err)
+	}
+	if status != string(models.InvoiceStatusSent) {
+		t.Errorf("invoice status = %q, want sent", status)
+	}
+}
+
+// The guard the link makes possible: nothing used to stop crediting more than
+// was ever invoiced.
+func TestCreditNotesCannotExceedTheInvoiceTotal(t *testing.T) {
+	f := newFixture(t)
+	inv := f.sentInvoice(t)
+	ctx := context.Background()
+
+	if _, err := f.svc.CreateCreditNote(ctx, inv.ID, f.userID, CreateCreditNoteRequest{}); err != nil {
+		t.Fatalf("first credit note: %v", err)
+	}
+	_, err := f.svc.CreateCreditNote(ctx, inv.ID, f.userID, CreateCreditNoteRequest{})
+	if !errors.Is(err, ErrCreditExceedsInvoice) {
+		t.Errorf("crediting the invoice twice returned %v, want ErrCreditExceedsInvoice", err)
+	}
+}
+
+// Partial credits must accumulate against the same ceiling, not each be
+// measured against the full invoice on its own.
+func TestPartialCreditsAccumulate(t *testing.T) {
+	f := newFixture(t)
+	inv := f.sentInvoice(t) // 1250.00 HT + 8.1% = 1351.25
+	ctx := context.Background()
+
+	half := []LineInput{{Description: "Retour partiel", Quantity: 1, UnitPrice: 600, VATRate: 8.1, Sequence: 1}}
+	if _, err := f.svc.CreateCreditNote(ctx, inv.ID, f.userID, CreateCreditNoteRequest{Lines: half}); err != nil {
+		t.Fatalf("first partial credit: %v", err)
+	}
+	if _, err := f.svc.CreateCreditNote(ctx, inv.ID, f.userID, CreateCreditNoteRequest{Lines: half}); err != nil {
+		t.Fatalf("second partial credit should still fit: %v", err)
+	}
+	// A third would push the total past the invoice.
+	_, err := f.svc.CreateCreditNote(ctx, inv.ID, f.userID, CreateCreditNoteRequest{Lines: half})
+	if !errors.Is(err, ErrCreditExceedsInvoice) {
+		t.Errorf("third partial credit returned %v, want ErrCreditExceedsInvoice", err)
+	}
+}
+
+// A cancelled credit note credits nothing, so it must free its share again.
+func TestCancelledCreditNoteFreesItsAmount(t *testing.T) {
+	f := newFixture(t)
+	inv := f.sentInvoice(t)
+	ctx := context.Background()
+
+	note, err := f.svc.CreateCreditNote(ctx, inv.ID, f.userID, CreateCreditNoteRequest{})
+	if err != nil {
+		t.Fatalf("credit note: %v", err)
+	}
+	if err := f.svc.Transition(ctx, note.ID, models.InvoiceStatusCancelled); err != nil {
+		t.Fatalf("cancel credit note: %v", err)
+	}
+	if _, err := f.svc.CreateCreditNote(ctx, inv.ID, f.userID, CreateCreditNoteRequest{}); err != nil {
+		t.Errorf("after cancelling, the invoice should be creditable again: %v", err)
+	}
+}
+
+func TestCreditNoteRejectsQuotesAndCreditNotes(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	quote := f.sentQuote(t)
+	if _, err := f.svc.CreateCreditNote(ctx, quote.ID, f.userID, CreateCreditNoteRequest{}); !errors.Is(err, ErrNotAnInvoice) {
+		t.Errorf("crediting an offer returned %v, want ErrNotAnInvoice", err)
+	}
+
+	inv := f.sentInvoice(t)
+	note, err := f.svc.CreateCreditNote(ctx, inv.ID, f.userID, CreateCreditNoteRequest{})
+	if err != nil {
+		t.Fatalf("credit note: %v", err)
+	}
+	if _, err := f.svc.CreateCreditNote(ctx, note.ID, f.userID, CreateCreditNoteRequest{}); !errors.Is(err, ErrNotAnInvoice) {
+		t.Errorf("crediting a credit note returned %v, want ErrNotAnInvoice", err)
+	}
+}
+
+// A draft was never issued and a cancelled invoice is already void — neither
+// carries a VAT debt to correct.
+func TestCreditNoteRejectsDraftAndCancelledInvoices(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	draft := f.create(t, DocumentTypeInvoice)
+	if _, err := f.svc.CreateCreditNote(ctx, draft.ID, f.userID, CreateCreditNoteRequest{}); !errors.Is(err, ErrInvoiceNotCreditable) {
+		t.Errorf("crediting a draft returned %v, want ErrInvoiceNotCreditable", err)
+	}
+
+	cancelled := f.create(t, DocumentTypeInvoice)
+	if err := f.svc.Transition(ctx, cancelled.ID, models.InvoiceStatusCancelled); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if _, err := f.svc.CreateCreditNote(ctx, cancelled.ID, f.userID, CreateCreditNoteRequest{}); !errors.Is(err, ErrInvoiceNotCreditable) {
+		t.Errorf("crediting a cancelled invoice returned %v, want ErrInvoiceNotCreditable", err)
+	}
+}
+
+// A paid invoice is the ordinary case for a refund.
+func TestPaidInvoiceCanBeCredited(t *testing.T) {
+	f := newFixture(t)
+	inv := f.sentInvoice(t)
+	ctx := context.Background()
+	if err := f.svc.Transition(ctx, inv.ID, models.InvoiceStatusPaid); err != nil {
+		t.Fatalf("mark paid: %v", err)
+	}
+	if _, err := f.svc.CreateCreditNote(ctx, inv.ID, f.userID, CreateCreditNoteRequest{}); err != nil {
+		t.Errorf("a paid invoice must be creditable: %v", err)
+	}
+}

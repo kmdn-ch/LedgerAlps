@@ -5,7 +5,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Download, Eye, EyeOff, Send, CheckCircle,
-  XCircle, Archive, Pencil, RotateCcw, FileText, Clock,
+  XCircle, Archive, Pencil, RotateCcw, FileText, Clock, Undo2,
 } from 'lucide-react'
 import { invoicesApi, downloadBlob } from '@/api/client'
 import {
@@ -102,6 +102,15 @@ export function InvoiceDetailPage() {
     },
   })
 
+  const creditNote = useMutation({
+    mutationFn: () => invoicesApi.createCreditNote(invoiceId!),
+    onSuccess: (resp) => {
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['invoice', invoiceId] })
+      navigate(`/invoices/${resp.data.id}`)
+    },
+  })
+
   const handleTransition = (status: DocumentStatus) => {
     const extra = status === 'paid'
       ? { paymentDate: new Date().toISOString().slice(0, 10) }
@@ -126,6 +135,10 @@ export function InvoiceDetailPage() {
   const actions = (isQuote ? QUOTE_TRANSITIONS[invoice.status] : TRANSITIONS[invoice.status]) ?? []
   // Une offre envoyée dont l'issue n'est pas encore connue reste actionnable.
   const quoteOpen = isQuote && invoice.status === 'sent' && !invoice.quote_outcome
+  // Une facture émise — envoyée ou payée — peut être corrigée. Un brouillon n'a
+  // jamais été réclamé, une facture annulée est déjà sans effet.
+  const creditable = invoice.document_type === 'invoice'
+    && (invoice.status === 'sent' || invoice.status === 'paid')
   const totalRemaining = invoice.total_amount - invoice.amount_paid
 
   return (
@@ -178,6 +191,17 @@ export function InvoiceDetailPage() {
                   </button>
                 </>
               )}
+              {creditable && (
+                <button
+                  onClick={() => creditNote.mutate()}
+                  disabled={creditNote.isPending}
+                  className="btn-secondary btn-sm flex items-center gap-1.5"
+                  title="Émet une note de crédit annulant cette facture. La facture est conservée."
+                >
+                  <Undo2 size={14} />
+                  {creditNote.isPending ? 'Création…' : 'Note de crédit'}
+                </button>
+              )}
               {actions.map(t => (
                 <button
                   key={t.status}
@@ -211,12 +235,24 @@ export function InvoiceDetailPage() {
       {convert.isError && (
         <ErrorBanner message="La conversion a échoué. Cette offre a peut-être déjà donné lieu à une facture." />
       )}
+      {creditNote.isError && (
+        <ErrorBanner message="La note de crédit a été refusée : le total crédité dépasserait le montant de la facture." />
+      )}
 
       {/* Lien entre l'offre et la facture qui en découle. Les deux documents
           existent séparément ; ce bandeau est ce qui les relie à l'écran. */}
       {invoice.quote_outcome && (
         <div className="mb-6 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
           {OUTCOME_LABEL[invoice.quote_outcome]}
+        </div>
+      )}
+      {invoice.corrects_invoice_id && (
+        <div className="mb-6 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
+          Note de crédit annulant la{' '}
+          <Link to={`/invoices/${invoice.corrects_invoice_id}`} className="underline font-medium">
+            facture d'origine
+          </Link>
+          , conservée telle qu'elle a été émise.
         </div>
       )}
       {invoice.converted_from_id && (

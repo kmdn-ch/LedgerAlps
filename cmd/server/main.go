@@ -145,6 +145,9 @@ func main() {
 	// mutating into one — both documents are kept and linked.
 	api.POST("/invoices/:id/convert", ih.ConvertQuote)
 	api.POST("/invoices/:id/outcome", ih.SetQuoteOutcome)
+	// Une note de crédit cite la facture qu'elle annule (LTVA art. 27 al. 4)
+	// et son montant est borné par ce qui a déjà été crédité.
+	api.POST("/invoices/:id/credit-note", ih.CreateCreditNote)
 
 	// Fiscal years + VAT declaration (admin)
 	fyh := handlers.NewFiscalYearHandler(database, cfg.UsePostgres())

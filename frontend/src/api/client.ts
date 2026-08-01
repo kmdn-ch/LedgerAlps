@@ -137,6 +137,11 @@ export const invoicesApi = {
   // acceptée ici : on accepte une offre en la convertissant.
   setQuoteOutcome: (id: string, outcome: 'refused' | 'expired') =>
     api.post(`/invoices/${id}/outcome`, { outcome }),
+  // Émet une note de crédit contre une facture. Corps vide = crédit total ;
+  // fournir des lignes crédite une partie. Refusé (409) si le total des notes
+  // de crédit dépasserait la facture.
+  createCreditNote: (id: string, data?: { issue_date?: string; reason?: string; lines?: unknown[] }) =>
+    api.post(`/invoices/${id}/credit-note`, data ?? {}),
   // PDF — Go endpoint: GET /invoices/:id/pdf
   downloadPDF: (id: string) =>
     api.get(`/invoices/${id}/pdf`, { responseType: 'blob' }),

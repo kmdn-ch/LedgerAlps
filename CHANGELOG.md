@@ -7,6 +7,13 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Ajouté
+- **Note de crédit rattachée à la facture qu'elle corrige** — `POST /invoices/:id/credit-note`, et un bouton « Note de crédit » sur une facture envoyée ou payée. La note référence la facture (`corrects_invoice_id`) et son PDF porte la mention « Annule la facture : FA-… » : LTVA art. 27 al. 4 définit la correction comme « un document qui mentionne et annule la facture d'origine », et le CO art. 957a al. 2 ch. 5 exige la traçabilité. Jusqu'ici une note de crédit ne référençait rien — un contrôleur constatant une TVA réduite n'avait aucun moyen de remonter à la facture concernée. La facture d'origine n'est pas modifiée
+- **Le montant d'une note de crédit est borné** par la facture : la somme des notes rattachées ne peut plus dépasser son total (`409`). Les notes annulées libèrent leur part, puisqu'elles ne créditent rien. Un crédit partiel est possible en fournissant des lignes ; les crédits partiels s'additionnent contre le même plafond, au lieu d'être jaugés chacun contre la facture entière
+
+### Limitations connues
+- **Une note de crédit ne passe pas d'écriture au journal** — parce qu'aucune facture n'en passe. Les ventes se saisissent manuellement au journal ; seuls les paiements sont automatisés. Contrepasser automatiquement un produit jamais enregistré créerait un produit négatif sans contrepartie, et doublerait la correction si l'utilisateur l'a déjà passée. L'automatisation doit commencer par les factures, pas par leurs corrections
+
 ---
 
 ## [1.4.3] — 2026-08-01
