@@ -102,6 +102,18 @@ Ce qui n'y est **pas** : le logiciel lui-même, et le fichier de configuration
 qui contient la clé de session. Restaurer sur une autre machine ramène donc
 toute votre comptabilité ; il faudra simplement vous reconnecter.
 
+**Mes données sont-elles chiffrées sur le disque ?**
+Vos **sauvegardes** peuvent l'être, si vous indiquez une phrase de passe. La
+**base de données elle-même n'est pas chiffrée** : SQLite ne le fait pas
+nativement, et les extensions qui le permettent obligeraient à abandonner le
+principe d'un logiciel qui s'installe sans rien d'autre.
+
+La bonne protection est ailleurs, et elle est gratuite : **activez le
+chiffrement du disque** — BitLocker sur Windows, LUKS sur Linux. Il protège la
+base, les sauvegardes, et tout le reste de votre ordinateur. Le
+[guide de déploiement](docs/PRODUCTION.md#pourquoi-la-base-de-données-est-en-clair)
+détaille pourquoi les autres options coûtent plus qu'elles ne rapportent.
+
 **Puis-je annuler une restauration ?**
 Oui. Avant de restaurer, LedgerAlps sauvegarde d'abord votre comptabilité
 actuelle — protégée par la même phrase de passe que la sauvegarde que vous

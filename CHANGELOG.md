@@ -7,6 +7,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Documentation
+- **Pourquoi la base de données est en clair**, et ce qui protège réellement : les quatre options possibles avec leur coût, et le point commun qui les condamne toutes sauf une — le serveur devant lire la base sans intervention humaine, la clé vit forcément sur la machine qu'elle protège. La réponse est le chiffrement du disque, qui couvre aussi le secret de signature. README pour l'essentiel, `docs/PRODUCTION.md` pour le détail
+- **Rotation du secret de signature** inscrite à la roadmap, avec sa portée exacte vérifiée dans le code : le secret ne sert qu'à signer les jetons, le régénérer déconnecte les sessions et **rien d'autre** — mots de passe intacts, aucune donnée touchée, sauvegardes toujours utilisables
+
 ### Modifié
 - **L'option « Chiffrer aussi l'accès local » est retirée.** Proposée en pré-version, elle n'apportait aucune sécurité réelle — le trafic vers `127.0.0.1` ne quitte pas la machine — et coûtait un avertissement de certificat à chaque nouveau profil de navigateur. Dépenser la confiance des utilisateurs dans les avertissements sans rien protéger est un mauvais échange. Le chiffrement suit désormais l'exposition : local en clair, réseau en HTTPS. La clé `force_tls` est supprimée des fichiers de configuration qui la portaient
 - Si votre politique exige TLS jusqu'au poste, la réponse est le chiffrement du **disque** (BitLocker, LUKS) : il protège la base de données elle-même, la vraie cible sur une machine accessible

@@ -259,6 +259,38 @@ même rotation. Il n'y a plus de fichiers `pre-restore` en clair qui
 s'accumulent : les versions antérieures à la v1.4.4 en produisaient, vous pouvez
 les supprimer.
 
+### Pourquoi la base de données est en clair
+
+`ledgeralps.db` est un fichier SQLite ordinaire : lisible par n'importe quel
+outil, sur n'importe quelle machine. C'est un choix subi, pas assumé, et il vaut
+d'être expliqué.
+
+SQLite ne chiffre pas nativement. Les extensions qui le font — SQLCipher, SEE —
+sont des **bibliothèques C**. LedgerAlps compile avec `CGO_ENABLED=0` sur un
+pilote SQLite en Go pur, et c'est précisément ce qui lui donne son binaire
+unique, sans dépendance système, compilable pour Windows depuis Linux. Adopter
+SQLCipher mettrait fin aux deux.
+
+**Les options réelles, avec leur coût :**
+
+| Option | Ce qu'elle protège | Ce qu'elle coûte |
+|---|---|---|
+| **Chiffrement du disque** (BitLocker, LUKS) | Tout : base, sauvegardes, `config.json`, et le reste du poste | Rien pour l'application. C'est une mesure du système d'exploitation |
+| Chiffrement applicatif de colonnes | Les seules colonnes sensibles | Plus de recherche ni de tri SQL dessus : lister vos contacts imposerait de déchiffrer chaque ligne. Et la clé reste sur la machine |
+| SQLCipher (CGO) | La base entière | Fin du binaire unique et de la compilation croisée ; une chaîne d'outils par plateforme |
+| VFS chiffré en Go pur | La base entière | Aucune implémentation que nous jugions assez mûre pour des données comptables |
+
+**Le point commun de toutes les solutions logicielles** : le serveur doit
+pouvoir lire la base **sans intervention humaine** au démarrage. La clé vit donc
+sur la même machine que le fichier qu'elle protège. Contre un portable volé
+éteint, le chiffrement du disque gagne. Contre une machine allumée et
+compromise, rien au niveau applicatif n'aide — l'attaquant lit la mémoire du
+processus, où la base est déchiffrée de toute façon.
+
+**Donc : chiffrez le disque.** C'est la mesure qui protège réellement, elle est
+gratuite sur Windows Pro et Linux, et elle couvre aussi le secret de signature
+dans `config.json` — que le chiffrement de la base laisserait, lui, en clair.
+
 ### Comment le chiffrement fonctionne
 
 Deux briques, aucune dépendance système — tout est en Go pur, ce qui préserve
