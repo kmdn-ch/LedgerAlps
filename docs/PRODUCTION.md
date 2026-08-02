@@ -99,6 +99,13 @@ LedgerAlps n'implémente pas TLS lui-même. Pour un accès hors de la machine,
 placez un reverse proxy devant (nginx, Caddy) et laissez-lui gérer le
 certificat.
 
+⚠️ **Sans proxy TLS, tout passe en clair sur le réseau** : mot de passe de
+connexion, jeton de session et **phrase de passe de chiffrement des
+sauvegardes**. Quiconque écoute le segment les lit. Sur un poste unique la
+question ne se pose pas — le trafic vers `localhost` ne quitte pas la machine —
+mais dès qu'un second poste se connecte, le proxy n'est pas optionnel.
+Le TLS natif est à la [roadmap](../ROADMAP.md).
+
 ```bash
 export ALLOWED_ORIGINS="https://compta.entreprise.local"
 ```

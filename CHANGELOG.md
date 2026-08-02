@@ -7,6 +7,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Modifié
+- **La phrase de passe de chiffrement est demandée après le clic sur « Créer une sauvegarde »**, dans un dialogue portant l'avertissement, et non plus dans un champ affiché en permanence. Sauvegarder sans chiffrer reste possible, mais devient un **choix explicite** au lieu d'être la conséquence d'un champ laissé vide
+- **La restauration nomme la sauvegarde concernée** dans l'invite de phrase de passe : plusieurs copies peuvent avoir été chiffrées avec des phrases différentes
+
 ### Ajouté
 - **Sauvegardes depuis l'interface** — onglet **Sauvegardes** dans Paramètres : créer un instantané, saisir la phrase de passe de chiffrement, consulter les copies existantes et leur état (chiffrée / en clair). Réservé aux administrateurs
 - **Restauration depuis l'interface, avec avertissement** — un dialogue explique que la comptabilité actuelle sera remplacée et que **LedgerAlps devra être redémarré**, puis la restauration est *préparée* : l'instantané est déchiffré et vérifié immédiatement, et appliqué au démarrage suivant avant l'ouverture de la base. Un serveur ne peut pas échanger sous lui le fichier qu'il a ouvert ; l'interface le dit au lieu de laisser croire que le clic a suffi. Une phrase de passe erronée est refusée sur-le-champ, pas au redémarrage. La restauration préparée reste annulable, et la comptabilité remplacée est sauvegardée juste avant

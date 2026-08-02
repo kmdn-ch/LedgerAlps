@@ -23,6 +23,10 @@ function formatSize(bytes: number): string {
 
 export function BackupPanel() {
   const qc = useQueryClient()
+  // La phrase de passe n'est demandée qu'après le clic : la laisser en
+  // permanence dans la page invite à la saisir puis à s'en aller sans rien
+  // créer, et elle traîne alors dans un champ de formulaire.
+  const [creating, setCreating]       = useState(false)
   const [passphrase, setPassphrase]   = useState('')
   const [confirming, setConfirming]   = useState<BackupItem | null>(null)
   const [restorePass, setRestorePass] = useState('')
@@ -37,9 +41,11 @@ export function BackupPanel() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['backups'] })
 
   const create = useMutation({
-    mutationFn: () => backupsApi.create(passphrase),
-    onSuccess: () => { setPassphrase(''); invalidate() },
+    mutationFn: (pass: string) => backupsApi.create(pass),
+    onSuccess: () => { setCreating(false); setPassphrase(''); invalidate() },
   })
+
+  const closeCreate = () => { setCreating(false); setPassphrase(''); create.reset() }
 
   const stage = useMutation({
     mutationFn: () => backupsApi.stageRestore(confirming!.name, restorePass),
@@ -90,44 +96,15 @@ export function BackupPanel() {
           Une copie complète de votre comptabilité est écrite dans le dossier de
           sauvegarde. L'opération est sûre pendant que vous travaillez.
         </p>
-
-        <label className="label" htmlFor="backup-passphrase">
-          Phrase de passe de chiffrement <span className="text-alpine-400">(facultative)</span>
-        </label>
-        <input
-          id="backup-passphrase"
-          type="password"
-          className="input w-full max-w-md"
-          placeholder="Laisser vide pour une sauvegarde non chiffrée"
-          value={passphrase}
-          onChange={e => setPassphrase(e.target.value)}
-          autoComplete="new-password"
-        />
-        <p className="text-xs text-alpine-500 mt-1.5 max-w-md">
-          Choisissez-la <strong>différente de votre mot de passe de connexion</strong> : sinon,
-          perdre cet ordinateur revient à perdre aussi vos sauvegardes. Notez-la ailleurs
-          que sur cette machine — <strong>sans elle, la sauvegarde est définitivement
-          illisible</strong>, y compris pour vous.
-        </p>
-
         <button
-          onClick={() => create.mutate()}
-          disabled={create.isPending}
-          className="btn-primary btn-sm mt-3 flex items-center gap-1.5"
+          onClick={() => { create.reset(); setPassphrase(''); setCreating(true) }}
+          className="btn-primary btn-sm flex items-center gap-1.5"
         >
-          {create.isPending ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-          {create.isPending ? 'Sauvegarde en cours…' : 'Créer une sauvegarde'}
+          <Download size={14} />
+          Créer une sauvegarde
         </button>
-
-        {create.isError && (
-          <div className="mt-3">
-            <ErrorBanner message="La sauvegarde a échoué. Rien n'a été modifié." />
-          </div>
-        )}
-        {create.isSuccess && (
-          <p className="text-sm text-success-700 mt-3">
-            Sauvegarde créée et vérifiée.
-          </p>
+        {create.isSuccess && !creating && (
+          <p className="text-sm text-success-700 mt-3">Sauvegarde créée et vérifiée.</p>
         )}
       </div>
 
@@ -186,6 +163,90 @@ export function BackupPanel() {
         )}
       </div>
 
+      {/* ── Choix du chiffrement, après le clic ─────────────────────────── */}
+      {creating && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-title"
+        >
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-5">
+            <div className="flex items-start justify-between mb-3">
+              <h2 id="create-title" className="text-base font-semibold flex items-center gap-2">
+                <ShieldCheck size={18} className="text-alpine-600" />
+                Chiffrer cette sauvegarde ?
+              </h2>
+              <button onClick={closeCreate} className="btn-ghost btn-sm" aria-label="Fermer">
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="text-sm space-y-3">
+              <p className="text-alpine-600">
+                Une sauvegarde chiffrée reste illisible si elle est copiée sur un NAS, une clé
+                USB ou un disque externe qui vous échappe.
+              </p>
+
+              <div>
+                <label className="label" htmlFor="create-passphrase">
+                  Phrase de passe de chiffrement
+                </label>
+                <input
+                  id="create-passphrase"
+                  type="password"
+                  className="input w-full"
+                  value={passphrase}
+                  onChange={e => setPassphrase(e.target.value)}
+                  autoComplete="new-password"
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && passphrase !== '' && !create.isPending) {
+                      create.mutate(passphrase)
+                    }
+                  }}
+                />
+                <p className="text-xs text-alpine-500 mt-1.5">
+                  Choisissez-la <strong>différente de votre mot de passe de connexion</strong> :
+                  sinon, perdre cet ordinateur revient à perdre aussi vos sauvegardes.
+                  Notez-la ailleurs que sur cette machine — <strong>sans elle, la sauvegarde
+                  est définitivement illisible</strong>, y compris pour vous.
+                </p>
+              </div>
+
+              {create.isError && (
+                <ErrorBanner message="La sauvegarde a échoué. Rien n'a été modifié." />
+              )}
+            </div>
+
+            <div className="flex justify-between items-center gap-2 mt-5">
+              {/* Sauvegarder sans chiffrer reste possible, mais c'est un choix
+                  posé, pas la conséquence d'un champ laissé vide. */}
+              <button
+                onClick={() => create.mutate('')}
+                disabled={create.isPending}
+                className="btn-ghost btn-sm"
+              >
+                Sauvegarder sans chiffrer
+              </button>
+              <div className="flex gap-2">
+                <button onClick={closeCreate} className="btn-secondary btn-sm">
+                  Annuler
+                </button>
+                <button
+                  onClick={() => create.mutate(passphrase)}
+                  disabled={create.isPending || passphrase === ''}
+                  className="btn-primary btn-sm flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {create.isPending && <Loader2 size={14} className="animate-spin" />}
+                  {create.isPending ? 'Chiffrement…' : 'Chiffrer et sauvegarder'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Avertissement avant restauration ────────────────────────────── */}
       {confirming && (
         <div
@@ -230,9 +291,15 @@ export function BackupPanel() {
               </p>
 
               {confirming.encrypted && (
-                <div>
+                <div className="rounded-md border border-alpine-200 bg-alpine-50 px-3 py-2.5">
+                  <p className="flex items-center gap-1.5 font-medium mb-2">
+                    <ShieldCheck size={15} className="text-success-700" />
+                    Cette sauvegarde est chiffrée
+                  </p>
+                  {/* Nommer le fichier : plusieurs sauvegardes peuvent avoir été
+                      créées avec des phrases de passe différentes. */}
                   <label className="label" htmlFor="restore-passphrase">
-                    Phrase de passe de cette sauvegarde
+                    Phrase de passe utilisée pour <span className="font-mono text-xs">{confirming.name}</span>
                   </label>
                   <input
                     id="restore-passphrase"
@@ -240,6 +307,11 @@ export function BackupPanel() {
                     className="input w-full"
                     value={restorePass}
                     onChange={e => setRestorePass(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && restorePass !== '' && !stage.isPending) {
+                        stage.mutate()
+                      }
+                    }}
                     autoComplete="off"
                     autoFocus
                   />
