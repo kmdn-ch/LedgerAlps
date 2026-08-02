@@ -79,6 +79,16 @@ func (h *BackupsHandler) CreateBackup(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&body)
 
+	// An empty passphrase means "do not encrypt", which stays a legitimate
+	// choice. A short one is not a choice, it is a mistake: this file can be
+	// carried off and attacked offline, with no rate limit and nobody watching.
+	if body.Passphrase != "" {
+		if err := db.ValidatePassphrase(body.Passphrase); err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
 	// Argon2id is deliberately slow and a large database takes a while to
 	// copy; the default request timeout would cut this short.
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Minute)

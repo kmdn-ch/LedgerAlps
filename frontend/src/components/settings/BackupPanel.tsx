@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Download, RotateCcw, ShieldCheck, ShieldOff, AlertTriangle, X, Loader2,
+  Download, RotateCcw, ShieldCheck, ShieldOff, AlertTriangle, X, Loader2, Check, Minus,
 } from 'lucide-react'
 import { backupsApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner, EmptyState } from '@/components/ui'
@@ -19,6 +19,79 @@ function formatSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} Mo`
   if (bytes >= 1024) return `${Math.round(bytes / 1024)} Ko`
   return `${bytes} o`
+}
+
+
+// ─── Robustesse de la phrase de passe ─────────────────────────────────────────
+//
+// Cette phrase protège un fichier qu'un attaquant peut emporter et attaquer
+// tranquillement : pas de limitation de tentatives, personne pour surveiller.
+// Argon2id rend chaque essai coûteux, mais rien ne sauve une phrase courte —
+// d'où la longueur en premier critère. Le serveur applique la même règle
+// (internal/db/passphrase.go) ; ceci ne fait que la rendre visible pendant la
+// frappe, au lieu de la révéler par un refus après coup.
+const MIN_LEN = 16
+const PASSPHRASE_EXAMPLE = '34CryPt3DB4ckup5@26'
+
+interface Check { label: string; met: boolean }
+
+function checksFor(p: string): Check[] {
+  return [
+    { label: `${MIN_LEN} caractères ou plus`, met: [...p].length >= MIN_LEN },
+    { label: 'une minuscule',                 met: /\p{Ll}/u.test(p) },
+    { label: 'une majuscule',                 met: /\p{Lu}/u.test(p) },
+    { label: 'un chiffre',                    met: /\p{Nd}/u.test(p) },
+  ]
+}
+
+// Le symbole n'est pas exigé mais renforce : il est présenté comme un bonus,
+// pas comme un obstacle de plus.
+function strengthOf(p: string): { score: number; label: string; className: string } {
+  if (p === '') return { score: 0, label: '', className: '' }
+  const met = checksFor(p).filter(c => c.met).length
+  const bonus = /[^\p{L}\p{Nd}]/u.test(p) ? 1 : 0
+  const long  = [...p].length >= 24 ? 1 : 0
+  const score = met + bonus + long // 0..6
+
+  if (met < 4)      return { score, label: 'Insuffisante', className: 'bg-danger-500' }
+  if (score >= 6)   return { score, label: 'Excellente',   className: 'bg-success-700' }
+  if (score === 5)  return { score, label: 'Solide',       className: 'bg-success-500' }
+  return { score, label: 'Acceptable', className: 'bg-warning-500' }
+}
+
+function PassphraseStrength({ value }: { value: string }) {
+  const checks = checksFor(value)
+  const { score, label, className } = strengthOf(value)
+  const allMet = checks.every(c => c.met)
+
+  return (
+    <div className="mt-2">
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1.5 bg-alpine-100 rounded overflow-hidden">
+          <div
+            className={`h-full transition-all ${className}`}
+            style={{ width: `${(score / 6) * 100}%` }}
+          />
+        </div>
+        {label && (
+          <span className={`text-xs font-medium ${allMet ? 'text-success-700' : 'text-danger-600'}`}>
+            {label}
+          </span>
+        )}
+      </div>
+
+      <ul className="mt-2 space-y-0.5">
+        {checks.map(c => (
+          <li key={c.label} className={`text-xs flex items-center gap-1.5 ${
+            c.met ? 'text-success-700' : 'text-alpine-500'
+          }`}>
+            {c.met ? <Check size={12} /> : <Minus size={12} />}
+            {c.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 }
 
 export function BackupPanel() {
@@ -201,11 +274,20 @@ export function BackupPanel() {
                   autoComplete="new-password"
                   autoFocus
                   onKeyDown={e => {
-                    if (e.key === 'Enter' && passphrase !== '' && !create.isPending) {
+                    if (e.key === 'Enter' && !create.isPending
+                        && checksFor(passphrase).every(c => c.met)) {
                       create.mutate(passphrase)
                     }
                   }}
                 />
+                <PassphraseStrength value={passphrase} />
+
+                <p className="text-xs text-alpine-500 mt-2">
+                  Exemple d'une phrase solide :{' '}
+                  <code className="font-mono bg-alpine-50 px-1.5 py-0.5 rounded">{PASSPHRASE_EXAMPLE}</code>
+                  {' '}— n'utilisez pas celle-ci, elle est publique.
+                </p>
+
                 <p className="text-xs text-alpine-500 mt-1.5">
                   Choisissez-la <strong>différente de votre mot de passe de connexion</strong> :
                   sinon, perdre cet ordinateur revient à perdre aussi vos sauvegardes.
@@ -235,7 +317,7 @@ export function BackupPanel() {
                 </button>
                 <button
                   onClick={() => create.mutate(passphrase)}
-                  disabled={create.isPending || passphrase === ''}
+                  disabled={create.isPending || !checksFor(passphrase).every(c => c.met)}
                   className="btn-primary btn-sm flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {create.isPending && <Loader2 size={14} className="animate-spin" />}

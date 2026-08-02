@@ -63,7 +63,8 @@ l'application quand une loi ou un standard qui vous concerne évolue.
 
 **Sauvegardes**
 Un instantané de votre comptabilité est pris automatiquement, et vous pouvez
-en déclencher un à tout moment.
+en déclencher un à tout moment depuis **Paramètres → Sauvegardes**, en le
+protégeant par une phrase de passe.
 
 ---
 
@@ -91,9 +92,27 @@ sauvegardes automatiques sont écrites sur le **même** disque : copiez-les
 régulièrement sur un support externe. Le CO impose de conserver vos pièces dix
 ans.
 
+**Que contient une sauvegarde ?**
+Tout ce que LedgerAlps enregistre, en un seul fichier : vos factures, offres de
+prix et notes de crédit avec leurs lignes, vos contacts, le journal et le plan
+comptable, les paiements, les exercices, les factures fournisseurs, les
+paramètres de votre société — logo compris — et le journal d'audit.
+
+Ce qui n'y est **pas** : le logiciel lui-même, et le fichier de configuration
+qui contient la clé de session. Restaurer sur une autre machine ramène donc
+toute votre comptabilité ; il faudra simplement vous reconnecter.
+
 **Les sauvegardes sont-elles chiffrées ?**
-Pas encore. En attendant, placez-les sur un support chiffré (BitLocker,
-VeraCrypt). C'est une priorité de la [roadmap](ROADMAP.md).
+Oui, si vous le demandez. À la création, LedgerAlps vous propose une phrase de
+passe : le fichier devient alors illisible sans elle. C'est ce qui compte quand
+la copie part sur une clé USB ou un NAS.
+
+Deux points à retenir : choisissez-la **différente de votre mot de passe de
+connexion**, et notez-la **ailleurs que sur cet ordinateur**. Sans elle,
+personne ne peut ouvrir la sauvegarde — vous non plus.
+
+Le détail technique — et pourquoi ces choix — est dans le
+[guide de déploiement](docs/PRODUCTION.md#comment-le-chiffrement-fonctionne).
 
 **Puis-je l'utiliser à plusieurs ?**
 Un seul compte pour l'instant. La gestion multi-utilisateurs avec rôles — dont

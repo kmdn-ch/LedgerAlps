@@ -66,6 +66,14 @@ func main() {
 	// than generated: a key the software holds protects nothing against someone
 	// holding the machine, and a passphrase the user has not written down turns
 	// a lost laptop into a lost ledger.
+	// Une phrase faible est signalée mais n'empêche pas la sauvegarde : refuser
+	// ici laisserait l'utilisateur sans aucune copie, ce qui est pire qu'une
+	// copie moins bien protégée.
+	if autoPass := os.Getenv("BACKUP_PASSPHRASE"); autoPass != "" {
+		if err := db.ValidatePassphrase(autoPass); err != nil {
+			log.Printf("WARNING: BACKUP_PASSPHRASE est faible (%v) — les sauvegardes automatiques sont chiffrées, mais moins solidement", err)
+		}
+	}
 	if path, err := db.MaybeAutoBackup(
 		context.Background(), database, cfg, db.BackupDir(), db.DefaultInterval, db.DefaultKeep,
 		os.Getenv("BACKUP_PASSPHRASE"),

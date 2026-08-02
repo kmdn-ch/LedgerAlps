@@ -52,6 +52,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 - Le contrôle d'encodage de l'installeur vérifie désormais **`LICENSE` en plus de `installer.nsi`**, et s'exécute **avant** la compilation. Il ne vivait que dans le workflow de répétition : le vrai workflow de publication n'en avait aucun
 
 ### Documentation
+- **Ce que contient une sauvegarde**, et **comment le chiffrement fonctionne** : README pour l'essentiel, `docs/PRODUCTION.md` pour le détail — Argon2id, XChaCha20-Poly1305, et le fondement légal (LPD art. 8, OPDo art. 1 et 3). Précision assumée : **aucun de ces textes ne nomme d'algorithme** ; la loi impose un résultat proportionné au risque, ces primitives sont notre réponse à cette exigence, pas une obligation que nous exécuterions
 - `docs/API.md` : section « Types de documents » et documentation de la conversion, avec les codes de retour et le fondement légal
 
 ---

@@ -213,6 +213,11 @@ func cmdBackup(args []string) {
 	defer cancel()
 
 	pass := resolvePassphrase(*passphrase)
+	if pass != "" {
+		if err := db.ValidatePassphrase(pass); err != nil {
+			fatalf("%v", err)
+		}
+	}
 	path, err := db.Backup(ctx, database, cfg, target, pass)
 	if err != nil {
 		fatalf("backup failed: %v", err)

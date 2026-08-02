@@ -154,6 +154,79 @@ l'instantané est définitivement illisible — pour vous comme pour quiconque.
 Et choisissez-la **distincte du mot de passe de session** : sinon, perdre le
 poste revient à perdre aussi les sauvegardes.
 
+### Que contient une sauvegarde ?
+
+Un instantané est une copie complète de la base SQLite — un seul fichier,
+cohérent, écrit par `VACUUM INTO` pendant que le serveur tourne.
+
+Il contient : `invoices` et `invoice_lines` (factures, offres de prix, notes de
+crédit), `supplier_invoices` et `supplier_invoice_lines`, `contacts`,
+`journal_entries` et `journal_lines`, `accounts`, `payments`, `fiscal_years`,
+`company_settings` (logo compris, stocké en base), `users`, `audit_logs`,
+`security_events` et `refresh_tokens`.
+
+Il ne contient **pas** :
+
+| Hors sauvegarde | Conséquence |
+|---|---|
+| Les binaires | Réinstaller LedgerAlps suffit |
+| `config.json` (dont `JWT_SECRET`) | Les sessions en cours sont invalidées : il faut se reconnecter. Les données sont intactes |
+| Les sauvegardes elles-mêmes | Une sauvegarde ne se sauvegarde pas ; copiez le dossier hors de la machine |
+
+### Comment le chiffrement fonctionne
+
+Deux briques, aucune dépendance système — tout est en Go pur, ce qui préserve
+le binaire unique.
+
+**Argon2id** transforme votre phrase de passe en clé. C'est délibérément lent et
+gourmand en mémoire (64 Mio, 3 passes) : un attaquant qui détient le fichier
+peut essayer des phrases sans limite ni surveillance, alors chaque essai doit
+lui coûter cher. Un sel aléatoire de 16 octets est tiré à chaque sauvegarde,
+si bien que deux fichiers protégés par la même phrase ne se ressemblent pas.
+
+**XChaCha20-Poly1305** chiffre le contenu, par blocs de 1 Mio. Ce n'est pas
+seulement du chiffrement : c'est du chiffrement *authentifié*. Chaque bloc porte
+une empreinte qui inclut son numéro d'ordre et le fait qu'il soit le dernier.
+Conséquence pratique : un fichier altéré, tronqué par une clé USB défaillante,
+ou dont on aurait retiré des blocs est **refusé**, au lieu de produire une
+comptabilité silencieusement amputée.
+
+Ces deux algorithmes sont des standards publics et audités — Argon2 a remporté
+la *Password Hashing Competition* (2015), ChaCha20-Poly1305 est normalisé par la
+[RFC 8439](https://www.rfc-editor.org/rfc/rfc8439) et utilisé par TLS 1.3, SSH
+et WireGuard. Ils ne sont ni maison, ni exotiques.
+
+**La phrase de passe exige au minimum 16 caractères**, avec minuscule, majuscule
+et chiffre. C'est plus long que pour une connexion, et volontairement : une
+connexion est protégée par la limitation des tentatives et le verrouillage de
+compte, un fichier emporté ne l'est par rien.
+
+### Ce que dit la loi
+
+> **LPD art. 8 al. 1** (RS 235.1) — « Les responsables du traitement et les
+> sous-traitants doivent assurer, par des mesures organisationnelles et
+> techniques appropriées, une sécurité adéquate des données personnelles par
+> rapport au risque encouru. »
+
+L'ordonnance d'application ([OPDo, RS 235.11](https://www.fedlex.admin.ch/eli/cc/2022/568/fr))
+précise ces mesures : son art. 1 demande d'évaluer le besoin de protection selon
+le type de données et le risque, son art. 3 exige des mesures assurant la
+confidentialité, la disponibilité et l'intégrité.
+
+**Aucun de ces textes ne nomme d'algorithme.** La loi impose un résultat —
+une sécurité proportionnée au risque — et non un moyen. Argon2id et
+XChaCha20-Poly1305 sont donc notre réponse à cette exigence, pas une obligation
+légale que nous exécuterions. Le raisonnement est celui-ci : une sauvegarde
+contient des données de clients identifiables et l'intégralité d'une
+comptabilité ; elle voyage sur des supports amovibles ; sa perte serait une
+violation de la sécurité des données au sens de l'art. 8 al. 2. Le besoin de
+protection est donc élevé, et des primitives modernes avec un facteur de travail
+élevé sont proportionnées.
+
+> Cette page décrit ce que fait le logiciel. Elle ne constitue ni un avis
+> juridique, ni une certification : votre conformité dépend aussi de l'usage que
+> vous faites de ces sauvegardes.
+
 > Le chiffrement de la base elle-même (au repos, en fonctionnement) n'est pas
 > disponible : il exigerait SQLCipher, une bibliothèque C, donc l'abandon de la
 > compilation croisée et du binaire unique. Voir la [roadmap](../ROADMAP.md).
