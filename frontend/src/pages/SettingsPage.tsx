@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Building2, CreditCard, FileText, Shield,
-  Upload, Trash2, ImageOff, Loader2, AlertTriangle,
+  Upload, Trash2, ImageOff, Loader2, AlertTriangle, Database,
 } from 'lucide-react'
 import { settingsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
@@ -33,7 +33,10 @@ const TABS = [
   { key: 'banking',   label: 'Banque',       icon: CreditCard },
   { key: 'invoicing', label: 'Facturation',  icon: FileText   },
   { key: 'legal',     label: 'Légal / CO',   icon: Shield     },
+  { key: 'backups',   label: 'Sauvegardes',  icon: Database   },
 ]
+
+import { BackupPanel } from '@/components/settings/BackupPanel'
 
 export function SettingsPage() {
   const [tab,   setTab]   = useState('identity')
@@ -118,15 +121,18 @@ export function SettingsPage() {
         title="Paramètres"
         subtitle="Configuration de votre société"
         actions={
-          <button
-            form="settings-form"
-            type="submit"
-            className="btn-primary flex items-center gap-1.5"
-            disabled={save.isPending}
-          >
-            {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {saved ? 'Sauvegardé ✓' : 'Enregistrer'}
-          </button>
+          // L'onglet Sauvegardes n'a rien à enregistrer : ses actions lui sont propres.
+          tab === 'backups' ? null : (
+            <button
+              form="settings-form"
+              type="submit"
+              className="btn-primary flex items-center gap-1.5"
+              disabled={save.isPending}
+            >
+              {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              {saved ? 'Sauvegardé ✓' : 'Enregistrer'}
+            </button>
+          )
         }
       />
 
@@ -167,7 +173,10 @@ export function SettingsPage() {
           </div>
         </nav>
 
-        {/* Formulaire */}
+        {tab === 'backups' ? (
+          <div className="flex-1"><BackupPanel /></div>
+        ) : (
+        /* Formulaire */
         <form id="settings-form" onSubmit={handleSubmit(d => save.mutate(d))} className="flex-1 space-y-5">
 
           {/* ─── Identité ─────────────────────────────────────────────── */}
@@ -368,6 +377,7 @@ export function SettingsPage() {
             </div>
           )}
         </form>
+        )}
       </div>
     </div>
   )

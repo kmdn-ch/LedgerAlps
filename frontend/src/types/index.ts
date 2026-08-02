@@ -229,3 +229,16 @@ export interface SelectOption {
   value: string
   label: string
 }
+
+// ─── Sauvegardes ──────────────────────────────────────────────────────────────
+export interface BackupItem {
+  name: string
+  size_bytes: number
+  created_at: string
+  encrypted: boolean
+}
+
+export interface PendingRestore {
+  source_name: string
+  requested_at: string
+}

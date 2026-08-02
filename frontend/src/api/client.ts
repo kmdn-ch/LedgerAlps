@@ -109,6 +109,19 @@ export const journalApi = {
 }
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
+// ─── Sauvegardes ──────────────────────────────────────────────────────────────
+// Créer un instantané est immédiat : SQLite écrit une copie cohérente d'une
+// base en service. Restaurer ne l'est pas — cela remplace le fichier que le
+// serveur a ouvert — donc la restauration est *préparée* puis appliquée au
+// démarrage suivant. L'interface doit le dire, pas le masquer.
+export const backupsApi = {
+  list:   ()                                   => api.get('/backups'),
+  create: (passphrase?: string)                => api.post('/backups', { passphrase: passphrase ?? '' }),
+  stageRestore: (name: string, passphrase: string) =>
+    api.post('/backups/restore', { name, passphrase, confirm: true }),
+  cancelRestore: ()                            => api.delete('/backups/restore'),
+}
+
 export const contactsApi = {
   list:   (params?: { contact_type?: string; page?: number; page_size?: number }) =>
     api.get('/contacts', { params }),

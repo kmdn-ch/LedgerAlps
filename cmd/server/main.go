@@ -25,6 +25,23 @@ func main() {
 	// ── 1. Load and validate configuration ────────────────────────────────────
 	cfg := config.Load()
 
+	// ── 1b. Apply a restore staged from the interface ─────────────────────────
+	// Restoring swaps the database file out from under every open connection,
+	// so the running server cannot do it to itself. The UI stages the restore;
+	// it is applied here, before the database is opened, and only here.
+	//
+	// A failure must not stop the start: the user would be left with neither
+	// the restored books nor the ones they had. The staged copy is cleared
+	// either way, so a broken restore is not retried at every launch.
+	if applied, previous, err := db.ApplyPendingRestore(context.Background(), cfg, db.BackupDir()); err != nil {
+		log.Printf("WARNING: la restauration demandée a échoué, la base actuelle est conservée: %v", err)
+	} else if applied != "" {
+		fmt.Printf("LedgerAlps: sauvegarde restaurée depuis %s\n", applied)
+		if previous != "" {
+			fmt.Printf("LedgerAlps: base précédente conservée dans %s\n", previous)
+		}
+	}
+
 	// ── 2. Open database ──────────────────────────────────────────────────────
 	database, err := db.Open(cfg)
 	if err != nil {
@@ -155,6 +172,16 @@ func main() {
 	// Une note de crédit cite la facture qu'elle annule (LTVA art. 27 al. 4)
 	// et son montant est borné par ce qui a déjà été crédité.
 	api.POST("/invoices/:id/credit-note", ih.CreateCreditNote)
+
+	// Sauvegardes. Créer un instantané est sûr serveur en marche ; restaurer
+	// ne l'est pas, la restauration est donc préparée puis appliquée au
+	// démarrage suivant. Réservé aux administrateurs : une restauration
+	// remplace toute la comptabilité.
+	bh := handlers.NewBackupsHandler(database, cfg)
+	api.GET("/backups", middleware.RequireAdmin(cfg.JWTSecret), bh.ListBackups)
+	api.POST("/backups", middleware.RequireAdmin(cfg.JWTSecret), bh.CreateBackup)
+	api.POST("/backups/restore", middleware.RequireAdmin(cfg.JWTSecret), bh.StageRestore)
+	api.DELETE("/backups/restore", middleware.RequireAdmin(cfg.JWTSecret), bh.CancelRestore)
 
 	// Fiscal years + VAT declaration (admin)
 	fyh := handlers.NewFiscalYearHandler(database, cfg.UsePostgres())

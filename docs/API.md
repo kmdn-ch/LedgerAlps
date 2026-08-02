@@ -168,6 +168,34 @@ comptent dans la déclaration TVA.
 | POST | `/supplier-invoices/:id/transition` | auth | Changer de statut |
 | DELETE | `/supplier-invoices/:id` | auth | Supprimer — brouillons uniquement (CO art. 958f) |
 
+## Sauvegardes
+
+| Méthode | Route | Accès | Description |
+|---|---|---|---|
+| GET | `/backups` | **admin** | Liste des instantanés + restauration en attente |
+| POST | `/backups` | **admin** | Créer un instantané (`passphrase` facultative) |
+| POST | `/backups/restore` | **admin** | **Préparer** une restauration (`confirm` requis) |
+| DELETE | `/backups/restore` | **admin** | Annuler une restauration préparée |
+
+Réservé aux administrateurs : une restauration remplace toute la comptabilité.
+
+**Créer** est immédiat et sûr serveur en marche — SQLite écrit une copie
+cohérente d'une base en service. Une `passphrase` non vide chiffre l'instantané ;
+la copie en clair n'est effacée qu'après relecture, déchiffrement et contrôle
+d'intégrité.
+
+**Restaurer ne l'est pas**, et l'API ne fait donc pas semblant. `POST
+/backups/restore` répond **`202 Accepted`** : l'instantané est déchiffré et
+vérifié sur-le-champ — pendant que l'utilisateur peut corriger une phrase de
+passe erronée — puis mis de côté. Le remplacement a lieu **au démarrage
+suivant**, avant l'ouverture de la base, parce qu'un serveur ne peut pas
+échanger sous lui le fichier qu'il a ouvert.
+
+La comptabilité remplacée est sauvegardée juste avant : une restauration lancée
+par erreur reste réversible. Si elle échoue au redémarrage, le serveur démarre
+quand même sur la base existante et le journalise — laisser l'utilisateur sans
+application serait pire que de ne pas restaurer.
+
 ## Contacts
 
 | Méthode | Route | Accès | Description |
