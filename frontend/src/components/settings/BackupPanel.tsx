@@ -74,7 +74,7 @@ function PassphraseStrength({ value }: { value: string }) {
           />
         </div>
         {label && (
-          <span className={`text-xs font-medium ${allMet ? 'text-success-700' : 'text-danger-600'}`}>
+          <span className={`text-xs font-medium ${allMet ? 'text-success-700' : 'text-danger-700'}`}>
             {label}
           </span>
         )}
@@ -388,7 +388,7 @@ export function BackupPanel() {
           <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-5">
             <div className="flex items-start justify-between mb-3">
               <h2 id="restore-title" className="text-base font-semibold flex items-center gap-2">
-                <AlertTriangle size={18} className="text-warning-600" />
+                <AlertTriangle size={18} className="text-warning-700" />
                 Restaurer cette sauvegarde ?
               </h2>
               <button onClick={() => setConfirming(null)} className="btn-ghost btn-sm" aria-label="Fermer">

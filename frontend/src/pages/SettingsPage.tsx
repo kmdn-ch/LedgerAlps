@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Building2, CreditCard, FileText, Shield,
-  Upload, Trash2, ImageOff, Loader2, AlertTriangle, Database,
+  Upload, Trash2, ImageOff, Loader2, AlertTriangle, Database, Wrench,
 } from 'lucide-react'
 import { settingsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
@@ -34,9 +34,11 @@ const TABS = [
   { key: 'invoicing', label: 'Facturation',  icon: FileText   },
   { key: 'legal',     label: 'Légal / CO',   icon: Shield     },
   { key: 'backups',   label: 'Sauvegardes',  icon: Database   },
+  { key: 'maintenance', label: 'Maintenance', icon: Wrench   },
 ]
 
 import { BackupPanel } from '@/components/settings/BackupPanel'
+import { MaintenancePanel } from '@/components/settings/MaintenancePanel'
 
 export function SettingsPage() {
   const [tab,   setTab]   = useState('identity')
@@ -122,7 +124,7 @@ export function SettingsPage() {
         subtitle="Configuration de votre société"
         actions={
           // L'onglet Sauvegardes n'a rien à enregistrer : ses actions lui sont propres.
-          tab === 'backups' ? null : (
+          tab === 'backups' || tab === 'maintenance' ? null : (
             <button
               form="settings-form"
               type="submit"
@@ -142,7 +144,7 @@ export function SettingsPage() {
 
       {/* IBAN missing warning — shown until an IBAN is saved */}
       {company && !company.iban && (
-        <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-800">
+        <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-warning-100 bg-warning-100 px-4 py-3 text-sm text-warning-700">
           <AlertTriangle size={15} className="mt-0.5 flex-shrink-0 text-warning-500" />
           <span>
             Aucun IBAN configuré. Sans IBAN, les factures PDF ne contiendront pas de QR code de paiement suisse.
@@ -175,6 +177,8 @@ export function SettingsPage() {
 
         {tab === 'backups' ? (
           <div className="flex-1"><BackupPanel /></div>
+        ) : tab === 'maintenance' ? (
+          <div className="flex-1"><MaintenancePanel /></div>
         ) : (
         /* Formulaire */
         <form id="settings-form" onSubmit={handleSubmit(d => save.mutate(d))} className="flex-1 space-y-5">
@@ -226,7 +230,7 @@ export function SettingsPage() {
                             type="button"
                             onClick={() => deleteLogo.mutate()}
                             disabled={deleteLogo.isPending}
-                            className="btn-ghost btn-sm text-danger-600 flex items-center gap-1.5"
+                            className="btn-ghost btn-sm text-danger-700 flex items-center gap-1.5"
                           >
                             {deleteLogo.isPending
                               ? <Loader2 size={13} className="animate-spin" />
@@ -237,7 +241,7 @@ export function SettingsPage() {
                         )}
                       </div>
                       {uploadLogo.isError && (
-                        <p className="text-xs text-danger-600">
+                        <p className="text-xs text-danger-700">
                           {(uploadLogo.error as any)?.response?.data?.error ?? 'Erreur lors du téléchargement.'}
                         </p>
                       )}
@@ -269,7 +273,7 @@ export function SettingsPage() {
                       {...register('company_name')}
                     />
                     {errors.company_name && (
-                      <p className="text-xs text-danger-600 mt-1">{errors.company_name.message}</p>
+                      <p className="text-xs text-danger-700 mt-1">{errors.company_name.message}</p>
                     )}
                   </div>
                   <div>
@@ -302,7 +306,7 @@ export function SettingsPage() {
               </div>
               <div className="card-body grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="label">IBAN <span className="text-warning-600 font-normal">(requis pour le QR code de paiement)</span></label>
+                  <label className="label">IBAN <span className="text-warning-700 font-normal">(requis pour le QR code de paiement)</span></label>
                   <input className="input font-mono" placeholder="CH56 0483 5012 3456 7800 9" {...register('iban')} />
                   <p className="text-xs text-alpine-400 mt-1">
                     Requis pour le QR code de paiement SPC 0200 sur les factures PDF. Format : CH + 19 chiffres.
@@ -349,26 +353,26 @@ export function SettingsPage() {
           {/* ─── Légal ────────────────────────────────────────────────── */}
           {tab === 'legal' && (
             <div className="space-y-4">
-              <div className="card border-warning-200 bg-warning-50/30">
+              <div className="card border-warning-100 bg-warning-100/30">
                 <div className="card-body">
                   <h3 className="text-sm font-semibold text-warning-700 mb-2">
                     Obligations légales
                   </h3>
                   <ul className="text-sm text-alpine-700 space-y-1.5">
                     <li className="flex items-start gap-2">
-                      <span className="text-success-600 mt-0.5">✓</span>
+                      <span className="text-success-700 mt-0.5">✓</span>
                       <span><strong>CO art. 958f</strong> — Conservation des documents : 10 ans.</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-success-600 mt-0.5">✓</span>
+                      <span className="text-success-700 mt-0.5">✓</span>
                       <span><strong>nLPD</strong> — Données stockées localement, chiffrement pgcrypto.</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-success-600 mt-0.5">✓</span>
+                      <span className="text-success-700 mt-0.5">✓</span>
                       <span><strong>TVA CH</strong> — Déclaration AFC : trimestrielle ou semestrielle.</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-warning-600 mt-0.5">⚠</span>
+                      <span className="text-warning-700 mt-0.5">⚠</span>
                       <span>Ce logiciel ne remplace pas un expert fiduciaire agréé.</span>
                     </li>
                   </ul>

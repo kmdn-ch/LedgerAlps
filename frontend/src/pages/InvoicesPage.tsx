@@ -167,7 +167,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
                 </td>
                 <td className="text-alpine-600">{formatDate(inv.issue_date)}</td>
                 <td className={`text-alpine-600 ${
-                  isOverdue(inv) ? 'text-danger-600 font-medium' : ''
+                  isOverdue(inv) ? 'text-danger-700 font-medium' : ''
                 }`}>
                   {formatDate(inv.due_date)}
                 </td>

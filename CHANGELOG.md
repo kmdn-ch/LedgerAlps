@@ -8,9 +8,11 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 ## [Unreleased]
 
 ### Corrigé
+- **Des textes s'affichaient sans couleur dans toute l'interface.** Les palettes `danger`, `warning` et `success` ne définissent que les nuances 100, 500 et 700 ; les classes en `-600`, `-50`, `-200` ou `-800` n'émettaient donc aucun CSS. Onze fichiers étaient concernés — messages d'erreur de formulaire, montants négatifs du plan comptable, avertissements TVA, boutons d'annulation
 - **Les options `HOST`, `TLS_CERT`, `TLS_KEY`, `FORCE_TLS` et `ALLOW_INSECURE_HTTP` étaient inatteignables sur une installation Windows.** `config.json` primait sur les variables d'environnement, et l'assistant écrit toujours ce fichier : le serveur lisait donc des clés absentes et retombait sur les valeurs par défaut. Le lanceur transmettait même `FORCE_TLS`, ignoré. **Les variables d'environnement priment désormais sur le fichier** lorsqu'elles sont réellement définies — une variable vide ou absente n'écrase rien. C'est aussi la précédence qui avait fait viser la base live lors d'une restauration
 
 ### Ajouté
+- **Paramètres → Maintenance** — première tranche du point 6 de la roadmap. **Contrôle de cohérence** : équilibre débit/crédit, écritures et documents vides, empreintes d'intégrité manquantes, totaux ne correspondant pas aux lignes, contacts orphelins, factures créditées au-delà de leur montant, offres sans réponse depuis 90 jours. Il **ne répare rien** — une comptabilité incohérente se corrige par une écriture, pas par un bouton ; réparer en silence effacerait la trace (CO art. 957a al. 2 ch. 5). Chaque constat dit quoi faire. **État du système** : moteur, version, volumétrie, sauvegardes et combien sont chiffrées, exposition réseau, et les capacités déclarées du produit
 - **Contrôle mécanique de cohérence des avis de conformité.** Un avis périmé coûte plus qu'un avis absent : l'utilisateur agit dessus et cesse de croire le suivant. Chaque avis déclare désormais les capacités qu'il suppose **absentes** du produit ; un test échoue dès qu'une de ces capacités existe, en nommant l'avis. Livrer une fonctionnalité en oubliant la bannière n'est plus possible — la construction s'arrête avant. Le contrôle a trouvé un second avis non protégé dès sa première exécution. Voir [`compliance/README.md`](compliance/README.md)
 
 

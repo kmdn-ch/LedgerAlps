@@ -85,7 +85,7 @@ function NewContactModal({
           </button>
         </div>
         <div className="px-5 py-4 space-y-3">
-          {err && <p className="text-xs text-danger-600 bg-danger-50 rounded px-3 py-2">{err}</p>}
+          {err && <p className="text-xs text-danger-700 bg-danger-100 rounded px-3 py-2">{err}</p>}
           <div className="flex items-center gap-2">
             <input id="nc_co" type="checkbox" checked={fields.is_company}
               onChange={e => set('is_company', e.target.checked)}
@@ -313,10 +313,10 @@ export function EditInvoicePage() {
 
         {/* QR bill readiness warning */}
         {watchedDocType === 'invoice' && qrIssues.length > 0 && (
-          <div className="flex items-start gap-2.5 rounded-lg border border-warning-200 bg-warning-50/70 px-4 py-3 text-sm">
+          <div className="flex items-start gap-2.5 rounded-lg border border-warning-100 bg-warning-100/70 px-4 py-3 text-sm">
             <AlertTriangle size={15} className="mt-0.5 flex-shrink-0 text-warning-500" />
             <div>
-              <p className="font-medium text-warning-800">QR code de paiement incomplet</p>
+              <p className="font-medium text-warning-700">QR code de paiement incomplet</p>
               <ul className="mt-1 space-y-0.5 list-disc list-inside text-xs text-warning-700">
                 {qrIssues.map((issue, i) => <li key={i}>{issue}</li>)}
               </ul>

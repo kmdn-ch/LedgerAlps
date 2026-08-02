@@ -205,6 +205,14 @@ func main() {
 	sysh := handlers.NewSystemHandler(restartCh)
 	api.POST("/system/restart", middleware.RequireAdmin(cfg.JWTSecret), sysh.Restart)
 
+	// Maintenance & Système. Lecture seule et réservé aux administrateurs : ces
+	// vues montrent l'état des données et du poste, elles ne réparent rien —
+	// une comptabilité incohérente se corrige par une écriture, pas par un
+	// bouton (CO art. 957a al. 2 ch. 5).
+	mh := handlers.NewMaintenanceHandler(database, cfg)
+	api.GET("/maintenance/integrity", middleware.RequireAdmin(cfg.JWTSecret), mh.IntegrityCheck)
+	api.GET("/maintenance/health", middleware.RequireAdmin(cfg.JWTSecret), mh.SystemHealth)
+
 	// Fiscal years + VAT declaration (admin)
 	fyh := handlers.NewFiscalYearHandler(database, cfg.UsePostgres())
 	api.GET("/fiscal-years", fyh.ListFiscalYears)

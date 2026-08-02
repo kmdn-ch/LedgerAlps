@@ -242,3 +242,32 @@ export interface PendingRestore {
   source_name: string
   requested_at: string
 }
+
+// ─── Maintenance & Système ────────────────────────────────────────────────────
+export interface IntegrityFinding {
+  severity: 'error' | 'warning' | 'info'
+  check: string
+  title: string
+  detail: string
+  action?: string
+  count: number
+}
+
+export interface IntegrityReport {
+  checked_at: string
+  findings: IntegrityFinding[]
+  clean: boolean
+}
+
+export interface SystemHealth {
+  version: string
+  database: { engine: string }
+  counts: Record<string, number>
+  backups?: {
+    count: number; encrypted: number; directory: string
+    newest?: string; newest_name?: string
+  }
+  network: { host: string; tls: boolean; loopback: boolean; insecure_opt_in: boolean }
+  capabilities: Record<string, boolean>
+  login_lockouts?: number
+}

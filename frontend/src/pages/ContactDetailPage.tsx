@@ -137,7 +137,7 @@ export function ContactDetailPage() {
         } />
       )}
       {save.isSuccess && !isDirty && (
-        <div className="mb-4 px-4 py-2.5 rounded-lg bg-success-50 border border-success-200
+        <div className="mb-4 px-4 py-2.5 rounded-lg bg-success-100 border border-success-100
                         text-sm text-success-700">
           Modifications enregistrées.
         </div>

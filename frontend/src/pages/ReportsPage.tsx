@@ -126,8 +126,8 @@ export function ReportsPage() {
 
           {/* camt result */}
           {camtResult && (
-            <div className="mt-4 p-4 bg-success-50 border border-success-200 rounded-lg">
-              <p className="text-sm font-medium text-success-800 mb-2">
+            <div className="mt-4 p-4 bg-success-100 border border-success-100 rounded-lg">
+              <p className="text-sm font-medium text-success-700 mb-2">
                 {camtResult.count} transaction{camtResult.count !== 1 ? 's' : ''} importée{camtResult.count !== 1 ? 's' : ''}
               </p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
@@ -137,7 +137,7 @@ export function ReportsPage() {
                 }>).map((e, i) => (
                   <div key={i} className="flex items-center justify-between text-xs text-success-700 bg-white/60 rounded px-2 py-1">
                     <span>{e.booking_date}</span>
-                    <span className={e.is_credit ? 'text-success-700 font-medium' : 'text-danger-600 font-medium'}>
+                    <span className={e.is_credit ? 'text-success-700 font-medium' : 'text-danger-700 font-medium'}>
                       {e.is_credit ? '+' : '-'}{e.amount.toFixed(2)} {e.currency}
                     </span>
                     <span className="truncate max-w-[200px] text-alpine-500">

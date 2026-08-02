@@ -212,6 +212,27 @@ Le lanceur Windows démarre le serveur sans le superviser : personne d'autre ne
 le relancerait, d'où ce redémarrage auto-porté. L'interface interroge `/health`
 jusqu'à réponse avant de recharger la page.
 
+## Maintenance & Système
+
+| Méthode | Route | Accès | Description |
+|---|---|---|---|
+| GET | `/maintenance/integrity` | **admin** | Contrôle de cohérence des données |
+| GET | `/maintenance/health` | **admin** | État du système, sauvegardes, exposition réseau |
+
+**Lecture seule.** Ces vues montrent, elles ne réparent pas : une comptabilité
+incohérente se corrige par une écriture, pas par un bouton — réparer en silence
+effacerait la trace de ce qui s'est passé, ce que le CO art. 957a al. 2 ch. 5
+interdit précisément.
+
+`integrity` renvoie une liste de constats, chacun avec une gravité (`error`,
+`warning`, `info`), un compte, et surtout **une action** : un constat sur lequel
+on ne peut rien faire est du bruit qui apprend à ignorer la page. Rien n'est
+signalé comme `error` sans qu'un chiffre soit réellement faux — l'arrondi au
+5 rappen, par exemple, n'en est pas un.
+
+`health` expose aussi les **capacités** du produit, la table même qui empêche les
+avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance/README.md)).
+
 ## Contacts
 
 | Méthode | Route | Accès | Description |

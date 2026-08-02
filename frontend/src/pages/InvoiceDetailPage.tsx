@@ -20,11 +20,11 @@ import type { DocumentStatus, Invoice, QuoteOutcome } from '@/types'
 const TRANSITIONS: Record<DocumentStatus, { status: DocumentStatus; label: string; icon: typeof Send; className: string }[]> = {
   draft:     [
     { status: 'sent',      label: 'Marquer envoyée',  icon: Send,        className: 'btn-primary' },
-    { status: 'cancelled', label: 'Annuler',           icon: XCircle,     className: 'btn-ghost text-danger-600' },
+    { status: 'cancelled', label: 'Annuler',           icon: XCircle,     className: 'btn-ghost text-danger-700' },
   ],
   sent:      [
     { status: 'paid',      label: 'Marquer payée',    icon: CheckCircle, className: 'btn-primary' },
-    { status: 'cancelled', label: 'Annuler',           icon: XCircle,     className: 'btn-ghost text-danger-600' },
+    { status: 'cancelled', label: 'Annuler',           icon: XCircle,     className: 'btn-ghost text-danger-700' },
   ],
   paid:      [
     { status: 'archived',  label: 'Archiver',          icon: Archive,     className: 'btn-ghost' },
@@ -42,10 +42,10 @@ const TRANSITIONS: Record<DocumentStatus, { status: DocumentStatus; label: strin
 const QUOTE_TRANSITIONS: Record<string, { status: DocumentStatus; label: string; icon: typeof Send; className: string }[]> = {
   draft:     [
     { status: 'sent',      label: 'Marquer envoyée', icon: Send,    className: 'btn-primary' },
-    { status: 'cancelled', label: 'Annuler',          icon: XCircle, className: 'btn-ghost text-danger-600' },
+    { status: 'cancelled', label: 'Annuler',          icon: XCircle, className: 'btn-ghost text-danger-700' },
   ],
   sent:      [
-    { status: 'cancelled', label: 'Annuler',          icon: XCircle, className: 'btn-ghost text-danger-600' },
+    { status: 'cancelled', label: 'Annuler',          icon: XCircle, className: 'btn-ghost text-danger-700' },
     { status: 'archived',  label: 'Archiver',         icon: Archive, className: 'btn-ghost' },
   ],
   cancelled: [
@@ -180,7 +180,7 @@ export function InvoiceDetailPage() {
                   <button
                     onClick={() => setOutcome.mutate('refused')}
                     disabled={setOutcome.isPending}
-                    className="btn-ghost btn-sm flex items-center gap-1.5 text-danger-600"
+                    className="btn-ghost btn-sm flex items-center gap-1.5 text-danger-700"
                   >
                     <XCircle size={14} />
                     Refusée
@@ -323,7 +323,7 @@ export function InvoiceDetailPage() {
             </div>
             <div className="flex justify-between">
               <dt className="text-alpine-500">Échéance</dt>
-              <dd className={`${isOverdue(invoice) ? 'text-danger-600 font-medium' : 'text-alpine-800'}`}>
+              <dd className={`${isOverdue(invoice) ? 'text-danger-700 font-medium' : 'text-alpine-800'}`}>
                 {formatDate(invoice.due_date)}
               </dd>
             </div>

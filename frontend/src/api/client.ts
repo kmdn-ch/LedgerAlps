@@ -125,6 +125,14 @@ export const backupsApi = {
   restart: ()                                  => api.post('/system/restart'),
 }
 
+// ─── Maintenance & Système ────────────────────────────────────────────────────
+// Lecture seule : ces vues montrent l'état des données, elles ne réparent rien.
+// Une comptabilité incohérente se corrige par une écriture, pas par un bouton.
+export const maintenanceApi = {
+  integrity: () => api.get('/maintenance/integrity'),
+  health:    () => api.get('/maintenance/health'),
+}
+
 export const contactsApi = {
   list:   (params?: { contact_type?: string; page?: number; page_size?: number }) =>
     api.get('/contacts', { params }),

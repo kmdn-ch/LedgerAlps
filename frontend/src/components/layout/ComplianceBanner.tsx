@@ -50,7 +50,7 @@ function saveDismissed(map: Record<string, string>) {
 }
 
 // tailwind.config.js ne définit que les nuances 100/500/700 pour danger et
-// warning : une classe comme bg-danger-50 n'émettrait aucun CSS et la bannière
+// warning : une classe comme bg-danger-100 n'émettrait aucun CSS et la bannière
 // s'afficherait sans couleur — le pire des défauts pour un avertissement.
 const STYLES = {
   critical: {

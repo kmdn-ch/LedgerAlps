@@ -77,7 +77,7 @@ export function StatCard({ label, value, delta, icon, accent }: StatCardProps) {
 export function ErrorBanner({ message }: { message: string }) {
   return (
     <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-danger-100
-                    border border-danger-200 text-danger-700 text-sm mb-4">
+                    border border-danger-100 text-danger-700 text-sm mb-4">
       <AlertTriangle size={16} className="flex-shrink-0" />
       <span>{message}</span>
     </div>

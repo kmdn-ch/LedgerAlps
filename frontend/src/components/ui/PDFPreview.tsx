@@ -86,7 +86,7 @@ export function PDFPreview({ fetchPDF, filename, className, onClose }: PDFPrevie
           </div>
         )}
         {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-danger-600">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-danger-700">
             <AlertTriangle size={24} />
             <p className="text-sm">{error}</p>
           </div>

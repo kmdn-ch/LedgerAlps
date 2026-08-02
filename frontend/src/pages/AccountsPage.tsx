@@ -168,7 +168,7 @@ export function AccountsPage() {
                       {parseFloat(row.credit) > 0 ? formatCHF(row.credit) : '—'}
                     </td>
                     <td className={`text-right font-mono tabular-nums font-medium ${
-                      parseFloat(row.balance) < 0 ? 'text-danger-600' : 'text-alpine-900'
+                      parseFloat(row.balance) < 0 ? 'text-danger-700' : 'text-alpine-900'
                     }`}>
                       {formatCHF(row.balance)}
                     </td>
@@ -182,7 +182,7 @@ export function AccountsPage() {
                     <td className="text-right font-mono">{formatCHF(totalRow.credit)}</td>
                     <td className="text-right font-mono">
                       {parseFloat(totalRow.balance) === 0
-                        ? <span className="text-success-400">Équilibrée ✓</span>
+                        ? <span className="text-success-500">Équilibrée ✓</span>
                         : formatCHF(totalRow.balance)
                       }
                     </td>

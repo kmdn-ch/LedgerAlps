@@ -113,7 +113,7 @@ export function Sidebar() {
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm
-                     text-alpine-400 hover:bg-danger-500/10 hover:text-danger-400 transition-all"
+                     text-alpine-400 hover:bg-danger-500/10 hover:text-danger-500 transition-all"
         >
           <LogOut size={16} />
           <span>Déconnexion</span>

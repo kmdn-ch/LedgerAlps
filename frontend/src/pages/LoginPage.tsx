@@ -73,7 +73,7 @@ export function LoginPage() {
 
           {error && (
             <div className="bg-danger-500/10 border border-danger-500/30 rounded-lg
-                            px-4 py-3 text-danger-400 text-sm mb-4">
+                            px-4 py-3 text-danger-500 text-sm mb-4">
               {error}
             </div>
           )}
@@ -93,7 +93,7 @@ export function LoginPage() {
                 placeholder="vous@exemple.ch"
                 {...register('email')}
               />
-              {errors.email && <p className="text-xs text-danger-400 mt-1">{errors.email.message}</p>}
+              {errors.email && <p className="text-xs text-danger-500 mt-1">{errors.email.message}</p>}
             </div>
 
             <div>
@@ -119,7 +119,7 @@ export function LoginPage() {
                   {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
-              {errors.password && <p className="text-xs text-danger-400 mt-1">{errors.password.message}</p>}
+              {errors.password && <p className="text-xs text-danger-500 mt-1">{errors.password.message}</p>}
             </div>
 
             <button
