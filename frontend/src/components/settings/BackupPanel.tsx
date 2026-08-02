@@ -13,6 +13,7 @@ import {
 import { backupsApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner, EmptyState } from '@/components/ui'
 import { formatDate } from '@/utils'
+import { waitForShutdownThenGo } from '@/utils/restart'
 import type { BackupItem, PendingRestore } from '@/types'
 
 function formatSize(bytes: number): string {
@@ -138,20 +139,12 @@ export function BackupPanel() {
     mutationFn: async () => {
       await backupsApi.restart()
       setRestarting(true)
-      const deadline = Date.now() + 60_000
-      while (Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 1000))
-        try {
-          const res = await fetch('/health', { cache: 'no-store' })
-          if (res.ok) return
-        } catch {
-          // Le serveur est en train de redémarrer : c'est attendu.
-        }
-      }
-      throw new Error('timeout')
+      // Le schéma ne change pas ici, mais la logique d'attente est partagée :
+      // deux copies finiraient par diverger, et celle-ci a déjà été corrigée
+      // une fois pour une raison qui vaut partout.
+      await waitForShutdownThenGo(window.location.origin + '/')
     },
-    onSuccess: () => window.location.reload(),
-    onError:   () => setRestarting(false),
+    onError: () => setRestarting(false),
   })
 
   if (isLoading) return <LoadingSpinner />

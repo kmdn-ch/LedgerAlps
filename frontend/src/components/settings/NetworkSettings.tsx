@@ -15,6 +15,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { Save, RefreshCw, Loader2 } from 'lucide-react'
 import { maintenanceApi, backupsApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
+import { targetURLAfterRestart, waitForShutdownThenGo } from '@/utils/restart'
 import type { ServerSettings } from '@/types'
 
 const LOOPBACK = ['127.0.0.1', 'localhost', '::1']
@@ -30,30 +31,30 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
   const [form, setForm] = useState<ServerSettings | null>(null)
   useEffect(() => { if (data?.settings) setForm(data.settings) }, [data])
 
+  // Ce qui est ENREGISTRÉ dans config.json. Distinct de `data.settings`, qui
+  // décrit la configuration en cours d'exécution : après un enregistrement,
+  // celle-ci est encore l'ancienne — c'est tout l'objet du redémarrage.
+  const [saved, setSaved] = useState<ServerSettings | null>(null)
+
   const save = useMutation({
     mutationFn: (s: ServerSettings) => maintenanceApi.putServerSettings(s),
-    onSuccess: () => { onSaved(); refetch() },
+    onSuccess: (_resp, s) => { setSaved(s); onSaved(); refetch() },
   })
 
-  // Le serveur répond, se coupe, puis relance une copie de lui-même. On attend
-  // qu'il réponde à nouveau avant de recharger : recharger trop tôt afficherait
-  // une erreur de connexion au moment précis où tout se passe bien.
+  // Le schéma peut changer sous nos pieds : activer TLS fait repartir le
+  // serveur en https sur le MÊME port. Recharger la page en place, ou sonder
+  // /health en relatif, se heurterait alors à une poignée de main TLS — c'est
+  // ce qui faisait tourner ce bouton indéfiniment. On attend l'arrêt, puis on
+  // navigue vers la bonne adresse.
+  // Le schéma cible vient des réglages ENREGISTRÉS, pas du formulaire : une
+  // case cochée sans avoir enregistré enverrait vers une adresse que le serveur
+  // ne servira pas.
   const restart = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (saved: ServerSettings) => {
+      const tlsAfter = saved.force_tls || !LOOPBACK.includes(saved.host)
       await backupsApi.restart()
-      const deadline = Date.now() + 60_000
-      while (Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 1000))
-        try {
-          const res = await fetch('/health', { cache: 'no-store' })
-          if (res.ok) return
-        } catch {
-          // Redémarrage en cours : c'est attendu.
-        }
-      }
-      throw new Error('timeout')
+      await waitForShutdownThenGo(targetURLAfterRestart(tlsAfter))
     },
-    onSuccess: () => window.location.reload(),
   })
 
   if (isLoading || !form) return <LoadingSpinner />
@@ -147,7 +148,7 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
         </button>
         {pending && (
           <button
-            onClick={() => restart.mutate()}
+            onClick={() => restart.mutate(saved ?? data!.settings)}
             disabled={restart.isPending}
             className="btn-secondary btn-sm flex items-center gap-1.5"
           >
@@ -162,16 +163,23 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
           Réglages enregistrés mais <strong>pas encore appliqués</strong> : l'adresse d'écoute et le
           chiffrement sont choisis une seule fois, au démarrage. Redémarrez LedgerAlps pour qu'ils
           prennent effet.
-          {form.force_tls && (
+          {(saved ?? form).force_tls && (
             <> L'application se rouvrira sur <code className="font-mono">https://localhost</code>, et
             votre navigateur affichera un avertissement de certificat à la première visite.</>
           )}
         </div>
       )}
 
+      {restart.isPending && (
+        <p className="text-xs text-alpine-600 mt-2">
+          Redémarrage en cours… la page va s'ouvrir sur la nouvelle adresse.
+          {(() => { const t = saved ?? data!.settings; return t.force_tls || !LOOPBACK.includes(t.host) })() &&
+            " Votre navigateur affichera un avertissement de certificat : c'est attendu avec un certificat auto-signé."}
+        </p>
+      )}
       {restart.isError && (
         <p className="text-xs text-danger-700 mt-2">
-          Le serveur n'a pas répondu à temps. Fermez puis rouvrez l'application manuellement.
+          Le redémarrage n'a pas abouti. Fermez puis rouvrez l'application manuellement.
         </p>
       )}
 
