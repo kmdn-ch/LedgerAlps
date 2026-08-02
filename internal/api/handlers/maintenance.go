@@ -265,7 +265,7 @@ func (h *MaintenanceHandler) SystemHealth(c *gin.Context) {
 	// Sécurité du transport : dire ce qui est, pas ce qui devrait être.
 	resp["network"] = gin.H{
 		"host":            h.cfg.Host,
-		"tls":             h.cfg.TLSCert != "" || h.cfg.ForceTLS || !tlsutil.IsLoopback(h.cfg.Host) && !h.cfg.AllowInsecureHTTP,
+		"tls":             !tlsutil.IsLoopback(h.cfg.Host) && !h.cfg.AllowInsecureHTTP,
 		"loopback":        tlsutil.IsLoopback(h.cfg.Host),
 		"insecure_opt_in": h.cfg.AllowInsecureHTTP,
 	}

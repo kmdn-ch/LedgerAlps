@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -45,18 +44,6 @@ type config struct {
 	Port           string `json:"port"`
 	Debug          bool   `json:"debug"`
 	AllowedOrigins string `json:"allowed_origins"`
-	// ForceTLS fait servir le serveur en HTTPS même sur localhost. Le lanceur
-	// doit alors ouvrir https:// et interroger /health de même, sinon il
-	// attendrait indéfiniment un serveur qui répond déjà.
-	ForceTLS bool `json:"force_tls,omitempty"`
-}
-
-// scheme returns the URL scheme this configuration serves.
-func (c *config) scheme() string {
-	if c.ForceTLS {
-		return "https"
-	}
-	return "http"
 }
 
 func appDataDir() string {
@@ -144,23 +131,8 @@ func openBrowser(url string) {
 // waitForServer polls GET /health on the given base URL until it responds 200
 // or the context is cancelled.
 
-// localClient talks to the server this launcher just started, on this machine.
-//
-// With FORCE_TLS the server presents the self-signed certificate it generated
-// itself, which no trust store knows about. Verification is skipped for that
-// one reason: both ends are the same process tree on loopback, so there is no
-// network path for anyone to sit in the middle of. This client is never used
-// for anything else.
-func localClient(forceTLS bool) *http.Client {
-	if !forceTLS {
-		return http.DefaultClient
-	}
-	return &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // loopback, our own certificate
-		},
-	}
-}
+// Le lanceur ne parle qu'au serveur local, servi en clair : l'écoute réseau
+// (et donc TLS) se règle dans l'application, pas ici.
 
 func waitForServer(ctx context.Context, baseURL string, client *http.Client) error {
 	tick := time.NewTicker(300 * time.Millisecond)
@@ -184,10 +156,11 @@ func waitForServer(ctx context.Context, baseURL string, client *http.Client) err
 // Returns the process; the caller should not wait on it.
 func startServer(cfg *config) (*os.Process, error) {
 	cmd := exec.Command(serverExe())
-	// FORCE_TLS n'est délibérément PAS transmis : le serveur lit le même
-	// config.json. Le passer en variable d'environnement en ferait une seconde
-	// source de vérité qui, valant "false" par défaut, écraserait le fichier —
-	// et rendrait le réglage impossible à activer.
+	// Seuls les réglages dont le lanceur a lui-même besoin sont transmis. Les
+	// options réseau restent dans config.json, que le serveur lit directement :
+	// les passer ici en ferait une seconde source de vérité qui, valant sa
+	// valeur par défaut, écraserait le fichier — c'est ce qui rendait le
+	// réglage TLS impossible à activer.
 	cmd.Env = append(os.Environ(),
 		"JWT_SECRET="+cfg.JWTSecret,
 		"SQLITE_PATH="+cfg.SQLitePath,
@@ -901,10 +874,10 @@ func runSetupWizard() {
 		}
 
 		// Wait for server to be ready (up to 30 seconds).
-		appURL := fmt.Sprintf("%s://localhost:%s", cfg.scheme(), cfg.Port)
+		appURL := fmt.Sprintf("http://localhost:%s", cfg.Port)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		if err := waitForServer(ctx, appURL, localClient(cfg.ForceTLS)); err != nil {
+		if err := waitForServer(ctx, appURL, http.DefaultClient); err != nil {
 			// Rollback config so next launch re-runs the wizard.
 			_ = os.Remove(configFilePath())
 			jsonError(w, "Le serveur ne répond pas — vérifiez server.log dans "+dataDir, http.StatusServiceUnavailable)
@@ -986,19 +959,19 @@ func main() {
 	}
 
 	// Config exists — ensure server is running, then open browser.
-	appURL := fmt.Sprintf("%s://localhost:%s", cfg.scheme(), cfg.Port)
+	appURL := fmt.Sprintf("http://localhost:%s", cfg.Port)
 
 	// If a reinstall sentinel exists, start the server first then show the
 	// "configuration preserved" notification page.
 	if _, err := os.Stat(reinstalledMarkerPath()); err == nil {
-		if !isServerRunning(appURL, localClient(cfg.ForceTLS)) {
+		if !isServerRunning(appURL, http.DefaultClient) {
 			logInfo("Starting server after reinstall…")
 			if _, err := startServer(cfg); err != nil {
 				logFatal("Cannot start server: %v", err)
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
-			if err := waitForServer(ctx, appURL, localClient(cfg.ForceTLS)); err != nil {
+			if err := waitForServer(ctx, appURL, http.DefaultClient); err != nil {
 				logFatal("Server did not become ready: %v", err)
 			}
 		}
@@ -1007,7 +980,7 @@ func main() {
 		return
 	}
 
-	if !isServerRunning(appURL, localClient(cfg.ForceTLS)) {
+	if !isServerRunning(appURL, http.DefaultClient) {
 		logInfo("Starting server…")
 		if _, err := startServer(cfg); err != nil {
 			logFatal("Cannot start server: %v", err)
@@ -1015,7 +988,7 @@ func main() {
 		// Wait for server (up to 20 s).
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		if err := waitForServer(ctx, appURL, localClient(cfg.ForceTLS)); err != nil {
+		if err := waitForServer(ctx, appURL, http.DefaultClient); err != nil {
 			logFatal("Server did not become ready: %v", err)
 		}
 	}

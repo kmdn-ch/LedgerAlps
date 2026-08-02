@@ -156,21 +156,17 @@ certification dans le magasin de confiance de Windows : une clé capable de
 forger des certificats **pour n'importe quel site**, posée sur le poste — un
 risque supérieur à celui qu'on prétend traiter.
 
-**Si votre politique de sécurité l'exige malgré tout**, le plus simple est
-**Paramètres → Maintenance → Réseau & chiffrement**, case « Chiffrer aussi
-l'accès local ». Le réglage est écrit dans `config.json` et prend effet au
-redémarrage, proposé sur place.
+**Cette option a existé, et a été retirée.** Une pré-version proposait de servir
+en HTTPS sur `localhost` ; elle a été supprimée avant publication. Elle
+n'apportait aucune sécurité réelle — le trafic ne quitte toujours pas la
+machine — et coûtait un avertissement de certificat à chaque nouveau profil de
+navigateur. Dépenser la confiance des utilisateurs dans les avertissements pour
+ne rien protéger est un mauvais échange.
 
-En ligne de commande :
-
-```bash
-export FORCE_TLS=true
-```
-
-LedgerAlps sert alors en HTTPS sur `localhost` avec son certificat auto-signé, et
-le lanceur ouvre `https://`. C'est disponible, documenté, et ce n'est pas le
-défaut — parce que la sécurité réelle ne s'améliore pas, alors que la fatigue
-face aux avertissements, si.
+Si votre politique de sécurité exige TLS jusqu'au poste de travail, la réponse
+n'est pas dans LedgerAlps : c'est le chiffrement du disque (BitLocker, LUKS),
+qui protège la base de données elle-même — la vraie cible sur une machine à
+laquelle un attaquant a accès.
 
 ⚠️ **`ALLOW_INSECURE_HTTP` n'a qu'un usage légitime** : un reverse proxy qui
 termine déjà TLS sur la **même** machine. Partout ailleurs, mot de passe de
@@ -352,7 +348,6 @@ export UPDATE_CHECK=false
 | `HOST` | `127.0.0.1` | Interface d'écoute. Toute valeur non-loopback impose TLS |
 | `TLS_CERT` / `TLS_KEY` | vide | Certificat et clé. À fournir ensemble |
 | `ALLOW_INSECURE_HTTP` | `false` | Sert en clair sur le réseau. Uniquement derrière un proxy TLS local |
-| `FORCE_TLS` | `false` | Sert en HTTPS même sur `localhost`. Voir « Pourquoi HTTP sur localhost » |
 
 > **Attention à la précédence.** Si un fichier `config.json` existe dans le
 > répertoire de données applicatives, il **prime sur ces variables**. C'est

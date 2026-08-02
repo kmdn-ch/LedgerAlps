@@ -23,7 +23,7 @@ func TestSavingPreservesUnknownKeys(t *testing.T) {
 		"une_option_future": "à préserver",
 	})
 
-	if err := SaveServerSettings(ServerSettings{Host: "0.0.0.0", ForceTLS: true}); err != nil {
+	if err := SaveServerSettings(ServerSettings{Host: "0.0.0.0"}); err != nil {
 		t.Fatalf("SaveServerSettings: %v", err)
 	}
 
@@ -45,28 +45,46 @@ func TestSavingPreservesUnknownKeys(t *testing.T) {
 	if got["une_option_future"] != "à préserver" {
 		t.Error("une clé inconnue a été supprimée ; ce sont les données d'une autre version, pas du bruit")
 	}
-	if got["host"] != "0.0.0.0" || got["force_tls"] != true {
-		t.Errorf("les nouveaux réglages n'ont pas été écrits: host=%v force_tls=%v", got["host"], got["force_tls"])
+	if got["host"] != "0.0.0.0" {
+		t.Errorf("le nouveau réglage n'a pas été écrit: host=%v", got["host"])
 	}
 }
 
-// The round trip that failed in practice: the user turns TLS on, restarts, and
-// the setting must actually be in effect.
+// The round trip that failed in practice: a setting written from the interface
+// must actually be in effect after a restart.
 func TestSavedSettingsAreReadBackByLoad(t *testing.T) {
 	writeConfigFile(t, map[string]any{
 		"jwt_secret":  "un-secret-suffisamment-long-pour-passer-la-validation",
 		"sqlite_path": "ledgeralps.db",
 	})
 
-	if err := SaveServerSettings(ServerSettings{Host: "127.0.0.1", ForceTLS: true}); err != nil {
+	if err := SaveServerSettings(ServerSettings{Host: "0.0.0.0"}); err != nil {
 		t.Fatal(err)
 	}
-	// No FORCE_TLS in the environment: the launcher used to pass it as "false",
-	// which overrode the file and made the setting impossible to turn on.
-	os.Unsetenv("FORCE_TLS")
+	os.Unsetenv("HOST")
 
-	if cfg := Load(); !cfg.ForceTLS {
-		t.Error("ForceTLS relu à false alors qu'il vient d'être enregistré à true")
+	if cfg := Load(); cfg.Host != "0.0.0.0" {
+		t.Errorf("Host relu à %q alors qu'il vient d'être enregistré à 0.0.0.0", cfg.Host)
+	}
+}
+
+// force_tls existed for one pre-release and was withdrawn. A file written then
+// must not keep a key that no longer does anything.
+func TestRetiredForceTLSKeyIsRemoved(t *testing.T) {
+	writeConfigFile(t, map[string]any{
+		"jwt_secret": "un-secret-suffisamment-long-pour-passer-la-validation",
+		"force_tls":  true,
+	})
+	if err := SaveServerSettings(ServerSettings{Host: "127.0.0.1"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(ConfigFilePath())
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := got["force_tls"]; present {
+		t.Error("force_tls est resté dans le fichier alors qu'il n'a plus d'effet")
 	}
 }
 

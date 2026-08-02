@@ -24,7 +24,6 @@ import (
 // returns a restart request rather than pretending it applied.
 type ServerSettings struct {
 	Host              string `json:"host"`
-	ForceTLS          bool   `json:"force_tls"`
 	TLSCert           string `json:"tls_cert"`
 	TLSKey            string `json:"tls_key"`
 	AllowInsecureHTTP bool   `json:"allow_insecure_http"`
@@ -34,7 +33,6 @@ type ServerSettings struct {
 func CurrentServerSettings(cfg *Config) ServerSettings {
 	return ServerSettings{
 		Host:              cfg.Host,
-		ForceTLS:          cfg.ForceTLS,
 		TLSCert:           cfg.TLSCert,
 		TLSKey:            cfg.TLSKey,
 		AllowInsecureHTTP: cfg.AllowInsecureHTTP,
@@ -60,7 +58,11 @@ func SaveServerSettings(s ServerSettings) error {
 	}
 
 	existing["host"] = s.Host
-	existing["force_tls"] = s.ForceTLS
+	// force_tls a existé le temps d'une pré-version puis a été retiré : servir
+	// en TLS sur localhost n'apportait rien qu'un avertissement de certificat
+	// répété. La clé est supprimée plutôt qu'ignorée, pour qu'un fichier de
+	// cette période ne conserve pas un réglage sans effet.
+	delete(existing, "force_tls")
 	existing["allow_insecure_http"] = s.AllowInsecureHTTP
 	// Empty means "not configured": storing "" would be indistinguishable from
 	// a path the user cleared on purpose, and both should read as absent.

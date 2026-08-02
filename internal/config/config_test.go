@@ -43,8 +43,7 @@ func writeConfigFile(t *testing.T, fc map[string]any) {
 
 // The defect this guards: config.json won outright, so every operational
 // setting was unreachable on a Windows install — the wizard always writes a
-// config.json, and it carries none of these keys. FORCE_TLS was passed to the
-// server by the launcher and ignored.
+// config.json, and it carries none of these keys.
 func TestEnvironmentOverridesTheConfigFile(t *testing.T) {
 	writeConfigFile(t, map[string]any{
 		"jwt_secret":  "un-secret-suffisamment-long-pour-passer-la-validation",
@@ -53,7 +52,7 @@ func TestEnvironmentOverridesTheConfigFile(t *testing.T) {
 	})
 
 	t.Setenv("HOST", "0.0.0.0")
-	t.Setenv("FORCE_TLS", "true")
+	t.Setenv("TLS_CERT", "/depuis/l-environnement/cert.pem")
 	t.Setenv("SQLITE_PATH", "depuis-l-environnement.db")
 
 	cfg := Load()
@@ -61,8 +60,8 @@ func TestEnvironmentOverridesTheConfigFile(t *testing.T) {
 	if cfg.Host != "0.0.0.0" {
 		t.Errorf("Host = %q, want 0.0.0.0 — HOST doit primer sur le fichier", cfg.Host)
 	}
-	if !cfg.ForceTLS {
-		t.Error("ForceTLS = false — FORCE_TLS était défini et doit primer")
+	if cfg.TLSCert != "/depuis/l-environnement/cert.pem" {
+		t.Errorf("TLSCert = %q — TLS_CERT était défini et doit primer", cfg.TLSCert)
 	}
 	if cfg.SQLitePath != "depuis-l-environnement.db" {
 		t.Errorf("SQLitePath = %q — SQLITE_PATH doit primer ; c'est cette surprise qui a fait viser la base live", cfg.SQLitePath)

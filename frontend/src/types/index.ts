@@ -274,7 +274,6 @@ export interface SystemHealth {
 
 export interface ServerSettings {
   host: string
-  force_tls: boolean
   tls_cert: string
   tls_key: string
   allow_insecure_http: boolean

@@ -232,7 +232,7 @@ on ne peut rien faire est du bruit qui apprend à ignorer la page. Rien n'est
 signalé comme `error` sans qu'un chiffre soit réellement faux — l'arrondi au
 5 rappen, par exemple, n'en est pas un.
 
-`PUT /settings/server` écrit `host`, `force_tls`, `tls_cert`, `tls_key` et
+`PUT /settings/server` écrit `host`, `tls_cert`, `tls_key` et
 `allow_insecure_http` dans `config.json`, puis répond `restart_required: true`.
 Il ne peut pas appliquer à chaud : l'adresse d'écoute et la configuration TLS
 sont choisies une seule fois, au démarrage.

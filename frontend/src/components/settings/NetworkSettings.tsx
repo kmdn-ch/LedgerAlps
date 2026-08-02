@@ -3,7 +3,7 @@
 // Ces réglages vivent dans config.json, écrit une seule fois par l'assistant de
 // premier démarrage et jamais retouché ensuite. Toute option ajoutée depuis
 // était donc absente du fichier, lue comme sa valeur par défaut, et
-// inatteignable — c'est pourquoi activer HTTPS ne fonctionnait pas.
+// inatteignable — c'est pourquoi ouvrir l'accès réseau ne fonctionnait pas.
 //
 // Éditer du JSON dans %APPDATA% n'est pas une réponse pour un logiciel de
 // comptabilité. Cet écran écrit le fichier, en préservant les clés qu'il ne
@@ -51,7 +51,8 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
   // ne servira pas.
   const restart = useMutation({
     mutationFn: async (saved: ServerSettings) => {
-      const tlsAfter = saved.force_tls || !LOOPBACK.includes(saved.host)
+      // Le chiffrement suit l'exposition : local en clair, réseau en HTTPS.
+      const tlsAfter = !LOOPBACK.includes(saved.host)
       await backupsApi.restart()
       await waitForShutdownThenGo(targetURLAfterRestart(tlsAfter))
     },
@@ -83,24 +84,6 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
           ? 'Le trafic ne quitte jamais cet ordinateur : rien sur le réseau ne peut le lire.'
           : "D'autres postes pourront se connecter. LedgerAlps servira alors en HTTPS, avec un certificat auto-signé si vous n'en fournissez pas — votre navigateur avertira à la première visite."}
       </p>
-
-      <label className="flex items-start gap-2 mt-4 max-w-md cursor-pointer">
-        <input
-          type="checkbox"
-          className="mt-0.5"
-          checked={form.force_tls}
-          onChange={e => setForm({ ...form, force_tls: e.target.checked })}
-        />
-        <span className="text-sm">
-          Chiffrer aussi l'accès local (HTTPS sur <code className="font-mono text-xs">localhost</code>)
-          <span className="block text-xs text-alpine-500 mt-0.5">
-            Non nécessaire : le trafic vers cet ordinateur ne touche aucune interface réseau, et les
-            navigateurs considèrent <code className="font-mono">localhost</code> comme une origine de
-            confiance. À activer si votre politique de sécurité exige TLS partout — vous verrez alors
-            un avertissement de certificat.
-          </span>
-        </span>
-      </label>
 
       <div className="mt-4 max-w-md space-y-2">
         <div>
@@ -163,9 +146,9 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
           Réglages enregistrés mais <strong>pas encore appliqués</strong> : l'adresse d'écoute et le
           chiffrement sont choisis une seule fois, au démarrage. Redémarrez LedgerAlps pour qu'ils
           prennent effet.
-          {(saved ?? form).force_tls && (
-            <> L'application se rouvrira sur <code className="font-mono">https://localhost</code>, et
-            votre navigateur affichera un avertissement de certificat à la première visite.</>
+          {!LOOPBACK.includes((saved ?? form).host) && (
+            <> L'application sera servie en <code className="font-mono">https</code>, et votre
+            navigateur affichera un avertissement de certificat à la première visite.</>
           )}
         </div>
       )}
@@ -173,7 +156,7 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
       {restart.isPending && (
         <p className="text-xs text-alpine-600 mt-2">
           Redémarrage en cours… la page va s'ouvrir sur la nouvelle adresse.
-          {(() => { const t = saved ?? data!.settings; return t.force_tls || !LOOPBACK.includes(t.host) })() &&
+          {!LOOPBACK.includes((saved ?? data!.settings).host) &&
             " Votre navigateur affichera un avertissement de certificat : c'est attendu avec un certificat auto-signé."}
         </p>
       )}

@@ -7,6 +7,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Modifié
+- **L'option « Chiffrer aussi l'accès local » est retirée.** Proposée en pré-version, elle n'apportait aucune sécurité réelle — le trafic vers `127.0.0.1` ne quitte pas la machine — et coûtait un avertissement de certificat à chaque nouveau profil de navigateur. Dépenser la confiance des utilisateurs dans les avertissements sans rien protéger est un mauvais échange. Le chiffrement suit désormais l'exposition : local en clair, réseau en HTTPS. La clé `force_tls` est supprimée des fichiers de configuration qui la portaient
+- Si votre politique exige TLS jusqu'au poste, la réponse est le chiffrement du **disque** (BitLocker, LUKS) : il protège la base de données elle-même, la vraie cible sur une machine accessible
+
 ### Corrigé
 - **Le bouton « Redémarrer maintenant » tournait indéfiniment** après avoir activé ou désactivé le HTTPS local. La page sondait `/health` en **relatif** : elle est sur `http://localhost:8000` et le serveur repart en **https sur le même port**, si bien que la requête en clair se heurtait à une poignée de main TLS et échouait jusqu'au délai d'attente. Sonder la nouvelle adresse n'aurait pas aidé non plus — avec un certificat auto-signé, le navigateur refuse toute requête tant qu'il n'a pas affiché son avertissement, qu'il ne montre que pour une navigation. L'interface attend donc l'**arrêt** du serveur actuel — seul signal fiable que le redémarrage a commencé — puis **navigue** vers la bonne adresse, en `http` ou `https` selon le réglage enregistré
 - **Activer HTTPS était impossible en pratique.** Deux défauts empilés : `config.json` n'est écrit qu'au premier lancement et jamais retouché — une installation mise à jour ne contient donc que les clés de sa version d'origine, sans `host` ni `force_tls` — et le lanceur transmettait `FORCE_TLS=false` explicitement, ce qui **écrasait le fichier** même édité à la main. Le lanceur ne transmet plus ce réglage : le serveur lit le même fichier, une seule source de vérité
@@ -23,7 +27,6 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 - **L'avis de conformité nLPD art. 8 était périmé** : il annonçait encore « base et sauvegardes en clair » alors que les sauvegardes sont chiffrables depuis la v1.4.4. Réécrit pour dire ce qui est vrai — les sauvegardes peuvent l'être, la base ne le sera pas (SQLCipher est incompatible avec le binaire unique), et l'action qui vous revient est d'activer le chiffrement du disque (BitLocker, LUKS). Un avis faux est pire qu'un avis absent : il est cru
 
 ### Ajouté
-- **`FORCE_TLS=true`** sert en HTTPS même sur `localhost`, pour les politiques de sécurité qui l'exigent. Ce n'est pas le défaut, et `docs/PRODUCTION.md` explique pourquoi : le trafic vers `127.0.0.1` ne touche aucune interface réseau, les navigateurs classent `http://localhost` parmi les origines dignes de confiance, et un avertissement de certificat répété entraîne le réflexe dont vit l'hameçonnage
 
 ### Sécurité
 - **Le serveur n'écoute plus sur toutes les interfaces par défaut.** Il écoutait sur `0.0.0.0` : un portable sur un réseau public ou une salle d'attente servait sa comptabilité à ce réseau, en clair, sans que personne l'ait demandé. Le défaut est désormais `127.0.0.1` — joignable depuis cette machine seulement
