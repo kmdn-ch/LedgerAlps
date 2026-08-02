@@ -55,7 +55,10 @@
       "source_url": "https://www.six-group.com/en/products-services/banking-services/payment-standardization.html",
       "published_at": "2026-07-27",
       "effective_from": null,
-      "resolved_in_version": null
+      "resolved_in_version": null,
+      "assumes_absent": [
+        "qr_bill_sps_2026"
+      ]
     },
     {
       "id": "nlpd-art8-data-security",
@@ -73,7 +76,10 @@
       "source_url": "https://www.fedlex.admin.ch/eli/cc/2022/491/fr",
       "published_at": "2026-07-27",
       "effective_from": "2023-09-01",
-      "resolved_in_version": null
+      "resolved_in_version": null,
+      "assumes_absent": [
+        "encrypted_database"
+      ]
     }
   ]
 }

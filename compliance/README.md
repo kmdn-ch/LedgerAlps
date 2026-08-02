@@ -178,3 +178,41 @@ version en cours. Sont masqués :
 La bannière (`ComplianceBanner.tsx`) est montée dans le layout. Un avis masqué
 par l'utilisateur réapparaît si sa date de publication change : un
 « ne plus afficher » ne doit pas enterrer une obligation légale révisée.
+
+---
+
+## Empêcher un avis de devenir faux
+
+Un avis périmé coûte plus cher qu'un avis absent : l'utilisateur agit dessus,
+dépense de l'effort sur un problème résolu, et **cesse de croire le suivant**.
+Ces bannières ne fonctionnent que tant qu'on les croit.
+
+C'est arrivé. Le chiffrement des sauvegardes est livré en v1.4.4, et l'avis
+`nlpd-art8-data-security` a continué d'annoncer des sauvegardes en clair — alors
+même que la roadmap disait que cette entrée serait retirée. Se fier à la mémoire
+d'un développeur ne suffit pas.
+
+Le contrôle est donc **mécanique** :
+
+1. [`capabilities.go`](../internal/core/compliance/capabilities.go) énumère ce
+   que LedgerAlps sait faire, avec un booléen par capacité.
+2. Chaque avis déclare dans `assumes_absent` les capacités qu'il suppose
+   **absentes**.
+3. Un test échoue dès qu'un avis suppose absent quelque chose qui existe — en
+   nommant l'avis et la capacité.
+
+Livrer une fonctionnalité en oubliant l'avis devient impossible : la
+construction s'arrête avant. Basculer le booléen fait partie de la livraison,
+au même titre que le CHANGELOG.
+
+Deux garde-fous complémentaires :
+
+- **un avis ouvert doit déclarer `resolved_in_version` ou `assumes_absent`** —
+  sinon rien ne détecterait qu'il est devenu faux ;
+- **une capacité inconnue est refusée** : une faute de frappe dans
+  `assumes_absent` se lirait « capacité absente » et désactiverait le contrôle
+  en silence.
+
+C'est le pendant interne de [`scripts/compliance_watch.py`](../scripts/compliance_watch.py) :
+celui-ci surveille l'évolution de la **loi**, celui-là l'évolution du
+**produit**. La dérive peut venir des deux côtés.

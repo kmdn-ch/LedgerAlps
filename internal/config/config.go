@@ -152,11 +152,26 @@ func Load() *Config {
 		if cfg.AllowedOrigins == "" {
 			cfg.AllowedOrigins = "http://localhost:" + cfg.Port
 		}
+		// Environment variables override the file.
+		//
+		// The file used to win outright, which made every operational setting
+		// unreachable on a Windows install: the wizard always writes a
+		// config.json, so HOST, TLS_CERT, FORCE_TLS and the rest were read from
+		// a file that has no such keys and silently defaulted. The launcher even
+		// passed FORCE_TLS to the server, where it was ignored.
+		//
+		// It also surprised us once in a way that mattered: SQLITE_PATH was set
+		// to aim a restore at a scratch database, the file won, and the restore
+		// ran against the live one.
+		//
+		// Only variables actually present in the environment override, so an
+		// unset variable never wipes a configured value.
+		applyEnvOverrides(cfg)
 		cfg.validateSecrets()
 		return cfg
 	}
 
-	// Fall back to environment variables (dev / Docker / CI usage).
+	// No config file: environment variables only (Linux, systemd, CI).
 	cfg := &Config{
 		Host:              getEnv("HOST", "127.0.0.1"),
 		Port:              getEnv("PORT", "8000"),
@@ -226,4 +241,38 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// applyEnvOverrides lets the environment win over the config file, for the
+// variables that are actually set. See Load for why.
+func applyEnvOverrides(cfg *Config) {
+	setStr := func(key string, dst *string) {
+		if v, ok := os.LookupEnv(key); ok && v != "" {
+			*dst = v
+		}
+	}
+	setBool := func(key string, dst *bool) {
+		if v, ok := os.LookupEnv(key); ok && v != "" {
+			*dst = v == "true"
+		}
+	}
+
+	setStr("HOST", &cfg.Host)
+	setStr("PORT", &cfg.Port)
+	setStr("SQLITE_PATH", &cfg.SQLitePath)
+	setStr("POSTGRES_DSN", &cfg.PostgresDSN)
+	setStr("JWT_SECRET", &cfg.JWTSecret)
+	setStr("ALLOWED_ORIGINS", &cfg.AllowedOrigins)
+	setStr("LOG_LEVEL", &cfg.LogLevel)
+	setStr("TLS_CERT", &cfg.TLSCert)
+	setStr("TLS_KEY", &cfg.TLSKey)
+
+	setBool("DEBUG", &cfg.Debug)
+	setBool("FORCE_TLS", &cfg.ForceTLS)
+	setBool("ALLOW_INSECURE_HTTP", &cfg.AllowInsecureHTTP)
+	// UPDATE_CHECK is the one where anything other than "false" means enabled,
+	// matching how it is documented.
+	if v, ok := os.LookupEnv("UPDATE_CHECK"); ok && v != "" {
+		cfg.UpdateCheck = v != "false"
+	}
 }

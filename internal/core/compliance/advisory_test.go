@@ -255,3 +255,79 @@ func TestBundledFeedRelevanceAtCurrentRelease(t *testing.T) {
 		}
 	}
 }
+
+// ─── Cohérence entre les avis et le produit ───────────────────────────────────
+
+// The guard this whole mechanism exists for.
+//
+// Encrypted backups shipped in v1.4.4 and the advisory went on telling users
+// their backups were in clear. The roadmap even said this entry would be
+// retired — and it was not, because nothing forced the question. Now shipping a
+// capability and forgetting the notice fails the build instead of reaching a
+// user as false compliance advice.
+func TestNoAdvisoryContradictsWhatTheProductDoes(t *testing.T) {
+	f, err := BundledFeed()
+	if err != nil {
+		t.Fatalf("BundledFeed: %v", err)
+	}
+	for _, a := range f.Advisories {
+		for _, cap := range a.AssumesAbsent {
+			if Has(cap) {
+				t.Errorf("l'avis %q suppose que LedgerAlps n'a pas %q — or il l'a désormais.\n"+
+					"  Réécrivez cet avis, ou renseignez resolved_in_version, avant de livrer.",
+					a.ID, cap)
+			}
+		}
+	}
+}
+
+// A typo in assumes_absent would read as "capability absent" and retire the
+// guard in silence — the failure mode this design has to avoid above all.
+func TestAssumedCapabilitiesAreAllKnown(t *testing.T) {
+	f, err := BundledFeed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range f.Advisories {
+		for _, cap := range a.AssumesAbsent {
+			if !KnownCapability(cap) {
+				t.Errorf("l'avis %q déclare la capacité inconnue %q — faute de frappe ? "+
+					"Une capacité inconnue serait lue comme absente et désactiverait le contrôle.",
+					a.ID, cap)
+			}
+		}
+	}
+}
+
+// An advisory that is neither resolved nor tied to a capability drifts with
+// nothing to catch it. Requiring one or the other is what makes the check
+// complete rather than decorative.
+func TestOpenAdvisoriesDeclareWhatTheyAssume(t *testing.T) {
+	f, err := BundledFeed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range f.Advisories {
+		if a.ResolvedInVersion != "" {
+			continue // already tied to a release
+		}
+		if len(a.AssumesAbsent) == 0 {
+			t.Errorf("l'avis ouvert %q ne déclare ni resolved_in_version ni assumes_absent : "+
+				"rien ne détectera qu'il est devenu faux", a.ID)
+		}
+	}
+}
+
+// The capability map is the single place a developer touches when shipping;
+// an empty one would make every check above pass vacuously.
+func TestCapabilityMapIsPopulated(t *testing.T) {
+	if len(Capabilities) == 0 {
+		t.Fatal("aucune capacité déclarée : les contrôles de cohérence ne vérifieraient rien")
+	}
+	if !Has(CapEncryptedBackups) {
+		t.Error("CapEncryptedBackups devrait être vrai depuis la v1.4.4")
+	}
+	if Has(CapEncryptedDatabase) {
+		t.Error("CapEncryptedDatabase devrait être faux : SQLCipher est incompatible avec CGO_ENABLED=0")
+	}
+}

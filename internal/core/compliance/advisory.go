@@ -60,6 +60,16 @@ type Advisory struct {
 	// ResolvedInVersion is the first release that satisfies the requirement.
 	// A user already on that version does not need to be told about it.
 	ResolvedInVersion string `json:"resolved_in_version"`
+
+	// AssumesAbsent lists the capabilities this advisory claims LedgerAlps
+	// lacks. It is what keeps a notice honest: ship the capability, and the
+	// build fails until the advisory is rewritten or retired.
+	//
+	// A stale compliance warning costs more than it looks. Users act on it,
+	// spend effort on a problem that no longer exists, and stop believing the
+	// next one — and these notices only work while they are believed. See
+	// capabilities.go.
+	AssumesAbsent []Capability `json:"assumes_absent,omitempty"`
 }
 
 // Feed is the advisory document, bundled and optionally refreshed.

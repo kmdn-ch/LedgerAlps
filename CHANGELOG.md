@@ -8,6 +8,13 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 ## [Unreleased]
 
 ### Corrigé
+- **Les options `HOST`, `TLS_CERT`, `TLS_KEY`, `FORCE_TLS` et `ALLOW_INSECURE_HTTP` étaient inatteignables sur une installation Windows.** `config.json` primait sur les variables d'environnement, et l'assistant écrit toujours ce fichier : le serveur lisait donc des clés absentes et retombait sur les valeurs par défaut. Le lanceur transmettait même `FORCE_TLS`, ignoré. **Les variables d'environnement priment désormais sur le fichier** lorsqu'elles sont réellement définies — une variable vide ou absente n'écrase rien. C'est aussi la précédence qui avait fait viser la base live lors d'une restauration
+
+### Ajouté
+- **Contrôle mécanique de cohérence des avis de conformité.** Un avis périmé coûte plus qu'un avis absent : l'utilisateur agit dessus et cesse de croire le suivant. Chaque avis déclare désormais les capacités qu'il suppose **absentes** du produit ; un test échoue dès qu'une de ces capacités existe, en nommant l'avis. Livrer une fonctionnalité en oubliant la bannière n'est plus possible — la construction s'arrête avant. Le contrôle a trouvé un second avis non protégé dès sa première exécution. Voir [`compliance/README.md`](compliance/README.md)
+
+
+### Corrigé
 - **L'avis de conformité nLPD art. 8 était périmé** : il annonçait encore « base et sauvegardes en clair » alors que les sauvegardes sont chiffrables depuis la v1.4.4. Réécrit pour dire ce qui est vrai — les sauvegardes peuvent l'être, la base ne le sera pas (SQLCipher est incompatible avec le binaire unique), et l'action qui vous revient est d'activer le chiffrement du disque (BitLocker, LUKS). Un avis faux est pire qu'un avis absent : il est cru
 
 ### Ajouté
