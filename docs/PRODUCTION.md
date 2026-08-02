@@ -287,6 +287,14 @@ sur la même machine que le fichier qu'elle protège. Contre un portable volé
 compromise, rien au niveau applicatif n'aide — l'attaquant lit la mémoire du
 processus, où la base est déchiffrée de toute façon.
 
+**LedgerAlps le vérifie.** Au démarrage, l'application lit l'état de BitLocker ;
+si le disque est protégé, l'avertissement de conformité disparaît de lui-même.
+La vérification a ses limites, et elles sont assumées : détecter BitLocker
+correctement exige des droits d'administrateur, que LedgerAlps n'a pas. La clé
+de registre lue sans élévation ne couvre que le volume système. Un résultat
+positif fait donc taire l'avis ; tout autre le laisse visible, formulé comme
+quelque chose à vérifier plutôt que comme un constat.
+
 **Donc : chiffrez le disque.** C'est la mesure qui protège réellement, elle est
 gratuite sur Windows Pro et Linux, et elle couvre aussi le secret de signature
 dans `config.json` — que le chiffrement de la base laisserait, lui, en clair.

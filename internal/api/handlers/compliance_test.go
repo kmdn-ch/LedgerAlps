@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/core/diskcrypt"
 	"github.com/kmdn-ch/ledgeralps/internal/services/updatecheck"
 )
 
@@ -131,5 +132,28 @@ func TestUpdateCheckDisabledIsInert(t *testing.T) {
 	}
 	if body["update_available"] != false {
 		t.Errorf("update_available = %v, want false", body["update_available"])
+	}
+}
+
+// The advisory asking for disk encryption must not reach a machine that already
+// has it. Nagging someone who did the work is how a compliance banner loses the
+// credibility it needs for the notice that actually matters.
+func TestDiskAdvisoryFollowsTheMachine(t *testing.T) {
+	body := getAdvisories(t, "?lang=fr")
+	items, _ := body["items"].([]any)
+
+	present := false
+	for _, it := range items {
+		if a, ok := it.(map[string]any); ok && a["id"] == "nlpd-art8-data-security" {
+			present = true
+		}
+	}
+
+	// The expectation is whatever this machine actually reports — the point is
+	// that the two agree, not what either happens to be on the CI runner.
+	wantPresent := diskcrypt.Check().Advisory
+	if present != wantPresent {
+		t.Errorf("avis disque présent=%v alors que la machine rapporte advisory=%v",
+			present, wantPresent)
 	}
 }

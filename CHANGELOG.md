@@ -7,6 +7,13 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Ajouté
+- **L'avertissement sur le chiffrement du disque ne s'affiche plus que sur les machines qui en ont besoin.** LedgerAlps lit l'état BitLocker au démarrage : si le disque est protégé, la bannière disparaît d'elle-même. Nager quelqu'un qui a déjà fait le travail est précisément ce qui apprend à ignorer l'avertissement suivant — et le suivant peut compter
+- L'état du chiffrement figure aussi sur **Paramètres → Maintenance → État du système**
+
+> **Limite assumée.** Détecter BitLocker correctement demande des droits d'administrateur : `Get-BitLockerVolume`, la classe WMI `Win32_EncryptableVolume` et `manage-bde` répondent tous « accès refusé » à un utilisateur normal — mesuré, pas supposé. LedgerAlps lit donc une clé de registre lisible sans élévation, qui ne couvre que le volume système. Un résultat **positif** fait taire l'avis ; tout autre résultat le laisse visible, formulé comme « à vérifier » et jamais comme « votre disque n'est pas chiffré ». Accuser à tort est le défaut que ce mécanisme existe pour éviter, donc le seul qu'il refuse de risquer.
+
+
 ### Documentation
 - **Pourquoi la base de données est en clair**, et ce qui protège réellement : les quatre options possibles avec leur coût, et le point commun qui les condamne toutes sauf une — le serveur devant lire la base sans intervention humaine, la clé vit forcément sur la machine qu'elle protège. La réponse est le chiffrement du disque, qui couvre aussi le secret de signature. README pour l'essentiel, `docs/PRODUCTION.md` pour le détail
 - **Rotation du secret de signature** inscrite à la roadmap, avec sa portée exacte vérifiée dans le code : le secret ne sert qu'à signer les jetons, le régénérer déconnecte les sessions et **rien d'autre** — mots de passe intacts, aucune donnée touchée, sauvegardes toujours utilisables

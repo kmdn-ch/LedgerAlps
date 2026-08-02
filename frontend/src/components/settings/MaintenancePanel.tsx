@@ -155,6 +155,29 @@ export function MaintenancePanel() {
               </div>
             )}
 
+            {health.data.disk_encryption && (
+              <div className="text-sm">
+                <p className="text-alpine-500 text-xs uppercase tracking-wider mb-1.5">Chiffrement du disque</p>
+                {health.data.disk_encryption.status === 'encrypted' ? (
+                  <p className="flex items-center gap-1.5 text-success-700">
+                    <ShieldCheck size={14} /> Activé
+                    {health.data.disk_encryption.mechanism && <> ({health.data.disk_encryption.mechanism})</>}
+                  </p>
+                ) : health.data.disk_encryption.status === 'not_encrypted' ? (
+                  <p className="text-warning-700">
+                    <strong>Non activé.</strong> La base de données est lisible sur un poste volé.
+                    Activez BitLocker : c'est la seule mesure qui protège vraiment vos données au
+                    repos, et LedgerAlps ne peut pas la prendre à votre place.
+                  </p>
+                ) : (
+                  <p className="text-alpine-600">
+                    Impossible à vérifier sur ce système. Assurez-vous que le disque est chiffré
+                    (BitLocker, LUKS).
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Ce que le produit sait faire, tel que le serveur le déclare —
                 la même table qui empêche les avis de conformité de mentir. */}
             <div className="text-sm">

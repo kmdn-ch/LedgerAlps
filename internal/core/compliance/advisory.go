@@ -70,6 +70,27 @@ type Advisory struct {
 	// next one — and these notices only work while they are believed. See
 	// capabilities.go.
 	AssumesAbsent []Capability `json:"assumes_absent,omitempty"`
+
+	// Condition, when set, names a runtime check that decides whether this
+	// advisory applies to THIS machine. `assumes_absent` guards against the
+	// product changing; this guards against telling a particular user something
+	// untrue of their installation — such as asking for disk encryption on a
+	// machine that already has it.
+	//
+	// An unrecognised condition shows the advisory. Hiding a compliance notice
+	// because of a typo is the failure that must not happen silently.
+	Condition Condition `json:"condition,omitempty"`
+}
+
+// Condition names a runtime check evaluated when advisories are served.
+type Condition string
+
+// DiskNotEncrypted — the machine's disk is not confirmed encrypted.
+const DiskNotEncrypted Condition = "disk_not_encrypted"
+
+// KnownCondition reports whether a condition name is one we evaluate.
+func KnownCondition(c Condition) bool {
+	return c == DiskNotEncrypted
 }
 
 // Feed is the advisory document, bundled and optionally refreshed.

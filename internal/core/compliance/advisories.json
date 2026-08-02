@@ -65,12 +65,12 @@
       "domain": "privacy",
       "severity": "action_required",
       "title": {
-        "fr": "nLPD art. 8 : chiffrez le disque de cette machine",
-        "en": "nLPD art. 8: encrypt this machine's disk"
+        "fr": "nLPD art. 8 : le disque de cette machine n'est pas chiffré",
+        "en": "nLPD art. 8: this machine's disk is not encrypted"
       },
       "body": {
-        "fr": "L'art. 8 LPD impose des mesures techniques et organisationnelles appropriées, proportionnées au risque ; l'OPDo en précise les exigences (confidentialité, disponibilité, intégrité).\n\nDepuis la v1.4.4, vos **sauvegardes peuvent être chiffrées** : indiquez une phrase de passe dans Paramètres → Sauvegardes. C'est la copie qui quitte la machine — NAS, clé USB — donc la plus exposée.\n\n**La base de données elle-même reste en clair sur le disque**, et le restera : la chiffrer exigerait SQLCipher, une bibliothèque C incompatible avec le binaire unique sans dépendance de LedgerAlps. Sur un poste volé dont le disque n'est pas chiffré, les données de vos clients sont lisibles.\n\n**Ce qu'il vous reste à faire** : activer le chiffrement du disque — BitLocker sous Windows, LUKS sous Linux. C'est une mesure du système d'exploitation, pas de LedgerAlps, et elle protège aussi tout le reste de votre poste.\n\nCette entrée décrit une obligation générale de moyens, non une échéance datée.",
-        "en": "Art. 8 of the Swiss Data Protection Act requires appropriate technical and organisational measures proportionate to the risk; the OPDo ordinance details them (confidentiality, availability, integrity).\n\nSince v1.4.4 your **backups can be encrypted**: set a passphrase under Settings → Backups. Backups are the copy that leaves the machine — a NAS, a USB stick — and so the most exposed.\n\n**The database itself stays unencrypted on disk**, and will: encrypting it would require SQLCipher, a C library incompatible with LedgerAlps' single dependency-free binary. On a stolen machine whose disk is not encrypted, your clients' data is readable.\n\n**What is left for you to do**: turn on full-disk encryption — BitLocker on Windows, LUKS on Linux. It is an operating-system measure rather than a LedgerAlps one, and it protects everything else on the machine too.\n\nThis entry describes a general obligation of means, not a dated deadline."
+        "fr": "L'art. 8 LPD impose des mesures techniques et organisationnelles appropriées, proportionnées au risque ; l'OPDo en précise les exigences (confidentialité, disponibilité, intégrité).\n\nDepuis la v1.4.4, vos **sauvegardes peuvent être chiffrées** : indiquez une phrase de passe dans Paramètres → Sauvegardes. C'est la copie qui quitte la machine — NAS, clé USB — donc la plus exposée.\n\n**La base de données elle-même reste en clair sur le disque**, et le restera : la chiffrer exigerait SQLCipher, une bibliothèque C incompatible avec le binaire unique sans dépendance de LedgerAlps. Sur un poste volé dont le disque n'est pas chiffré, les données de vos clients sont lisibles.\n\n**Ce qu'il vous reste à faire** : activer le chiffrement du disque — BitLocker sous Windows, LUKS sous Linux. C'est une mesure du système d'exploitation, pas de LedgerAlps, et elle protège aussi tout le reste de votre poste.\n\nCet avertissement disparaîtra de lui-même une fois le chiffrement activé : LedgerAlps le vérifie au démarrage.\n\nCette entrée décrit une obligation générale de moyens, non une échéance datée.",
+        "en": "Art. 8 of the Swiss Data Protection Act requires appropriate technical and organisational measures proportionate to the risk; the OPDo ordinance details them (confidentiality, availability, integrity).\n\nSince v1.4.4 your **backups can be encrypted**: set a passphrase under Settings → Backups. Backups are the copy that leaves the machine — a NAS, a USB stick — and so the most exposed.\n\n**The database itself stays unencrypted on disk**, and will: encrypting it would require SQLCipher, a C library incompatible with LedgerAlps' single dependency-free binary. On a stolen machine whose disk is not encrypted, your clients' data is readable.\n\n**What is left for you to do**: turn on full-disk encryption — BitLocker on Windows, LUKS on Linux. It is an operating-system measure rather than a LedgerAlps one, and it protects everything else on the machine too.\n\nThis notice disappears on its own once encryption is on: LedgerAlps checks at startup.\n\nThis entry describes a general obligation of means, not a dated deadline."
       },
       "source_name": "RS 235.1 — LPD art. 8 ; RS 235.11 OPDo art. 1 et 3",
       "source_url": "https://www.fedlex.admin.ch/eli/cc/2022/491/fr",
@@ -79,7 +79,8 @@
       "resolved_in_version": null,
       "assumes_absent": [
         "encrypted_database"
-      ]
+      ],
+      "condition": "disk_not_encrypted"
     }
   ]
 }

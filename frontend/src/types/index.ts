@@ -268,6 +268,11 @@ export interface SystemHealth {
     newest?: string; newest_name?: string
   }
   network: { host: string; tls: boolean; loopback: boolean; insecure_opt_in: boolean }
+  disk_encryption?: {
+    status: 'encrypted' | 'not_encrypted' | 'unknown'
+    mechanism?: string
+    advisory: boolean
+  }
   capabilities: Record<string, boolean>
   login_lockouts?: number
 }

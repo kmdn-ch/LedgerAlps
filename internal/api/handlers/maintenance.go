@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
+	"github.com/kmdn-ch/ledgeralps/internal/core/diskcrypt"
 	"github.com/kmdn-ch/ledgeralps/internal/core/tlsutil"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/version"
@@ -269,6 +270,10 @@ func (h *MaintenanceHandler) SystemHealth(c *gin.Context) {
 		"loopback":        tlsutil.IsLoopback(h.cfg.Host),
 		"insecure_opt_in": h.cfg.AllowInsecureHTTP,
 	}
+
+	// Chiffrement du disque : la mesure qui protège réellement la base, et la
+	// seule que LedgerAlps ne peut pas prendre à votre place.
+	resp["disk_encryption"] = diskcrypt.Check()
 
 	// Ce que le produit sait faire — la même table que celle qui garde les avis
 	// de conformité honnêtes.

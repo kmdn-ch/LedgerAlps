@@ -331,3 +331,20 @@ func TestCapabilityMapIsPopulated(t *testing.T) {
 		t.Error("CapEncryptedDatabase devrait être faux : SQLCipher est incompatible avec CGO_ENABLED=0")
 	}
 }
+
+// A typo in `condition` must not silently retire an advisory — the same failure
+// the capability check guards against, from the other direction.
+func TestAdvisoryConditionsAreAllKnown(t *testing.T) {
+	f, err := BundledFeed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range f.Advisories {
+		if a.Condition == "" {
+			continue
+		}
+		if !KnownCondition(a.Condition) {
+			t.Errorf("l'avis %q déclare la condition inconnue %q — faute de frappe ?", a.ID, a.Condition)
+		}
+	}
+}

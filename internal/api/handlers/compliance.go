@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
+	"github.com/kmdn-ch/ledgeralps/internal/core/diskcrypt"
 	"github.com/kmdn-ch/ledgeralps/internal/services/updatecheck"
 	"github.com/kmdn-ch/ledgeralps/version"
 )
@@ -55,8 +56,16 @@ func (h *ComplianceHandler) ListAdvisories(c *gin.Context) {
 
 	relevant := feed.Relevant(version.Version(), time.Now(), defaultHorizon)
 
+	// Un avis dont la condition ne tient pas sur CETTE machine n'est pas affiché.
+	// Demander d'activer BitLocker à quelqu'un qui l'a déjà activé est
+	// exactement le genre d'avertissement faux qui apprend à ignorer le suivant.
+	disk := diskcrypt.Check()
+
 	items := make([]advisoryResponse, 0, len(relevant))
 	for _, a := range relevant {
+		if a.Condition == compliance.DiskNotEncrypted && !disk.Advisory {
+			continue
+		}
 		items = append(items, advisoryResponse{
 			ID:            a.ID,
 			Domain:        a.Domain,
