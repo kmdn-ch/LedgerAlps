@@ -31,7 +31,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -185,11 +184,14 @@ func waitForServer(ctx context.Context, baseURL string, client *http.Client) err
 // Returns the process; the caller should not wait on it.
 func startServer(cfg *config) (*os.Process, error) {
 	cmd := exec.Command(serverExe())
+	// FORCE_TLS n'est délibérément PAS transmis : le serveur lit le même
+	// config.json. Le passer en variable d'environnement en ferait une seconde
+	// source de vérité qui, valant "false" par défaut, écraserait le fichier —
+	// et rendrait le réglage impossible à activer.
 	cmd.Env = append(os.Environ(),
 		"JWT_SECRET="+cfg.JWTSecret,
 		"SQLITE_PATH="+cfg.SQLitePath,
 		"PORT="+cfg.Port,
-		"FORCE_TLS="+strconv.FormatBool(cfg.ForceTLS),
 		"ALLOWED_ORIGINS="+cfg.AllowedOrigins,
 		// Tell the server where it's installed so it can locate the frontend dist folder.
 		"LEDGERALPS_INSTALL_DIR="+exeDir(),

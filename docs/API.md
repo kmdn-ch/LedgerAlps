@@ -218,6 +218,8 @@ jusqu'à réponse avant de recharger la page.
 |---|---|---|---|
 | GET | `/maintenance/integrity` | **admin** | Contrôle de cohérence des données |
 | GET | `/maintenance/health` | **admin** | État du système, sauvegardes, exposition réseau |
+| GET | `/settings/server` | **admin** | Réglages réseau en vigueur |
+| PUT | `/settings/server` | **admin** | Écrire les réglages réseau (effet au redémarrage) |
 
 **Lecture seule.** Ces vues montrent, elles ne réparent pas : une comptabilité
 incohérente se corrige par une écriture, pas par un bouton — réparer en silence
@@ -229,6 +231,26 @@ interdit précisément.
 on ne peut rien faire est du bruit qui apprend à ignorer la page. Rien n'est
 signalé comme `error` sans qu'un chiffre soit réellement faux — l'arrondi au
 5 rappen, par exemple, n'en est pas un.
+
+`PUT /settings/server` écrit `host`, `force_tls`, `tls_cert`, `tls_key` et
+`allow_insecure_http` dans `config.json`, puis répond `restart_required: true`.
+Il ne peut pas appliquer à chaud : l'adresse d'écoute et la configuration TLS
+sont choisies une seule fois, au démarrage.
+
+Ce chemin existe parce que `config.json` est écrit **une seule fois**, par
+l'assistant de premier démarrage, et jamais retouché : une installation mise à
+jour ne contient donc que les clés de sa version d'origine. Toute option ajoutée
+depuis était absente, lue comme sa valeur par défaut, et inatteignable.
+
+L'écriture préserve **toutes** les clés inconnues — sérialiser une structure
+supprimerait `jwt_secret` au passage, ce qui déconnecterait chaque utilisateur de
+sa comptabilité. Le fichier est écrit à côté puis renommé : une coupure en cours
+d'écriture laisserait sinon un `config.json` tronqué, et l'application ne
+redémarrerait pas.
+
+Certificat et clé doivent être fournis **ensemble**, et leurs chemins sont
+vérifiés avant enregistrement : la moitié d'une configuration TLS empêcherait le
+serveur de démarrer, et l'utilisateur se serait exclu de ses propres comptes.
 
 `health` expose aussi les **capacités** du produit, la table même qui empêche les
 avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance/README.md)).

@@ -156,7 +156,12 @@ certification dans le magasin de confiance de Windows : une clé capable de
 forger des certificats **pour n'importe quel site**, posée sur le poste — un
 risque supérieur à celui qu'on prétend traiter.
 
-**Si votre politique de sécurité l'exige malgré tout :**
+**Si votre politique de sécurité l'exige malgré tout**, le plus simple est
+**Paramètres → Maintenance → Réseau & chiffrement**, case « Chiffrer aussi
+l'accès local ». Le réglage est écrit dans `config.json` et prend effet au
+redémarrage, proposé sur place.
+
+En ligne de commande :
 
 ```bash
 export FORCE_TLS=true

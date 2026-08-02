@@ -131,6 +131,10 @@ export const backupsApi = {
 export const maintenanceApi = {
   integrity: () => api.get('/maintenance/integrity'),
   health:    () => api.get('/maintenance/health'),
+  // Réglages réseau. config.json n'est écrit qu'au premier lancement : sans cet
+  // écran, aucune option ajoutée depuis n'est atteignable.
+  getServerSettings: () => api.get('/settings/server'),
+  putServerSettings: (data: unknown) => api.put('/settings/server', data),
 }
 
 export const contactsApi = {

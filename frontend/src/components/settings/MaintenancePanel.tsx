@@ -5,12 +5,13 @@
 // de ce qui s'est passé, ce que le CO art. 957a al. 2 ch. 5 interdit. Chaque
 // constat dit donc ce qui ne va pas et ce qu'il faut faire.
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ShieldCheck, AlertTriangle, XCircle, Info, RefreshCw, Loader2,
   Database, Lock, LockOpen,
 } from 'lucide-react'
 import { maintenanceApi } from '@/api/client'
+import { NetworkSettings } from '@/components/settings/NetworkSettings'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { formatDate } from '@/utils'
 import type { IntegrityReport, IntegrityFinding, SystemHealth } from '@/types'
@@ -36,6 +37,7 @@ const CAPABILITY_LABEL: Record<string, string> = {
 }
 
 export function MaintenancePanel() {
+  const qc = useQueryClient()
   const integrity = useQuery<IntegrityReport>({
     queryKey: ['maintenance', 'integrity'],
     queryFn:  () => maintenanceApi.integrity().then(r => r.data),
@@ -183,6 +185,8 @@ export function MaintenancePanel() {
           </div>
         )}
       </div>
+
+      <NetworkSettings onSaved={() => qc.invalidateQueries({ queryKey: ['maintenance', 'health'] })} />
 
       <p className="text-xs text-alpine-500">
         Les sections Conformité, Flux bancaires et Réversibilité arrivent dans une

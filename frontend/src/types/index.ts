@@ -271,3 +271,11 @@ export interface SystemHealth {
   capabilities: Record<string, boolean>
   login_lockouts?: number
 }
+
+export interface ServerSettings {
+  host: string
+  force_tls: boolean
+  tls_cert: string
+  tls_key: string
+  allow_insecure_http: boolean
+}
