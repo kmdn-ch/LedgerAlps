@@ -176,6 +176,7 @@ comptent dans la déclaration TVA.
 | POST | `/backups` | **admin** | Créer un instantané (`passphrase` facultative) |
 | POST | `/backups/restore` | **admin** | **Préparer** une restauration (`confirm` requis) |
 | DELETE | `/backups/restore` | **admin** | Annuler une restauration préparée |
+| POST | `/system/restart` | **admin** | Redémarrer pour appliquer la restauration préparée |
 
 Réservé aux administrateurs : une restauration remplace toute la comptabilité.
 
@@ -195,6 +196,21 @@ La comptabilité remplacée est sauvegardée juste avant : une restauration lanc
 par erreur reste réversible. Si elle échoue au redémarrage, le serveur démarre
 quand même sur la base existante et le journalise — laisser l'utilisateur sans
 application serait pire que de ne pas restaurer.
+
+### Redémarrer
+
+`POST /system/restart` — **refusé (`422`) s'il n'y a aucune restauration en
+attente**. En dehors de ce cas, un bouton de redémarrage n'est qu'un moyen
+supplémentaire d'interrompre quelqu'un en pleine saisie.
+
+Le serveur répond `202` **avant** de s'arrêter, puis : arrêt de l'écoute HTTP,
+fermeture de la base, lancement d'une copie neuve de son propre binaire, sortie.
+L'ordre compte — le nouveau processus applique la restauration avant d'ouvrir
+la base, ce qu'il ne peut pas faire tant que l'ancien détient le fichier.
+
+Le lanceur Windows démarre le serveur sans le superviser : personne d'autre ne
+le relancerait, d'où ce redémarrage auto-porté. L'interface interroge `/health`
+jusqu'à réponse avant de recharger la page.
 
 ## Contacts
 

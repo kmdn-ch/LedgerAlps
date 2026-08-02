@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -191,6 +195,13 @@ func main() {
 	api.POST("/backups/restore", middleware.RequireAdmin(cfg.JWTSecret), bh.StageRestore)
 	api.DELETE("/backups/restore", middleware.RequireAdmin(cfg.JWTSecret), bh.CancelRestore)
 
+	// Redémarrage — proposé uniquement pour appliquer une restauration préparée.
+	// Le handler signale, main exécute : un handler ne doit pas démonter le
+	// serveur depuis lequel il répond.
+	restartCh := make(chan struct{}, 1)
+	sysh := handlers.NewSystemHandler(restartCh)
+	api.POST("/system/restart", middleware.RequireAdmin(cfg.JWTSecret), sysh.Restart)
+
 	// Fiscal years + VAT declaration (admin)
 	fyh := handlers.NewFiscalYearHandler(database, cfg.UsePostgres())
 	api.GET("/fiscal-years", fyh.ListFiscalYears)
@@ -298,8 +309,72 @@ func main() {
 
 	// ── 9. Start ──────────────────────────────────────────────────────────────
 	addr := ":" + cfg.Port
-	fmt.Printf("LedgerAlps: listening on http://localhost%s\n", addr)
-	if err := r.Run(addr); err != nil {
+	srv := &http.Server{Addr: addr, Handler: r}
+
+	serveErr := make(chan error, 1)
+	go func() {
+		fmt.Printf("LedgerAlps: listening on http://localhost%s\n", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serveErr <- err
+		}
+	}()
+
+	// Ctrl-C and service stop take the same path as a restart, minus the
+	// relaunch: stop serving, then release the database cleanly.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case err := <-serveErr:
 		log.Fatalf("FATAL: server error: %v", err)
+
+	case <-stop:
+		fmt.Println("LedgerAlps: arrêt demandé…")
+		shutdown(srv, database)
+
+	case <-restartCh:
+		fmt.Println("LedgerAlps: redémarrage pour appliquer la restauration…")
+		// Let the HTTP response reach the browser: the user is looking at a
+		// page that is about to reload itself.
+		time.Sleep(300 * time.Millisecond)
+		shutdown(srv, database)
+
+		// Only now is the database file free. The replacement applies the
+		// staged restore before opening it, which it could not do while this
+		// process still held the handle.
+		if err := relaunch(); err != nil {
+			log.Fatalf("FATAL: impossible de redémarrer LedgerAlps: %v\n"+
+				"  La restauration reste préparée : fermez puis rouvrez l'application.", err)
+		}
 	}
+}
+
+// shutdown stops serving, then closes the database — in that order, so no
+// request is still using it when it goes.
+func shutdown(srv *http.Server, database *sql.DB) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("WARNING: arrêt du serveur HTTP: %v", err)
+	}
+	if err := database.Close(); err != nil {
+		log.Printf("WARNING: fermeture de la base: %v", err)
+	}
+}
+
+// relaunch starts a fresh copy of this binary with the same environment and
+// arguments, then returns so the caller can exit.
+//
+// The child is deliberately not waited on: this process is about to disappear
+// and the new one has to outlive it.
+func relaunch() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("chemin de l'exécutable: %w", err)
+	}
+	cmd := exec.Command(exe, os.Args[1:]...)
+	cmd.Env = os.Environ()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Start()
 }

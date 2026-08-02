@@ -120,6 +120,9 @@ export const backupsApi = {
   stageRestore: (name: string, passphrase: string) =>
     api.post('/backups/restore', { name, passphrase, confirm: true }),
   cancelRestore: ()                            => api.delete('/backups/restore'),
+  // Redémarre le serveur pour appliquer la restauration préparée. Le serveur
+  // répond avant de s'arrêter, puis relance une copie de lui-même.
+  restart: ()                                  => api.post('/system/restart'),
 }
 
 export const contactsApi = {

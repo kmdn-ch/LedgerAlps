@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Download, RotateCcw, ShieldCheck, ShieldOff, AlertTriangle, X, Loader2, Check, Minus,
+  Download, RotateCcw, ShieldCheck, ShieldOff, AlertTriangle, X, Loader2, Check, Minus, RefreshCw,
 } from 'lucide-react'
 import { backupsApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner, EmptyState } from '@/components/ui'
@@ -130,6 +130,30 @@ export function BackupPanel() {
     onSuccess: invalidate,
   })
 
+  // Le serveur répond, puis se coupe et relance une copie de lui-même. On
+  // attend qu'il réponde à nouveau avant de recharger : recharger trop tôt
+  // afficherait une erreur de connexion là où tout se passe bien.
+  const [restarting, setRestarting] = useState(false)
+  const restart = useMutation({
+    mutationFn: async () => {
+      await backupsApi.restart()
+      setRestarting(true)
+      const deadline = Date.now() + 60_000
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 1000))
+        try {
+          const res = await fetch('/health', { cache: 'no-store' })
+          if (res.ok) return
+        } catch {
+          // Le serveur est en train de redémarrer : c'est attendu.
+        }
+      }
+      throw new Error('timeout')
+    },
+    onSuccess: () => window.location.reload(),
+    onError:   () => setRestarting(false),
+  })
+
   if (isLoading) return <LoadingSpinner />
   if (error)     return <ErrorBanner message="Impossible de lire les sauvegardes." />
 
@@ -150,13 +174,37 @@ export function BackupPanel() {
                 Elle remplacera la comptabilité actuelle au prochain démarrage :
                 <strong> fermez puis rouvrez LedgerAlps</strong>.
               </p>
-              <button
-                onClick={() => cancelRestore.mutate()}
-                disabled={cancelRestore.isPending}
-                className="btn-ghost btn-sm mt-2"
-              >
-                Annuler cette restauration
-              </button>
+              <div className="flex items-center gap-2 mt-3">
+                <button
+                  onClick={() => restart.mutate()}
+                  disabled={restart.isPending || restarting}
+                  className="btn-primary btn-sm flex items-center gap-1.5"
+                >
+                  {(restart.isPending || restarting)
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : <RefreshCw size={14} />}
+                  {restarting ? 'Redémarrage…' : 'Redémarrer LedgerAlps maintenant'}
+                </button>
+                <button
+                  onClick={() => cancelRestore.mutate()}
+                  disabled={cancelRestore.isPending || restart.isPending || restarting}
+                  className="btn-ghost btn-sm"
+                >
+                  Annuler cette restauration
+                </button>
+              </div>
+              {restarting && (
+                <p className="text-xs mt-2">
+                  LedgerAlps applique la restauration et redémarre. Cette page se
+                  rechargera d'elle-même — ne fermez pas la fenêtre.
+                </p>
+              )}
+              {restart.isError && (
+                <p className="text-xs text-danger-700 mt-2">
+                  Le serveur n'a pas répondu à temps. La restauration reste préparée :
+                  fermez puis rouvrez l'application pour l'appliquer.
+                </p>
+              )}
             </div>
           </div>
         </div>
