@@ -7,6 +7,15 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Sécurité
+- **Le serveur n'écoute plus sur toutes les interfaces par défaut.** Il écoutait sur `0.0.0.0` : un portable sur un réseau public ou une salle d'attente servait sa comptabilité à ce réseau, en clair, sans que personne l'ait demandé. Le défaut est désormais `127.0.0.1` — joignable depuis cette machine seulement
+- **HTTPS natif dès que LedgerAlps est joignable depuis le réseau.** Définir `HOST` sur autre chose que loopback active TLS : votre certificat via `TLS_CERT`/`TLS_KEY`, ou un **certificat auto-signé généré** dans `<données applicatives>/tls`. Il couvre `localhost`, le nom de la machine et ses adresses IP, vaut dix ans, et est **réutilisé d'un démarrage à l'autre** pour que l'exception accordée au navigateur tienne — la régénérer à chaque fois apprendrait à cliquer sans lire
+- `ALLOW_INSECURE_HTTP=true` conserve le clair pour le seul cas légitime — un reverse proxy terminant TLS sur la même machine — et l'écrit au journal, parce que c'est aussi le drapeau vers lequel on se tourne pour faire taire un avertissement
+- Sans cela, mot de passe de connexion, jeton de session et **phrase de passe de chiffrement des sauvegardes** traversaient le réseau en clair (LPD art. 8, OPDo art. 3 al. 1 let. c)
+
+> **Changement de comportement.** Si vous accédiez à LedgerAlps depuis un autre poste sans reverse proxy, il faut désormais définir `HOST` explicitement — et l'accès passera en HTTPS. C'est délibéré : cette configuration servait des identifiants en clair.
+
+
 ---
 
 ## [1.4.4] — 2026-08-02

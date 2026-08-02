@@ -22,8 +22,26 @@ var knownWeakSecrets = []string{
 // or environment variables; sensible defaults apply for local (SQLite) usage.
 type Config struct {
 	// Server
+	//
+	// Host defaults to 127.0.0.1. Until v1.4.5 the server bound to every
+	// interface, which meant a laptop on a café network was serving its
+	// accounts to that network in clear. Reaching LedgerAlps from another
+	// machine is now something you ask for, and asking for it brings TLS.
+	Host  string
 	Port  string
 	Debug bool
+
+	// TLS. Supplying both a certificate and a key serves HTTPS. Leaving them
+	// empty while Host is not loopback makes the server generate a self-signed
+	// certificate rather than fall back to clear text.
+	TLSCert string
+	TLSKey  string
+
+	// AllowInsecureHTTP serves clear HTTP on a non-loopback interface. It
+	// exists for the case where a reverse proxy already terminates TLS on the
+	// same host — and nowhere else. Anything else puts the login password, the
+	// session token and the backup passphrase on the wire.
+	AllowInsecureHTTP bool
 
 	// Database — SQLite by default, PostgreSQL if DSN is set
 	SQLitePath  string
@@ -47,15 +65,20 @@ type Config struct {
 
 // fileConfig is the JSON structure stored in the config file.
 type fileConfig struct {
-	JWTSecret      string `json:"jwt_secret"`
-	SQLitePath     string `json:"sqlite_path"`
-	PostgresDSN    string `json:"postgres_dsn,omitempty"`
-	Port           string `json:"port"`
-	Debug          bool   `json:"debug"`
-	AllowedOrigins string `json:"allowed_origins"`
+	JWTSecret   string `json:"jwt_secret"`
+	SQLitePath  string `json:"sqlite_path"`
+	PostgresDSN string `json:"postgres_dsn,omitempty"`
+	Host        string `json:"host,omitempty"`
+	Port        string `json:"port"`
+	Debug       bool   `json:"debug"`
+	TLSCert     string `json:"tls_cert,omitempty"`
+	TLSKey      string `json:"tls_key,omitempty"`
+	// Pointer so an absent key keeps the safe default (false).
+	AllowInsecureHTTP *bool  `json:"allow_insecure_http,omitempty"`
+	AllowedOrigins    string `json:"allowed_origins"`
 	// Pointer so that an absent key keeps the default (enabled) while an
 	// explicit `"update_check": false` is honoured.
-	UpdateCheck    *bool  `json:"update_check,omitempty"`
+	UpdateCheck *bool `json:"update_check,omitempty"`
 }
 
 // AppDataDir returns the platform-specific application data directory for LedgerAlps.
@@ -85,7 +108,10 @@ func Load() *Config {
 	// Try config file first (written by the setup wizard / installer).
 	if fc, err := loadFromFile(ConfigFilePath()); err == nil {
 		cfg := &Config{
+			Host:             fc.Host,
 			Port:             fc.Port,
+			TLSCert:          fc.TLSCert,
+			TLSKey:           fc.TLSKey,
 			Debug:            fc.Debug,
 			SQLitePath:       fc.SQLitePath,
 			PostgresDSN:      fc.PostgresDSN,
@@ -99,6 +125,12 @@ func Load() *Config {
 		if cfg.Port == "" {
 			cfg.Port = "8000"
 		}
+		if cfg.Host == "" {
+			cfg.Host = "127.0.0.1"
+		}
+		if fc.AllowInsecureHTTP != nil {
+			cfg.AllowInsecureHTTP = *fc.AllowInsecureHTTP
+		}
 		if cfg.AllowedOrigins == "" {
 			cfg.AllowedOrigins = "http://localhost:" + cfg.Port
 		}
@@ -108,16 +140,20 @@ func Load() *Config {
 
 	// Fall back to environment variables (dev / Docker / CI usage).
 	cfg := &Config{
-		Port:             getEnv("PORT", "8000"),
-		Debug:            getEnv("DEBUG", "false") == "true",
-		SQLitePath:       getEnv("SQLITE_PATH", "ledgeralps.db"),
-		PostgresDSN:      getEnv("POSTGRES_DSN", ""),
-		JWTSecret:        getEnv("JWT_SECRET", ""),
-		JWTAccessMinutes: 60,
-		JWTRefreshDays:   30,
-		LogLevel:         getEnv("LOG_LEVEL", "INFO"),
-		AllowedOrigins:   getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
-		UpdateCheck:      getEnv("UPDATE_CHECK", "true") != "false",
+		Host:              getEnv("HOST", "127.0.0.1"),
+		Port:              getEnv("PORT", "8000"),
+		TLSCert:           getEnv("TLS_CERT", ""),
+		TLSKey:            getEnv("TLS_KEY", ""),
+		AllowInsecureHTTP: getEnv("ALLOW_INSECURE_HTTP", "false") == "true",
+		Debug:             getEnv("DEBUG", "false") == "true",
+		SQLitePath:        getEnv("SQLITE_PATH", "ledgeralps.db"),
+		PostgresDSN:       getEnv("POSTGRES_DSN", ""),
+		JWTSecret:         getEnv("JWT_SECRET", ""),
+		JWTAccessMinutes:  60,
+		JWTRefreshDays:    30,
+		LogLevel:          getEnv("LOG_LEVEL", "INFO"),
+		AllowedOrigins:    getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
+		UpdateCheck:       getEnv("UPDATE_CHECK", "true") != "false",
 	}
 	cfg.validateSecrets()
 	return cfg

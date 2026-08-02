@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/api/handlers"
 	"github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
+	"github.com/kmdn-ch/ledgeralps/internal/core/tlsutil"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	embeddedFrontend "github.com/kmdn-ch/ledgeralps/internal/frontend"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
@@ -308,13 +311,29 @@ func main() {
 	})
 
 	// ── 9. Start ──────────────────────────────────────────────────────────────
-	addr := ":" + cfg.Port
+	addr := net.JoinHostPort(cfg.Host, cfg.Port)
 	srv := &http.Server{Addr: addr, Handler: r}
+
+	certFile, keyFile, tlsErr := resolveTLS(cfg)
+	if tlsErr != nil {
+		log.Fatalf("FATAL: %v", tlsErr)
+	}
 
 	serveErr := make(chan error, 1)
 	go func() {
-		fmt.Printf("LedgerAlps: listening on http://localhost%s\n", addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		scheme := "http"
+		if certFile != "" {
+			scheme = "https"
+		}
+		fmt.Printf("LedgerAlps: listening on %s://%s\n", scheme, addr)
+
+		var err error
+		if certFile != "" {
+			err = srv.ListenAndServeTLS(certFile, keyFile)
+		} else {
+			err = srv.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			serveErr <- err
 		}
 	}()
@@ -377,4 +396,52 @@ func relaunch() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Start()
+}
+
+// resolveTLS decides how this instance serves, and refuses the combination
+// that silently leaks credentials.
+//
+// Loopback: plain HTTP. The traffic never reaches a cable, so TLS would buy
+// nothing and cost a certificate warning at every start.
+//
+// Any other interface means another machine can reach LedgerAlps, and with it
+// the login password, the session token and the backup passphrase. There TLS is
+// the default rather than an option: a supplied certificate is used, and
+// failing that one is generated. Until v1.4.5 the server bound to every
+// interface and served all of it in clear, without anyone having chosen that.
+//
+// ALLOW_INSECURE_HTTP covers the one legitimate case — a reverse proxy
+// terminating TLS on the same host — and says so loudly in the log, because
+// that same flag is what someone reaches for to make a warning go away.
+func resolveTLS(cfg *config.Config) (certFile, keyFile string, err error) {
+	if cfg.TLSCert != "" && cfg.TLSKey != "" {
+		return cfg.TLSCert, cfg.TLSKey, nil
+	}
+	if (cfg.TLSCert == "") != (cfg.TLSKey == "") {
+		return "", "", fmt.Errorf("TLS_CERT et TLS_KEY doivent être fournis ensemble")
+	}
+	if tlsutil.IsLoopback(cfg.Host) {
+		return "", "", nil
+	}
+
+	if cfg.AllowInsecureHTTP {
+		log.Printf("WARNING: LedgerAlps sert en HTTP NON CHIFFRÉ sur %s. "+
+			"Mot de passe de connexion, jeton de session et phrase de passe de sauvegarde "+
+			"traversent le réseau en clair. À n'utiliser que derrière un reverse proxy TLS "+
+			"sur la même machine.", cfg.Host)
+		return "", "", nil
+	}
+
+	dir := filepath.Join(config.AppDataDir(), "tls")
+	certFile, keyFile, err = tlsutil.EnsureSelfSigned(dir, tlsutil.LocalHostnames())
+	if err != nil {
+		return "", "", fmt.Errorf("LedgerAlps est configuré pour être joignable depuis le réseau (HOST=%s) "+
+			"mais aucun certificat TLS n'a pu être préparé: %w\n"+
+			"  Fournissez TLS_CERT et TLS_KEY, revenez à HOST=127.0.0.1, "+
+			"ou acceptez explicitement le clair avec ALLOW_INSECURE_HTTP=true", cfg.Host, err)
+	}
+	log.Printf("LedgerAlps: certificat auto-signé utilisé (%s). "+
+		"Votre navigateur affichera un avertissement à la première visite — c'est attendu. "+
+		"Pour l'éviter, fournissez TLS_CERT et TLS_KEY.", certFile)
+	return certFile, keyFile, nil
 }

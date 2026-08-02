@@ -95,16 +95,48 @@ sudo systemctl enable --now ledgeralps
 
 ## 6. Accès réseau
 
-LedgerAlps n'implémente pas TLS lui-même. Pour un accès hors de la machine,
-placez un reverse proxy devant (nginx, Caddy) et laissez-lui gérer le
-certificat.
+**Par défaut, LedgerAlps n'écoute que sur `127.0.0.1`** : il n'est joignable que
+depuis sa propre machine, et le trafic ne touche aucun câble. C'est le mode
+normal du produit.
 
-⚠️ **Sans proxy TLS, tout passe en clair sur le réseau** : mot de passe de
-connexion, jeton de session et **phrase de passe de chiffrement des
-sauvegardes**. Quiconque écoute le segment les lit. Sur un poste unique la
-question ne se pose pas — le trafic vers `localhost` ne quitte pas la machine —
-mais dès qu'un second poste se connecte, le proxy n'est pas optionnel.
-Le TLS natif est à la [roadmap](../ROADMAP.md).
+> Jusqu'à la v1.4.5, le serveur écoutait sur **toutes** les interfaces. Un
+> portable sur un réseau public servait donc sa comptabilité en clair à ce
+> réseau, sans que personne l'ait choisi. Ce n'est plus le cas.
+
+Pour y accéder depuis d'autres postes :
+
+```bash
+export HOST=0.0.0.0            # ou l'adresse de l'interface concernée
+```
+
+**Ce choix impose TLS**, et LedgerAlps s'en charge :
+
+| Situation | Comportement |
+|---|---|
+| `HOST` loopback | HTTP simple — rien à chiffrer, le trafic ne sort pas |
+| `HOST` réseau + `TLS_CERT`/`TLS_KEY` | HTTPS avec votre certificat |
+| `HOST` réseau, sans certificat | **Certificat auto-signé généré** dans `<données applicatives>/tls`, HTTPS |
+| `HOST` réseau + `ALLOW_INSECURE_HTTP=true` | HTTP en clair, avec un avertissement au journal |
+
+Le certificat auto-signé couvre `localhost`, le nom de la machine et ses
+adresses IP, il est valable dix ans et **réutilisé d'un démarrage à l'autre** —
+l'exception que vous accordez dans le navigateur tient. Le navigateur avertira
+à la première visite : c'est le prix d'un certificat sans autorité de
+certification, et il reste inférieur à celui d'un mot de passe en clair sur le
+réseau.
+
+Pour éviter l'avertissement, fournissez un certificat d'une autorité interne, ou
+placez un reverse proxy (nginx, Caddy) devant.
+
+```bash
+export ALLOWED_ORIGINS="https://compta.entreprise.local"
+```
+
+⚠️ **`ALLOW_INSECURE_HTTP` n'a qu'un usage légitime** : un reverse proxy qui
+termine déjà TLS sur la **même** machine. Partout ailleurs, mot de passe de
+connexion, jeton de session et phrase de passe de chiffrement des sauvegardes
+traversent le réseau en clair, lisibles par quiconque écoute le segment — ce que
+la LPD art. 8 et l'OPDo art. 3 demandent précisément d'empêcher.
 
 ```bash
 export ALLOWED_ORIGINS="https://compta.entreprise.local"
@@ -277,6 +309,9 @@ export UPDATE_CHECK=false
 | `LOG_LEVEL` | `INFO` | Niveau de journal |
 | `UPDATE_CHECK` | `true` | Vérifier l'existence d'une version plus récente. `false` = aucun appel réseau |
 | `BACKUP_PASSPHRASE` | vide | Si définie, chiffre les sauvegardes. À conserver hors de la machine |
+| `HOST` | `127.0.0.1` | Interface d'écoute. Toute valeur non-loopback impose TLS |
+| `TLS_CERT` / `TLS_KEY` | vide | Certificat et clé. À fournir ensemble |
+| `ALLOW_INSECURE_HTTP` | `false` | Sert en clair sur le réseau. Uniquement derrière un proxy TLS local |
 
 > **Attention à la précédence.** Si un fichier `config.json` existe dans le
 > répertoire de données applicatives, il **prime sur ces variables**. C'est
