@@ -185,7 +185,7 @@ func TestRestoreReplacesLiveDatabaseAndSnapshotsPrevious(t *testing.T) {
 	}
 	database.Close() // restore requires the server to be stopped
 
-	prev, err := Restore(context.Background(), cfg, snapshot, dir, "")
+	prev, err := Restore(context.Background(), cfg, snapshot, dir, "", true)
 	if err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestRestoreRefusesCorruptSource(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("not a database"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Restore(context.Background(), cfg, bad, dir, ""); err == nil {
+	if _, err := Restore(context.Background(), cfg, bad, dir, "", true); err == nil {
 		t.Error("Restore must refuse a snapshot that fails verification")
 	}
 }
@@ -288,7 +288,7 @@ func TestEncryptedBackupRestoresTheLedger(t *testing.T) {
 	}
 
 	database.Close()
-	if _, err := Restore(ctx, cfg, path, dir, "phrase de passe distincte"); err != nil {
+	if _, err := Restore(ctx, cfg, path, dir, "phrase de passe distincte", true); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
 
@@ -323,7 +323,7 @@ func TestFailedDecryptionLeavesTheLiveDatabaseAlone(t *testing.T) {
 	}
 	database.Close()
 
-	if _, err := Restore(ctx, cfg, path, dir, "la mauvaise"); err == nil {
+	if _, err := Restore(ctx, cfg, path, dir, "la mauvaise", true); err == nil {
 		t.Fatal("a restore with the wrong passphrase reported success")
 	}
 
@@ -351,7 +351,7 @@ func TestEncryptedRestoreWithoutPassphraseExplainsItself(t *testing.T) {
 	}
 	database.Close()
 
-	_, err = Restore(ctx, cfg, path, dir, "")
+	_, err = Restore(ctx, cfg, path, dir, "", true)
 	if err == nil || !strings.Contains(err.Error(), "passe") {
 		t.Errorf("got %v, want a message naming the missing passphrase", err)
 	}
@@ -371,7 +371,7 @@ func TestPassphraseOnAPlainSnapshotIsRefused(t *testing.T) {
 	}
 	database.Close()
 
-	if _, err := Restore(ctx, cfg, path, dir, "inutile"); err == nil {
+	if _, err := Restore(ctx, cfg, path, dir, "inutile", true); err == nil {
 		t.Error("a passphrase was silently ignored on a plain snapshot")
 	}
 }
@@ -430,5 +430,83 @@ func TestPruneCountsEncryptedSnapshots(t *testing.T) {
 	list, _ := ListBackups(dir)
 	if len(list) != 2 {
 		t.Errorf("after pruning to 2, %d snapshots remain", len(list))
+	}
+}
+
+// The undo copy must inherit the protection the user chose. Someone who
+// encrypts their backups did not ask for a clear copy of the whole ledger to
+// appear beside them at restore time.
+func TestUndoCopyIsEncryptedWhenThePassphraseIs(t *testing.T) {
+	database, cfg := newTestDB(t)
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	snapshot, err := Backup(ctx, database, cfg, dir, "phrase de passe longue 2026")
+	if err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+	database.Close()
+
+	previous, err := Restore(ctx, cfg, snapshot, dir, "phrase de passe longue 2026", true)
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if previous == "" {
+		t.Fatal("no undo copy was taken")
+	}
+	if enc, _ := IsEncrypted(previous); !enc {
+		t.Errorf("the undo copy %q is in clear although the backup was encrypted", filepath.Base(previous))
+	}
+	// And no plaintext twin left behind.
+	if _, err := os.Stat(strings.TrimSuffix(previous, ".enc")); !os.IsNotExist(err) {
+		t.Error("a clear copy was left beside the encrypted undo copy")
+	}
+}
+
+// Restoring a plaintext snapshot leaves a plaintext undo copy — consistent
+// with the choice the user made, not a downgrade.
+func TestUndoCopyStaysClearForAClearBackup(t *testing.T) {
+	database, cfg := newTestDB(t)
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	snapshot, err := Backup(ctx, database, cfg, dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	database.Close()
+
+	previous, err := Restore(ctx, cfg, snapshot, dir, "", true)
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if enc, _ := IsEncrypted(previous); enc {
+		t.Error("an unexpected encryption was applied")
+	}
+}
+
+// The staged path takes its undo copy earlier, so applying must not make a
+// second one — which could only be written in clear.
+func TestApplyDoesNotCreateAClearUndoCopy(t *testing.T) {
+	database, cfg := newTestDB(t)
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	snapshot, err := Backup(ctx, database, cfg, dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := StageRestore(ctx, snapshot, dir, "", "u"); err != nil {
+		t.Fatal(err)
+	}
+	database.Close()
+
+	_, previous, err := ApplyPendingRestore(ctx, cfg, dir)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if previous != "" {
+		t.Errorf("applying created an extra copy (%s); the undo was already taken at staging",
+			filepath.Base(previous))
 	}
 }

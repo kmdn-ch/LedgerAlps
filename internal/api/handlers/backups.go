@@ -174,16 +174,34 @@ func (h *BackupsHandler) StageRestore(c *gin.Context) {
 		requestedBy = claims.UserID
 	}
 
+	// The undo copy is taken here, not when the restore is applied: this is the
+	// only moment the user is present with their passphrase. Taken at startup
+	// instead, it could only ever be written in clear — silently undoing the
+	// very choice someone made by encrypting their backups.
+	//
+	// It goes through Backup, so it lands in the list like any other snapshot
+	// and rotates with them, instead of accumulating as a special file nobody
+	// prunes.
+	undo, err := db.Backup(ctx, h.db, h.cfg, dir, body.Passphrase)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "impossible de sauvegarder la comptabilité actuelle avant la restauration: " + err.Error()})
+		return
+	}
+
 	p, err := db.StageRestore(ctx, src, dir, body.Passphrase, requestedBy)
 	if err != nil {
+		// The undo copy is a perfectly good backup on its own; keeping it
+		// costs nothing and losing it could cost everything.
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusAccepted, gin.H{
-		"pending_restore": gin.H{"source_name": p.SourceName, "requested_at": p.RequestedAt},
-		"message": "Restauration préparée et vérifiée. Elle sera appliquée au prochain " +
-			"démarrage de LedgerAlps : fermez puis rouvrez l'application.",
+		"pending_restore":  gin.H{"source_name": p.SourceName, "requested_at": p.RequestedAt},
+		"undo_backup_name": filepath.Base(undo),
+		"message": "Restauration préparée et vérifiée. Votre comptabilité actuelle a été " +
+			"sauvegardée. La restauration sera appliquée au redémarrage de LedgerAlps.",
 	})
 }
 

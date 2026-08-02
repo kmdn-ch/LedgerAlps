@@ -110,7 +110,10 @@ func ApplyPendingRestore(ctx context.Context, cfg *config.Config, dir string) (a
 	// restore that failed must not be retried silently at every start.
 	defer ClearPendingRestore(dir, p)
 
-	previous, err = Restore(ctx, cfg, p.StagedPath, dir, "")
+	// snapshotCurrent=false : la copie d'annulation a été prise au moment de
+	// la préparation, quand l'utilisateur était là avec sa phrase de passe. En
+	// reprendre une ici la produirait forcément en clair, faute de secret.
+	previous, err = Restore(ctx, cfg, p.StagedPath, dir, "", false)
 	if err != nil {
 		return "", previous, fmt.Errorf("restauration de %s: %w", p.SourceName, err)
 	}

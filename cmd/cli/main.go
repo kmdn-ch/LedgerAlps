@@ -317,7 +317,7 @@ func cmdRestore(args []string) {
 
 	fmt.Printf("ledgeralps-cli: restoring %s over %s\n", *file, cfg.SQLitePath)
 
-	prev, err := db.Restore(ctx, cfg, *file, target, resolvePassphrase(*restorePass))
+	prev, err := db.Restore(ctx, cfg, *file, target, resolvePassphrase(*restorePass), true)
 	if err != nil {
 		fatalf("restore failed: %v", err)
 	}

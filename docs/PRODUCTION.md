@@ -173,6 +173,24 @@ Il ne contient **pas** :
 | `config.json` (dont `JWT_SECRET`) | Les sessions en cours sont invalidées : il faut se reconnecter. Les données sont intactes |
 | Les sauvegardes elles-mêmes | Une sauvegarde ne se sauvegarde pas ; copiez le dossier hors de la machine |
 
+### La copie d'annulation
+
+Avant toute restauration, LedgerAlps sauvegarde la comptabilité **actuelle**.
+C'est l'annulation : on ne découvre pas qu'on a restauré la mauvaise sauvegarde
+pendant l'opération, mais après avoir regardé les données. Sans cette copie, la
+comptabilité en place serait effacée sans retour.
+
+Elle est prise **au moment de la préparation**, pas au redémarrage — le seul
+instant où vous êtes présent avec votre phrase de passe. Elle est donc
+**chiffrée avec la même phrase que la sauvegarde restaurée** : quelqu'un qui
+choisit de chiffrer ses sauvegardes n'a pas choisi de voir apparaître à côté une
+copie en clair de toute sa comptabilité.
+
+Elle apparaît dans la liste comme n'importe quel autre instantané et suit la
+même rotation. Il n'y a plus de fichiers `pre-restore` en clair qui
+s'accumulent : les versions antérieures à la v1.4.4 en produisaient, vous pouvez
+les supprimer.
+
 ### Comment le chiffrement fonctionne
 
 Deux briques, aucune dépendance système — tout est en Go pur, ce qui préserve

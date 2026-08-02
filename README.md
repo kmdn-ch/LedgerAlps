@@ -102,6 +102,11 @@ Ce qui n'y est **pas** : le logiciel lui-même, et le fichier de configuration
 qui contient la clé de session. Restaurer sur une autre machine ramène donc
 toute votre comptabilité ; il faudra simplement vous reconnecter.
 
+**Puis-je annuler une restauration ?**
+Oui. Avant de restaurer, LedgerAlps sauvegarde d'abord votre comptabilité
+actuelle — protégée par la même phrase de passe que la sauvegarde que vous
+restaurez. Si vous vous êtes trompé de fichier, elle est là, dans la liste.
+
 **Les sauvegardes sont-elles chiffrées ?**
 Oui, si vous le demandez. À la création, LedgerAlps vous propose une phrase de
 passe : le fichier devient alors illisible sans elle. C'est ce qui compte quand

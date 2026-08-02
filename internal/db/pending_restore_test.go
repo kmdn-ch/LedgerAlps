@@ -63,8 +63,12 @@ func TestApplyPendingRestoreReplacesTheDatabase(t *testing.T) {
 	if applied == "" {
 		t.Fatal("nothing was applied")
 	}
-	if previous == "" {
-		t.Error("the replaced database was not snapshotted; a mistaken restore would be final")
+	// No copy here on purpose: the undo was taken when the restore was staged,
+	// while the user was present with their passphrase. Taking one now could
+	// only produce a clear copy of the whole ledger — see
+	// TestApplyDoesNotCreateAClearUndoCopy.
+	if previous != "" {
+		t.Errorf("applying created an extra copy (%s) — the undo belongs to staging", previous)
 	}
 
 	reopened, err := Open(cfg)

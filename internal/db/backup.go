@@ -227,7 +227,7 @@ func Verify(ctx context.Context, path string) error {
 // connection. It is exposed only through the CLI for that reason. Before
 // overwriting, the current database is snapshotted into dir so a mistaken
 // restore is itself recoverable.
-func Restore(ctx context.Context, cfg *config.Config, src, dir, passphrase string) (backupOfCurrent string, err error) {
+func Restore(ctx context.Context, cfg *config.Config, src, dir, passphrase string, snapshotCurrent bool) (backupOfCurrent string, err error) {
 	if cfg.UsePostgres() {
 		return "", ErrPostgresUnsupported
 	}
@@ -268,15 +268,33 @@ func Restore(ctx context.Context, cfg *config.Config, src, dir, passphrase strin
 		return "", fmt.Errorf("refusing to restore: %w", err)
 	}
 
-	// Snapshot the database being replaced, when one exists.
-	if _, statErr := os.Stat(cfg.SQLitePath); statErr == nil {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return "", fmt.Errorf("creating backup directory: %w", err)
-		}
-		backupOfCurrent = filepath.Join(dir,
-			fmt.Sprintf("%spre-restore-%s%s", backupPrefix, time.Now().UTC().Format(BackupTimeFormat), backupSuffix))
-		if err := copyFile(cfg.SQLitePath, backupOfCurrent); err != nil {
-			return "", fmt.Errorf("snapshotting current database before restore: %w", err)
+	// Snapshot the database being replaced — the undo for a restore chosen by
+	// mistake, which is only discovered after looking at the restored data.
+	//
+	// It inherits the passphrase used to read the source: someone who chose to
+	// encrypt their backups did not choose to have a clear copy of the whole
+	// ledger appear beside them. Callers that already took this snapshot pass
+	// snapshotCurrent=false rather than making a second one.
+	if snapshotCurrent {
+		if _, statErr := os.Stat(cfg.SQLitePath); statErr == nil {
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				return "", fmt.Errorf("creating backup directory: %w", err)
+			}
+			backupOfCurrent = filepath.Join(dir,
+				fmt.Sprintf("%spre-restore-%s%s", backupPrefix, time.Now().UTC().Format(BackupTimeFormat), backupSuffix))
+			if err := copyFile(cfg.SQLitePath, backupOfCurrent); err != nil {
+				return "", fmt.Errorf("snapshotting current database before restore: %w", err)
+			}
+			if passphrase != "" {
+				encrypted, encErr := encryptInPlace(ctx, backupOfCurrent, passphrase)
+				if encErr != nil {
+					// The clear copy is removed by encryptInPlace on failure;
+					// losing the undo is preferable to leaving the ledger in
+					// clear on disk without the user having asked for it.
+					return "", fmt.Errorf("chiffrement de la copie de sécurité: %w", encErr)
+				}
+				backupOfCurrent = encrypted
+			}
 		}
 	}
 
