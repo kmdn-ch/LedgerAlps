@@ -258,8 +258,14 @@ func cmdBackups(args []string) {
 	}
 	fmt.Printf("ledgeralps-cli: %d backup(s) in %s\n\n", len(list), target)
 	for _, b := range list {
-		fmt.Printf("  %-52s %8.2f MB  %s\n",
-			b.Name, float64(b.SizeBytes)/(1024*1024), b.CreatedAt.Format(time.RFC3339))
+		// Say which copies are protected: "chiffrée" or not is the difference
+		// between a mislaid USB stick being a nuisance and being a breach.
+		state := "en clair"
+		if enc, _ := db.IsEncrypted(b.Path); enc {
+			state = "chiffrée"
+		}
+		fmt.Printf("  %-56s %8.2f MB  %-8s  %s\n",
+			b.Name, float64(b.SizeBytes)/(1024*1024), state, b.CreatedAt.Format(time.RFC3339))
 	}
 }
 

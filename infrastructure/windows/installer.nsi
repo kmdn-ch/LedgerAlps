@@ -41,6 +41,13 @@ Unicode True
 
 !define MUI_ABORTWARNING
 
+; The welcome and finish titles hold two lines by default. "Bienvenue dans le
+; programme d'installation de LedgerAlps 1.4.4-rc3" does not fit, and the
+; overflow is clipped mid-word rather than wrapped — the version number simply
+; vanished. These give the title area a third line.
+!define MUI_WELCOMEPAGE_TITLE_3LINES
+!define MUI_FINISHPAGE_TITLE_3LINES
+
 ; On the Finish page, offer to launch the app (via the launcher).
 !define MUI_FINISHPAGE_RUN          "$INSTDIR\${LAUNCHER_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT     "Launch LedgerAlps"

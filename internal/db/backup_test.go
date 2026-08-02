@@ -375,3 +375,60 @@ func TestPassphraseOnAPlainSnapshotIsRefused(t *testing.T) {
 		t.Error("a passphrase was silently ignored on a plain snapshot")
 	}
 }
+
+// An encrypted snapshot is named .db.enc, and the listing required .db — so it
+// existed on disk and appeared nowhere. That is not only a display problem:
+// the listing is how a restore resolves a chosen name, how pruning finds old
+// copies, and how the startup check decides a backup is due. An encrypted
+// backup was effectively unreachable.
+func TestListBackupsIncludesEncryptedSnapshots(t *testing.T) {
+	database, cfg := newTestDB(t)
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	plain, err := Backup(ctx, database, cfg, dir, "")
+	if err != nil {
+		t.Fatalf("plain backup: %v", err)
+	}
+	encrypted, err := Backup(ctx, database, cfg, dir, "pass")
+	if err != nil {
+		t.Fatalf("encrypted backup: %v", err)
+	}
+
+	list, err := ListBackups(dir)
+	if err != nil {
+		t.Fatalf("ListBackups: %v", err)
+	}
+	found := map[string]bool{}
+	for _, b := range list {
+		found[b.Name] = true
+	}
+	if !found[filepath.Base(plain)] {
+		t.Error("the plaintext snapshot is missing from the listing")
+	}
+	if !found[filepath.Base(encrypted)] {
+		t.Errorf("the encrypted snapshot %q is missing — it exists on disk but cannot be listed, pruned or restored",
+			filepath.Base(encrypted))
+	}
+}
+
+// Pruning must count encrypted snapshots too, or they accumulate forever while
+// the plaintext ones rotate.
+func TestPruneCountsEncryptedSnapshots(t *testing.T) {
+	database, cfg := newTestDB(t)
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	for i := 0; i < 4; i++ {
+		if _, err := Backup(ctx, database, cfg, dir, "pass"); err != nil {
+			t.Fatalf("backup %d: %v", i, err)
+		}
+	}
+	if _, err := Prune(dir, 2); err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	list, _ := ListBackups(dir)
+	if len(list) != 2 {
+		t.Errorf("after pruning to 2, %d snapshots remain", len(list))
+	}
+}

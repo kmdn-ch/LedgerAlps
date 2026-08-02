@@ -16,6 +16,9 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 - **Le montant d'une note de crédit est borné** par la facture : la somme des notes rattachées ne peut plus dépasser son total (`409`). Les notes annulées libèrent leur part, puisqu'elles ne créditent rien. Un crédit partiel est possible en fournissant des lignes ; les crédits partiels s'additionnent contre le même plafond, au lieu d'être jaugés chacun contre la facture entière
 
 ### Corrigé
+- **Les sauvegardes chiffrées étaient invisibles.** Le listing exigeait le suffixe `.db`, or un instantané chiffré finit en `.db.enc` : il existait sur le disque et n'apparaissait nulle part. Ce n'était pas qu'un défaut d'affichage — le listing sert aussi à **résoudre le nom d'une restauration** (aucun instantané chiffré n'était donc restaurable depuis l'interface), à **nettoyer** les anciennes copies (elles s'accumulaient indéfiniment) et à décider au démarrage qu'une sauvegarde est due
+- **Deux sauvegardes chiffrées dans la même seconde échouaient.** Le compteur anti-collision testait l'existence du `.db` alors que le fichier final est `.db.enc` : la seconde reprenait le même nom et butait sur un chiffré déjà présent, au lieu de passer au numéro suivant
+- **Titre tronqué sur la page d'accueil de l'installeur** : « Bienvenue dans le programme d'installation de LedgerAlps 1.4.4 » ne tenait pas sur deux lignes, et le débordement était coupé net plutôt que replié — le numéro de version disparaissait
 - **La liste des factures affichait un identifiant tronqué** (`a4571078…`) à la place du nom du client. On ne peut pas chercher les factures d'un client dont le nom n'apparaît jamais
 - **Le bouton « Note de crédit » restait actif sur une facture déjà créditée en totalité**, alors que le serveur refuse (409). Les factures exposent désormais `credited_amount` et le bouton se grise, avec un bandeau l'expliquant
 

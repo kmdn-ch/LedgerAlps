@@ -65,9 +65,13 @@ func Backup(ctx context.Context, database *sql.DB, cfg *config.Config, dir, pass
 		return "", fmt.Errorf("creating backup directory: %w", err)
 	}
 
+	// The counter has to consider the *final* name. When encrypting, the file
+	// that survives is dest+".enc"; checking only dest let two encrypted
+	// backups within the same second pick the same slot, and the second failed
+	// on an already-existing ciphertext instead of taking the next number.
 	dest := filepath.Join(dir, backupPrefix+time.Now().UTC().Format(BackupTimeFormat)+backupSuffix)
 	for i := 1; ; i++ {
-		if _, err := os.Stat(dest); os.IsNotExist(err) {
+		if free(dest) && free(dest+encryptedSuffix) {
 			break
 		}
 		if i > 100 {
@@ -147,7 +151,12 @@ func ListBackups(dir string) ([]BackupInfo, error) {
 
 	var out []BackupInfo
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), backupPrefix) || !strings.HasSuffix(e.Name(), backupSuffix) {
+		// Both plaintext (.db) and encrypted (.db.enc) snapshots belong here.
+		// Requiring .db hid every encrypted backup: it existed on disk and
+		// appeared nowhere — not in the interface, and not to the code that
+		// resolves a name for a restore, prunes old copies, or decides at
+		// startup whether a backup is due.
+		if e.IsDir() || !strings.HasPrefix(e.Name(), backupPrefix) || !isSnapshotName(e.Name()) {
 			continue
 		}
 		info, err := e.Info()
@@ -334,4 +343,16 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// isSnapshotName reports whether a filename is one of our snapshots, plaintext
+// or encrypted.
+func isSnapshotName(name string) bool {
+	return strings.HasSuffix(name, backupSuffix) ||
+		strings.HasSuffix(name, backupSuffix+encryptedSuffix)
+}
+
+func free(path string) bool {
+	_, err := os.Stat(path)
+	return os.IsNotExist(err)
 }
