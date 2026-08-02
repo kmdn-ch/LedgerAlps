@@ -420,7 +420,11 @@ func resolveTLS(cfg *config.Config) (certFile, keyFile string, err error) {
 	if (cfg.TLSCert == "") != (cfg.TLSKey == "") {
 		return "", "", fmt.Errorf("TLS_CERT et TLS_KEY doivent être fournis ensemble")
 	}
-	if tlsutil.IsLoopback(cfg.Host) {
+	// Loopback stays plain HTTP unless asked otherwise. The traffic never
+	// reaches a cable, so TLS buys nothing an attacker with local code access
+	// could not already bypass — and costs a certificate warning that trains
+	// people to click through them.
+	if tlsutil.IsLoopback(cfg.Host) && !cfg.ForceTLS {
 		return "", "", nil
 	}
 

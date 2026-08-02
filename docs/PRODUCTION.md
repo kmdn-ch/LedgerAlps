@@ -132,6 +132,41 @@ placez un reverse proxy (nginx, Caddy) devant.
 export ALLOWED_ORIGINS="https://compta.entreprise.local"
 ```
 
+### Pourquoi HTTP sur localhost
+
+C'est une question légitime, et la réponse n'est pas « par simplicité ».
+
+**Le trafic vers `127.0.0.1` ne touche aucune interface réseau.** Il ne passe ni
+par votre carte réseau, ni par un câble, ni par un routeur. Wireshark branché sur
+le réseau ne verra jamais rien : il n'y a rien à voir. Capturer la boucle locale
+suppose d'exécuter du code **sur la machine**, avec des privilèges élevés — et à
+ce stade l'attaquant lit directement le fichier SQLite, la mémoire du processus,
+ou enregistre vos frappes. TLS ne l'en empêcherait pas.
+
+Ce n'est pas une opinion isolée : la plateforme web elle-même classe
+`http://localhost` parmi les [origines dignes de confiance](https://w3c.github.io/webappsec-secure-contexts/),
+au même titre qu'HTTPS. C'est pourquoi les API réservées aux contextes sécurisés
+y fonctionnent sans certificat.
+
+**Le coût de forcer TLS localement est réel.** Un certificat auto-signé déclenche
+un avertissement à chaque nouveau profil de navigateur. Habituer quelqu'un à
+cliquer sur « Continuer malgré tout » entraîne exactement le réflexe dont vit
+l'hameçonnage. Et le supprimer voudrait dire installer une autorité de
+certification dans le magasin de confiance de Windows : une clé capable de
+forger des certificats **pour n'importe quel site**, posée sur le poste — un
+risque supérieur à celui qu'on prétend traiter.
+
+**Si votre politique de sécurité l'exige malgré tout :**
+
+```bash
+export FORCE_TLS=true
+```
+
+LedgerAlps sert alors en HTTPS sur `localhost` avec son certificat auto-signé, et
+le lanceur ouvre `https://`. C'est disponible, documenté, et ce n'est pas le
+défaut — parce que la sécurité réelle ne s'améliore pas, alors que la fatigue
+face aux avertissements, si.
+
 ⚠️ **`ALLOW_INSECURE_HTTP` n'a qu'un usage légitime** : un reverse proxy qui
 termine déjà TLS sur la **même** machine. Partout ailleurs, mot de passe de
 connexion, jeton de session et phrase de passe de chiffrement des sauvegardes
@@ -312,6 +347,7 @@ export UPDATE_CHECK=false
 | `HOST` | `127.0.0.1` | Interface d'écoute. Toute valeur non-loopback impose TLS |
 | `TLS_CERT` / `TLS_KEY` | vide | Certificat et clé. À fournir ensemble |
 | `ALLOW_INSECURE_HTTP` | `false` | Sert en clair sur le réseau. Uniquement derrière un proxy TLS local |
+| `FORCE_TLS` | `false` | Sert en HTTPS même sur `localhost`. Voir « Pourquoi HTTP sur localhost » |
 
 > **Attention à la précédence.** Si un fichier `config.json` existe dans le
 > répertoire de données applicatives, il **prime sur ces variables**. C'est

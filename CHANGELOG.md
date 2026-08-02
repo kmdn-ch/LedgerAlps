@@ -7,6 +7,12 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Corrigé
+- **L'avis de conformité nLPD art. 8 était périmé** : il annonçait encore « base et sauvegardes en clair » alors que les sauvegardes sont chiffrables depuis la v1.4.4. Réécrit pour dire ce qui est vrai — les sauvegardes peuvent l'être, la base ne le sera pas (SQLCipher est incompatible avec le binaire unique), et l'action qui vous revient est d'activer le chiffrement du disque (BitLocker, LUKS). Un avis faux est pire qu'un avis absent : il est cru
+
+### Ajouté
+- **`FORCE_TLS=true`** sert en HTTPS même sur `localhost`, pour les politiques de sécurité qui l'exigent. Ce n'est pas le défaut, et `docs/PRODUCTION.md` explique pourquoi : le trafic vers `127.0.0.1` ne touche aucune interface réseau, les navigateurs classent `http://localhost` parmi les origines dignes de confiance, et un avertissement de certificat répété entraîne le réflexe dont vit l'hameçonnage
+
 ### Sécurité
 - **Le serveur n'écoute plus sur toutes les interfaces par défaut.** Il écoutait sur `0.0.0.0` : un portable sur un réseau public ou une salle d'attente servait sa comptabilité à ce réseau, en clair, sans que personne l'ait demandé. Le défaut est désormais `127.0.0.1` — joignable depuis cette machine seulement
 - **HTTPS natif dès que LedgerAlps est joignable depuis le réseau.** Définir `HOST` sur autre chose que loopback active TLS : votre certificat via `TLS_CERT`/`TLS_KEY`, ou un **certificat auto-signé généré** dans `<données applicatives>/tls`. Il couvre `localhost`, le nom de la machine et ses adresses IP, vaut dix ans, et est **réutilisé d'un démarrage à l'autre** pour que l'exception accordée au navigateur tienne — la régénérer à chaque fois apprendrait à cliquer sans lire

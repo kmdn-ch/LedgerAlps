@@ -37,6 +37,22 @@ type Config struct {
 	TLSCert string
 	TLSKey  string
 
+	// ForceTLS serves HTTPS even on loopback.
+	//
+	// Off by default, and that is not a shortcut. Traffic to 127.0.0.1 never
+	// reaches a network interface, so nothing on the network can capture it;
+	// the web platform says as much, treating http://localhost as a secure
+	// context on a par with HTTPS. An attacker able to read loopback already
+	// runs code on the machine, where the SQLite file and process memory are
+	// far easier targets than the socket.
+	//
+	// It exists because some security policies require TLS everywhere and
+	// auditors check the scheme rather than the threat model. The cost is a
+	// browser warning on a self-signed certificate at every fresh profile —
+	// and teaching people to click through certificate warnings is itself a
+	// risk, since that is the same reflex phishing relies on.
+	ForceTLS bool
+
 	// AllowInsecureHTTP serves clear HTTP on a non-loopback interface. It
 	// exists for the case where a reverse proxy already terminates TLS on the
 	// same host — and nowhere else. Anything else puts the login password, the
@@ -74,6 +90,7 @@ type fileConfig struct {
 	TLSCert     string `json:"tls_cert,omitempty"`
 	TLSKey      string `json:"tls_key,omitempty"`
 	// Pointer so an absent key keeps the safe default (false).
+	ForceTLS          bool   `json:"force_tls,omitempty"`
 	AllowInsecureHTTP *bool  `json:"allow_insecure_http,omitempty"`
 	AllowedOrigins    string `json:"allowed_origins"`
 	// Pointer so that an absent key keeps the default (enabled) while an
@@ -112,6 +129,7 @@ func Load() *Config {
 			Port:             fc.Port,
 			TLSCert:          fc.TLSCert,
 			TLSKey:           fc.TLSKey,
+			ForceTLS:         fc.ForceTLS,
 			Debug:            fc.Debug,
 			SQLitePath:       fc.SQLitePath,
 			PostgresDSN:      fc.PostgresDSN,
@@ -144,6 +162,7 @@ func Load() *Config {
 		Port:              getEnv("PORT", "8000"),
 		TLSCert:           getEnv("TLS_CERT", ""),
 		TLSKey:            getEnv("TLS_KEY", ""),
+		ForceTLS:          getEnv("FORCE_TLS", "false") == "true",
 		AllowInsecureHTTP: getEnv("ALLOW_INSECURE_HTTP", "false") == "true",
 		Debug:             getEnv("DEBUG", "false") == "true",
 		SQLitePath:        getEnv("SQLITE_PATH", "ledgeralps.db"),
