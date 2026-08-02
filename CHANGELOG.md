@@ -7,6 +7,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+---
+
+## [1.4.4] — 2026-08-02
+
 ### Modifié
 - **La phrase de passe de chiffrement est demandée après le clic sur « Créer une sauvegarde »**, dans un dialogue portant l'avertissement, et non plus dans un champ affiché en permanence. Sauvegarder sans chiffrer reste possible, mais devient un **choix explicite** au lieu d'être la conséquence d'un champ laissé vide
 - **La restauration nomme la sauvegarde concernée** dans l'invite de phrase de passe : plusieurs copies peuvent avoir été chiffrées avec des phrases différentes
@@ -260,7 +264,8 @@ automatiquement à chaque publication.
 
 ---
 
-[Unreleased]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.3...HEAD
+[Unreleased]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.4...HEAD
+[1.4.4]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.0...v1.4.1
