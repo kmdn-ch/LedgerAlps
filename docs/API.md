@@ -297,11 +297,33 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
-| GET | `/audit-logs` | auth | Journal d'audit |
-| GET | `/audit-logs/:id/verify` | auth | Vérifier l'intégrité de la chaîne |
+| GET | `/audit-logs` | **admin** | Piste d'audit. `order=asc` (défaut, ordre d'écriture) ou `desc` ; `table_name`, `record_id`, `from`, `to`, `limit`, `offset` |
+| GET | `/audit-logs/verify-chain` | **admin** | Vérifier **toute** la chaîne : empreintes, chaînage, continuité des numéros. `200` si intacte, `409` avec le rapport sinon |
+| GET | `/audit-logs/:id/verify` | **admin** | Vérifier une entrée isolée. Détecte une modification de contenu, **pas une suppression** — voir la note ci-dessous |
 | GET | `/compliance/advisories` | auth | Avis de conformité — voir [compliance](../compliance/README.md) |
 | GET | `/security-events` | **admin** | Verrouillages de connexion (contient des adresses IP — nLPD) |
 | GET | `/exports/legal-archive` | auth | Archive ZIP 10 ans avec manifeste (CO art. 958f) |
+
+> **Pourquoi une vérification de chaîne, et pas seulement par entrée.** Vérifier
+> une entrée recalcule sa propre empreinte : cela détecte la modification de son
+> contenu, mais **pas son effacement**. Supprimer une ligne laisse l'empreinte de
+> toutes les autres parfaitement valide. Seuls le chaînage (`prev_hash` de N doit
+> valoir `entry_hash` de N−1) et la continuité des numéros de séquence rendent une
+> suppression visible. `verify-chain` contrôle les quatre propriétés et nomme
+> chaque rupture : `entry_altered`, `link_broken`, `sequence_gap`, `anchor_invalid`
+> (ce dernier couvre la troncature du **début** de la chaîne, le seul cas où tous
+> les maillons restants restent mutuellement cohérents).
+>
+> **Limite assumée** : une chaîne tronquée à la **fin** reste cohérente. Rien ne
+> distingue « les trois dernières écritures ont été effacées » de « il n'y a pas
+> encore eu de quatrième écriture ». C'est la sauvegarde qui répond à cette
+> question, et l'écran le dit.
+>
+> **Entrées antérieures à la v1.4.6** : `hash_version = 1`. Leur empreinte propre
+> n'est pas recalculable (voir la migration `0012`), ce que les deux routes
+> signalent explicitement — `verifiable: false` et `legacy_entries` — au lieu de
+> les compter comme altérées. Leur chaînage, lui, est vérifié normalement.
+
 
 ## Paramètres
 

@@ -264,6 +264,9 @@ func main() {
 	// Audit logs
 	alh := handlers.NewAuditHandler(database, cfg.UsePostgres())
 	api.GET("/audit-logs", alh.ListAuditLogs)
+	// Registered before the :id route: gin resolves the static segment first,
+	// so "verify-chain" is never read as an identifier.
+	api.GET("/audit-logs/verify-chain", alh.VerifyAuditChain)
 	api.GET("/audit-logs/:id/verify", alh.VerifyAuditLog)
 
 	// Security telemetry — admin only: lockout records expose client IPs (nLPD).

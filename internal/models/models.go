@@ -202,6 +202,11 @@ type AuditLog struct {
 	PrevHash       *string   `db:"prev_hash"       json:"prev_hash,omitempty"`
 	SequenceNumber int64     `db:"sequence_number" json:"sequence_number"`
 	CreatedAt      time.Time `db:"created_at"      json:"created_at"`
+
+	// Résolu par jointure à la lecture, jamais stocké : la chaîne d'empreintes
+	// est calculée sur user_id, et y mêler un nom la romprait au premier
+	// changement d'état civil.
+	UserName string `db:"-" json:"user_name,omitempty"`
 }
 
 // ─── Payments ─────────────────────────────────────────────────────────────────

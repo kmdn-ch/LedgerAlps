@@ -283,3 +283,50 @@ export interface ServerSettings {
   tls_key: string
   allow_insecure_http: boolean
 }
+
+// ─── Piste d'audit (CO art. 957a) ─────────────────────────────────────────────
+export interface AuditLog {
+  id: string
+  user_id: string
+  action: string
+  table_name: string
+  record_id: string
+  before_state?: string
+  after_state?: string
+  ip_address?: string
+  entry_hash: string
+  prev_hash?: string
+  sequence_number: number
+  created_at: string
+  // Résolu par jointure à la lecture : absent si l'auteur n'existe plus.
+  user_name?: string
+}
+
+export interface AuditLogPage {
+  items: AuditLog[]
+  total: number
+  limit: number
+  offset: number
+  pages: number
+}
+
+export interface ChainBreak {
+  sequence_number: number
+  id: string
+  created_at: string
+  kind: 'entry_altered' | 'link_broken' | 'sequence_gap' | 'anchor_invalid'
+  detail: string
+}
+
+export interface ChainReport {
+  verified: boolean
+  entries: number
+  // Entrées écrites avant la v1.4.6 : leur empreinte propre n'est pas
+  // recalculable, mais leur chaînage l'est.
+  legacy_entries: number
+  first_sequence: number
+  last_sequence: number
+  breaks: ChainBreak[]
+  truncated: boolean
+  checked_at: string
+}

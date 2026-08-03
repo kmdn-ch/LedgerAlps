@@ -67,6 +67,18 @@ requête écrite couvre les deux moteurs.
 **Chaîne de hachage d'audit.** Chaque écriture validée reçoit un SHA-256 chaîné
 au précédent (`entry_hash`, `prev_hash`, `sequence_number`). Une modification
 rétroactive casse la chaîne de façon détectable, comme l'exige le CO art. 957a.
+`GET /audit-logs/verify-chain` parcourt l'ensemble et distingue quatre ruptures ;
+l'écran **Paramètres → Maintenance → Piste d'audit** l'expose.
+
+*Règle apprise à ses dépens :* l'empreinte doit couvrir **exactement les valeurs
+enregistrées**. Jusqu'à la v1.4.6 elle était calculée sur un `after_state` rédigé
+séparément de celui inséré et sur un horodatage venu de Go alors que la colonne
+était remplie par le `DEFAULT CURRENT_TIMESTAMP` de SQLite : aucune écriture ne
+pouvait se revérifier. Le défaut a traversé toute la suite de tests parce que
+chaque test fabriquait ses propres lignes avec les mêmes valeurs des deux côtés ;
+il est apparu au premier appel réel. `internal/services/accounting/integrity_test.go`
+écrit désormais par le vrai chemin puis relit depuis la base — recalculer en
+mémoire ce qu'on vient de calculer en mémoire ne prouve rien.
 
 **Partie double vérifiée à la validation.** `sum(débit) == sum(crédit)` est
 contrôlé avant qu'une écriture ne passe au statut `posted` ; une écriture

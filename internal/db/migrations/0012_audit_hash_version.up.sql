@@ -1,0 +1,28 @@
+-- Version du calcul d'empreinte des entrées de la piste d'audit (CO art. 957a).
+--
+-- Jusqu'à la v1.4.6, l'empreinte d'une entrée était calculée sur des valeurs qui
+-- n'étaient pas celles enregistrées : un after_state rédigé séparément de celui
+-- inséré, et un created_at issu de Go alors que la colonne était remplie par le
+-- DEFAULT CURRENT_TIMESTAMP de SQLite. Une entrée ne pouvait donc jamais se
+-- revérifier. Le défaut est resté invisible parce qu'aucun écran n'exerçait la
+-- vérification ; il est apparu au premier appel réel.
+--
+-- Les entrées écrites avant le correctif ne sont pas récupérables : les valeurs
+-- ayant servi au calcul (dont un horodatage à la nanoseconde) n'ont jamais été
+-- persistées. Aucune reconstruction n'est possible, et prétendre le contraire
+-- serait pire que l'aveu.
+--
+-- Ce que ces entrées conservent : leur CHAÎNAGE. prev_hash et entry_hash sont
+-- des valeurs stockées, donc la continuité de la chaîne et des numéros de
+-- séquence reste vérifiable — c'est-à-dire qu'une suppression reste détectable,
+-- y compris sur la partie ancienne. Seule la question « le contenu de cette
+-- ligne a-t-il changé ? » devient sans réponse.
+--
+-- La colonne permet à la vérification de le dire, au lieu d'accuser à tort
+-- l'utilisateur d'avoir altéré ses livres. Une alerte fausse coûte plus qu'une
+-- alerte absente : elle est crue une fois, puis plus jamais.
+--
+--   1 = empreinte historique, non recalculable (défaut pour l'existant)
+--   2 = empreinte calculée sur les valeurs réellement stockées
+
+ALTER TABLE audit_logs ADD COLUMN hash_version INTEGER NOT NULL DEFAULT 1;

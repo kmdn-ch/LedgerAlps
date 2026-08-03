@@ -42,6 +42,21 @@ func (e ErrIntegrityViolation) Error() string {
 	return fmt.Sprintf("integrity violation for entry %s: expected hash %s, got %s", e.EntryID, e.Expected, e.Got)
 }
 
+// ErrIntegrityNotVerifiable signale une entrée dont l'empreinte ne peut pas
+// être recalculée — et non une entrée altérée. La distinction est le fond du
+// sujet : « je ne peux pas vérifier » et « quelqu'un a modifié vos livres » ne
+// s'adressent pas au même destinataire ni au même problème.
+type ErrIntegrityNotVerifiable struct {
+	EntryID     string
+	HashVersion int
+}
+
+func (e ErrIntegrityNotVerifiable) Error() string {
+	return fmt.Sprintf(
+		"entry %s was written with hash version %d, whose inputs were not persisted: its own hash cannot be recomputed (the chain links around it still can)",
+		e.EntryID, e.HashVersion)
+}
+
 // Service implements the double-entry accounting engine.
 type Service struct {
 	db          *sql.DB
@@ -148,11 +163,33 @@ func (s *Service) PostEntry(ctx context.Context, userID, entryID, ipAddress stri
 		return ErrNotDoubleEntry{Debit: totalDebit, Credit: totalCredit}
 	}
 
-	// 3. Compute integrity hash (covers entry state at posting time)
-	afterState := fmt.Sprintf(`{"entry_id":%q,"debit":%.4f,"credit":%.4f,"posted_at":%q}`,
-		entryID, totalDebit, totalCredit, time.Now().UTC().Format(time.RFC3339))
-	now := time.Now().UTC()
-	entryHash := security.ComputeEntryHash(userID, "post", "journal_entries", entryID, "", afterState, ipAddress, now)
+	// 3. Construire l'état EXACTEMENT tel qu'il sera stocké, puis le hacher.
+	//
+	// Jusqu'à la v1.4.6, l'empreinte était calculée sur un JSON rédigé ici même
+	// (avec un champ posted_at) tandis que la ligne enregistrait un autre JSON,
+	// et le created_at haché venait de Go alors que la colonne était remplie par
+	// le DEFAULT CURRENT_TIMESTAMP de SQLite, à la seconde près. L'empreinte
+	// couvrait donc des valeurs jamais écrites : aucune entrée ne pouvait se
+	// revérifier. Le défaut est resté invisible faute d'écran pour l'exercer.
+	//
+	// Règle qui en découle : ne hacher que ce que la ligne contiendra, et écrire
+	// created_at explicitement. La troncature à la seconde évite de dépendre de
+	// la précision que le pilote choisit de conserver.
+	rawAfterJSON, _ := json.Marshal(map[string]any{
+		"entry_id": entryID,
+		"status":   "posted",
+		"debit":    totalDebit,
+		"credit":   totalCredit,
+	})
+	maskedAfterJSON := maskPersonalData(string(rawAfterJSON))
+	// before_state est vide pour une comptabilisation ; masqué par prudence.
+	maskedBeforeJSON := maskPersonalData("")
+
+	now := time.Now().UTC().Truncate(time.Second)
+	entryHash := security.ComputeEntryHash(
+		userID, "post", "journal_entries", entryID,
+		maskedBeforeJSON, maskedAfterJSON, ipAddress, now,
+	)
 
 	// 4. Get prev_hash and sequence for audit chain
 	prevQ := db.Rebind("SELECT entry_hash, sequence_number FROM audit_logs ORDER BY sequence_number DESC LIMIT 1", s.usePostgres)
@@ -177,20 +214,15 @@ func (s *Service) PostEntry(ctx context.Context, userID, entryID, ipAddress stri
 	}
 
 	// 6. Write audit log record with CO art. 957a hash chain.
-	// Personal data fields are masked (nLPD art. 6) before persistence.
-	rawAfterJSON, _ := json.Marshal(map[string]any{
-		"entry_id": entryID,
-		"status":   "posted",
-		"debit":    totalDebit,
-		"credit":   totalCredit,
-	})
-	maskedAfterJSON := maskPersonalData(string(rawAfterJSON))
-	// before_state is empty for a post action; mask for safety if ever non-empty.
-	maskedBeforeJSON := maskPersonalData("")
-
+	// Personal data fields are masked (nLPD art. 6) before persistence — the
+	// masking happens in step 3, before the hash, so the two cannot diverge.
+	//
+	// hash_version = 2 : empreinte calculée sur les valeurs réellement stockées.
+	// Les lignes en version 1 restent lisibles et chaînées, mais leur empreinte
+	// propre n'est pas recalculable — voir la migration 0012.
 	insertAudit := db.Rebind(`
-		INSERT INTO audit_logs (id, user_id, action, table_name, record_id, before_state, after_state, ip_address, entry_hash, prev_hash, sequence_number)
-		VALUES (?, ?, 'post', 'journal_entries', ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+		INSERT INTO audit_logs (id, user_id, action, table_name, record_id, before_state, after_state, ip_address, entry_hash, prev_hash, sequence_number, created_at, hash_version)
+		VALUES (?, ?, 'post', 'journal_entries', ?, ?, ?, ?, ?, ?, ?, ?, 2)`, s.usePostgres)
 	var prevHashPtr *string
 	if prevHash != "" {
 		prevHashPtr = &prevHash
@@ -202,7 +234,7 @@ func (s *Service) PostEntry(ctx context.Context, userID, entryID, ipAddress stri
 	}
 	if _, err := tx.ExecContext(ctx, insertAudit,
 		db.NewID(), userID, entryID, beforeStatePtr, maskedAfterJSON, ipAddress,
-		entryHash, prevHashPtr, nextSeq); err != nil {
+		entryHash, prevHashPtr, nextSeq, now); err != nil {
 		return fmt.Errorf("insert audit log: %w", err)
 	}
 
@@ -241,7 +273,8 @@ func (s *Service) VerifyEntryIntegrity(ctx context.Context, entryID string) erro
 			COALESCE(after_state, ''),
 			COALESCE(ip_address, ''),
 			entry_hash,
-			created_at
+			created_at,
+			hash_version
 		FROM audit_logs
 		WHERE table_name = 'journal_entries'
 		  AND record_id = ?
@@ -253,15 +286,24 @@ func (s *Service) VerifyEntryIntegrity(ctx context.Context, entryID string) erro
 		beforeState, afterState, ipAddress  string
 		auditEntryHash                      string
 		createdAt                           time.Time
+		hashVersion                         int
 	)
 	if err := s.db.QueryRowContext(ctx, auditQ, entryID).Scan(
 		&userID, &action, &tableName, &recordID,
 		&beforeState, &afterState, &ipAddress,
-		&auditEntryHash, &createdAt,
+		&auditEntryHash, &createdAt, &hashVersion,
 	); err == sql.ErrNoRows {
 		return fmt.Errorf("audit log not found for posted entry %s", entryID)
 	} else if err != nil {
 		return fmt.Errorf("load audit log: %w", err)
+	}
+
+	// 3 bis. Entrée antérieure au correctif d'empreinte (voir migration 0012) :
+	// les valeurs ayant servi au calcul n'ont pas été persistées, l'empreinte
+	// n'est donc pas recalculable. Retourner ErrIntegrityViolation reviendrait
+	// à accuser l'utilisateur d'une altération qui n'a pas eu lieu.
+	if hashVersion < 2 {
+		return ErrIntegrityNotVerifiable{EntryID: entryID, HashVersion: hashVersion}
 	}
 
 	// 4. Recalculer l'entry_hash depuis les champs de l'audit log

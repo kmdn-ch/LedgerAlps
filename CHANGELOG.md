@@ -7,6 +7,17 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Sécurité
+- **L'empreinte d'intégrité des écritures ne couvrait pas ce qui était enregistré.** À la comptabilisation, l'empreinte SHA-256 était calculée sur un `after_state` rédigé séparément de celui réellement inséré, et sur un horodatage venu de Go alors que la colonne était remplie par le `DEFAULT CURRENT_TIMESTAMP` de SQLite. **Aucune écriture comptabilisée ne pouvait donc se revérifier**, et la garantie affichée au titre du CO art. 957a n'en était pas une. Corrigé : l'empreinte couvre désormais exactement les valeurs stockées, `created_at` compris, écrit explicitement.
+- Le défaut a traversé toute la suite de tests parce que chaque test touchant aux empreintes fabriquait ses propres lignes, avec les mêmes valeurs des deux côtés. Il est apparu au premier appel réel, en écrivant l'écran de la piste d'audit. Les tests de non-régression écrivent maintenant **par le vrai chemin** puis relisent depuis la base — c'est la seule façon de vérifier une empreinte.
+- **Les entrées écrites avant ce correctif ne sont pas rattrapables** : les valeurs ayant servi au calcul n'ont jamais été persistées. Elles sont marquées `hash_version = 1` et signalées comme **non vérifiables**, jamais comme altérées. Leur chaînage reste vérifié — une suppression y demeure détectable. Accuser à tort un utilisateur d'avoir modifié ses livres coûterait la crédibilité de tous les avertissements suivants.
+
+### Ajouté
+- **Paramètres → Maintenance → Piste d'audit** — la chaîne d'empreintes du CO art. 957a devient visible : numéro de séquence, date, action, document, auteur et empreinte, la plus récente en tête.
+- **Vérification de la chaîne entière** (`GET /audit-logs/verify-chain`). Vérifier une entrée isolée — tout ce qui existait — ne détecte que la modification de son contenu : **supprimer une ligne laisse l'empreinte de toutes les autres parfaitement valide**. Le parcours contrôle en plus le chaînage et la continuité des numéros, et nomme la rupture : contenu modifié, chaînage rompu, entrée supprimée, ou début de chaîne manquant — ce dernier étant le seul cas où tous les maillons restants restent mutuellement cohérents.
+- L'écran énonce sa propre limite : une chaîne tronquée **à la fin** reste cohérente, car rien ne distingue une fin effacée d'une écriture jamais passée. C'est la sauvegarde qui répond à cette question.
+- La liste accepte `order=desc` ; le défaut reste l'ordre d'écriture, seul ordre qui ait un sens pour une lecture d'intégrité. Le nom de l'auteur est résolu par jointure à la lecture, jamais stocké dans la chaîne — l'y mêler la romprait au premier changement d'état civil.
+
 ---
 
 ## [1.4.5] — 2026-08-03

@@ -137,6 +137,20 @@ export const maintenanceApi = {
   putServerSettings: (data: unknown) => api.put('/settings/server', data),
 }
 
+// Piste d'audit — la chaîne d'empreintes du CO art. 957a.
+export const auditApi = {
+  list: (params?: { limit?: number; offset?: number; order?: 'asc' | 'desc'; from?: string; to?: string }) =>
+    api.get('/audit-logs', { params }),
+  // Le serveur répond 409 quand la chaîne est rompue, et le corps de cette
+  // réponse EST le rapport à afficher. Sans validateStatus, axios le rejetterait
+  // et l'écran ne montrerait rien précisément dans le cas qui compte.
+  verifyChain: () =>
+    api.get('/audit-logs/verify-chain', {
+      validateStatus: (s) => s === 200 || s === 409,
+      timeout: 120_000, // parcours de toute la chaîne : dix ans de livres
+    }),
+}
+
 export const contactsApi = {
   list:   (params?: { contact_type?: string; page?: number; page_size?: number }) =>
     api.get('/contacts', { params }),

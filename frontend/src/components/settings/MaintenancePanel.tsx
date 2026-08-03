@@ -11,6 +11,7 @@ import {
   Database, Lock, LockOpen,
 } from 'lucide-react'
 import { maintenanceApi } from '@/api/client'
+import { AuditTrailPanel } from '@/components/settings/AuditTrailPanel'
 import { NetworkSettings } from '@/components/settings/NetworkSettings'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { formatDate } from '@/utils'
@@ -208,6 +209,8 @@ export function MaintenancePanel() {
           </div>
         )}
       </div>
+
+      <AuditTrailPanel />
 
       <NetworkSettings onSaved={() => qc.invalidateQueries({ queryKey: ['maintenance', 'health'] })} />
 
