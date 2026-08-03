@@ -174,19 +174,26 @@ func TestVerifyChainDetectsADeletedEntry(t *testing.T) {
 	}
 
 	// D'abord la démonstration : chaque entrée survivante se vérifie seule.
-	rows, err := database.Query(`SELECT id FROM audit_logs ORDER BY sequence_number`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+	ids := func() []string {
+		rows, err := database.Query(`SELECT id FROM audit_logs ORDER BY sequence_number`)
+		if err != nil {
 			t.Fatal(err)
 		}
-		ids = append(ids, id)
-	}
-	rows.Close()
+		defer rows.Close()
+
+		var out []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, id)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}()
 
 	gin.SetMode(gin.TestMode)
 	single := gin.New()
