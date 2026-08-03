@@ -274,6 +274,10 @@ type ChainReport struct {
 	Breaks    []ChainBreak `json:"breaks"`
 	Truncated bool         `json:"truncated"`
 	CheckedAt time.Time    `json:"checked_at"`
+	// HeadHash est l'empreinte de la dernière entrée. Elle résume l'état de
+	// toute la chaîne : la noter aujourd'hui permet de prouver demain qu'aucune
+	// des entrées d'aujourd'hui n'a bougé depuis.
+	HeadHash string `json:"head_hash,omitempty"`
 }
 
 // maxChainBreaks borne la réponse : au-delà, la chaîne est manifestement
@@ -309,6 +313,27 @@ func (h *AuditHandler) VerifyAuditChain(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
 
+	report, err := h.ComputeChainReport(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	// 200 quand la chaîne est intacte, 409 sinon — même convention que la
+	// vérification d'une entrée isolée, pour qu'un client puisse traiter les
+	// deux points d'entrée de la même manière.
+	if report.Verified {
+		c.JSON(http.StatusOK, report)
+		return
+	}
+	c.JSON(http.StatusConflict, report)
+}
+
+// ComputeChainReport parcourt la chaîne et retourne le rapport. Extrait du
+// handler pour que l'attestation Olico repose exactement sur le même parcours :
+// deux implémentations finiraient par diverger, et c'est l'attestation — le
+// document qu'on présente à un tiers — qui aurait tort.
+func (h *AuditHandler) ComputeChainReport(ctx context.Context) (ChainReport, error) {
 	// COALESCE aligné sur VerifyAuditLog : les deux points d'entrée doivent
 	// recalculer exactement la même empreinte, sans quoi ils se contrediraient
 	// sur la même ligne.
@@ -325,8 +350,7 @@ func (h *AuditHandler) VerifyAuditChain(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, q)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
+		return ChainReport{}, err
 	}
 	defer rows.Close()
 
@@ -335,6 +359,7 @@ func (h *AuditHandler) VerifyAuditChain(c *gin.Context) {
 	var (
 		prevEntryHash string
 		prevSeq       int64
+		headHash      string
 		first         = true
 	)
 
@@ -360,8 +385,7 @@ func (h *AuditHandler) VerifyAuditChain(c *gin.Context) {
 			&beforeState, &afterState, &ipAddress,
 			&entryHash, &prevHash, &seq, &createdAt, &hashVersion,
 		); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error"})
-			return
+			return ChainReport{}, err
 		}
 
 		report.Entries++
@@ -408,7 +432,7 @@ func (h *AuditHandler) VerifyAuditChain(c *gin.Context) {
 				})
 			}
 			first = false
-			prevEntryHash, prevSeq = entryHash, seq
+			prevEntryHash, prevSeq, headHash = entryHash, seq, entryHash
 			continue
 		}
 
@@ -428,21 +452,13 @@ func (h *AuditHandler) VerifyAuditChain(c *gin.Context) {
 			})
 		}
 
-		prevEntryHash, prevSeq = entryHash, seq
+		prevEntryHash, prevSeq, headHash = entryHash, seq, entryHash
 	}
 	if err := rows.Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "rows error"})
-		return
+		return ChainReport{}, err
 	}
 
 	report.Verified = len(report.Breaks) == 0 && !report.Truncated
-
-	// 200 quand la chaîne est intacte, 409 sinon — même convention que la
-	// vérification d'une entrée isolée, pour qu'un client puisse traiter les
-	// deux points d'entrée de la même manière.
-	if report.Verified {
-		c.JSON(http.StatusOK, report)
-		return
-	}
-	c.JSON(http.StatusConflict, report)
+	report.HeadHash = headHash
+	return report, nil
 }

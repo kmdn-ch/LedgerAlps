@@ -3,7 +3,6 @@ package accounting
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"time"
@@ -102,10 +101,18 @@ func (s *Service) CreateEntry(ctx context.Context, userID string, req CreateEntr
 		return nil, fmt.Errorf("next reference: %w", err)
 	}
 
+	// Rattachement à l'exercice, dans la même transaction que l'insertion :
+	// une écriture sans exercice est invisible à la clôture, qui filtre dessus.
+	// EnsureFiscalPeriod refuse aussi les exercices clos (CO art. 958f).
+	period, err := EnsureFiscalPeriod(ctx, tx, s.usePostgres, req.Date)
+	if err != nil {
+		return nil, err
+	}
+
 	insertEntry := db.Rebind(`
-		INSERT INTO journal_entries (id, reference, date, description, status, created_by_id)
-		VALUES (?, ?, ?, ?, 'draft', ?)`, s.usePostgres)
-	if _, err := tx.ExecContext(ctx, insertEntry, entryID, ref, req.Date.Format("2006-01-02"), req.Description, userID); err != nil {
+		INSERT INTO journal_entries (id, reference, date, description, status, fiscal_year_id, created_by_id)
+		VALUES (?, ?, ?, ?, 'draft', ?, ?)`, s.usePostgres)
+	if _, err := tx.ExecContext(ctx, insertEntry, entryID, ref, req.Date.Format("2006-01-02"), req.Description, period.ID, userID); err != nil {
 		return nil, fmt.Errorf("insert entry: %w", err)
 	}
 
@@ -140,15 +147,26 @@ func (s *Service) CreateEntry(ctx context.Context, userID string, req CreateEntr
 // and appends an audit log record with the CO art. 957a hash chain.
 func (s *Service) PostEntry(ctx context.Context, userID, entryID, ipAddress string) error {
 	// 1. Load entry
-	getQ := db.Rebind("SELECT status FROM journal_entries WHERE id = ?", s.usePostgres)
+	getQ := db.Rebind("SELECT status, date FROM journal_entries WHERE id = ?", s.usePostgres)
 	var status string
-	if err := s.db.QueryRowContext(ctx, getQ, entryID).Scan(&status); err == sql.ErrNoRows {
+	var entryDate time.Time
+	if err := s.db.QueryRowContext(ctx, getQ, entryID).Scan(&status, &entryDate); err == sql.ErrNoRows {
 		return ErrEntryNotFound
 	} else if err != nil {
 		return fmt.Errorf("load entry: %w", err)
 	}
 	if status == string(models.JournalEntryStatusPosted) {
 		return ErrAlreadyPosted
+	}
+
+	// 1 bis. Verrouillage de période. Un brouillon peut avoir été créé avant la
+	// clôture et comptabilisé après : c'est précisément le chemin qu'il faut
+	// fermer, sans quoi l'exercice bouclé continuerait de bouger (CO art. 958f,
+	// Olico art. 3). La correction se passe dans l'exercice ouvert.
+	if period, found, err := LookupFiscalPeriod(ctx, s.db, s.usePostgres, entryDate); err != nil {
+		return err
+	} else if found && period.Closed {
+		return ErrPeriodClosed{FiscalYear: period.Name, Date: entryDate}
 	}
 
 	// 2. Re-validate double-entry from stored lines
@@ -163,79 +181,33 @@ func (s *Service) PostEntry(ctx context.Context, userID, entryID, ipAddress stri
 		return ErrNotDoubleEntry{Debit: totalDebit, Credit: totalCredit}
 	}
 
-	// 3. Construire l'état EXACTEMENT tel qu'il sera stocké, puis le hacher.
-	//
-	// Jusqu'à la v1.4.6, l'empreinte était calculée sur un JSON rédigé ici même
-	// (avec un champ posted_at) tandis que la ligne enregistrait un autre JSON,
-	// et le created_at haché venait de Go alors que la colonne était remplie par
-	// le DEFAULT CURRENT_TIMESTAMP de SQLite, à la seconde près. L'empreinte
-	// couvrait donc des valeurs jamais écrites : aucune entrée ne pouvait se
-	// revérifier. Le défaut est resté invisible faute d'écran pour l'exercer.
-	//
-	// Règle qui en découle : ne hacher que ce que la ligne contiendra, et écrire
-	// created_at explicitement. La troncature à la seconde évite de dépendre de
-	// la précision que le pilote choisit de conserver.
-	rawAfterJSON, _ := json.Marshal(map[string]any{
-		"entry_id": entryID,
-		"status":   "posted",
-		"debit":    totalDebit,
-		"credit":   totalCredit,
-	})
-	maskedAfterJSON := maskPersonalData(string(rawAfterJSON))
-	// before_state est vide pour une comptabilisation ; masqué par prudence.
-	maskedBeforeJSON := maskPersonalData("")
-
-	now := time.Now().UTC().Truncate(time.Second)
-	entryHash := security.ComputeEntryHash(
-		userID, "post", "journal_entries", entryID,
-		maskedBeforeJSON, maskedAfterJSON, ipAddress, now,
-	)
-
-	// 4. Get prev_hash and sequence for audit chain
-	prevQ := db.Rebind("SELECT entry_hash, sequence_number FROM audit_logs ORDER BY sequence_number DESC LIMIT 1", s.usePostgres)
-	var prevHash string
-	var lastSeq int64
-	if err := s.db.QueryRowContext(ctx, prevQ).Scan(&prevHash, &lastSeq); err != nil && err != sql.ErrNoRows {
-		return fmt.Errorf("load prev hash: %w", err)
-	}
-	chainedHash := security.ChainHash(prevHash, entryHash)
-	nextSeq := lastSeq + 1
-
+	// 3. Ouvrir la transaction AVANT de lire le maillon précédent : lire à
+	//    l'extérieur laissait deux comptabilisations concurrentes obtenir le
+	//    même prédécesseur et fourcher la chaîne.
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	// 5. Mark entry as posted with integrity hash
+	// 4. Ajouter le maillon d'audit (CO art. 957a) et récupérer l'empreinte
+	//    chaînée à porter sur l'écriture.
+	chainedHash, now, err := AppendAuditEntry(ctx, tx, s.usePostgres,
+		userID, "post", entryID, ipAddress,
+		map[string]any{
+			"entry_id": entryID,
+			"status":   "posted",
+			"debit":    totalDebit,
+			"credit":   totalCredit,
+		})
+	if err != nil {
+		return err
+	}
+
+	// 5. Marquer l'écriture comme comptabilisée, empreinte comprise.
 	updateQ := db.Rebind("UPDATE journal_entries SET status = 'posted', integrity_hash = ?, updated_at = ? WHERE id = ?", s.usePostgres)
 	if _, err := tx.ExecContext(ctx, updateQ, chainedHash, now, entryID); err != nil {
 		return fmt.Errorf("update entry: %w", err)
-	}
-
-	// 6. Write audit log record with CO art. 957a hash chain.
-	// Personal data fields are masked (nLPD art. 6) before persistence — the
-	// masking happens in step 3, before the hash, so the two cannot diverge.
-	//
-	// hash_version = 2 : empreinte calculée sur les valeurs réellement stockées.
-	// Les lignes en version 1 restent lisibles et chaînées, mais leur empreinte
-	// propre n'est pas recalculable — voir la migration 0012.
-	insertAudit := db.Rebind(`
-		INSERT INTO audit_logs (id, user_id, action, table_name, record_id, before_state, after_state, ip_address, entry_hash, prev_hash, sequence_number, created_at, hash_version)
-		VALUES (?, ?, 'post', 'journal_entries', ?, ?, ?, ?, ?, ?, ?, ?, 2)`, s.usePostgres)
-	var prevHashPtr *string
-	if prevHash != "" {
-		prevHashPtr = &prevHash
-	}
-	// Store before_state as NULL when empty (avoids persisting empty string).
-	var beforeStatePtr *string
-	if maskedBeforeJSON != "" {
-		beforeStatePtr = &maskedBeforeJSON
-	}
-	if _, err := tx.ExecContext(ctx, insertAudit,
-		db.NewID(), userID, entryID, beforeStatePtr, maskedAfterJSON, ipAddress,
-		entryHash, prevHashPtr, nextSeq, now); err != nil {
-		return fmt.Errorf("insert audit log: %w", err)
 	}
 
 	return tx.Commit()

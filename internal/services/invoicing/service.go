@@ -161,16 +161,25 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 		return nil, fmt.Errorf("next invoice number: %w", err)
 	}
 
+	// Rattachement à l'exercice, comme pour les écritures : l'archive légale
+	// filtrée par exercice (CO art. 958f) revenait sinon vide de toute facture.
+	// Une offre de prix n'est pas une pièce comptable, mais elle devient une
+	// facture sans changer de ligne : le rattachement suit donc le document.
+	period, err := accsvc.EnsureFiscalPeriod(ctx, tx, s.usePostgres, req.IssueDate)
+	if err != nil {
+		return nil, err
+	}
+
 	insertInv := db.Rebind(`
 		INSERT INTO invoices (id, invoice_number, document_type, contact_id, status, issue_date, due_date,
 		                      currency, subtotal_amount, vat_amount, total_amount, vat_rate,
-		                      notes, terms, created_by_id)
-		VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+		                      notes, terms, fiscal_year_id, created_by_id)
+		VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
 	if _, err := tx.ExecContext(ctx, insertInv,
 		invoiceID, number, req.DocumentType, req.ContactID,
 		req.IssueDate.Format("2006-01-02"), req.DueDate.Format("2006-01-02"),
 		req.Currency, subtotal, vatAmount, total, primaryVATRate,
-		req.Notes, req.Terms, userID); err != nil {
+		req.Notes, req.Terms, period.ID, userID); err != nil {
 		return nil, fmt.Errorf("insert invoice: %w", err)
 	}
 

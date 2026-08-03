@@ -205,9 +205,15 @@ func (s *FiscalYearService) CloseYear(ctx context.Context, fiscalYearID, userID 
 		closingDate := fyEndDate.Format("2006-01-02")
 		entryID := db.NewID()
 
+		// L'écriture de clôture entre au journal en 'draft', puis reçoit son
+		// empreinte et son maillon d'audit comme n'importe quelle autre. Elle
+		// était auparavant insérée directement en 'posted', sans empreinte ni
+		// entrée d'audit : l'écriture qui vire le résultat de l'exercice était
+		// la seule à échapper à la chaîne du CO art. 957a. Le contrôle de
+		// cohérence la signalait déjà, sans que le lien soit fait.
 		insertEntry := db.Rebind(`
 			INSERT INTO journal_entries (id, reference, date, description, status, fiscal_year_id, created_by_id)
-			VALUES (?, ?, ?, ?, 'posted', ?, ?)
+			VALUES (?, ?, ?, ?, 'draft', ?, ?)
 		`, s.usePostgres)
 		if _, err := tx.ExecContext(ctx, insertEntry, entryID, closingRef, closingDate, closingDesc, fiscalYearID, userID); err != nil {
 			return fmt.Errorf("insert closing entry: %w", err)
@@ -225,6 +231,34 @@ func (s *FiscalYearService) CloseYear(ctx context.Context, fiscalYearID, userID 
 			); err != nil {
 				return fmt.Errorf("insert closing line: %w", err)
 			}
+		}
+
+		// Chaînage et comptabilisation, dans la même transaction que la clôture :
+		// une panne entre les deux laisserait un exercice clos sur une écriture
+		// de clôture restée en brouillon.
+		var closingDebit float64
+		for _, l := range lines {
+			if l.debitAmount != nil {
+				closingDebit += *l.debitAmount
+			}
+		}
+		chainedHash, now, err := AppendAuditEntry(ctx, tx, s.usePostgres,
+			userID, "close", entryID, "",
+			map[string]any{
+				"entry_id":    entryID,
+				"status":      "posted",
+				"fiscal_year": fyName,
+				"debit":       closingDebit,
+				"credit":      closingDebit,
+			})
+		if err != nil {
+			return fmt.Errorf("chain closing entry: %w", err)
+		}
+		postQ := db.Rebind(
+			`UPDATE journal_entries SET status = 'posted', integrity_hash = ?, updated_at = ? WHERE id = ?`,
+			s.usePostgres)
+		if _, err := tx.ExecContext(ctx, postQ, chainedHash, now, entryID); err != nil {
+			return fmt.Errorf("post closing entry: %w", err)
 		}
 	}
 

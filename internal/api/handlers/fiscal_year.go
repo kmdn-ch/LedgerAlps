@@ -76,6 +76,89 @@ func (h *FiscalYearHandler) ListFiscalYears(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": years, "total": len(years)})
 }
 
+// ─── POST /api/v1/fiscal-years ───────────────────────────────────────────────
+
+type createFiscalYearRequest struct {
+	Name      string `json:"name" binding:"required"`
+	StartDate string `json:"start_date" binding:"required"` // YYYY-MM-DD
+	EndDate   string `json:"end_date" binding:"required"`   // YYYY-MM-DD
+}
+
+// CreateFiscalYear déclare un exercice comptable.
+//
+// Il n'existait aucune route pour en créer un : l'installation n'en sème aucun
+// et seule la clôture en créait un — le suivant. Un exercice décalé (juillet à
+// juin, fréquent en Suisse) était donc impossible à déclarer, et LedgerAlps
+// crée alors l'année civile au premier enregistrement. Cette route permet de
+// poser le bon exercice **avant** d'y comptabiliser quoi que ce soit.
+//
+// Accès : administrateur uniquement.
+func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
+	if !isAdmin(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to create a fiscal year"})
+		return
+	}
+
+	var req createFiscalYearRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	start, err := time.Parse("2006-01-02", req.StartDate)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "start_date must be YYYY-MM-DD"})
+		return
+	}
+	end, err := time.Parse("2006-01-02", req.EndDate)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "end_date must be YYYY-MM-DD"})
+		return
+	}
+	if !end.After(start) {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "end_date must be after start_date"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	// Deux exercices qui se chevauchent rendraient le rattachement d'une
+	// écriture arbitraire, donc la clôture arbitraire. Refuser ici est la seule
+	// occasion de l'empêcher.
+	var overlapping string
+	overlapQ := db.Rebind(`
+		SELECT name FROM fiscal_years
+		WHERE start_date <= ? AND end_date >= ?
+		LIMIT 1`, h.usePostgres)
+	err = h.db.QueryRowContext(ctx, overlapQ, req.EndDate, req.StartDate).Scan(&overlapping)
+	if err == nil {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "la période chevauche l'exercice « " + overlapping + " »",
+		})
+		return
+	}
+	if err != sql.ErrNoRows {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	id := db.NewID()
+	insertQ := db.Rebind(`
+		INSERT INTO fiscal_years (id, name, start_date, end_date, is_closed)
+		VALUES (?, ?, ?, ?, 0)`, h.usePostgres)
+	if _, err := h.db.ExecContext(ctx, insertQ, id, req.Name, req.StartDate, req.EndDate); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "un exercice porte déjà ce nom"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id": id, "name": req.Name,
+		"start_date": req.StartDate, "end_date": req.EndDate,
+		"is_closed": false,
+	})
+}
+
 // ─── POST /api/v1/fiscal-years/:id/close ─────────────────────────────────────
 
 // CloseFiscalYear triggers the year-end closing procedure (CO art. 958).

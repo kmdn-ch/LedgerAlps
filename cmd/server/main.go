@@ -63,6 +63,14 @@ func main() {
 	}
 	fmt.Println("LedgerAlps: migrations up-to-date.")
 
+	// Rattachement des écritures et documents à leur exercice comptable. Le
+	// champ n'était renseigné nulle part avant la v1.4.6, si bien qu'une base
+	// existante contient des lignes orphelines — invisibles à la clôture, qui
+	// filtre dessus. Idempotent : sans orphelin, c'est deux SELECT.
+	if err := db.BackfillFiscalYears(database, cfg.UsePostgres()); err != nil {
+		log.Fatalf("FATAL: fiscal year backfill failed: %v", err)
+	}
+
 	// ── 3b. Automatic backup ──────────────────────────────────────────────────
 	// LedgerAlps is local-first: this SQLite file is the only copy of records the
 	// CO (art. 958f) requires be kept for ten years. Take a snapshot at startup
@@ -221,7 +229,8 @@ func main() {
 	// Fiscal years + VAT declaration (admin)
 	fyh := handlers.NewFiscalYearHandler(database, cfg.UsePostgres())
 	api.GET("/fiscal-years", fyh.ListFiscalYears)
-	api.POST("/fiscal-years/:id/close", fyh.CloseFiscalYear)
+	api.POST("/fiscal-years", middleware.RequireAdmin(cfg.JWTSecret), fyh.CreateFiscalYear)
+	api.POST("/fiscal-years/:id/close", middleware.RequireAdmin(cfg.JWTSecret), fyh.CloseFiscalYear)
 	api.POST("/vat/declaration", fyh.GenerateVATDeclaration)
 
 	// VAT rates (static reference data — no DB)
@@ -267,6 +276,7 @@ func main() {
 	// Registered before the :id route: gin resolves the static segment first,
 	// so "verify-chain" is never read as an identifier.
 	api.GET("/audit-logs/verify-chain", alh.VerifyAuditChain)
+	api.GET("/audit-logs/attestation", alh.IntegrityAttestation)
 	api.GET("/audit-logs/:id/verify", alh.VerifyAuditLog)
 
 	// Security telemetry — admin only: lockout records expose client IPs (nLPD).
