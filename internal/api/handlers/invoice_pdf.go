@@ -30,16 +30,21 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 	invQ := db.Rebind(`
 		SELECT i.id, i.invoice_number, i.document_type, i.contact_id, i.status, i.issue_date, i.due_date,
 		       i.currency, i.subtotal_amount, i.vat_amount, i.total_amount, i.vat_rate, i.notes, i.terms,
-		       i.created_at, i.updated_at, COALESCE(orig.invoice_number, '')
+		       i.created_at, i.updated_at, COALESCE(orig.invoice_number, ''),
+		       COALESCE(i.recipient_name,''), COALESCE(i.recipient_address,''),
+		       COALESCE(i.recipient_postal_code,''), COALESCE(i.recipient_city,''),
+		       COALESCE(i.recipient_country,''), COALESCE(i.recipient_vat_number,'')
 		FROM invoices i
 		LEFT JOIN invoices orig ON orig.id = i.corrects_invoice_id
 		WHERE i.id = ?`, h.usePostgres)
 	var correctsNumber string
+	var rcp recipientIdentity
 	err := h.db.QueryRowContext(ctx, invQ, id).Scan(
 		&inv.ID, &inv.InvoiceNumber, &inv.DocumentType, &inv.ContactID, &inv.Status,
 		&inv.IssueDate, &inv.DueDate, &inv.Currency,
 		&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate,
-		&inv.Notes, &inv.Terms, &inv.CreatedAt, &inv.UpdatedAt, &correctsNumber)
+		&inv.Notes, &inv.Terms, &inv.CreatedAt, &inv.UpdatedAt, &correctsNumber,
+		&rcp.Name, &rcp.Address, &rcp.PostalCode, &rcp.City, &rcp.Country, &rcp.VATNumber)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
 		return
@@ -130,23 +135,42 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 		}
 	}
 
-	// Customer info from contact.
+	// Destinataire : l'identité FIGÉE sur la facture, pas la fiche contact
+	// d'aujourd'hui. Relire le contact vivant faisait qu'un client renommé ou
+	// déménagé réécrivait toutes ses factures passées — une pièce comptable qui
+	// change n'est plus celle qui a été envoyée (CO art. 958f, LTVA art. 26).
+	//
+	// Repli sur le contact uniquement si l'instantané est vide : le cas d'une
+	// facture antérieure à la v1.4.6 que le rattrapage n'aurait pas couverte,
+	// faute de contact encore présent.
+	if rcp.Name == "" {
+		rcp = recipientIdentity{Name: ct.Name, Country: ct.Country}
+		if ct.Address != nil {
+			rcp.Address = *ct.Address
+		}
+		if ct.City != nil {
+			rcp.City = *ct.City
+		}
+		if ct.PostalCode != nil {
+			rcp.PostalCode = *ct.PostalCode
+		}
+	}
+
 	// SPC 0200 requires a 2-char country when debtor is identified; default CH.
-	ctCountry := ct.Country
+	ctCountry := rcp.Country
 	if len(ctCountry) != 2 {
 		ctCountry = "CH"
 	}
 	customer := pdfsvc.CustomerInfo{
-		Name:    ct.Name,
+		Name:    rcp.Name,
 		Country: ctCountry,
+		Address: rcp.Address,
 	}
-	if ct.Address != nil {
-		customer.Address = *ct.Address
-	}
-	if ct.City != nil && ct.PostalCode != nil {
-		customer.City = fmt.Sprintf("%s %s", *ct.PostalCode, *ct.City)
-	} else if ct.City != nil {
-		customer.City = *ct.City
+	switch {
+	case rcp.PostalCode != "" && rcp.City != "":
+		customer.City = fmt.Sprintf("%s %s", rcp.PostalCode, rcp.City)
+	case rcp.City != "":
+		customer.City = rcp.City
 	}
 
 	// Render PDF
@@ -185,4 +209,15 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// recipientIdentity est l'identité du destinataire telle qu'elle a été figée
+// sur la facture à son émission.
+type recipientIdentity struct {
+	Name       string
+	Address    string
+	PostalCode string
+	City       string
+	Country    string
+	VATNumber  string
 }

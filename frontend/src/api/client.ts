@@ -171,6 +171,9 @@ export const contactsApi = {
   list:   (params?: { contact_type?: string; page?: number; page_size?: number }) =>
     api.get('/contacts', { params }),
   get:    (id: string)           => api.get(`/contacts/${id}`),
+  // Anonymisation (nLPD art. 6 al. 4 et 32). Irréversible, et c'est le but :
+  // c'est ce qui a été promis à la personne concernée.
+  anonymise: (id: string)        => api.post(`/contacts/${id}/anonymise`),
   create: (data: unknown)        => api.post('/contacts', data),
   update: (id: string, data: unknown) => api.patch(`/contacts/${id}`, data),
 }

@@ -69,6 +69,13 @@ même antidatée. Et vous en téléchargez une **attestation d'intégrité** à
 remettre à votre fiduciaire, qui dit aussi bien ce qu'elle prouve que ce
 qu'elle ne prouve pas.
 
+**Données personnelles**
+Un client peut demander l'effacement de ses données : LedgerAlps anonymise sa
+fiche depuis **Paramètres → Maintenance**, tout en conservant ses factures —
+elles portent l'identité qu'elles avaient à l'émission, comme la loi l'exige
+pendant dix ans. Les adresses IP des tentatives de connexion bloquées sont
+effacées d'elles-mêmes après quelques mois.
+
 **Vos données restent les vôtres**
 L'archive légale (**Paramètres → Maintenance**) contient dix ans de pièces en
 JSON *et* en CSV : ouvrable dans un tableur, importable dans un autre logiciel

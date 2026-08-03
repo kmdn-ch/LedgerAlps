@@ -384,6 +384,28 @@ func (h *MaintenanceHandler) SystemHealth(c *gin.Context) {
 	resp["capabilities"] = caps
 
 	// Verrous de sécurité récents : visibles ici plutôt que dans un fichier log.
+	// Rétention des données personnelles : les chiffres réels, pas la règle.
+	// Annoncer une durée sans montrer qu'elle s'applique est exactement ce que
+	// faisait le commentaire du schéma, qui promettait une purge inexistante.
+	personal := gin.H{
+		"ip_retention_days":    int(db.IPRetention.Hours() / 24),
+		"event_retention_days": int(db.EventRetention.Hours() / 24),
+	}
+	if n, err := h.count(ctx, `SELECT COUNT(*) FROM security_events`); err == nil {
+		personal["security_events"] = n
+	}
+	if n, err := h.count(ctx,
+		`SELECT COUNT(*) FROM security_events WHERE ip_address IS NOT NULL AND ip_address <> '(anonymisée)'`); err == nil {
+		personal["ip_addresses_held"] = n
+	}
+	if n, err := h.count(ctx, `SELECT COUNT(*) FROM contacts WHERE anonymised_at IS NOT NULL`); err == nil {
+		personal["contacts_anonymised"] = n
+	}
+	if n, err := h.count(ctx, `SELECT COUNT(*) FROM invoices WHERE recipient_backfilled = 1`); err == nil {
+		personal["invoices_recipient_reconstructed"] = n
+	}
+	resp["personal_data"] = personal
+
 	if n, err := h.count(ctx, `SELECT COUNT(*) FROM security_events WHERE event_type = 'login_lockout'`); err == nil {
 		resp["login_lockouts"] = n
 	}

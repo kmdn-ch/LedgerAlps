@@ -170,16 +170,35 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 		return nil, err
 	}
 
+	// Identité du destinataire figée à l'émission. Sans cela, le PDF relit le
+	// contact vivant : renommer un client réécrit toutes ses factures passées,
+	// alors que le CO art. 958f impose de conserver la pièce telle qu'elle est
+	// et que la LTVA art. 26 exige qu'elle nomme son destinataire.
+	var rcp recipientSnapshot
+	rcpQ := db.Rebind(`
+		SELECT COALESCE(name,''), COALESCE(address,''), COALESCE(postal_code,''),
+		       COALESCE(city,''), COALESCE(country,''), COALESCE(vat_number,'')
+		FROM contacts WHERE id = ?`, s.usePostgres)
+	if err := tx.QueryRowContext(ctx, rcpQ, req.ContactID).Scan(
+		&rcp.Name, &rcp.Address, &rcp.PostalCode, &rcp.City, &rcp.Country, &rcp.VATNumber,
+	); err != nil {
+		return nil, fmt.Errorf("load recipient: %w", err)
+	}
+
 	insertInv := db.Rebind(`
 		INSERT INTO invoices (id, invoice_number, document_type, contact_id, status, issue_date, due_date,
 		                      currency, subtotal_amount, vat_amount, total_amount, vat_rate,
-		                      notes, terms, fiscal_year_id, created_by_id)
-		VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+		                      notes, terms, fiscal_year_id, created_by_id,
+		                      recipient_name, recipient_address, recipient_postal_code,
+		                      recipient_city, recipient_country, recipient_vat_number,
+		                      recipient_backfilled)
+		VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`, s.usePostgres)
 	if _, err := tx.ExecContext(ctx, insertInv,
 		invoiceID, number, req.DocumentType, req.ContactID,
 		req.IssueDate.Format("2006-01-02"), req.DueDate.Format("2006-01-02"),
 		req.Currency, subtotal, vatAmount, total, primaryVATRate,
-		req.Notes, req.Terms, period.ID, userID); err != nil {
+		req.Notes, req.Terms, period.ID, userID,
+		rcp.Name, rcp.Address, rcp.PostalCode, rcp.City, rcp.Country, rcp.VATNumber); err != nil {
 		return nil, fmt.Errorf("insert invoice: %w", err)
 	}
 
@@ -805,4 +824,17 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 		CorrectsInvoiceID: &corrects,
 		CreatedByID:       userID,
 	}, nil
+}
+
+// recipientSnapshot est l'identité du destinataire au moment de l'émission.
+// Elle est copiée sur la facture et n'en bouge plus : c'est ce qui fait de
+// celle-ci une pièce comptable autonome, et ce qui permet d'anonymiser un
+// contact sans effacer l'identité portée par ses factures.
+type recipientSnapshot struct {
+	Name       string
+	Address    string
+	PostalCode string
+	City       string
+	Country    string
+	VATNumber  string
 }

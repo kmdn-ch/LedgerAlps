@@ -274,6 +274,16 @@ export interface SystemHealth {
     advisory: boolean
   }
   capabilities: Record<string, boolean>
+  // Ce que la rétention nLPD art. 6 al. 4 fait réellement, en chiffres :
+  // annoncer une durée sans montrer qu'elle s'applique était le défaut à éviter.
+  personal_data?: {
+    ip_retention_days: number
+    event_retention_days: number
+    security_events?: number
+    ip_addresses_held?: number
+    contacts_anonymised?: number
+    invoices_recipient_reconstructed?: number
+  }
   login_lockouts?: number
 }
 
@@ -346,4 +356,14 @@ export interface RotateSecretResult {
   sessions_revoked: number
   restart_required: boolean
   message: string
+}
+
+export interface AnonymiseResult {
+  id: string
+  label: string
+  anonymised_at: string
+  invoices_kept: number
+  legal_basis: string[]
+  what_was_erased: string[]
+  what_was_kept: string[]
 }

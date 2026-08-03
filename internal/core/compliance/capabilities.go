@@ -63,8 +63,10 @@ var Capabilities = map[Capability]bool{
 	// certificate when none is supplied.
 	CapNativeTLS: true,
 
-	// Roadmap: "Suppression & droit à l'effacement (nLPD)".
-	CapContactAnonymisation: false,
+	// Livré en v1.4.6 : un contact peut être anonymisé (nLPD art. 6 al. 4 et
+	// art. 32) sans amputer les pièces comptables, qui portent désormais
+	// l'identité de leur destinataire figée à l'émission.
+	CapContactAnonymisation: true,
 
 	// Roadmap: "Paramètres → Maintenance & Système", section Conformité.
 	// Closing a fiscal year exists; refusing writes to a closed period does not.

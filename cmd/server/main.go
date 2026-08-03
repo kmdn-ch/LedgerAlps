@@ -71,6 +71,20 @@ func main() {
 		log.Fatalf("FATAL: fiscal year backfill failed: %v", err)
 	}
 
+	// Identité du destinataire figée sur les factures. Le PDF relisait le
+	// contact vivant : renommer un client réécrivait ses factures passées.
+	if err := db.BackfillInvoiceRecipients(database, cfg.UsePostgres()); err != nil {
+		log.Fatalf("FATAL: invoice recipient backfill failed: %v", err)
+	}
+
+	// Rétention des données personnelles (nLPD art. 6 al. 4). Les adresses IP
+	// des verrouillages de connexion s'accumulaient sans terme, alors que le
+	// schéma annonçait une durée limitée. Un échec ici ne doit pas empêcher le
+	// démarrage : l'utilisateur a besoin de ses livres.
+	if _, err := db.ApplyRetention(database, cfg.UsePostgres(), time.Now().UTC()); err != nil {
+		log.Printf("WARNING: passe de rétention échouée: %v", err)
+	}
+
 	// ── 3b. Automatic backup ──────────────────────────────────────────────────
 	// LedgerAlps is local-first: this SQLite file is the only copy of records the
 	// CO (art. 958f) requires be kept for ten years. Take a snapshot at startup
@@ -171,6 +185,9 @@ func main() {
 	api.GET("/contacts/:id", ch.GetContact)
 	api.POST("/contacts", ch.CreateContact)
 	api.PATCH("/contacts/:id", ch.UpdateContact)
+	// Anonymisation (nLPD art. 6 al. 4 et 32) : effacer les données d'une
+	// personne est une décision, pas une opération de saisie.
+	api.POST("/contacts/:id/anonymise", middleware.RequireAdmin(cfg.JWTSecret), ch.AnonymiseContact)
 
 	// Invoices
 	ih := handlers.NewInvoicesHandler(database, cfg.UsePostgres(), accountingSvc)

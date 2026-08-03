@@ -263,6 +263,33 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/contacts/:id` | auth | Détail |
 | POST | `/contacts` | auth | Créer |
 | PATCH | `/contacts/:id` | auth | Modifier |
+| POST | `/contacts/:id/anonymise` | **admin** | Anonymise un contact (nLPD art. 6 al. 4 et 32). Efface nom, adresse, courriel, téléphone, IBAN, n° TVA et notes ; conserve la ligne et sa date d'anonymisation. Refuse si une facture du contact ne porte pas son destinataire figé, et refuse un second passage |
+
+> **Anonymiser sans amputer une pièce comptable.** La nLPD art. 6 al. 4 impose
+> de détruire ou d'anonymiser une donnée personnelle dès qu'elle n'est plus
+> nécessaire, et l'art. 32 ouvre un droit à l'effacement. Le CO art. 958f impose
+> en parallèle dix ans de conservation, et la LTVA art. 26 exige que la facture
+> nomme son destinataire.
+>
+> Ce n'est pas contradictoire : ce que la loi commerciale protège est la
+> **pièce**, pas la fiche client. Depuis la migration `0014`, chaque facture
+> porte l'identité de son destinataire **telle qu'elle était à l'émission**. La
+> fiche peut donc être vidée sans qu'aucun document ne perde une mention
+> obligatoire — le PDF affiche l'identité figée, pas le contact d'aujourd'hui.
+>
+> Avant cela, une facture ne stockait que `contact_id` : renommer un client
+> réécrivait rétroactivement toutes ses factures passées. Les factures
+> antérieures sont complétées au démarrage depuis leur contact et marquées
+> `recipient_backfilled = 1` — une reconstitution et une pièce d'origine ne se
+> valent pas devant un réviseur.
+>
+> **Rétention** (nLPD art. 6 al. 4). Les adresses IP des verrouillages de
+> connexion sont anonymisées après 90 jours et l'événement supprimé après un an,
+> à chaque démarrage. La table annonçait cette limite dans son schéma sans que
+> rien ne l'applique. `GET /maintenance/health` expose les chiffres réels sous
+> `personal_data` : annoncer une durée sans montrer qu'elle s'applique était
+> précisément le défaut.
+
 
 ## TVA et exercices
 

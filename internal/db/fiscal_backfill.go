@@ -154,3 +154,38 @@ func attachOrphans(database *sql.DB, usePostgres bool, table, dateCol string) (i
 	}
 	return n, nil
 }
+
+// BackfillInvoiceRecipients renseigne l'identité du destinataire sur les
+// factures qui n'en portent pas.
+//
+// Avant la v1.4.6 une facture ne stockait que `contact_id`, si bien que le PDF
+// relisait le contact vivant : renommer un client réécrivait rétroactivement
+// toutes ses factures passées. Ces factures-là ne peuvent pas être restituées
+// telles qu'elles ont été imprimées — la seule source disponible est le contact
+// d'aujourd'hui. Elles sont donc marquées `recipient_backfilled = 1`, parce
+// qu'une reconstitution et une pièce d'origine ne se valent pas devant un
+// réviseur, et que confondre les deux serait le vrai défaut.
+//
+// Idempotent : seules les lignes sans identité sont touchées.
+func BackfillInvoiceRecipients(database *sql.DB, usePostgres bool) error {
+	q := Rebind(`
+		UPDATE invoices
+		SET recipient_name        = COALESCE((SELECT c.name        FROM contacts c WHERE c.id = invoices.contact_id), ''),
+		    recipient_address     = COALESCE((SELECT c.address     FROM contacts c WHERE c.id = invoices.contact_id), ''),
+		    recipient_postal_code = COALESCE((SELECT c.postal_code FROM contacts c WHERE c.id = invoices.contact_id), ''),
+		    recipient_city        = COALESCE((SELECT c.city        FROM contacts c WHERE c.id = invoices.contact_id), ''),
+		    recipient_country     = COALESCE((SELECT c.country     FROM contacts c WHERE c.id = invoices.contact_id), ''),
+		    recipient_vat_number  = COALESCE((SELECT c.vat_number  FROM contacts c WHERE c.id = invoices.contact_id), ''),
+		    recipient_backfilled  = 1
+		WHERE recipient_name IS NULL OR recipient_name = ''`, usePostgres)
+
+	res, err := database.Exec(q)
+	if err != nil {
+		return fmt.Errorf("backfill invoice recipients: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n > 0 {
+		log.Printf("[migration] identité du destinataire reconstituée sur %d facture(s) — "+
+			"depuis la fiche contact actuelle, faute d'instantané d'époque", n)
+	}
+	return nil
+}
