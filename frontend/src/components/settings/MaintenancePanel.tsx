@@ -12,6 +12,8 @@ import {
 } from 'lucide-react'
 import { maintenanceApi } from '@/api/client'
 import { AuditTrailPanel } from '@/components/settings/AuditTrailPanel'
+import { CompliancePanel } from '@/components/settings/CompliancePanel'
+import { SecurityPanel } from '@/components/settings/SecurityPanel'
 import { NetworkSettings } from '@/components/settings/NetworkSettings'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { formatDate } from '@/utils'
@@ -210,12 +212,16 @@ export function MaintenancePanel() {
         )}
       </div>
 
+      <CompliancePanel />
+
       <AuditTrailPanel />
+
+      <SecurityPanel tlsEnabled={health.data?.network.tls ?? false} />
 
       <NetworkSettings onSaved={() => qc.invalidateQueries({ queryKey: ['maintenance', 'health'] })} />
 
       <p className="text-xs text-alpine-500">
-        Les sections Conformité, Flux bancaires et Réversibilité arrivent dans une
+        La console de rejeu ISO 20022 et le mode bac à sable arrivent dans une
         prochaine version — voir la roadmap.
       </p>
     </div>

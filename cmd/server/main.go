@@ -210,13 +210,14 @@ func main() {
 	// Le handler signale, main exécute : un handler ne doit pas démonter le
 	// serveur depuis lequel il répond.
 	restartCh := make(chan struct{}, 1)
-	sysh := handlers.NewSystemHandler(restartCh, cfg)
+	sysh := handlers.NewSystemHandler(restartCh, cfg, database)
 	api.POST("/system/restart", middleware.RequireAdmin(cfg.JWTSecret), sysh.Restart)
 	// Réglages réseau. config.json n'est écrit qu'au premier lancement : sans
 	// cet écran, aucune option ajoutée depuis n'est atteignable par un
 	// utilisateur, et éditer du JSON dans %APPDATA% n'est pas une réponse.
 	api.GET("/settings/server", middleware.RequireAdmin(cfg.JWTSecret), sysh.GetServerSettings)
 	api.PUT("/settings/server", middleware.RequireAdmin(cfg.JWTSecret), sysh.PutServerSettings)
+	api.POST("/settings/server/rotate-secret", middleware.RequireAdmin(cfg.JWTSecret), sysh.RotateJWTSecret)
 
 	// Maintenance & Système. Lecture seule et réservé aux administrateurs : ces
 	// vues montrent l'état des données et du poste, elles ne réparent rien —

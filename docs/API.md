@@ -270,8 +270,31 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 |---|---|---|---|
 | GET | `/vat/rates` | auth | Taux suisses en vigueur |
 | POST | `/vat/declaration` | auth | Déclaration TVA (effective ou TDFN) |
-| GET | `/fiscal-years` | auth | Exercices |
-| POST | `/fiscal-years/:id/close` | auth | Clôturer un exercice (CO art. 958) |
+| GET | `/fiscal-years` | auth | Exercices déclarés, du plus récent au plus ancien |
+| POST | `/fiscal-years` | **admin** | Déclarer un exercice (`name`, `start_date`, `end_date`). Refuse tout chevauchement |
+| POST | `/fiscal-years/:id/close` | **admin** | Clôture (CO art. 958) : vire produits et charges au résultat, verrouille la période, ouvre la suivante |
+
+> **Rattachement à l'exercice.** Chaque écriture et chaque document est rattaché
+> à l'exercice couvrant sa date. Si aucun ne la couvre, LedgerAlps crée l'**année
+> civile** correspondante : refuser rendrait le produit inutilisable, puisque
+> l'installation n'en sème aucun. Pour un exercice décalé (juillet–juin), le
+> déclarer via `POST /fiscal-years` **avant** d'y comptabiliser.
+>
+> Le champ n'était renseigné nulle part avant la v1.4.6. `CloseYear` filtrant
+> dessus, il clôturait sans voir aucune écriture : pas d'écriture de clôture, pas
+> de garde sur les brouillons, et une réponse `200 closed` malgré tout. Les bases
+> existantes sont rattrapées au démarrage.
+>
+> **Verrouillage de période** (CO art. 958f, Olico art. 3). Un exercice clos
+> refuse la création **et** la comptabilisation d'écritures — le second contrôle
+> porte le cas qui compte : un brouillon créé avant la clôture, comptabilisé
+> après. Réponse `422` avec le motif légal. La correction se passe dans
+> l'exercice ouvert.
+>
+> **Écriture de clôture.** Elle rejoint la chaîne d'empreintes du CO art. 957a
+> comme les autres. Elle était auparavant insérée directement en `posted`, sans
+> empreinte ni maillon d'audit — la pièce qui vire le résultat était la seule
+> hors chaîne.
 
 ## Rapports
 
@@ -299,10 +322,11 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 |---|---|---|---|
 | GET | `/audit-logs` | **admin** | Piste d'audit. `order=asc` (défaut, ordre d'écriture) ou `desc` ; `table_name`, `record_id`, `from`, `to`, `limit`, `offset` |
 | GET | `/audit-logs/verify-chain` | **admin** | Vérifier **toute** la chaîne : empreintes, chaînage, continuité des numéros. `200` si intacte, `409` avec le rapport sinon |
+| GET | `/audit-logs/attestation` | **admin** | Attestation d'intégrité (Olico art. 9), en pièce jointe JSON : état de la chaîne, empreinte de tête, périmètre, **et ses limites** |
 | GET | `/audit-logs/:id/verify` | **admin** | Vérifier une entrée isolée. Détecte une modification de contenu, **pas une suppression** — voir la note ci-dessous |
 | GET | `/compliance/advisories` | auth | Avis de conformité — voir [compliance](../compliance/README.md) |
 | GET | `/security-events` | **admin** | Verrouillages de connexion (contient des adresses IP — nLPD) |
-| GET | `/exports/legal-archive` | auth | Archive ZIP 10 ans avec manifeste (CO art. 958f) |
+| GET | `/exports/legal-archive` | auth | Archive ZIP 10 ans avec manifeste (CO art. 958f). Contient le JSON **et** un dossier `csv/` — export de réversibilité ouvrable dans un tableur, avec les lignes imbriquées extraites dans leurs propres fichiers |
 
 > **Pourquoi une vérification de chaîne, et pas seulement par entrée.** Vérifier
 > une entrée recalcule sa propre empreinte : cela détecte la modification de son
@@ -333,3 +357,4 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | PUT | `/settings/company` | **admin** | Modifier le profil |
 | POST | `/settings/logo` | auth | Téléverser le logo |
 | DELETE | `/settings/logo` | auth | Supprimer le logo |
+| POST | `/settings/server/rotate-secret` | **admin** | Régénère le secret de signature des jetons. Déconnecte toutes les sessions et **rien d'autre** : mots de passe intacts (bcrypt), aucune donnée touchée, sauvegardes toujours utilisables — elles ne contiennent pas `config.json`. Prend effet au redémarrage ; les jetons de rafraîchissement en base sont révoqués au passage |

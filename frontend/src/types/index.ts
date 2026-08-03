@@ -330,3 +330,20 @@ export interface ChainReport {
   truncated: boolean
   checked_at: string
 }
+
+// ─── Conformité & clôture ─────────────────────────────────────────────────────
+export interface FiscalYear {
+  id: string
+  name: string
+  start_date: string
+  end_date: string
+  is_closed: boolean
+}
+
+export interface RotateSecretResult {
+  rotated: boolean
+  secret_length: number
+  sessions_revoked: number
+  restart_required: boolean
+  message: string
+}

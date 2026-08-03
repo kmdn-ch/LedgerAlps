@@ -149,6 +149,22 @@ export const auditApi = {
       validateStatus: (s) => s === 200 || s === 409,
       timeout: 120_000, // parcours de toute la chaîne : dix ans de livres
     }),
+  // Attestation Olico art. 9 : téléchargée, pas affichée — elle est destinée à
+  // être transmise à une fiduciaire ou à un réviseur.
+  attestationURL: () => `${BASE_URL}/audit-logs/attestation`,
+  attestation: () =>
+    api.get('/audit-logs/attestation', { responseType: 'blob', timeout: 120_000 }),
+}
+
+// Archive légale et export de réversibilité (CO art. 958f).
+export const exportApi = {
+  legalArchive: () =>
+    api.get('/exports/legal-archive', { responseType: 'blob', timeout: 120_000 }),
+}
+
+// Rotation du secret de signature (point 6 de la roadmap).
+export const securityApi = {
+  rotateSecret: () => api.post('/settings/server/rotate-secret'),
 }
 
 export const contactsApi = {
@@ -228,6 +244,10 @@ export const isoApi = {
 // ─── Exercices fiscaux ────────────────────────────────────────────────────────
 export const fiscalYearsApi = {
   list:  ()                    => api.get('/fiscal-years'),
+  // Déclarer un exercice décalé AVANT d'y comptabiliser : sans exercice
+  // couvrant la date, LedgerAlps crée l'année civile.
+  create: (data: { name: string; start_date: string; end_date: string }) =>
+    api.post('/fiscal-years', data),
   close: (id: string)          => api.post(`/fiscal-years/${id}/close`),
   vatDeclaration: (params: { period_start: string; period_end: string; method: string }) =>
     api.post('/vat/declaration', params),

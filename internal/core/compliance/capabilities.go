@@ -68,7 +68,7 @@ var Capabilities = map[Capability]bool{
 
 	// Roadmap: "Paramètres → Maintenance & Système", section Conformité.
 	// Closing a fiscal year exists; refusing writes to a closed period does not.
-	CapPeriodLocking: false,
+	CapPeriodLocking: true,
 
 	// SIX has not published SPS 2026 yet; the QR payload still follows IG v2.4.
 	// The compliance watcher will notice the publication; this flips when the

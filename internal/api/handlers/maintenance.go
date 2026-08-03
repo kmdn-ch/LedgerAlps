@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -208,11 +209,110 @@ func (h *MaintenanceHandler) IntegrityCheck(c *gin.Context) {
 		})
 	}
 
+	// ── QR-facture : la validation existait, sans écran pour l'exercer ───────
+	//
+	// Ces contrôles ne coûtent rien et évitent le pire scénario : découvrir que
+	// les bulletins de versement sont refusés par la banque du client, après
+	// les avoir envoyés. Ils portent sur la configuration, pas sur les données
+	// comptables, donc ils n'apparaissent que s'il y a matière.
+	h.addQRBillFindings(ctx, add)
+
 	c.JSON(http.StatusOK, gin.H{
 		"checked_at": time.Now().UTC(),
 		"findings":   findings,
 		"clean":      len(findings) == 0,
 	})
+}
+
+// addQRBillFindings vérifie ce qui rend une QR-facture émettable, avec la même
+// bibliothèque que celle qui produit le bulletin (SIX IG v2.4).
+func (h *MaintenanceHandler) addQRBillFindings(ctx context.Context, add func(Finding)) {
+	var iban, postal, city, country, name string
+	q := db.Rebind(`
+		SELECT COALESCE(iban,''), COALESCE(address_postal_code,''),
+		       COALESCE(address_city,''), COALESCE(address_country,''),
+		       COALESCE(company_name,'')
+		FROM company_settings LIMIT 1`, h.usePostgres)
+	if err := h.db.QueryRowContext(ctx, q).Scan(&iban, &postal, &city, &country, &name); err != nil {
+		// Aucune fiche société : l'assistant d'installation ne l'a pas encore
+		// remplie. Ce n'est pas une incohérence, c'est un début.
+		return
+	}
+
+	switch {
+	case iban == "":
+		add(Finding{
+			Severity: "warning", Check: "qr_iban_missing", Count: 1,
+			Title:  "Aucun IBAN : vos factures n'auront pas de QR",
+			Detail: "Sans IBAN, LedgerAlps produit des PDF sans section de paiement.",
+			Action: "Renseignez votre IBAN dans Paramètres → Banque.",
+		})
+	default:
+		if err := compliance.ValidateIBAN(iban); err != nil {
+			add(Finding{
+				Severity: "error", Check: "qr_iban_invalid", Count: 1,
+				Title:  "IBAN invalide",
+				Detail: "L'IBAN enregistré ne passe pas le contrôle de clé (ISO 13616) : " + err.Error(),
+				Action: "Corrigez-le dans Paramètres → Banque. En l'état, les bulletins produits seront refusés.",
+			})
+		} else if compliance.IsQRIBAN(iban) {
+			add(Finding{
+				Severity: "info", Check: "qr_iban_type", Count: 1,
+				Title:  "QR-IBAN détecté",
+				Detail: "Vos factures portent une référence QRR, structurée et contrôlée par votre banque.",
+			})
+		}
+	}
+
+	// Adresse structurée : la QR-facture l'exige, et c'est le manque le plus
+	// courant — l'assistant ne demande pas toujours la localité.
+	var missing []string
+	if postal == "" {
+		missing = append(missing, "code postal")
+	}
+	if city == "" {
+		missing = append(missing, "localité")
+	}
+	if len(country) != 2 {
+		missing = append(missing, "pays (code à deux lettres)")
+	}
+	if name == "" {
+		missing = append(missing, "raison sociale")
+	}
+	if len(missing) > 0 && iban != "" {
+		add(Finding{
+			Severity: "error", Check: "qr_address_incomplete", Count: len(missing),
+			Title:  "Adresse incomplète pour la QR-facture",
+			Detail: "Champs manquants : " + strings.Join(missing, ", ") + ". La QR-facture impose une adresse structurée (SIX IG v2.4 §4.2.2).",
+			Action: "Complétez Paramètres → Identité avant votre prochaine facture.",
+		})
+	}
+
+	// IBAN de contacts : utilisés pour les virements fournisseurs (pain.001).
+	rows, err := h.db.QueryContext(ctx, db.Rebind(
+		`SELECT name, iban FROM contacts WHERE iban IS NOT NULL AND iban <> ''`, h.usePostgres))
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	bad := 0
+	for rows.Next() {
+		var cname, ciban string
+		if err := rows.Scan(&cname, &ciban); err != nil {
+			return
+		}
+		if compliance.ValidateIBAN(ciban) != nil {
+			bad++
+		}
+	}
+	if rows.Err() == nil && bad > 0 {
+		add(Finding{
+			Severity: "warning", Check: "contact_iban_invalid", Count: bad,
+			Title:  "IBAN de contact invalide",
+			Detail: fmt.Sprintf("%d contact(s) ont un IBAN qui ne passe pas le contrôle de clé.", bad),
+			Action: "Corrigez-les avant d'émettre un ordre de virement : la banque rejetterait le fichier entier.",
+		})
+	}
 }
 
 // SystemHealth GET /api/v1/maintenance/health

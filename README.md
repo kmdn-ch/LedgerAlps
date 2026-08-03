@@ -60,10 +60,20 @@ Export de virements et import de relevés bancaires aux formats ISO 20022
 Écritures scellées par empreinte numérique (CO art. 957a), archive légale
 10 ans (CO art. 958f), et une **veille automatique** qui vous prévient dans
 l'application quand une loi ou un standard qui vous concerne évolue.
-**Paramètres → Maintenance → Piste d'audit** vous laisse vérifier vous-même
-que rien n'a été modifié ni retiré, d'un bouton : LedgerAlps recalcule chaque
-empreinte et contrôle le chaînage — c'est ce qui rend une **suppression**
-visible, qu'une vérification entrée par entrée ne verrait pas.
+**Paramètres → Maintenance** vous laisse vérifier vous-même que rien n'a été
+modifié ni retiré, d'un bouton : LedgerAlps recalcule chaque empreinte et
+contrôle le chaînage — c'est ce qui rend une **suppression** visible, qu'une
+vérification entrée par entrée ne verrait pas. Vous y clôturez aussi vos
+exercices : une fois bouclé, un exercice n'accepte plus aucune écriture, pas
+même antidatée. Et vous en téléchargez une **attestation d'intégrité** à
+remettre à votre fiduciaire, qui dit aussi bien ce qu'elle prouve que ce
+qu'elle ne prouve pas.
+
+**Vos données restent les vôtres**
+L'archive légale (**Paramètres → Maintenance**) contient dix ans de pièces en
+JSON *et* en CSV : ouvrable dans un tableur, importable dans un autre logiciel
+comptable. Le verrouillage fournisseur ne tient pas au refus d'exporter, il
+tient au format de l'export.
 
 **Sauvegardes**
 Un instantané de votre comptabilité est pris automatiquement, et vous pouvez

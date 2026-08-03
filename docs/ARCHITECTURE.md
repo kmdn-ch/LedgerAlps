@@ -80,6 +80,16 @@ il est apparu au premier appel réel. `internal/services/accounting/integrity_te
 écrit désormais par le vrai chemin puis relit depuis la base — recalculer en
 mémoire ce qu'on vient de calculer en mémoire ne prouve rien.
 
+**Exercice comptable et verrouillage de période.** Chaque écriture est rattachée
+à l'exercice couvrant sa date, dans la transaction qui l'insère ; sans exercice
+couvrant, l'année civile est créée. Un exercice clos refuse création **et**
+comptabilisation (CO art. 958f, Olico art. 3) — le second contrôle porte le
+chemin qui compte, un brouillon créé avant la clôture et comptabilisé après.
+L'écriture de clôture passe par le même ajout au chaînage que les autres :
+`accounting.AppendAuditEntry`, dont la lecture du maillon précédent se fait
+**dans** la transaction, faute de quoi deux comptabilisations concurrentes
+fourcheraient la chaîne.
+
 **Partie double vérifiée à la validation.** `sum(débit) == sum(crédit)` est
 contrôlé avant qu'une écriture ne passe au statut `posted` ; une écriture
 déséquilibrée est refusée, pas corrigée silencieusement.

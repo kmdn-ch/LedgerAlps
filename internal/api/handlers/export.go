@@ -144,7 +144,7 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 		data []byte
 	}
 
-	files := make([]namedFile, 0, 5)
+	files := make([]namedFile, 0, 13)
 	for _, nf := range []struct {
 		name string
 		v    any
@@ -163,7 +163,29 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 		files = append(files, namedFile{nf.name, raw})
 	}
 
+	// ── Export de réversibilité : les mêmes données en CSV ────────────────────
+	// Le JSON est exact mais suppose d'écrire du code pour l'exploiter. Sans
+	// format ouvrable dans un tableur, « vos données vous appartiennent » reste
+	// une affirmation sans moyen de l'exercer.
+	csvFiles, err := buildCSVFiles(map[string]any{
+		"accounts":        accounts,
+		"journal_entries": journalEntries,
+		"invoices":        invoices,
+		"contacts":        contacts,
+		"fiscal_years":    fiscalYears,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "csv build failed: " + err.Error()})
+		return
+	}
+	for _, f := range csvFiles {
+		files = append(files, namedFile{"csv/" + f.name, f.data})
+	}
+	files = append(files, namedFile{"csv/LISEZ-MOI.txt", csvReadme(csvFiles)})
+
 	// ── Compute SHA-256 hashes ────────────────────────────────────────────────
+	// Le manifeste couvre le CSV comme le JSON : un fichier de l'archive sans
+	// empreinte serait le seul qu'on ne pourrait pas vérifier.
 	hashes := make(map[string]string, len(files))
 	for _, f := range files {
 		sum := sha256.Sum256(f.data)
