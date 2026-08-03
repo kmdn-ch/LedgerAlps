@@ -12,9 +12,17 @@ pour votre réseau, pas pour être exposé sur Internet.
 
 ## 1. Installer le binaire
 
-Téléchargez l'archive correspondant à votre système depuis la page
-[Releases](https://github.com/kmdn-ch/LedgerAlps/releases/latest), ou utilisez
-le paquet `.deb` / `.rpm`.
+Téléchargez l'archive depuis la page
+[Releases](https://github.com/kmdn-ch/LedgerAlps/releases/latest).
+
+> Les paquets `.deb` et `.rpm` ne sont plus publiés depuis la v1.4.5. Le code
+> Go est inchangé et Linux reste une plateforme de compilation **et de test** —
+> la CI tourne sur Ubuntu, c'est là que `go test -race` s'exécute. Ce qui
+> s'arrête est l'empaquetage : scripts d'installation, unité systemd,
+> arborescence FHS. Suivre les conventions de plusieurs distributions demande de
+> les vérifier sur de vraies machines, ce que personne ne faisait. L'unité
+> systemd ci-dessous reste documentée et fonctionnelle : elle est simplement à
+> installer soi-même.
 
 ```bash
 tar xzf ledgeralps_*_linux_amd64.tar.gz

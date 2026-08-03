@@ -113,41 +113,17 @@ archives:
       - CHANGELOG.md
       - scripts/install.sh
 
-nfpms:
-  - id: ledgeralps-packages
-    package_name: ledgeralps
-    file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    vendor: LedgerAlps
-    homepage: https://github.com/kmdn-ch/ledgeralps
-    maintainer: LedgerAlps Team <hello@ledgeralps.ch>
-    description: |-
-      LedgerAlps — Swiss SME Accounting Platform.
-      Double-entry accounting with Swiss compliance (CO 957a/958f), QR-bill (SPC 0200),
-      ISO 20022 payments (pain.001/camt.053), and TVA declarations.
-    license: MIT
-    formats:
-      - deb
-      - rpm
-    bindir: /usr/bin
-    section: finance
-    priority: optional
-    scripts:
-      preinstall: infrastructure/linux/preinstall.sh
-      postinstall: infrastructure/linux/postinstall.sh
-      preremove: infrastructure/linux/preremove.sh
-      postremove: infrastructure/linux/postremove.sh
-    contents:
-      - src: infrastructure/linux/ledgeralps.service
-        dst: /lib/systemd/system/ledgeralps.service
-        file_info:
-          mode: 0644
-      - src: .env.example
-        dst: /etc/ledgeralps/ledgeralps.env.example
-        type: config|noreplace
-        file_info:
-          mode: 0600
-    recommends:
-      - postgresql-client
+# Les paquets .deb et .rpm ne sont plus publiés depuis la v1.4.5.
+#
+# Le code Go reste identique et Linux reste une plateforme de compilation ET DE
+# TEST : la CI tourne sur Ubuntu, c'est là que `go test -race` s'exécute — il ne
+# peut pas tourner localement, faute de compilateur C — et là que les assertions
+# de permissions de fichiers ont un sens, Windows ignorant les bits Unix.
+#
+# Ce qui s'arrête est l'empaquetage : scripts d'installation, unité systemd,
+# arborescence FHS. Cela suppose de suivre les conventions de plusieurs
+# distributions, et personne ici ne le vérifie sur une vraie machine. L'archive
+# .tar.gz reste publiée et `scripts/install.sh` continue de l'installer.
 
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
@@ -209,7 +185,10 @@ release:
     curl -fsSL https://raw.githubusercontent.com/kmdn-ch/ledgeralps/main/scripts/install.sh | bash
     ```
 
-    Paquets `.deb` et `.rpm` également disponibles ci-dessous.
+    Les paquets `.deb` et `.rpm` ne sont plus publiés depuis la v1.4.5 :
+    l'empaquetage suppose de suivre les conventions de plusieurs distributions,
+    et personne ne le vérifiait sur une vraie machine. L'archive `.tar.gz`
+    reste publiée et le script ci-dessus l'installe.
     Pour un déploiement serveur (systemd, PostgreSQL, sauvegardes), voir
     [docs/PRODUCTION.md](https://github.com/kmdn-ch/LedgerAlps/blob/main/docs/PRODUCTION.md).
 
