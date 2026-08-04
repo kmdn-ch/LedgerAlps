@@ -21,21 +21,27 @@ func RoundTo5Rappen(amount float64) float64 {
 // ─── TVA rates (Swiss 2024) ───────────────────────────────────────────────────
 
 const (
-	VATRateStandard  = 0.081 // 8.1%
-	VATRateReduced   = 0.026 // 2.6% (food, books, etc.)
-	VATRateSpecial   = 0.038 // 3.8% (hotel accommodation)
+	VATRateStandard = 0.081 // 8.1%
+	VATRateReduced  = 0.026 // 2.6% (food, books, etc.)
+	VATRateSpecial  = 0.038 // 3.8% (hotel accommodation)
 )
 
 // ─── IBAN validation ──────────────────────────────────────────────────────────
 
 var ibanClean = regexp.MustCompile(`\s+`)
 
-// ValidateIBAN checks the IBAN checksum using the MOD-97 algorithm (ISO 13616).
-// Returns nil if valid, an error with a descriptive message otherwise.
+// ValidateIBAN vérifie un IBAN selon l'ISO 13616 : structure, longueur imposée
+// par le pays, puis clé de contrôle MOD-97. Voir iban.go pour le détail et pour
+// le choix fait sur les pays absents du registre embarqué.
+//
+// Le contrôle de longueur par pays est la partie qui manquait : un IBAN suisse
+// à 20 caractères a environ une chance sur 97 de passer le seul MOD-97, et
+// serait alors rejeté par la banque à la remise du fichier de virements —
+// c'est-à-dire une fois les paiements supposés partis.
 func ValidateIBAN(iban string) error {
-	iban = strings.ToUpper(ibanClean.ReplaceAllString(iban, ""))
-	if len(iban) < 5 || len(iban) > 34 {
-		return fmt.Errorf("IBAN length %d is invalid (must be 5–34 characters)", len(iban))
+	iban = NormaliseIBAN(iban)
+	if err := checkIBANStructure(iban); err != nil {
+		return err
 	}
 
 	// Move the first 4 characters to the end
@@ -49,14 +55,14 @@ func ValidateIBAN(iban string) error {
 		} else if ch >= '0' && ch <= '9' {
 			numeric.WriteRune(ch)
 		} else {
-			return fmt.Errorf("IBAN contains invalid character: %c", ch)
+			return fmt.Errorf("caractère non autorisé dans un IBAN : %q", string(ch))
 		}
 	}
 
 	// MOD-97 check
 	remainder := mod97(numeric.String())
 	if remainder != 1 {
-		return fmt.Errorf("IBAN checksum invalid (expected MOD-97 = 1, got %d)", remainder)
+		return fmt.Errorf("la clé de contrôle de l'IBAN est fausse — vérifiez la saisie, un chiffre a probablement été inversé")
 	}
 	return nil
 }

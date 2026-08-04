@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -129,19 +131,16 @@ func (h *ContactsHandler) CreateContact(c *gin.Context) {
 	if req.PaymentTermDays == 0 {
 		req.PaymentTermDays = 30
 	}
-	// IBAN validation at schema boundary
-	if req.IBAN != nil {
-		if err := compliance.ValidateIBAN(*req.IBAN); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "iban: " + err.Error()})
-			return
-		}
+	// IBAN : structure, longueur imposée par le pays, puis clé de contrôle
+	// (ISO 13616). Un formulaire envoie une chaîne vide pour un champ non
+	// rempli : la traiter comme un IBAN invalide empêcherait d'enregistrer un
+	// contact qui n'en a pas, ce qui est le cas courant d'un client.
+	if err := validateOptionalIBAN(req.IBAN, req.QRIBAN); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
 	}
-	if req.QRIBAN != nil {
-		if err := compliance.ValidateQRIBAN(*req.QRIBAN); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "qr_iban: " + err.Error()})
-			return
-		}
-	}
+	req.IBAN = blankToNil(req.IBAN)
+	req.QRIBAN = blankToNil(req.QRIBAN)
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
@@ -202,18 +201,16 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
 	}
-	if req.IBAN != nil {
-		if err := compliance.ValidateIBAN(*req.IBAN); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "iban: " + err.Error()})
-			return
-		}
+	// IBAN : structure, longueur imposée par le pays, puis clé de contrôle
+	// (ISO 13616). Un formulaire envoie une chaîne vide pour un champ non
+	// rempli : la traiter comme un IBAN invalide empêcherait d'enregistrer un
+	// contact qui n'en a pas, ce qui est le cas courant d'un client.
+	if err := validateOptionalIBAN(req.IBAN, req.QRIBAN); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
 	}
-	if req.QRIBAN != nil {
-		if err := compliance.ValidateQRIBAN(*req.QRIBAN); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "qr_iban: " + err.Error()})
-			return
-		}
-	}
+	req.IBAN = blankToNil(req.IBAN)
+	req.QRIBAN = blankToNil(req.QRIBAN)
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
@@ -307,4 +304,36 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 
 	// Return updated contact
 	h.GetContact(c)
+}
+
+// ─── IBAN : validation à la frontière du schéma ──────────────────────────────
+
+// blankToNil ramène une chaîne vide à l'absence de valeur. Un formulaire envoie
+// "" pour un champ laissé vide ; stocker cette chaîne la rendrait
+// indistinguable d'un IBAN que l'utilisateur aurait effacé exprès, et les deux
+// doivent se lire comme « pas d'IBAN ».
+func blankToNil(v *string) *string {
+	if v == nil || strings.TrimSpace(*v) == "" {
+		return nil
+	}
+	normalised := compliance.NormaliseIBAN(*v)
+	return &normalised
+}
+
+// validateOptionalIBAN vérifie les deux champs IBAN quand ils portent une
+// valeur. Le message d'erreur nomme le champ : « iban » et « qr_iban » se
+// saisissent dans deux cases voisines, et corriger la mauvaise fait perdre du
+// temps sans rien apprendre.
+func validateOptionalIBAN(iban, qrIBAN *string) error {
+	if v := blankToNil(iban); v != nil {
+		if err := compliance.ValidateIBAN(*v); err != nil {
+			return fmt.Errorf("IBAN : %w", err)
+		}
+	}
+	if v := blankToNil(qrIBAN); v != nil {
+		if err := compliance.ValidateQRIBAN(*v); err != nil {
+			return fmt.Errorf("QR-IBAN : %w", err)
+		}
+	}
+	return nil
 }

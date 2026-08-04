@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Download, Search, Filter } from 'lucide-react'
 import { invoicesApi, contactsApi, downloadBlob } from '@/api/client'
 import {
-  PageHeader, StatusBadge, LoadingSpinner, EmptyState,
+  PageHeader, StatusBadge, LoadingSpinner, EmptyState, ConfirmDialog,
 } from '@/components/ui'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
 import type { Invoice, DisplayStatus, Contact } from '@/types'
@@ -59,8 +59,17 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
   const markPaid = useMutation({
     mutationFn: (id: string) =>
       invoicesApi.updateStatus(id, 'paid'),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
+    onSuccess: () => {
+      setPendingPaid(null)
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+    },
   })
+
+  // Le raccourci « Payer » de la liste est le plus exposé de l'application :
+  // il est aligné avec ceux des autres lignes, et un clic décalé encaisse la
+  // mauvaise facture. Enregistrer un paiement passe une écriture au journal et
+  // fige le document — il n'y a pas de bouton pour revenir en arrière.
+  const [pendingPaid, setPendingPaid] = useState<Invoice | null>(null)
 
   const filtered = invoices.filter(i =>
     search === '' ||
@@ -69,6 +78,23 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
 
   return (
     <div>
+      <ConfirmDialog
+        open={pendingPaid !== null}
+        title={pendingPaid ? `Marquer la facture ${pendingPaid.invoice_number} comme payée ?` : ''}
+        consequences={[
+          pendingPaid
+            ? `${formatCHF(pendingPaid.total_amount)} encaissé${pendingPaid.contact_name ? ` de ${pendingPaid.contact_name}` : ''}, à la date d'aujourd'hui.`
+            : '',
+          'Le paiement est passé au journal (banque / débiteurs).',
+          'La facture ne sera plus modifiable.',
+        ]}
+        reassurance="Si le montant reçu diffère, ouvrez la facture et enregistrez un paiement partiel."
+        confirmLabel="Marquer payée"
+        busy={markPaid.isPending}
+        onConfirm={() => pendingPaid && markPaid.mutate(pendingPaid.id)}
+        onCancel={() => setPendingPaid(null)}
+      />
+
       <PageHeader
         title={isQuote ? 'Offres de prix' : 'Factures'}
         subtitle={`${invoices.length} document${invoices.length !== 1 ? 's' : ''}`}
@@ -182,7 +208,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
                   <div className="flex items-center gap-1 justify-end">
                     {inv.status === 'sent' && (
                       <button
-                        onClick={() => markPaid.mutate(inv.id)}
+                        onClick={() => setPendingPaid(inv)}
                         className="btn-ghost btn-sm text-success-700"
                       >
                         Payer

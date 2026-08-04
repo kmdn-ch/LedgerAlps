@@ -106,3 +106,4 @@ export function SectionTitle({ children }: { children: ReactNode }) {
 }
 
 export { PDFPreview } from './PDFPreview'
+export { ConfirmDialog } from './ConfirmDialog'

@@ -10,7 +10,7 @@ import {
 import { invoicesApi, downloadBlob } from '@/api/client'
 import {
   PageHeader, StatusBadge, LoadingSpinner, ErrorBanner,
-  SectionTitle, PDFPreview,
+  SectionTitle, PDFPreview, ConfirmDialog,
 } from '@/components/ui'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
 import type { DocumentStatus, Invoice, QuoteOutcome } from '@/types'
@@ -61,6 +61,130 @@ const OUTCOME_LABEL: Record<QuoteOutcome, string> = {
   expired:  'Offre expirée',
 }
 
+
+// ─── Ce que chaque action fait vraiment ──────────────────────────────────────
+//
+// Une confirmation qui demande « êtes-vous sûr ? » ne protège personne : elle
+// ne dit ni ce qui va se passer, ni ce qui reste récupérable, et répétée elle
+// devient un réflexe. Chaque action décrit donc ses conséquences.
+//
+// Le vocabulaire suit le document : une offre de prix n'est pas une facture, et
+// « annuler » ne veut pas dire la même chose sur l'une et sur l'autre.
+
+type ActionCopy = {
+  title: string
+  consequences: string[]
+  reassurance?: string
+  confirmLabel: string
+  tone?: 'danger' | 'normal'
+}
+
+function transitionCopy(status: DocumentStatus, isQuote: boolean, number: string): ActionCopy {
+  const doc = isQuote ? "l'offre" : 'la facture'
+  switch (status) {
+    case 'sent':
+      return {
+        title: `Marquer ${doc} ${number} comme envoyée ?`,
+        consequences: isQuote
+          ? ["L'offre passe en « envoyée » et son issue — acceptée, refusée, expirée — devient à renseigner."]
+          : [
+              'La facture passe en « envoyée » : elle est réputée réclamée au client.',
+              'Son échéance commence à courir, et elle apparaîtra en retard une fois cette date passée.',
+            ],
+        reassurance: "LedgerAlps n'envoie aucun courriel : c'est vous qui transmettez le document.",
+        confirmLabel: 'Marquer envoyée',
+      }
+    case 'paid':
+      return {
+        title: `Marquer la facture ${number} comme payée ?`,
+        consequences: [
+          "Le paiement est enregistré à la date d'aujourd'hui et passé au journal (banque / débiteurs).",
+          'La facture ne sera plus modifiable : un document réglé ne se réécrit pas.',
+        ],
+        reassurance: "Si le montant reçu diffère, enregistrez plutôt un paiement partiel depuis l'onglet Paiements.",
+        confirmLabel: 'Marquer payée',
+      }
+    case 'cancelled':
+      return {
+        title: `Annuler ${doc} ${number} ?`,
+        consequences: isQuote
+          ? ["L'offre est classée sans suite et ne pourra plus être convertie en facture."]
+          : [
+              'La facture est classée sans effet et sort de vos créances.',
+              "Elle reste consultable et conservée : le CO art. 958f impose dix ans, y compris pour un document annulé.",
+            ],
+        reassurance: isQuote
+          ? "Une offre annulée peut être réactivée tant qu'elle n'est pas archivée."
+          : "Pour corriger une facture déjà transmise au client, une note de crédit est le geste comptable attendu, pas une annulation.",
+        confirmLabel: 'Annuler le document',
+        tone: 'danger',
+      }
+    case 'archived':
+      return {
+        title: `Archiver ${doc} ${number} ?`,
+        consequences: [
+          'Le document quitte les listes courantes.',
+          "C'est un état terminal : il ne pourra plus être réactivé depuis l'application.",
+        ],
+        reassurance: 'Il reste consultable, exporté dans les archives légales et compté dans vos rapports.',
+        confirmLabel: 'Archiver',
+      }
+    case 'draft':
+      return {
+        title: `Réactiver ${doc} ${number} ?`,
+        consequences: ['Le document repasse en brouillon et redevient modifiable.'],
+        confirmLabel: 'Réactiver',
+      }
+    default:
+      return {
+        title: 'Confirmer cette action ?',
+        consequences: ["Le statut du document va changer."],
+        confirmLabel: 'Confirmer',
+      }
+  }
+}
+
+const CONVERT_COPY = (number: string): ActionCopy => ({
+  title: `Convertir l'offre ${number} en facture ?`,
+  consequences: [
+    'Une facture est créée avec son propre numéro, et vous y êtes emmené.',
+    "L'offre est marquée acceptée. Les deux documents restent liés et se citent.",
+  ],
+  reassurance: "L'offre n'est pas transformée : elle est conservée telle qu'elle a été envoyée (CO art. 957a al. 2 ch. 5).",
+  confirmLabel: 'Créer la facture',
+})
+
+const CREDIT_NOTE_COPY = (number: string): ActionCopy => ({
+  title: `Émettre une note de crédit pour la facture ${number} ?`,
+  consequences: [
+    'Une note de crédit est créée pour le montant restant, avec son propre numéro.',
+    "Elle porte la mention « Annule la facture " + number + " » (LTVA art. 27 al. 4).",
+  ],
+  reassurance: 'La facture reste inchangée et conservée. Une note de crédit corrige, elle n\'efface pas.',
+  confirmLabel: 'Émettre la note de crédit',
+})
+
+const OUTCOME_COPY: Record<'refused' | 'expired', (n: string) => ActionCopy> = {
+  refused: n => ({
+    title: `Marquer l'offre ${n} comme refusée ?`,
+    consequences: [
+      'Le client a décliné : aucune facture ne sera établie depuis cette offre.',
+      "L'offre ne pourra plus être convertie.",
+    ],
+    confirmLabel: 'Marquer refusée',
+    tone: 'danger',
+  }),
+  expired: n => ({
+    title: `Marquer l'offre ${n} comme expirée ?`,
+    consequences: [
+      'La validité est dépassée sans réponse du client.',
+      "L'offre ne pourra plus être convertie.",
+    ],
+    reassurance: 'Pour la remettre au client, dupliquez-la en une nouvelle offre.',
+    confirmLabel: 'Marquer expirée',
+  }),
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function InvoiceDetailPage() {
@@ -68,6 +192,13 @@ export function InvoiceDetailPage() {
   const navigate      = useNavigate()
   const qc            = useQueryClient()
   const [showPDF, setShowPDF] = useState(false)
+
+  // L'action en attente de confirmation. Une seule à la fois : le dialogue est
+  // modal, et deux confirmations superposées seraient illisibles.
+  const [pending, setPending] = useState<
+    { copy: ActionCopy; run: () => void } | null
+  >(null)
+  const ask = (copy: ActionCopy, run: () => void) => setPending({ copy, run })
 
   const { data: invoice, isLoading, error } = useQuery<Invoice>({
     queryKey: ['invoice', invoiceId],
@@ -115,7 +246,10 @@ export function InvoiceDetailPage() {
     const extra = status === 'paid'
       ? { paymentDate: new Date().toISOString().slice(0, 10) }
       : {}
-    transition.mutate({ status, ...extra })
+    ask(
+      transitionCopy(status, invoice?.document_type === 'quote', invoice?.invoice_number ?? ''),
+      () => transition.mutate({ status, ...extra }),
+    )
   }
 
   const handleDownload = async () => {
@@ -145,8 +279,23 @@ export function InvoiceDetailPage() {
     && (invoice.status === 'sent' || invoice.status === 'paid')
   const totalRemaining = invoice.total_amount - invoice.amount_paid
 
+  const busy = transition.isPending || convert.isPending
+    || setOutcome.isPending || creditNote.isPending
+
   return (
     <div className="max-w-4xl mx-auto">
+      <ConfirmDialog
+        open={pending !== null}
+        title={pending?.copy.title ?? ''}
+        consequences={pending?.copy.consequences ?? []}
+        reassurance={pending?.copy.reassurance}
+        confirmLabel={pending?.copy.confirmLabel ?? 'Confirmer'}
+        tone={pending?.copy.tone}
+        busy={busy}
+        onConfirm={() => { pending?.run(); setPending(null) }}
+        onCancel={() => setPending(null)}
+      />
+
       {/* En-tête */}
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => navigate(-1)} className="btn-ghost btn-sm">
@@ -169,7 +318,7 @@ export function InvoiceDetailPage() {
               {quoteOpen && (
                 <>
                   <button
-                    onClick={() => convert.mutate()}
+                    onClick={() => ask(CONVERT_COPY(invoice.invoice_number), () => convert.mutate())}
                     disabled={convert.isPending}
                     className="btn-primary btn-sm flex items-center gap-1.5"
                     title="Crée une facture à partir de cette offre. L'offre est conservée."
@@ -178,7 +327,7 @@ export function InvoiceDetailPage() {
                     {convert.isPending ? 'Conversion…' : 'Convertir en facture'}
                   </button>
                   <button
-                    onClick={() => setOutcome.mutate('refused')}
+                    onClick={() => ask(OUTCOME_COPY.refused(invoice.invoice_number), () => setOutcome.mutate('refused'))}
                     disabled={setOutcome.isPending}
                     className="btn-ghost btn-sm flex items-center gap-1.5 text-danger-700"
                   >
@@ -186,7 +335,7 @@ export function InvoiceDetailPage() {
                     Refusée
                   </button>
                   <button
-                    onClick={() => setOutcome.mutate('expired')}
+                    onClick={() => ask(OUTCOME_COPY.expired(invoice.invoice_number), () => setOutcome.mutate('expired'))}
                     disabled={setOutcome.isPending}
                     className="btn-ghost btn-sm flex items-center gap-1.5"
                   >
@@ -197,7 +346,7 @@ export function InvoiceDetailPage() {
               )}
               {creditable && (
                 <button
-                  onClick={() => creditNote.mutate()}
+                  onClick={() => ask(CREDIT_NOTE_COPY(invoice.invoice_number), () => creditNote.mutate())}
                   disabled={creditNote.isPending || fullyCredited}
                   className="btn-secondary btn-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   title={fullyCredited

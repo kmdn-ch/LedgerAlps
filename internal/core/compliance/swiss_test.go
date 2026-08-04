@@ -10,9 +10,9 @@ import (
 
 func TestRoundTo5Rappen(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  float64
-		want   float64
+		name  string
+		input float64
+		want  float64
 	}{
 		{"10.123 → 10.10", 10.123, 10.10},
 		{"10.125 → 10.15 (round-half-up, not banker's)", 10.125, 10.15},

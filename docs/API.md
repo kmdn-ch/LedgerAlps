@@ -263,6 +263,19 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/contacts/:id` | auth | Détail |
 | POST | `/contacts` | auth | Créer |
 | PATCH | `/contacts/:id` | auth | Modifier |
+> **Validation IBAN** (ISO 13616, guide SIX pour les éditeurs de logiciels).
+> `POST` et `PATCH` vérifient trois choses, dans cet ordre : la **structure**
+> (deux lettres de pays, deux chiffres de clé, alphanumérique ensuite), la
+> **longueur imposée par le pays** d'après le registre officiel, puis la **clé
+> MOD-97**. Le contrôle de longueur est celui qui manquait : un IBAN suisse à 20
+> caractères a environ une chance sur 97 de passer le seul MOD-97, et serait
+> rejeté par la banque à la remise du fichier de virements.
+>
+> Un code pays absent du registre embarqué n'est pas rejeté — il évolue après la
+> compilation du binaire, et bloquer une facturation coûterait plus qu'accepter
+> un IBAN partiellement vérifié. Une valeur vide vaut « pas d'IBAN » ; les
+> espaces sont retirés avant enregistrement.
+
 | POST | `/contacts/:id/anonymise` | **admin** | Anonymise un contact (nLPD art. 6 al. 4 et 32). Efface nom, adresse, courriel, téléphone, IBAN, n° TVA et notes ; conserve la ligne et sa date d'anonymisation. Refuse si une facture du contact ne porte pas son destinataire figé, et refuse un second passage |
 
 > **Anonymiser sans amputer une pièce comptable.** La nLPD art. 6 al. 4 impose
