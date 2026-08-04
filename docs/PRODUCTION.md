@@ -302,6 +302,30 @@ réseau ou un dossier synchronisé reste illisible.
 **Ce que cela n'apporte pas** : aucune protection contre un programme lancé sous
 le même compte. Il peut demander la clé exactement comme LedgerAlps le fait.
 
+#### Le moment où tout cela se décide
+
+À l'installation. L'assistant du premier lancement demande les deux phrases
+après les informations de l'entreprise, et pose les clés **avant de démarrer le
+serveur**. La base n'existe pas encore : elle naît chiffrée, sans conversion,
+sans redémarrage, et la comptabilité n'est jamais écrite en clair — pas même le
+temps d'une migration. La première sauvegarde automatique est déjà chiffrée.
+
+Sur une installation existante, ou si vous avez décliné, le réglage reste
+accessible dans Paramètres → Maintenance → Sécurité ; la conversion passe alors
+par un redémarrage, parce qu'elle remplace le fichier que le serveur a ouvert.
+
+#### Les deux phrases de passe ne se confondent pas
+
+| | Ce qu'elle ouvre | Quand elle est demandée |
+|---|---|---|
+| **Phrase des sauvegardes** | les fichiers `.db.enc` | à la restauration d'une sauvegarde |
+| **Phrase de récupération de la base** | la clé de la base, rien d'autre | changement de machine ou de compte Windows |
+
+Prenez-les **différentes**. Une seule phrase compromise ouvrirait sinon les deux,
+et comme on ne les tape presque jamais, les retenir toutes les deux ne coûte
+rien. Celle des sauvegardes est la plus importante des deux : le jour où la
+machine a disparu, les sauvegardes sont le seul chemin de retour.
+
 #### La clé, et pourquoi il y en a deux copies
 
 La clé est scellée au compte Windows par DPAPI — le démarrage ne demande donc

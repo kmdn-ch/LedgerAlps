@@ -16,6 +16,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/kmdn-ch/ledgeralps/internal/config"
@@ -74,4 +75,34 @@ func openEncrypted(cfg *config.Config) (*sql.DB, error) {
 			ErrDatabaseKeyUnavailable, err)
 	}
 	return database, nil
+}
+
+// shouldOpenEncrypted décide si la base doit être ouverte à travers le VFS
+// chiffrant.
+//
+// L'en-tête du fichier répond dans le cas courant. Il ne répond PAS dans un cas
+// qui compte : une clé est configurée et le fichier n'existe pas encore. Se fier
+// au seul en-tête crée alors une base EN CLAIR sur une installation dont le
+// propriétaire a demandé le chiffrement.
+//
+// C'est exactement le chemin de l'assistant d'installation, où la clé est créée
+// avant que le serveur démarre pour que la base naisse chiffrée — sans
+// conversion, sans redémarrage, et sans jamais écrire la comptabilité en clair.
+// C'est aussi ce qui se passe si le fichier disparaît sur une installation
+// chiffrée.
+func shouldOpenEncrypted(cfg *config.Config) (bool, error) {
+	encrypted, err := IsDatabaseEncrypted(cfg.SQLitePath)
+	if err != nil {
+		return false, err
+	}
+	if encrypted {
+		return true, nil
+	}
+	if _, statErr := os.Stat(cfg.SQLitePath); statErr == nil {
+		// Le fichier existe et n'est pas chiffré : il fait foi. Une clé
+		// configurée en plus est le cas que ReconcileDatabaseEncryption traite
+		// au démarrage, pas celui-ci.
+		return false, nil
+	}
+	return NewDatabaseKeys(config.AppDataDir()).Configured(), nil
 }

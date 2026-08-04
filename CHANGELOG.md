@@ -7,6 +7,37 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Ajouté
+
+- **La protection se choisit à l'installation.** L'assistant du premier lancement enchaîne désormais trois écrans : l'entreprise et le compte, puis la protection de la base, puis celle des sauvegardes.
+
+  C'est le bon moment, et pas seulement pour l'ergonomie : **la base n'existe pas encore**. En posant la clé avant que le serveur démarre, elle naît chiffrée — aucune conversion, aucun redémarrage, et la comptabilité n'est jamais écrite en clair, pas même le temps d'une migration. La phrase de passe des sauvegardes est enregistrée dans le même mouvement, si bien que l'instantané pris au tout premier démarrage est déjà chiffré.
+
+- **Changement de la phrase de récupération** sans toucher à la clé ni aux données (Paramètres → Maintenance → Sécurité). Le chiffrement se décidant maintenant à l'installation, quelqu'un qui a mal noté sa phrase — ou qui l'a montrée — devait pouvoir en changer autrement qu'en déchiffrant toute la base.
+
+- **Déconnexion automatique après inactivité**, dix minutes par défaut, réglable de deux minutes à une heure ou désactivable.
+
+  Une minute d'avertissement compté à rebours précède la coupure, avec un bouton pour rester. Ce n'est pas de la politesse : LedgerAlps n'enregistre aucun brouillon automatique, et une facture de quinze lignes disparaîtrait sans un mot. L'activité comptée est celle de l'utilisateur — clavier, souris, molette — et non le trafic réseau : une page qui recharge ses données toutes les trente secondes ne doit pas maintenir la session de quelqu'un parti déjeuner. Pendant l'avertissement, il faut cliquer : un mouvement de souris ne suffit plus, sinon un écran tactile dans une poche garderait la session ouverte indéfiniment.
+
+### Modifié
+
+- **La clé de signature est régénérée automatiquement**, chaque jour par défaut, au lieu d'attendre un clic. Un bouton de sécurité qu'il faut penser à presser n'est pas une mesure, c'est une intention — et dans les faits la clé ne tournait jamais.
+
+  Elle tourne **au démarrage, jamais en cours de session** : la régénérer invalide toutes les sessions, et couper au milieu d'une saisie ferait perdre le travail. Au démarrage, la seule conséquence est une reconnexion, au moment où l'on ouvre l'application de toute façon. La périodicité se règle, et le bouton manuel reste : il couvre ce que la périodicité ne couvre pas — la fuite dont on vient de s'apercevoir, où attendre le prochain cycle serait trop long.
+
+- **Les deux phrases de passe sont distinguées partout où on les saisit.** Elles ne protègent pas la même chose et les confondre est le vrai risque : celle des **sauvegardes** ouvre les fichiers `.db.enc` et reste le seul chemin de retour quand la machine a disparu ; celle de **récupération** ne sert qu'à retrouver la clé de la base sur un autre compte Windows et n'ouvre aucune sauvegarde. L'interface le dit à l'endroit où l'on tape, et signale le cas où les deux sont identiques.
+
+- **La robustesse est évaluée pendant la frappe** sur les deux, et non plus sur la seule phrase de sauvegarde. La jauge encourage la longueur au-delà du minimum plutôt que les astuces de composition : face à une attaque hors ligne, c'est elle qui décide.
+
+- **Le panneau « Chiffrement de la base » change de forme** une fois le chiffrement en place : il n'invite plus à faire ce qui est fait, il propose de changer la phrase de récupération ou de revenir en arrière. Il n'est pas retiré pour autant — les installations antérieures à l'assistant n'ont jamais vu la question, et quelqu'un qui a décliné doit pouvoir changer d'avis.
+
+### Corrigé
+
+- **Une clé configurée sans fichier de base créait la base EN CLAIR.** L'ouverture se fiait à l'en-tête du fichier, qui ne répond rien quand il n'y a pas de fichier. C'est exactement le chemin de l'assistant — la clé est posée avant que le serveur démarre — et c'est aussi ce qui se produit si la base disparaît sur une installation chiffrée. Trouvé en écrivant le test avant le code de l'assistant.
+
+---
+
+
 ### Sécurité
 
 - **Toute route réservée aux administrateurs répondait à n'importe quel utilisateur connecté.** `RequireAdmin` appelait `RequireAuth` comme une fonction ordinaire — or celle-ci se termine par `c.Next()`, qui exécute la suite de la chaîne, handler compris. Le contrôle du privilège n'intervenait donc qu'**après** que le handler avait répondu : le 403 arrivait sur une réponse déjà partie en 200, et finissait collé derrière la charge utile. Sauvegardes, restauration, contrôle d'intégrité, données personnelles : tout était lisible et actionnable par un compte non administrateur. Trouvé en appelant `GET /api/v1/backups` sur un serveur qui tourne, avec un jeton non-administrateur, et en lisant les octets renvoyés.

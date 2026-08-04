@@ -143,6 +143,8 @@ export const databaseApi = {
   cancelEncryption:  ()                   => api.delete('/database/encryption/pending'),
   recoverKey:        (recovery: string)   =>
     api.post('/database/encryption/recover', { recovery_passphrase: recovery }),
+  changeRecovery:    (recovery: string)   =>
+    api.put('/database/encryption/recovery', { recovery_passphrase: recovery }),
 }
 
 // ─── Maintenance & Système ────────────────────────────────────────────────────
@@ -193,6 +195,12 @@ export const exportApi = {
 // Rotation du secret de signature (point 6 de la roadmap).
 export const securityApi = {
   rotateSecret: () => api.post('/settings/server/rotate-secret'),
+  // Rotation de la clé de signature et déconnexion sur inactivité. Les deux se
+  // lisent ensemble : ils bornent la même chose — la durée pendant laquelle une
+  // session vaut quelque chose — par deux chemins différents.
+  settings:     () => api.get('/settings/security'),
+  saveSettings: (body: { rotation_days?: number; idle_logout_minutes?: number }) =>
+    api.put('/settings/security', body),
 }
 
 export const contactsApi = {

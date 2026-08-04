@@ -424,3 +424,16 @@ export interface DatabaseEncryption {
   pending?: 'encrypt' | 'decrypt'
   supported: boolean
 }
+
+// Réglages de sécurité de la session.
+export interface SecuritySettings {
+  rotation: {
+    // 0 = rotation automatique désactivée.
+    max_age_days: number
+    rotated_at?: string
+    next_at?: string
+  }
+  // 0 = déconnexion automatique désactivée.
+  idle_logout_minutes: number
+  access_minutes: number
+}

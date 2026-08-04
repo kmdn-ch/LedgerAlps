@@ -1,6 +1,7 @@
 // LedgerAlps — Layout principal
 
 import { Outlet } from 'react-router-dom'
+import { IdleGuard } from './IdleGuard'
 import { Sidebar } from './Sidebar'
 import { ComplianceBanner } from './ComplianceBanner'
 
@@ -14,6 +15,7 @@ export function AppLayout() {
               page en particulier : la bannière est donc montée dans le layout. */}
           <ComplianceBanner />
           <Outlet />
+          <IdleGuard />
         </div>
       </main>
     </div>

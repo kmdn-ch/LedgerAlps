@@ -15,24 +15,16 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Lock, LockOpen, AlertTriangle, Loader2, KeyRound, Eye, EyeOff } from 'lucide-react'
+import { Lock, LockOpen, AlertTriangle, Loader2, KeyRound } from 'lucide-react'
 import { databaseApi } from '@/api/client'
-import { SectionTitle, ErrorBanner } from '@/components/ui'
+import { SectionTitle, ErrorBanner, PassphraseField, passphraseIsStrong } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import type { DatabaseEncryption } from '@/types'
 
-const MIN_LEN = 16
-
-function strongEnough(p: string): boolean {
-  return [...p].length >= MIN_LEN &&
-    /\p{Ll}/u.test(p) && /\p{Lu}/u.test(p) && /\p{Nd}/u.test(p)
-}
-
 export function DatabaseEncryptionPanel() {
   const qc = useQueryClient()
-  const [mode, setMode] = useState<'idle' | 'enable' | 'recover'>('idle')
+  const [mode, setMode] = useState<'idle' | 'enable' | 'recover' | 'rekey'>('idle')
   const [pass, setPass] = useState('')
-  const [show, setShow] = useState(false)
   const [noted, setNoted] = useState(false)
 
   const status = useQuery<DatabaseEncryption>({
@@ -40,7 +32,7 @@ export function DatabaseEncryptionPanel() {
     queryFn:  () => databaseApi.encryption().then(r => r.data),
   })
 
-  const reset = () => { setMode('idle'); setPass(''); setNoted(false); setShow(false) }
+  const reset = () => { setMode('idle'); setPass(''); setNoted(false) }
   const invalidate = () => qc.invalidateQueries({ queryKey: ['database', 'encryption'] })
 
   const enable   = useMutation({ mutationFn: () => databaseApi.enableEncryption(pass),
@@ -48,6 +40,8 @@ export function DatabaseEncryptionPanel() {
   const disable  = useMutation({ mutationFn: () => databaseApi.disableEncryption(), onSuccess: invalidate })
   const cancel   = useMutation({ mutationFn: () => databaseApi.cancelEncryption(),  onSuccess: invalidate })
   const recover  = useMutation({ mutationFn: () => databaseApi.recoverKey(pass),
+                                 onSuccess: () => { reset(); invalidate() } })
+  const rekey    = useMutation({ mutationFn: () => databaseApi.changeRecovery(pass),
                                  onSuccess: () => { reset(); invalidate() } })
 
   const s = status.data
@@ -162,49 +156,61 @@ export function DatabaseEncryptionPanel() {
             </button>
           )}
           {s.configured && s.key_available && (
-            <button
-              onClick={() => disable.mutate()}
-              disabled={disable.isPending}
-              className="text-xs text-alpine-600 hover:text-danger-700 underline underline-offset-2"
-            >
-              Revenir à une base en clair
-            </button>
+            <>
+              {/* Le chiffrement est en place : cet écran n'a plus à le proposer.
+                  Il sert désormais à entretenir ce qui existe — changer la
+                  phrase de récupération mal notée, ou revenir en arrière.
+                  Le panneau ne disparaît pas pour autant : les installations
+                  antérieures à l'assistant n'ont jamais vu la question, et
+                  quelqu'un qui a décliné doit pouvoir changer d'avis. */}
+              <button onClick={() => setMode('rekey')} className="btn-secondary btn-sm">
+                Changer la phrase de récupération
+              </button>
+              <button
+                onClick={() => disable.mutate()}
+                disabled={disable.isPending}
+                className="text-xs text-alpine-600 hover:text-danger-700 underline underline-offset-2"
+              >
+                Revenir à une base en clair
+              </button>
+            </>
           )}
         </div>
       )}
 
-      {(mode === 'enable' || mode === 'recover') && (
+      {mode !== 'idle' && (
         <div className="mt-3 space-y-3 text-sm">
-          <div>
-            <label className="label" htmlFor="dbrecovery">
-              {mode === 'enable' ? 'Phrase de récupération' : 'Votre phrase de récupération'}
-            </label>
-            <div className="relative">
-              <input
-                id="dbrecovery"
-                type={show ? 'text' : 'password'}
-                value={pass}
-                onChange={e => setPass(e.target.value)}
-                autoComplete="new-password"
-                className="input pr-10"
-                placeholder="au moins 16 caractères"
-              />
-              <button
-                type="button"
-                onClick={() => setShow(!show)}
-                aria-label={show ? 'Masquer' : 'Afficher'}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-alpine-500 hover:text-alpine-900"
-              >
-                {show ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
+          <PassphraseField
+            id="dbrecovery"
+            label={mode === 'recover'
+              ? 'Votre phrase de récupération de la base'
+              : mode === 'rekey'
+                ? 'Nouvelle phrase de récupération de la base'
+                : 'Phrase de récupération de la base'}
+            value={pass}
+            onChange={setPass}
+            autoFocus
+            showStrength={mode !== 'recover'}
+            hint={mode !== 'recover' ? (
+              <>
+                <strong>Ce n'est pas la phrase de vos sauvegardes.</strong> Celle-ci ne sert
+                qu'à retrouver la clé de la base sur un autre compte Windows ; elle n'ouvre
+                aucun fichier de sauvegarde. Prenez-en une <strong>différente</strong> : une
+                seule phrase compromise ouvrirait sinon les deux, et vous ne les tapez
+                presque jamais.
+              </>
+            ) : (
+              <>Celle que vous avez notée en activant le chiffrement — pas celle de vos
+              sauvegardes.</>
+            )}
+          />
 
-          {mode === 'enable' && (
+          {mode !== 'recover' && (
             <>
               <p className="text-alpine-600 text-xs">
                 Elle n'est demandée qu'en cas de changement de machine ou de compte Windows.
-                Au quotidien, LedgerAlps s'ouvre sans rien réclamer.
+                Au quotidien, LedgerAlps s'ouvre sans rien réclamer — c'est pourquoi elle
+                doit être notée maintenant : vous n'aurez aucune occasion de la réviser.
               </p>
               <label className="flex items-start gap-2 text-alpine-700">
                 <input type="checkbox" checked={noted} onChange={e => setNoted(e.target.checked)} className="mt-0.5" />
@@ -218,25 +224,29 @@ export function DatabaseEncryptionPanel() {
             </>
           )}
 
-          {(enable.isError || recover.isError) && (
+          {(enable.isError || recover.isError || rekey.isError) && (
             <ErrorBanner message={refusalMessage(
-              enable.error ?? recover.error,
-              mode === 'enable' ? "Le chiffrement n'a pas pu être activé." : 'La clé n\'a pas pu être récupérée.',
+              enable.error ?? recover.error ?? rekey.error,
+              mode === 'enable' ? "Le chiffrement n'a pas pu être activé."
+                : mode === 'rekey' ? "La phrase de récupération n'a pas pu être changée."
+                : "La clé n'a pas pu être récupérée.",
             )} />
           )}
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => (mode === 'enable' ? enable : recover).mutate()}
+              onClick={() => (mode === 'enable' ? enable : mode === 'rekey' ? rekey : recover).mutate()}
               disabled={
-                (mode === 'enable' && (!strongEnough(pass) || !noted)) ||
+                (mode !== 'recover' && (!passphraseIsStrong(pass) || !noted)) ||
                 (mode === 'recover' && pass === '') ||
-                enable.isPending || recover.isPending
+                enable.isPending || recover.isPending || rekey.isPending
               }
               className="btn-primary btn-sm flex items-center gap-1.5"
             >
-              {(enable.isPending || recover.isPending) && <Loader2 size={13} className="animate-spin" />}
-              {mode === 'enable' ? 'Programmer le chiffrement' : 'Récupérer'}
+              {(enable.isPending || recover.isPending || rekey.isPending) && <Loader2 size={13} className="animate-spin" />}
+              {mode === 'enable' ? 'Programmer le chiffrement'
+                : mode === 'rekey' ? 'Enregistrer la nouvelle phrase'
+                : 'Récupérer'}
             </button>
             <button onClick={reset} className="btn-ghost btn-sm">Annuler</button>
           </div>

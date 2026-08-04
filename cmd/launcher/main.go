@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/kmdn-ch/ledgeralps/internal/core/zefix"
+	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -452,6 +453,36 @@ const setupHTML = `<!DOCTYPE html>
   .logo-text span { color: #2563eb; }
   h1 { font-size: 1.1rem; font-weight: 600; color: #1a2e4a; margin-bottom: .3rem; }
   .subtitle { font-size: .875rem; color: #64748b; margin-bottom: 1.6rem; }
+  .step { display: none; }
+  .step.active { display: block; }
+  .steps-nav { display: flex; gap: 8px; margin-top: 20px; }
+  .steps-nav .btn { margin-top: 0; }
+  .btn-ghost {
+    background: transparent; color: #475569; border: 1px solid #cbd5e1;
+  }
+  .progress { display: flex; gap: 6px; margin-bottom: 18px; }
+  .progress span {
+    flex: 1; height: 3px; border-radius: 2px; background: #e2e8f0;
+  }
+  .progress span.done { background: #1f4b99; }
+  .meter { height: 5px; border-radius: 3px; background: #e2e8f0; overflow: hidden; margin-top: 8px; }
+  .meter div { height: 100%; width: 0; transition: width .2s, background .2s; }
+  .checks { list-style: none; padding: 0; margin: 8px 0 0; font-size: 12px; }
+  .checks li { color: #94a3b8; }
+  .checks li.met { color: #15803d; }
+  .callout {
+    border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 14px;
+    font-size: 13px; line-height: 1.55; margin: 14px 0; background: #f8fafc;
+  }
+  .callout.warn { border-color: #f59e0b; background: #fffbeb; }
+  .choice {
+    display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px;
+    border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 10px; cursor: pointer;
+  }
+  .choice.selected { border-color: #1f4b99; background: #eff6ff; }
+  .choice input { width: auto; margin: 3px 0 0; }
+  .choice .t { font-weight: 600; font-size: 14px; }
+  .choice .d { font-size: 12.5px; color: #475569; margin-top: 2px; line-height: 1.5; }
   .section-label {
     font-size: .68rem;
     font-weight: 700;
@@ -541,7 +572,13 @@ const setupHTML = `<!DOCTYPE html>
   <div class="error" id="errBox"></div>
   <div class="info"  id="infoBox"></div>
 
+  <div class="progress">
+    <span id="p1" class="done"></span><span id="p2"></span><span id="p3"></span>
+  </div>
+
   <form id="setupForm">
+
+  <div class="step active" id="step1">
 
     <!-- ── Entreprise ──────────────────────────────────────────────────── -->
     <div class="section-label">Votre entreprise</div>
@@ -622,14 +659,214 @@ const setupHTML = `<!DOCTYPE html>
       <input type="number" id="port" value="8000" min="1024" max="65535">
     </div>
 
-    <button type="submit" class="btn" id="submitBtn">
-      <span id="btnText">Démarrer LedgerAlps</span>
-      <div class="spinner" id="spinner"></div>
-    </button>
+    <div class="steps-nav">
+      <button type="button" class="btn" onclick="goStep(2)">Continuer</button>
+    </div>
+  </div><!-- /step1 -->
+
+  <!-- ── Étape 2 : protection de la base ────────────────────────── -->
+  <div class="step" id="step2">
+    <div class="section-label">Protection de la base de données</div>
+    <p class="hint" style="margin-top:0">
+      Vos livres seront enregistrés dans un fichier sur ce PC. Vous pouvez le chiffrer.
+      C'est maintenant que c'est le plus simple : la base est vide, la mise en place est
+      instantanée.
+    </p>
+
+    <label class="choice" id="choiceOff" onclick="pickEnc(false)">
+      <input type="radio" name="enc" id="encOff" checked>
+      <span>
+        <span class="t">Non, s'en remettre au chiffrement du disque</span>
+        <span class="d">Le réglage habituel, et il suffit à la plupart des installations.
+        BitLocker ou le Chiffrement de l'appareil, déjà présents dans Windows, protègent
+        le poste entier — vos documents et vos courriels compris.</span>
+      </span>
+    </label>
+
+    <label class="choice" id="choiceOn" onclick="pickEnc(true)">
+      <input type="radio" name="enc" id="encOn">
+      <span>
+        <span class="t">Oui, chiffrer la base</span>
+        <span class="d">La protection <b>suit le fichier</b> : copié sur un NAS, un partage
+        réseau ou un dossier synchronisé, il reste illisible. C'est la seule chose que
+        cela ajoute au chiffrement du disque, mais elle est réelle. Utile surtout si vous
+        ne pouvez pas activer BitLocker.</span>
+      </span>
+    </label>
+
+    <div id="encFields" style="display:none">
+      <label for="dbRecovery">Phrase de récupération de la base <span class="req">*</span></label>
+      <input type="password" id="dbRecovery" autocomplete="new-password"
+             oninput="meter('dbRecovery','dbMeter','dbChecks')">
+      <div class="meter"><div id="dbMeter"></div></div>
+      <ul class="checks" id="dbChecks"></ul>
+      <p class="hint">
+        Au quotidien, LedgerAlps s'ouvrira sans rien vous demander : la clé est scellée
+        à votre compte Windows. Cette phrase ne sert qu'à rouvrir la base
+        <b>depuis un autre ordinateur ou après une réinstallation de Windows</b>.
+      </p>
+      <div class="callout warn">
+        <b>Notez-la maintenant, ailleurs que sur ce PC.</b> Vous n'aurez aucune occasion de
+        la revoir, et sans elle une base chiffrée ne se rouvre plus — y compris les dix ans
+        de pièces que la loi vous impose de conserver.
+      </div>
+    </div>
+
+    <div class="steps-nav">
+      <button type="button" class="btn btn-ghost" onclick="goStep(1)">Retour</button>
+      <button type="button" class="btn" onclick="if (validEnc()) goStep(3)">Continuer</button>
+    </div>
+  </div><!-- /step2 -->
+
+  <!-- ── Étape 3 : protection des sauvegardes ─────────────────── -->
+  <div class="step" id="step3">
+    <div class="section-label">Protection des sauvegardes</div>
+    <p class="hint" style="margin-top:0">
+      LedgerAlps prend une copie complète de votre comptabilité à chaque démarrage.
+      C'est la copie qui voyage — un NAS, une clé USB — donc la plus exposée, et c'est
+      aussi le seul chemin de retour le jour où ce PC n'est plus là.
+    </p>
+
+    <label for="backupPass">Phrase de passe des sauvegardes</label>
+    <input type="password" id="backupPass" autocomplete="new-password"
+           oninput="meter('backupPass','bkMeter','bkChecks')">
+    <div class="meter"><div id="bkMeter"></div></div>
+    <ul class="checks" id="bkChecks"></ul>
+    <p class="hint">
+      Laissez vide pour des sauvegardes en clair — c'est possible, mais alors n'importe qui
+      pouvant lire le fichier lit votre comptabilité.
+    </p>
+
+    <div class="callout" id="differentWarn" style="display:none">
+      <b>Prenez-la différente de la phrase de récupération.</b> Une seule phrase
+      compromise ouvrirait sinon les deux — et vous ne les tapez presque jamais, donc
+      les retenir toutes les deux ne coûte rien.
+    </div>
+
+    <div class="callout warn">
+      <b>Notez-la ailleurs que sur ce PC.</b> Sans elle, personne ne peut ouvrir vos
+      sauvegardes. Vous non plus.
+    </div>
+
+    <div class="steps-nav">
+      <button type="button" class="btn btn-ghost" onclick="goStep(2)">Retour</button>
+      <button type="submit" class="btn" id="submitBtn">
+        <span id="btnText">Démarrer LedgerAlps</span>
+        <div class="spinner" id="spinner"></div>
+      </button>
+    </div>
+  </div><!-- /step3 -->
   </form>
 </div>
 
 <script>
+// ── Navigation par étapes ───────────────────────────────────────
+//
+// L'étape 1 garde ses champs "required" : passer à la suite sans les remplir
+// produirait une erreur du serveur trois écrans plus loin, là où personne ne
+// saurait quoi corriger.
+var currentStep = 1;
+
+function goStep(n) {
+  if (n > 1 && currentStep === 1 && !checkStep1()) return;
+  for (var i = 1; i <= 3; i++) {
+    document.getElementById('step' + i).className = (i === n) ? 'step active' : 'step';
+    document.getElementById('p' + i).className = (i <= n) ? 'done' : '';
+  }
+  currentStep = n;
+  window.scrollTo(0, 0);
+}
+
+function checkStep1() {
+  var ids = ['companyName', 'firstName', 'lastName', 'email', 'password'];
+  for (var i = 0; i < ids.length; i++) {
+    var el = document.getElementById(ids[i]);
+    if (!el.checkValidity()) { el.reportValidity(); return false; }
+  }
+  return true;
+}
+
+// ── Robustesse de la phrase de passe ────────────────────────────
+//
+// Même règle que l'application et que le serveur (internal/db/passphrase.go) :
+// seize caractères, minuscule, majuscule, chiffre. Reproduite ici parce que
+// l'assistant tourne avant que le serveur existe. Le serveur reste l'autorité :
+// un écart se solde par son refus au moment de l'enregistrement, pas par une
+// phrase faible acceptée en silence.
+var MIN_LEN = 16;
+
+function pchecks(p) {
+  return [
+    [MIN_LEN + ' caract\u00e8res ou plus', Array.from(p).length >= MIN_LEN],
+    ['une minuscule', /\p{Ll}/u.test(p)],
+    ['une majuscule', /\p{Lu}/u.test(p)],
+    ['un chiffre',    /\p{Nd}/u.test(p)]
+  ];
+}
+
+function pstrong(p) {
+  var c = pchecks(p);
+  for (var i = 0; i < c.length; i++) if (!c[i][1]) return false;
+  return true;
+}
+
+function meter(inputId, meterId, checksId) {
+  var v = document.getElementById(inputId).value;
+  var c = pchecks(v);
+  var met = 0;
+  for (var i = 0; i < c.length; i++) if (c[i][1]) met++;
+  var bonus = /[^\p{L}\p{Nd}]/u.test(v) ? 1 : 0;
+  var long  = Array.from(v).length >= 24 ? 1 : 0;
+  var score = met + bonus + long;
+
+  var bar = document.getElementById(meterId);
+  bar.style.width = (v === '' ? 0 : (score / 6) * 100) + '%';
+  bar.style.background = met < 4 ? '#dc2626' : (score >= 6 ? '#15803d' : (score === 5 ? '#22c55e' : '#f59e0b'));
+
+  var ul = document.getElementById(checksId);
+  ul.innerHTML = '';
+  if (v === '') return;
+  for (var j = 0; j < c.length; j++) {
+    var li = document.createElement('li');
+    li.textContent = (c[j][1] ? '\u2713 ' : '\u00b7 ') + c[j][0];
+    li.className = c[j][1] ? 'met' : '';
+    ul.appendChild(li);
+  }
+  differentHint();
+}
+
+// Les deux phrases doivent différer : l'avertissement n'apparaît que si elles
+// se ressemblent, pour ne pas faire de bruit quand tout va bien.
+function differentHint() {
+  var a = document.getElementById('dbRecovery');
+  var b = document.getElementById('backupPass');
+  var w = document.getElementById('differentWarn');
+  if (!a || !b || !w) return;
+  w.style.display = (a.value !== '' && a.value === b.value) ? 'block' : 'none';
+}
+
+function pickEnc(on) {
+  document.getElementById('encOn').checked  = on;
+  document.getElementById('encOff').checked = !on;
+  document.getElementById('choiceOn').className  = on ? 'choice selected' : 'choice';
+  document.getElementById('choiceOff').className = on ? 'choice' : 'choice selected';
+  document.getElementById('encFields').style.display = on ? 'block' : 'none';
+}
+
+function validEnc() {
+  if (!document.getElementById('encOn').checked) return true;
+  var v = document.getElementById('dbRecovery').value;
+  if (!pstrong(v)) {
+    document.getElementById('dbRecovery').focus();
+    var e = document.getElementById('errBox');
+    e.textContent = 'La phrase de r\u00e9cup\u00e9ration est trop faible : sans elle, une base chiffr\u00e9e ne se rouvre plus.';
+    e.style.display = 'block';
+    return false;
+  }
+  document.getElementById('errBox').style.display = 'none';
+  return true;
+}
+
 function toggleAdvanced() {
   const s = document.getElementById('advancedSection');
   s.style.display = s.style.display === 'block' ? 'none' : 'block';
@@ -688,6 +925,8 @@ function toggleAdvanced() {
   });
 })();
 
+pickEnc(false);
+
 document.getElementById('setupForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   const btn     = document.getElementById('submitBtn');
@@ -715,6 +954,9 @@ document.getElementById('setupForm').addEventListener('submit', async function(e
   const addressCity        = document.getElementById('addressCity').value.trim();
   const vatNumber          = document.getElementById('vatNumber').value.trim();
   const iban               = document.getElementById('iban').value.trim();
+  const encryptDatabase    = document.getElementById('encOn').checked;
+  const dbRecovery         = document.getElementById('dbRecovery').value;
+  const backupPassphrase   = document.getElementById('backupPass').value;
 
   try {
     const resp = await fetch('/setup', {
@@ -725,6 +967,7 @@ document.getElementById('setupForm').addEventListener('submit', async function(e
         companyName, legalForm, cheNumber,
         addressStreet, addressPostalCode, addressCity,
         vatNumber, iban,
+        encryptDatabase, dbRecovery, backupPassphrase,
         fiscalYearStartMonth: 1,
       }),
     });
@@ -775,6 +1018,12 @@ type setupRequest struct {
 	VatNumber            string `json:"vatNumber"`
 	IBAN                 string `json:"iban"`
 	FiscalYearStartMonth int    `json:"fiscalYearStartMonth"`
+	// Protection au repos, choisie à l'installation. C'est le meilleur moment :
+	// la base n'existe pas encore, elle naît chiffrée — aucune conversion, aucun
+	// redémarrage, et la comptabilité n'est jamais écrite en clair.
+	EncryptDatabase  bool   `json:"encryptDatabase"`
+	DBRecovery       string `json:"dbRecovery"`
+	BackupPassphrase string `json:"backupPassphrase"`
 }
 
 // runSetupWizard starts a local HTTP server, opens the browser at the setup
@@ -864,11 +1113,45 @@ func runSetupWizard() {
 			return
 		}
 
+		// Protections au repos — AVANT de démarrer le serveur.
+		//
+		// C'est tout l'intérêt de les demander à l'installation : la base
+		// n'existe pas encore. En posant la clé maintenant, elle naît chiffrée.
+		// Aucune conversion, aucun redémarrage, et la comptabilité n'est jamais
+		// écrite en clair — pas même le temps d'une migration.
+		//
+		// La phrase des sauvegardes est posée dans le même mouvement, si bien
+		// que l'instantané pris au premier démarrage est déjà chiffré.
+		//
+		// Un échec ici annule l'installation plutôt que de la poursuivre à
+		// moitié : quelqu'un qui a demandé le chiffrement et obtient une base
+		// en clair ne le saurait pas.
+		if req.EncryptDatabase {
+			if _, err := db.NewDatabaseKeys(dataDir).Create(req.DBRecovery); err != nil {
+				_ = os.Remove(configFilePath())
+				jsonError(w, "Impossible de préparer le chiffrement de la base: "+err.Error(),
+					http.StatusBadRequest)
+				return
+			}
+		}
+		if req.BackupPassphrase != "" {
+			if err := db.NewBackupPolicy(dataDir).Set(req.BackupPassphrase); err != nil {
+				_ = os.Remove(configFilePath())
+				_ = db.NewDatabaseKeys(dataDir).Forget()
+				jsonError(w, "Impossible d'enregistrer la phrase de passe des sauvegardes: "+err.Error(),
+					http.StatusBadRequest)
+				return
+			}
+		}
+
 		// Start the server.
 		_, err = startServer(cfg)
 		if err != nil {
-			// Rollback config so next launch re-runs the wizard.
+			// Rollback config so next launch re-runs the wizard. Les secrets
+			// partent avec : une clé sans base et sans configuration ferait
+			// échouer la tentative suivante pour une raison incompréhensible.
 			_ = os.Remove(configFilePath())
+			_ = db.NewDatabaseKeys(dataDir).Forget()
 			jsonError(w, "Impossible de démarrer le serveur: "+err.Error(), http.StatusInternalServerError)
 			return
 		}

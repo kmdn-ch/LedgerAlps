@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 )
 
 // knownWeakSecrets are default/test values that must not be used in production.
@@ -51,6 +52,17 @@ type Config struct {
 	JWTSecret        string
 	JWTAccessMinutes int
 	JWTRefreshDays   int
+	// JWTSecretRotatedAt est la date du dernier tirage de la clé de signature.
+	// Nulle sur toute installation antérieure à la rotation automatique, ce qui
+	// compte comme « jamais tournée » : on ignore l'âge de cette clé, et sur une
+	// installation qui date, la réponse est « longtemps ».
+	JWTSecretRotatedAt time.Time
+	// JWTSecretMaxAgeDays : au-delà, la clé est régénérée au démarrage suivant.
+	// Zéro désactive la rotation automatique.
+	JWTSecretMaxAgeDays int
+	// IdleLogoutMinutes déconnecte après cette durée sans activité. Zéro
+	// désactive.
+	IdleLogoutMinutes int
 
 	// Application
 	LogLevel       string
@@ -79,6 +91,12 @@ type fileConfig struct {
 	// Pointer so that an absent key keeps the default (enabled) while an
 	// explicit `"update_check": false` is honoured.
 	UpdateCheck *bool `json:"update_check,omitempty"`
+	// Rotation de la clé de signature et déconnexion sur inactivité. Pointeurs
+	// pour distinguer « absent » — donc valeur par défaut — de « posé à zéro »,
+	// qui veut dire « désactivé » et doit être respecté.
+	JWTSecretRotatedAt  string `json:"jwt_secret_rotated_at,omitempty"`
+	JWTSecretMaxAgeDays *int   `json:"jwt_secret_max_age_days,omitempty"`
+	IdleLogoutMinutes   *int   `json:"idle_logout_minutes,omitempty"`
 }
 
 // AppDataDir returns the platform-specific application data directory for LedgerAlps.
@@ -131,6 +149,25 @@ func Load() *Config {
 		if fc.AllowInsecureHTTP != nil {
 			cfg.AllowInsecureHTTP = *fc.AllowInsecureHTTP
 		}
+		// Absent = valeur par defaut ; pose a zero = desactive volontairement.
+		// La distinction ne peut se faire qu'avec un pointeur, sans quoi
+		// « desactiver la rotation » se relirait comme « regler par defaut » au
+		// demarrage suivant.
+		cfg.JWTSecretMaxAgeDays = DefaultJWTSecretMaxAgeDays
+		if fc.JWTSecretMaxAgeDays != nil {
+			cfg.JWTSecretMaxAgeDays = *fc.JWTSecretMaxAgeDays
+		}
+		cfg.IdleLogoutMinutes = DefaultIdleLogoutMinutes
+		if fc.IdleLogoutMinutes != nil {
+			cfg.IdleLogoutMinutes = *fc.IdleLogoutMinutes
+		}
+		if fc.JWTSecretRotatedAt != "" {
+			if t, err := time.Parse(time.RFC3339, fc.JWTSecretRotatedAt); err == nil {
+				cfg.JWTSecretRotatedAt = t
+			}
+			// Une date illisible reste nulle, donc « jamais tournee », donc la
+			// cle tourne au prochain demarrage. C'est le bon sens de l'erreur.
+		}
 		if cfg.AllowedOrigins == "" {
 			cfg.AllowedOrigins = "http://localhost:" + cfg.Port
 		}
@@ -154,20 +191,22 @@ func Load() *Config {
 
 	// No config file: environment variables only (Linux, systemd, CI).
 	cfg := &Config{
-		Host:              getEnv("HOST", "127.0.0.1"),
-		Port:              getEnv("PORT", "8000"),
-		TLSCert:           getEnv("TLS_CERT", ""),
-		TLSKey:            getEnv("TLS_KEY", ""),
-		AllowInsecureHTTP: getEnv("ALLOW_INSECURE_HTTP", "false") == "true",
-		Debug:             getEnv("DEBUG", "false") == "true",
-		SQLitePath:        getEnv("SQLITE_PATH", "ledgeralps.db"),
-		PostgresDSN:       getEnv("POSTGRES_DSN", ""),
-		JWTSecret:         getEnv("JWT_SECRET", ""),
-		JWTAccessMinutes:  60,
-		JWTRefreshDays:    30,
-		LogLevel:          getEnv("LOG_LEVEL", "INFO"),
-		AllowedOrigins:    getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
-		UpdateCheck:       getEnv("UPDATE_CHECK", "true") != "false",
+		Host:                getEnv("HOST", "127.0.0.1"),
+		Port:                getEnv("PORT", "8000"),
+		TLSCert:             getEnv("TLS_CERT", ""),
+		TLSKey:              getEnv("TLS_KEY", ""),
+		AllowInsecureHTTP:   getEnv("ALLOW_INSECURE_HTTP", "false") == "true",
+		Debug:               getEnv("DEBUG", "false") == "true",
+		SQLitePath:          getEnv("SQLITE_PATH", "ledgeralps.db"),
+		PostgresDSN:         getEnv("POSTGRES_DSN", ""),
+		JWTSecret:           getEnv("JWT_SECRET", ""),
+		JWTAccessMinutes:    60,
+		JWTRefreshDays:      30,
+		JWTSecretMaxAgeDays: DefaultJWTSecretMaxAgeDays,
+		IdleLogoutMinutes:   DefaultIdleLogoutMinutes,
+		LogLevel:            getEnv("LOG_LEVEL", "INFO"),
+		AllowedOrigins:      getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
+		UpdateCheck:         getEnv("UPDATE_CHECK", "true") != "false",
 	}
 	cfg.validateSecrets()
 	return cfg

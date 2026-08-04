@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kmdn-ch/ledgeralps/internal/config"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/kmdn-ch/ledgeralps/internal/config"
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 	_ "github.com/ncruces/go-sqlite3/vfs/adiantum"
@@ -30,7 +30,7 @@ func Open(cfg *config.Config) (*sql.DB, error) {
 		driver = "pgx"
 		dsn = cfg.PostgresDSN
 	} else {
-		encrypted, encErr := IsDatabaseEncrypted(cfg.SQLitePath)
+		encrypted, encErr := shouldOpenEncrypted(cfg)
 		if encErr != nil {
 			return nil, encErr
 		}

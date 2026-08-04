@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // ServerSettings is the network-facing subset a user can change at runtime.
@@ -63,18 +64,29 @@ func CurrentServerSettings(cfg *Config) ServerSettings {
 // L'écriture réutilise la lecture-modification-écriture sur une map générique :
 // sérialiser une structure supprimerait les clés inconnues du fichier.
 func RotateJWTSecret() (int, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return 0, fmt.Errorf("génération du secret: %w", err)
+	secret, err := newSecret()
+	if err != nil {
+		return 0, err
 	}
-	secret := hex.EncodeToString(b)
-
+	// L'horodatage part avec la clé : sans lui, une rotation manuelle serait
+	// suivie d'une rotation automatique au démarrage suivant, la clé passant
+	// pour « jamais tournée ».
 	if err := updateConfigFile(func(existing map[string]any) {
 		existing["jwt_secret"] = secret
+		existing["jwt_secret_rotated_at"] = time.Now().UTC().Format(time.RFC3339)
 	}); err != nil {
 		return 0, err
 	}
 	return len(secret), nil
+}
+
+// newSecret tire 32 octets et les rend en hexadécimal.
+func newSecret() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("génération du secret: %w", err)
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // SaveServerSettings fusionne s dans config.json en préservant toutes les

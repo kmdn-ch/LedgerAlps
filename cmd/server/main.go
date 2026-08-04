@@ -33,6 +33,22 @@ func main() {
 	// ── 1. Load and validate configuration ────────────────────────────────────
 	cfg := config.Load()
 
+	// ── 1a. Rotation de la clé de signature ───────────────────────────────────
+	//
+	// Au démarrage, et jamais en cours de session : régénérer la clé invalide
+	// toutes les sessions, et LedgerAlps n'enregistre aucun brouillon
+	// automatique. Couper pendant une saisie ferait perdre la facture — une
+	// mesure de sécurité qui fait perdre du travail est une mesure qu'on
+	// désactive.
+	//
+	// Un échec n'empêche pas de démarrer : garder la clé un jour de plus est
+	// moins grave que de laisser l'utilisateur sans ses livres.
+	if rotated, err := config.MaybeRotateJWTSecret(cfg, time.Now()); err != nil {
+		log.Printf("WARNING: la clé de signature n'a pas pu être régénérée: %v", err)
+	} else if rotated {
+		fmt.Println("LedgerAlps: clé de signature régénérée — reconnexion nécessaire")
+	}
+
 	// ── 1b. Apply a restore staged from the interface ─────────────────────────
 	// Restoring swaps the database file out from under every open connection,
 	// so the running server cannot do it to itself. The UI stages the restore;
@@ -274,6 +290,7 @@ func main() {
 	api.DELETE("/database/encryption", middleware.RequireAdmin(cfg.JWTSecret), bh.DisableDatabaseEncryption)
 	api.DELETE("/database/encryption/pending", middleware.RequireAdmin(cfg.JWTSecret), bh.CancelDatabaseEncryption)
 	api.POST("/database/encryption/recover", middleware.RequireAdmin(cfg.JWTSecret), bh.RecoverDatabaseKey)
+	api.PUT("/database/encryption/recovery", middleware.RequireAdmin(cfg.JWTSecret), bh.ChangeRecoveryPassphrase)
 
 	// Redémarrage — proposé uniquement pour appliquer une restauration préparée.
 	// Le handler signale, main exécute : un handler ne doit pas démonter le
@@ -287,6 +304,8 @@ func main() {
 	api.GET("/settings/server", middleware.RequireAdmin(cfg.JWTSecret), sysh.GetServerSettings)
 	api.PUT("/settings/server", middleware.RequireAdmin(cfg.JWTSecret), sysh.PutServerSettings)
 	api.POST("/settings/server/rotate-secret", middleware.RequireAdmin(cfg.JWTSecret), sysh.RotateJWTSecret)
+	api.GET("/settings/security", middleware.RequireAdmin(cfg.JWTSecret), sysh.GetSecuritySettings)
+	api.PUT("/settings/security", middleware.RequireAdmin(cfg.JWTSecret), sysh.UpdateSecuritySettings)
 
 	// Maintenance & Système. Lecture seule et réservé aux administrateurs : ces
 	// vues montrent l'état des données et du poste, elles ne réparent rien —

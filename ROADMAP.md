@@ -67,6 +67,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 2 | Sauvegarde & restauration | ✅ | [↓](#2--sauvegarde--restauration) |
 | 3 | Limitation des tentatives de connexion | ✅ | — |
 | 4 | Chiffrement au repos | 🔎 sauvegardes · 🔎 base (option) · 🔎 conseil disque | [↓](#4--chiffrement-au-repos) |
+| 4b | Durée de vie des sessions | 🔎 inactivité + rotation automatique | [↓](#4b--durée-de-vie-des-sessions) |
 | 5 | HTTPS natif | 🔎 réseau à valider | [↓](#5--https-natif) |
 | 6 | Rotation du secret de signature | ✅ | [↓](#6--rotation-du-secret-de-signature) |
 | 7 | Maintenance & Système | ✅ conforme | [↓](#7--maintenance--système) |
@@ -143,9 +144,38 @@ illisible, LedgerAlps démarre en mode récupération plutôt que de refuser de
 démarrer. Ce dernier point manquait, et le logiciel était irrécupérable —
 constaté en effaçant le coffre sur un serveur réel.
 
+**La protection se choisit à l'installation.** L'assistant demande les deux
+phrases après l'entreprise, et pose les clés *avant* que le serveur démarre : la
+base naît chiffrée, sans conversion ni redémarrage, et la première sauvegarde
+automatique est déjà chiffrée. Le panneau de réglage subsiste mais change de
+forme une fois le chiffrement en place — il sert à l'entretenir, pas à le
+proposer. Le retirer aurait laissé sans recours les installations antérieures à
+l'assistant, et ceux qui ont décliné.
+
 **Reste** : rien d'obligatoire. Le chiffrement de colonnes a été écarté — les
 données comptables ne sont pas des « données sensibles » au sens de la nLPD
 art. 5 let. c, et on paierait la recherche et les tris pour peu.
+
+### 4b — Durée de vie des sessions
+
+Deux réglages qui bornent la même chose par deux chemins, et qu'il faut donc
+regarder ensemble : en durcir un seul donne l'illusion d'une protection.
+
+| | Défaut | Réglable |
+|---|---|---|
+| **Déconnexion après inactivité** | 10 minutes | 2 min à 1 h, ou jamais |
+| **Régénération de la clé de signature** | chaque jour, au démarrage | jour / semaine / mois, ou jamais |
+
+Dix minutes et pas cinq, parce qu'aucun brouillon n'est enregistré : lire une
+facture fournisseur avant de la saisir prend plus de cinq minutes sans qu'une
+touche soit frappée, et un délai qui coupe pendant la lecture est un délai qu'on
+désactive — ce qui laisse la session ouverte indéfiniment. Une minute
+d'avertissement précède la coupure, avec un bouton pour rester.
+
+La clé tourne **au démarrage seulement**. Sur une minuterie, elle déconnecterait
+au milieu d'une saisie ; au démarrage, elle ne coûte qu'une reconnexion. Le
+bouton manuel reste pour la fuite dont on vient de s'apercevoir, qu'aucune
+périodicité ne couvre.
 
 ### 5 — HTTPS natif
 

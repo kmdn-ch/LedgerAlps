@@ -17,6 +17,7 @@ import { SectionTitle, ErrorBanner } from '@/components/ui'
 import { targetURLAfterRestart, waitForShutdownThenGo } from '@/utils/restart'
 import type { RotateSecretResult } from '@/types'
 import { DatabaseEncryptionPanel } from './DatabaseEncryptionPanel'
+import { SessionSecurityPanel } from './SessionSecurityPanel'
 
 export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
   const [confirming, setConfirming] = useState(false)
@@ -47,7 +48,9 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
       <SectionTitle>Sécurité</SectionTitle>
       <p className="text-sm text-alpine-600 mb-3">
         LedgerAlps signe vos sessions avec une clé conservée dans son fichier de
-        configuration. La régénérer met fin à toutes les sessions en cours.
+        configuration. Elle est régénérée automatiquement (voir plus bas) ; ce bouton
+        sert au cas que la périodicité ne couvre pas — <strong>vous venez</strong> de vous
+        apercevoir d'une fuite et attendre le prochain cycle serait trop long.
       </p>
 
       <div className="rounded-md border border-neutral-200 px-4 py-3 text-sm">
@@ -134,6 +137,7 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
           </div>
         )}
       </div>
+      <SessionSecurityPanel />
     </div>
   )
 }

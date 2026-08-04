@@ -8,12 +8,20 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Download, RotateCcw, ShieldCheck, ShieldOff, AlertTriangle, X, Loader2, Check, Minus, RefreshCw,
+  Download, RotateCcw, ShieldCheck, ShieldOff, AlertTriangle, X, Loader2, RefreshCw,
   Eye, EyeOff,
 } from 'lucide-react'
 import { backupsApi } from '@/api/client'
-import { SectionTitle, LoadingSpinner, ErrorBanner, EmptyState } from '@/components/ui'
+import {
+  SectionTitle, LoadingSpinner, ErrorBanner, EmptyState,
+  PassphraseField, PassphraseStrength, passphraseIsStrong,
+} from '@/components/ui'
 import { formatDate } from '@/utils'
+
+// Exemple montre a l'utilisateur, deliberement non copiable : le reprendre
+// tel quel en ferait la phrase de passe la plus repandue du produit, donc la
+// premiere qu'un attaquant essaierait.
+const PASSPHRASE_EXAMPLE = '34CryPt3DB4ckup5@26'
 import { waitForShutdownThenGo } from '@/utils/restart'
 import { refusalMessage } from '@/utils/refusal'
 import type { BackupItem, PendingRestore, BackupPolicy } from '@/types'
@@ -25,77 +33,6 @@ function formatSize(bytes: number): string {
 }
 
 
-// ─── Robustesse de la phrase de passe ─────────────────────────────────────────
-//
-// Cette phrase protège un fichier qu'un attaquant peut emporter et attaquer
-// tranquillement : pas de limitation de tentatives, personne pour surveiller.
-// Argon2id rend chaque essai coûteux, mais rien ne sauve une phrase courte —
-// d'où la longueur en premier critère. Le serveur applique la même règle
-// (internal/db/passphrase.go) ; ceci ne fait que la rendre visible pendant la
-// frappe, au lieu de la révéler par un refus après coup.
-const MIN_LEN = 16
-const PASSPHRASE_EXAMPLE = '34CryPt3DB4ckup5@26'
-
-interface Check { label: string; met: boolean }
-
-function checksFor(p: string): Check[] {
-  return [
-    { label: `${MIN_LEN} caractères ou plus`, met: [...p].length >= MIN_LEN },
-    { label: 'une minuscule',                 met: /\p{Ll}/u.test(p) },
-    { label: 'une majuscule',                 met: /\p{Lu}/u.test(p) },
-    { label: 'un chiffre',                    met: /\p{Nd}/u.test(p) },
-  ]
-}
-
-// Le symbole n'est pas exigé mais renforce : il est présenté comme un bonus,
-// pas comme un obstacle de plus.
-function strengthOf(p: string): { score: number; label: string; className: string } {
-  if (p === '') return { score: 0, label: '', className: '' }
-  const met = checksFor(p).filter(c => c.met).length
-  const bonus = /[^\p{L}\p{Nd}]/u.test(p) ? 1 : 0
-  const long  = [...p].length >= 24 ? 1 : 0
-  const score = met + bonus + long // 0..6
-
-  if (met < 4)      return { score, label: 'Insuffisante', className: 'bg-danger-500' }
-  if (score >= 6)   return { score, label: 'Excellente',   className: 'bg-success-700' }
-  if (score === 5)  return { score, label: 'Solide',       className: 'bg-success-500' }
-  return { score, label: 'Acceptable', className: 'bg-warning-500' }
-}
-
-function PassphraseStrength({ value }: { value: string }) {
-  const checks = checksFor(value)
-  const { score, label, className } = strengthOf(value)
-  const allMet = checks.every(c => c.met)
-
-  return (
-    <div className="mt-2">
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1.5 bg-alpine-100 rounded overflow-hidden">
-          <div
-            className={`h-full transition-all ${className}`}
-            style={{ width: `${(score / 6) * 100}%` }}
-          />
-        </div>
-        {label && (
-          <span className={`text-xs font-medium ${allMet ? 'text-success-700' : 'text-danger-700'}`}>
-            {label}
-          </span>
-        )}
-      </div>
-
-      <ul className="mt-2 space-y-0.5">
-        {checks.map(c => (
-          <li key={c.label} className={`text-xs flex items-center gap-1.5 ${
-            c.met ? 'text-success-700' : 'text-alpine-500'
-          }`}>
-            {c.met ? <Check size={12} /> : <Minus size={12} />}
-            {c.label}
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
 
 export function BackupPanel() {
   const qc = useQueryClient()
@@ -351,7 +288,7 @@ export function BackupPanel() {
                     autoFocus
                     onKeyDown={e => {
                       if (e.key === 'Enter' && !create.isPending
-                          && checksFor(passphrase).every(c => c.met)) {
+                          && passphraseIsStrong(passphrase)) {
                         create.mutate(passphrase)
                       }
                     }}
@@ -420,7 +357,7 @@ export function BackupPanel() {
                 <button
                   onClick={() => create.mutate(passphrase)}
                   disabled={create.isPending
-                    || !(checksFor(passphrase).every(c => c.met)
+                    || !(passphraseIsStrong(passphrase)
                          || (passphrase === '' && storedPolicy?.encrypting))}
                   className="btn-primary btn-sm flex items-center gap-1.5 disabled:opacity-50"
                 >
@@ -550,7 +487,6 @@ function AutoBackupPolicy() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [pass, setPass] = useState('')
-  const [show, setShow] = useState(false)
   const [noted, setNoted] = useState(false)
   const [alsoExisting, setAlsoExisting] = useState(true)
 
@@ -559,7 +495,7 @@ function AutoBackupPolicy() {
     queryFn:  () => backupsApi.policy().then(r => r.data),
   })
 
-  const reset = () => { setEditing(false); setPass(''); setNoted(false); setShow(false) }
+  const reset = () => { setEditing(false); setPass(''); setNoted(false) }
 
   const save = useMutation({
     mutationFn: () => backupsApi.setPolicy(pass, alsoExisting),
@@ -576,7 +512,7 @@ function AutoBackupPolicy() {
 
   if (!policy.data) return null
   const p = policy.data
-  const strong = checksFor(pass).every(c => c.met)
+  const strong = passphraseIsStrong(pass)
 
   return (
     <div className={`rounded-md border px-4 py-3 text-sm ${
@@ -647,29 +583,20 @@ function AutoBackupPolicy() {
 
           {editing && (
             <div className="mt-3 space-y-3">
-              <div>
-                <label className="label" htmlFor="autopass">Phrase de passe des sauvegardes</label>
-                <div className="relative">
-                  <input
-                    id="autopass"
-                    type={show ? 'text' : 'password'}
-                    value={pass}
-                    onChange={e => setPass(e.target.value)}
-                    autoComplete="new-password"
-                    className="input pr-10"
-                    placeholder="au moins 16 caractères"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShow(!show)}
-                    aria-label={show ? 'Masquer la phrase de passe' : 'Afficher la phrase de passe'}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-alpine-500 hover:text-alpine-900"
-                  >
-                    {show ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                {pass && <PassphraseStrength value={pass} />}
-              </div>
+              <PassphraseField
+                id="autopass"
+                label="Phrase de passe des sauvegardes"
+                value={pass}
+                onChange={setPass}
+                hint={
+                  <>
+                    C'est <strong>celle qui compte le plus</strong> : le jour où cette machine
+                    n'est plus là, vos sauvegardes sont le seul chemin de retour, et cette
+                    phrase est la seule chose qui les ouvre. À ne pas confondre avec la phrase
+                    de récupération de la base, qui n'ouvre aucune sauvegarde.
+                  </>
+                }
+              />
 
               {p.plaintext_count > 0 && (
                 <label className="flex items-start gap-2 text-alpine-700">

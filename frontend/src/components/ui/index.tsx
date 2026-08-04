@@ -107,3 +107,11 @@ export function SectionTitle({ children }: { children: ReactNode }) {
 
 export { PDFPreview } from './PDFPreview'
 export { ConfirmDialog } from './ConfirmDialog'
+
+// Saisie de phrase de passe, robustesse évaluée pendant la frappe. Partagée
+// parce que LedgerAlps en manipule deux, qui ne protègent pas la même chose :
+// les confondre est ce que cet écran doit empêcher.
+export {
+  PassphraseField, PassphraseStrength,
+  passphraseChecks, passphraseIsStrong, PASSPHRASE_MIN_LEN,
+} from './PassphraseField'

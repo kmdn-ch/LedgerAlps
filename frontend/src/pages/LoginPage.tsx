@@ -3,7 +3,7 @@
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Mountain, Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 import { authApi } from '@/api/client'
@@ -16,6 +16,12 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 export function LoginPage() {
+  // Une déconnexion automatique doit se dire. Renvoyer quelqu'un sur l'écran de
+  // connexion sans explication ressemble à une panne, et c'est la première
+  // chose qu'on signale au support.
+  const [params] = useSearchParams()
+  const idle = params.get('raison') === 'inactivite'
+
   const navigate = useNavigate()
   const setAuth  = useAuthStore(s => s.setAuth)
   const [showPw, setShowPw]   = useState(false)
@@ -53,6 +59,16 @@ export function LoginPage() {
       </div>
 
       <div className="relative w-full max-w-md">
+        {idle && (
+          <div className="mb-5 rounded-md border border-warning-500 bg-warning-100 px-4 py-3 text-sm">
+            <p className="font-medium">Session fermée après inactivité</p>
+            <p className="mt-1 text-alpine-700">
+              Vous avez été déconnecté automatiquement. Le délai se règle dans
+              Paramètres → Maintenance → Sécurité.
+            </p>
+          </div>
+        )}
+
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
           <div className="w-10 h-10 rounded-xl bg-accent-500 flex items-center justify-center

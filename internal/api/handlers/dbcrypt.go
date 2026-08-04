@@ -201,3 +201,35 @@ func (h *BackupsHandler) RecoverDatabaseKey(c *gin.Context) {
 		"message": "Clé retrouvée et rescellée à ce compte. Redémarrez LedgerAlps.",
 	})
 }
+
+// ChangeRecoveryPassphrase PUT /api/v1/database/encryption/recovery
+//
+// Change la phrase de récupération sans toucher à la clé : les données restent
+// lisibles, seule l'enveloppe change.
+//
+// Ce point d'entrée existe parce que le chiffrement se décide désormais à
+// l'installation. Sans lui, quelqu'un qui a mal noté sa phrase — ou qui l'a
+// partagée — n'aurait aucun moyen d'en changer, et le seul recours serait de
+// déchiffrer puis rechiffrer toute la base.
+func (h *BackupsHandler) ChangeRecoveryPassphrase(c *gin.Context) {
+	var body struct {
+		RecoveryPassphrase string `json:"recovery_passphrase" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	keys := db.NewDatabaseKeys(config.AppDataDir())
+	if !keys.Configured() {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "cette base n'est pas chiffrée"})
+		return
+	}
+	if err := keys.SetRecovery(body.RecoveryPassphrase); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Nouvelle phrase de récupération enregistrée. L'ancienne ne fonctionne plus. " +
+			"Notez celle-ci ailleurs que sur cet ordinateur.",
+	})
+}
