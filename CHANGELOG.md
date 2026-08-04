@@ -7,6 +7,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+---
+
+## [1.4.6] — 2026-08-04
+
 ### Sécurité
 - **Le plafond des notes de crédit se contournait en modifiant la note après coup.** Il était vérifié à la création et nulle part ailleurs : une note de 500.- sur une facture de 500.- pouvait passer à 1500.- en HTTP 200, sous-évaluant d'autant la TVA due. Mesuré sur un serveur réel avant correction. La modification est désormais bornée elle aussi — réduire une note reste possible, un crédit partiel étant légitime.
 - **Modifier un document changeait sa nature.** Le champ `document_type` omis dans une modification retombait sur « facture » : éditer une note de crédit la transformait en facture, le lien vers la pièce corrigée survivant dans la base pendant que le document changeait de sens — ce que la LTVA art. 27 al. 4 ne prévoit pas. Un champ absent veut désormais dire « inchangé », et un changement explicite est refusé.
@@ -359,7 +363,8 @@ automatiquement à chaque publication.
 
 ---
 
-[Unreleased]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.5...HEAD
+[Unreleased]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.6...HEAD
+[1.4.6]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.5...v1.4.6
 [1.4.5]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.4...v1.4.5
 [1.4.4]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/kmdn-ch/LedgerAlps/compare/v1.4.2...v1.4.3
