@@ -32,17 +32,36 @@ func (h *ContactsHandler) ListContacts(c *gin.Context) {
 	// are company-wide, not per-user, so all authenticated users may list them).
 	// Admins additionally see inactive contacts via ?include_inactive=true.
 	includeInactive := c.Query("include_inactive") == "true" && isAdmin(c)
-	activeFilter := " WHERE is_active = 1"
+	where := " WHERE is_active = 1"
 	if includeInactive {
-		activeFilter = " WHERE 1=1"
+		where = " WHERE 1=1"
 	}
+
+	// Filtre par type. L'interface l'envoyait déjà et le serveur l'ignorait :
+	// cliquer « Clients » ou « Fournisseurs » ne changeait donc rien à la liste.
+	// Un filtre qui ne filtre pas est pire qu'un filtre absent — on croit avoir
+	// restreint la vue, et on lit la mauvaise.
+	//
+	// « both » désigne un contact à la fois client et fournisseur : il doit
+	// apparaître dans les deux filtres, sans quoi un artisan qui achète et vend
+	// au même partenaire le perdrait de vue dans les deux.
+	args := []any{}
+	switch t := c.Query("contact_type"); t {
+	case "customer", "supplier":
+		where += " AND contact_type IN (?, 'both')"
+		args = append(args, t)
+	case "both":
+		where += " AND contact_type = ?"
+		args = append(args, t)
+	}
+
 	q := db.Rebind(`
 		SELECT id, contact_type, is_company, name, legal_name, email, phone, address, city, postal_code,
 		       country, iban, qr_iban, vat_number, uid_number, payment_term_days, notes, is_active,
 		       created_at, updated_at
-		FROM contacts`+activeFilter+` ORDER BY name`, h.usePostgres)
+		FROM contacts`+where+` ORDER BY name`, h.usePostgres)
 
-	rows, err := h.db.QueryContext(ctx, q)
+	rows, err := h.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return

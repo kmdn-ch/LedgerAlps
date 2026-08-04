@@ -27,9 +27,12 @@ export function PersonalDataPanel() {
     queryKey: ['maintenance', 'health'],
     queryFn: () => maintenanceApi.health().then(r => r.data),
   })
+  // GET /contacts renvoie un tableau JSON nu, pas un objet paginé — comme tous
+  // les autres écrans qui l'appellent. Lire `r.data.items` donnait `undefined`,
+  // donc une liste vide et un sélecteur sans aucun contact.
   const contacts = useQuery<Contact[]>({
-    queryKey: ['contacts', 'all'],
-    queryFn: () => contactsApi.list({ page_size: 500 }).then(r => r.data.items ?? []),
+    queryKey: ['contacts'],
+    queryFn: () => contactsApi.list().then(r => r.data as Contact[]),
   })
 
   const anonymise = useMutation<AnonymiseResult>({
