@@ -202,6 +202,8 @@ func main() {
 	api.GET("/invoices", ih.ListInvoices)
 	api.GET("/invoices/:id", ih.GetInvoice)
 	api.GET("/invoices/:id/pdf", ih.GetInvoicePDF)
+	// Téléchargement groupé : un PDF si un seul document, un ZIP si plusieurs.
+	api.POST("/invoices/bulk-pdf", ih.BulkInvoicePDF)
 	api.POST("/invoices", ih.CreateInvoice)
 	api.PATCH("/invoices/:id", ih.UpdateInvoice)
 	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
@@ -281,6 +283,8 @@ func main() {
 	api.GET("/reports/income-statement", rh.IncomeStatement)
 	api.GET("/reports/general-ledger", rh.GeneralLedger)
 	api.GET("/reports/ar-aging", rh.ARaging)
+	// Chiffre d'affaires groupable : par année, par mois ou par client.
+	api.GET("/reports/revenue", rh.Revenue)
 
 	// Payments (CRUD — must be registered after /payments/export to avoid shadowing)
 	ph := handlers.NewPaymentsHandler(database, cfg.UsePostgres(), accountingSvc)

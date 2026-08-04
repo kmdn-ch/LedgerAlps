@@ -156,6 +156,14 @@ export const auditApi = {
     api.get('/audit-logs/attestation', { responseType: 'blob', timeout: 120_000 }),
 }
 
+// Chiffre d'affaires groupable. La convention de calcul est renvoyée avec les
+// chiffres (`basis`) : un total sans sa définition invite à le comparer à un
+// autre calculé autrement.
+export const revenueApi = {
+  get: (params: { group_by: 'year' | 'month' | 'contact'; from?: string; to?: string }) =>
+    api.get('/reports/revenue', { params }),
+}
+
 // Archive légale et export de réversibilité (CO art. 958f).
 export const exportApi = {
   legalArchive: () =>
@@ -183,6 +191,9 @@ export const invoicesApi = {
   list: (params?: {
     status?: string; page?: number; page_size?: number
     contact_id?: string; document_type?: string
+    // Bornes sur la date d'émission. Filtrées côté serveur : la pagination
+    // l'est aussi, donc un filtre client ne verrait que la page chargée.
+    from?: string; to?: string
   }) => api.get('/invoices', { params }),
   get:        (id: string)                    => api.get(`/invoices/${id}`),
   create:     (data: unknown)                 => api.post('/invoices', data),
@@ -206,6 +217,10 @@ export const invoicesApi = {
   createCreditNote: (id: string, data?: { issue_date?: string; reason?: string; lines?: unknown[] }) =>
     api.post(`/invoices/${id}/credit-note`, data ?? {}),
   // PDF — Go endpoint: GET /invoices/:id/pdf
+  // Un PDF si un seul document, un ZIP si plusieurs. La réponse est binaire
+  // dans les deux cas : c'est l'en-tête Content-Type qui tranche.
+  bulkPDF: (ids: string[]) =>
+    api.post('/invoices/bulk-pdf', { ids }, { responseType: 'blob', timeout: 300_000 }),
   downloadPDF: (id: string) =>
     api.get(`/invoices/${id}/pdf`, { responseType: 'blob' }),
 }

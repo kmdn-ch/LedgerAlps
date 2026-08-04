@@ -152,6 +152,20 @@ personne ne peut ouvrir la sauvegarde — vous non plus.
 Le détail technique — et pourquoi ces choix — est dans le
 [guide de déploiement](docs/PRODUCTION.md#comment-le-chiffrement-fonctionne).
 
+**Ai-je le droit d'exporter les documents d'un client depuis sa fiche ?**
+Oui, sans réserve. Ces factures sont **vos** pièces comptables, que le CO
+art. 958f vous impose de conserver dix ans. Exporter vos propres livres ne pose
+aucune question de principe.
+
+C'est même l'inverse : cet export est le moyen de répondre à une demande
+d'**accès** (nLPD art. 25, à traiter dans les trente jours) ou de **remise des
+données** (art. 28, gratuitement). Sans lui, satisfaire ces droits supposerait
+de bricoler.
+
+Ce qui vous engage commence **après** : le fichier contient des données
+personnelles et quitte votre machine. Envoyez-le au bon destinataire, et ne le
+laissez pas traîner dans un dossier partagé.
+
 **Je ne suis pas assujetti à la TVA. Que dois-je écrire sur mes factures ?**
 Aucune mention n'est légalement obligatoire. Ce qui existe est une
 **interdiction** : si vous n'êtes pas inscrit au registre des assujettis, vous

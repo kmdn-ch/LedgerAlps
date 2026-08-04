@@ -56,6 +56,26 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 		args = append(args, docType)
 	}
 
+	// Bornes de date sur la date d'émission. Elles se filtrent ici et non dans
+	// le navigateur : la pagination est côté serveur, donc un filtre client ne
+	// verrait que la page déjà chargée — et donnerait un résultat qui change
+	// selon la page où l'on se trouve.
+	for _, f := range []struct {
+		param, op string
+	}{{"from", ">="}, {"to", "<="}} {
+		v := c.Query(f.param)
+		if v == "" {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", v); err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": f.param + " doit être au format AAAA-MM-JJ"})
+			return
+		}
+		where += " AND i.issue_date " + f.op + " ?"
+		args = append(args, v)
+	}
+
 	// Data isolation: non-admin users only see their own invoices (nLPD art. 6)
 	if uid := currentUserID(c); uid != "" && !isAdmin(c) {
 		where += " AND i.created_by_id = ?"

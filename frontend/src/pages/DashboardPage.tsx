@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { invoicesApi, statsApi } from '@/api/client'
 import { PageHeader, StatCard, StatusBadge, LoadingSpinner } from '@/components/ui'
+import { RevenuePanel } from '@/components/dashboard/RevenuePanel'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
 import type { Invoice } from '@/types'
 
@@ -96,6 +97,13 @@ export function DashboardPage() {
           value={String(stats?.contacts?.customers ?? '—')}
           icon={<Users size={18} />}
         />
+      </div>
+
+      {/* Le chiffre d'affaires détaillé, sous les indicateurs et au-dessus de la
+          courbe : la courbe donne la tendance, ce tableau donne les montants —
+          et c'est le montant qu'on vient chercher au moment de déclarer. */}
+      <div className="mb-6">
+        <RevenuePanel />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

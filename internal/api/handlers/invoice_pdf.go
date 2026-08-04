@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -19,10 +20,33 @@ import (
 // Renders the invoice as a PDF with a Swiss QR payment slip.
 // Returns application/pdf with Content-Disposition: attachment.
 func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
-	id := c.Param("id")
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
+	pdfBytes, filename, err := h.buildInvoicePDF(ctx, c.Param("id"))
+	switch {
+	case err == errInvoiceNotFound:
+		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
+		return
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Data(http.StatusOK, "application/pdf", pdfBytes)
+}
+
+var errInvoiceNotFound = errors.New("invoice not found")
+
+// buildInvoicePDF produit le PDF d'un document et le nom de fichier qui lui
+// convient.
+//
+// Extrait du handler parce qu'un second appelant en a besoin : le
+// téléchargement groupé depuis la fiche client. Deux implémentations auraient
+// fini par diverger, et c'est le lot téléchargé — celui qu'on archive ou qu'on
+// transmet — qui aurait porté la version périmée.
+func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byte, string, error) {
 	// Load invoice
 	var inv models.Invoice
 	// The join resolves the number of the invoice a credit note cancels: LTVA
@@ -46,12 +70,10 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 		&inv.Notes, &inv.Terms, &inv.CreatedAt, &inv.UpdatedAt, &correctsNumber,
 		&rcp.Name, &rcp.Address, &rcp.PostalCode, &rcp.City, &rcp.Country, &rcp.VATNumber)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
-		return
+		return nil, "", errInvoiceNotFound
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
+		return nil, "", errors.New("database error")
 	}
 
 	// Load invoice lines
@@ -60,16 +82,14 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 		FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence`, h.usePostgres)
 	rows, err := h.db.QueryContext(ctx, linesQ, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
+		return nil, "", errors.New("database error")
 	}
 	defer rows.Close()
 	var pdfLines []pdfsvc.InvoiceLine
 	for rows.Next() {
 		var l pdfsvc.InvoiceLine
 		if err := rows.Scan(&l.Description, &l.Quantity, &l.UnitPrice, &l.VATRate, &l.LineTotal); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error"})
-			return
+			return nil, "", errors.New("scan error")
 		}
 		pdfLines = append(pdfLines, l)
 	}
@@ -87,8 +107,7 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 		&ct.IBAN, &ct.QRIBAN, &ct.VATNumber, &ct.PaymentTermDays, &isActive,
 		&ct.CreatedAt, &ct.UpdatedAt)
 	if err != nil && err != sql.ErrNoRows {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
+		return nil, "", errors.New("database error")
 	}
 	ct.IsActive = isActive == 1
 
@@ -201,13 +220,21 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 
 	pdfBytes, err := pdfsvc.Generate(data)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "pdf generation failed"})
-		return
+		return nil, "", errors.New("pdf generation failed")
 	}
 
-	filename := fmt.Sprintf("facture-%s.pdf", inv.InvoiceNumber)
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-	c.Data(http.StatusOK, "application/pdf", pdfBytes)
+	// Le préfixe suit le type de document : un fichier nommé « facture-… » qui
+	// contient une offre de prix se retrouve classé au mauvais endroit, et le
+	// nom survit au classement bien plus longtemps que la mémoire de qui l'a
+	// téléchargé.
+	prefix := "facture"
+	switch inv.DocumentType {
+	case "quote":
+		prefix = "offre"
+	case "credit_note":
+		prefix = "note-credit"
+	}
+	return pdfBytes, fmt.Sprintf("%s-%s.pdf", prefix, inv.InvoiceNumber), nil
 }
 
 func envOr(key, fallback string) string {

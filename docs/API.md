@@ -51,7 +51,7 @@ Toutes les routes applicatives sont préfixées par `/api/v1`.
 
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
-| GET | `/invoices` | auth | Liste paginée |
+| GET | `/invoices` | auth | Liste paginée. Filtres : `status` (dont `overdue`, déduit), `contact_id`, `document_type`, `from`/`to` sur la date d'émission, `page`, `page_size` |
 | GET | `/invoices/:id` | auth | Détail |
 | POST | `/invoices` | auth | Créer |
 | PATCH | `/invoices/:id` | auth | Modifier |
@@ -60,6 +60,7 @@ Toutes les routes applicatives sont préfixées par `/api/v1`.
 | POST | `/invoices/:id/outcome` | auth | Enregistrer l'issue d'une offre (`refused`, `expired`) |
 | POST | `/invoices/:id/credit-note` | auth | Émettre une note de crédit contre une facture |
 | GET | `/invoices/:id/pdf` | auth | PDF — bulletin QR-facture sur les factures uniquement |
+| POST | `/invoices/bulk-pdf` | auth | Téléchargement groupé. Corps `{"ids": [...]}`. **Un** identifiant renvoie un PDF, **plusieurs** un ZIP — emballer un unique PDF obligerait à le dézipper pour le lire. Doublons ignorés, 200 documents au maximum. Un document disparu entre l'affichage et le clic est omis et compté dans l'en-tête `X-LedgerAlps-Missing` plutôt que passé sous silence |
 
 ### Types de documents
 
@@ -344,6 +345,7 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/reports/income-statement` | auth | Compte de résultat |
 | GET | `/reports/general-ledger` | auth | Grand livre |
 | GET | `/reports/ar-aging` | auth | Balance âgée des créances |
+| GET | `/reports/revenue` | auth | Chiffre d'affaires groupé par `year`, `month` ou `contact`, avec `from`/`to`. La réponse porte `basis` : la convention de calcul, pour qu'un total ne soit pas comparé à un autre calculé autrement |
 | GET | `/stats` | auth | Indicateurs du tableau de bord |
 
 ## Paiements et ISO 20022
