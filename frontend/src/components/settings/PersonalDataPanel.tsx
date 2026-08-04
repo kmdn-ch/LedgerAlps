@@ -143,6 +143,13 @@ export function PersonalDataPanel() {
                   Ses documents comptables, eux, sont conservés : le CO art. 958f l'impose
                   pendant dix ans.
                 </p>
+                <p className="text-alpine-700 mt-1">
+                  <strong>Les sauvegardes déjà prises gardent ces coordonnées.</strong> Une
+                  sauvegarde est une copie figée ; la réécrire lui retirerait la valeur
+                  qu'elle a pour vos livres. Elles disparaissent d'elles-mêmes à mesure que
+                  de nouvelles sont prises — d'ici là, ne restaurez pas une copie antérieure
+                  pour retrouver ces données.
+                </p>
                 <div className="mt-3 flex gap-2">
                   <button
                     onClick={() => anonymise.mutate()}
@@ -166,6 +173,9 @@ export function PersonalDataPanel() {
             <p className="font-medium text-success-700">
               {anonymise.data.label} — anonymisé
             </p>
+            {anonymise.data.backups_notice && (
+              <p className="mt-2 text-alpine-700">{anonymise.data.backups_notice}</p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 text-alpine-700">
               <div>
                 <p className="text-xs uppercase tracking-wider text-alpine-500 mb-1">Effacé</p>

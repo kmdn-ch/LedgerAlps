@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Download, RotateCcw, ShieldCheck, ShieldOff, AlertTriangle, X, Loader2, Check, Minus, RefreshCw,
+  Eye, EyeOff,
 } from 'lucide-react'
 import { backupsApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner, EmptyState } from '@/components/ui'
@@ -102,6 +103,10 @@ export function BackupPanel() {
   // créer, et elle traîne alors dans un champ de formulaire.
   const [creating, setCreating]       = useState(false)
   const [passphrase, setPassphrase]   = useState('')
+  // La phrase repart masquée à chaque ouverture du dialogue : la laisser
+  // visible d'une fois sur l'autre exposerait une saisie que personne n'a
+  // demandé à montrer.
+  const [showPassphrase, setShowPassphrase] = useState(false)
   const [confirming, setConfirming]   = useState<BackupItem | null>(null)
   const [restorePass, setRestorePass] = useState('')
 
@@ -116,10 +121,10 @@ export function BackupPanel() {
 
   const create = useMutation({
     mutationFn: (pass: string) => backupsApi.create(pass),
-    onSuccess: () => { setCreating(false); setPassphrase(''); invalidate() },
+    onSuccess: () => { setCreating(false); setPassphrase(''); setShowPassphrase(false); invalidate() },
   })
 
-  const closeCreate = () => { setCreating(false); setPassphrase(''); create.reset() }
+  const closeCreate = () => { setCreating(false); setPassphrase(''); setShowPassphrase(false); create.reset() }
 
   const stage = useMutation({
     mutationFn: () => backupsApi.stageRestore(confirming!.name, restorePass),
@@ -211,7 +216,7 @@ export function BackupPanel() {
           sauvegarde. L'opération est sûre pendant que vous travaillez.
         </p>
         <button
-          onClick={() => { create.reset(); setPassphrase(''); setCreating(true) }}
+          onClick={() => { create.reset(); setPassphrase(''); setShowPassphrase(false); setCreating(true) }}
           className="btn-primary btn-sm flex items-center gap-1.5"
         >
           <Download size={14} />
@@ -306,26 +311,58 @@ export function BackupPanel() {
                 <label className="label" htmlFor="create-passphrase">
                   Phrase de passe de chiffrement
                 </label>
-                <input
-                  id="create-passphrase"
-                  type="password"
-                  className="input w-full"
-                  value={passphrase}
-                  onChange={e => setPassphrase(e.target.value)}
-                  autoComplete="new-password"
-                  autoFocus
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !create.isPending
-                        && checksFor(passphrase).every(c => c.met)) {
-                      create.mutate(passphrase)
-                    }
-                  }}
-                />
+                {/* Bascule d'affichage. Une phrase de passe qu'on ne relit
+                    pas se saisit de travers, et l'erreur ne se découvre qu'à la
+                    restauration — c'est-à-dire au pire moment. Ici le risque de
+                    la montrer est faible : on la saisit une fois, sur sa propre
+                    machine. Elle repart masquée au prochain dialogue. */}
+                <div className="relative">
+                  <input
+                    id="create-passphrase"
+                    type={showPassphrase ? 'text' : 'password'}
+                    className="input w-full pr-10"
+                    value={passphrase}
+                    onChange={e => setPassphrase(e.target.value)}
+                    autoComplete="new-password"
+                    autoFocus
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !create.isPending
+                          && checksFor(passphrase).every(c => c.met)) {
+                        create.mutate(passphrase)
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassphrase(v => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-alpine-500
+                               hover:text-alpine-700"
+                    aria-label={showPassphrase ? 'Masquer la phrase de passe' : 'Afficher la phrase de passe'}
+                    title={showPassphrase ? 'Masquer' : 'Afficher en clair'}
+                    tabIndex={-1}
+                  >
+                    {showPassphrase ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
                 <PassphraseStrength value={passphrase} />
 
                 <p className="text-xs text-alpine-500 mt-2">
                   Exemple d'une phrase solide :{' '}
-                  <code className="font-mono bg-alpine-50 px-1.5 py-0.5 rounded">{PASSPHRASE_EXAMPLE}</code>
+                  {/* Non sélectionnable et non copiable, délibérément : cet
+                      exemple est publié dans le code source et dans la
+                      documentation. Le copier-coller en ferait la phrase de
+                      passe la plus répandue du produit, et donc la première
+                      qu'un attaquant essaierait. Le lire et s'en inspirer est
+                      le but ; le reprendre tel quel ne doit pas être à un
+                      raccourci clavier de distance. */}
+                  <code
+                    className="font-mono bg-alpine-50 px-1.5 py-0.5 rounded select-none"
+                    onCopy={e => e.preventDefault()}
+                    onCut={e => e.preventDefault()}
+                    onContextMenu={e => e.preventDefault()}
+                    onDragStart={e => e.preventDefault()}
+                    aria-label="Exemple de phrase de passe, à ne pas réutiliser"
+                  >{PASSPHRASE_EXAMPLE}</code>
                   {' '}— n'utilisez pas celle-ci, elle est publique.
                 </p>
 

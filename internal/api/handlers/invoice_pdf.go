@@ -104,13 +104,13 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 	}
 	settingsQ := db.Rebind(`
 		SELECT company_name, address_street, address_postal_code, address_city, address_country,
-		       iban, vat_number, logo_data
+		       iban, vat_number, che_number, logo_data
 		FROM company_settings LIMIT 1`, h.usePostgres)
-	var dbName, dbStreet, dbPostal, dbCity, dbCountry, dbIBAN, dbVAT sql.NullString
+	var dbName, dbStreet, dbPostal, dbCity, dbCountry, dbIBAN, dbVAT, dbCHE sql.NullString
 	var dbLogo sql.NullString
 	if err := h.db.QueryRowContext(ctx, settingsQ).Scan(
 		&dbName, &dbStreet, &dbPostal, &dbCity, &dbCountry,
-		&dbIBAN, &dbVAT, &dbLogo,
+		&dbIBAN, &dbVAT, &dbCHE, &dbLogo,
 	); err == nil {
 		if dbName.Valid && dbName.String != "" {
 			company.Name = dbName.String
@@ -129,6 +129,12 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 		}
 		if dbVAT.Valid {
 			company.VATNumber = dbVAT.String
+		}
+		// L'IDE n'était pas lu du tout : il identifie l'entreprise au registre,
+		// qu'elle soit assujettie à la TVA ou non, et n'apparaissait donc sur
+		// aucune facture.
+		if dbCHE.Valid {
+			company.UIDNumber = dbCHE.String
 		}
 		if dbLogo.Valid {
 			company.LogoData = dbLogo.String

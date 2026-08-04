@@ -227,13 +227,13 @@ func (h *MaintenanceHandler) IntegrityCheck(c *gin.Context) {
 // addQRBillFindings vérifie ce qui rend une QR-facture émettable, avec la même
 // bibliothèque que celle qui produit le bulletin (SIX IG v2.4).
 func (h *MaintenanceHandler) addQRBillFindings(ctx context.Context, add func(Finding)) {
-	var iban, postal, city, country, name string
+	var iban, postal, city, country, name, vatNumber string
 	q := db.Rebind(`
 		SELECT COALESCE(iban,''), COALESCE(address_postal_code,''),
 		       COALESCE(address_city,''), COALESCE(address_country,''),
-		       COALESCE(company_name,'')
+		       COALESCE(company_name,''), COALESCE(vat_number,'')
 		FROM company_settings LIMIT 1`, h.usePostgres)
-	if err := h.db.QueryRowContext(ctx, q).Scan(&iban, &postal, &city, &country, &name); err != nil {
+	if err := h.db.QueryRowContext(ctx, q).Scan(&iban, &postal, &city, &country, &name, &vatNumber); err != nil {
 		// Aucune fiche société : l'assistant d'installation ne l'a pas encore
 		// remplie. Ce n'est pas une incohérence, c'est un début.
 		return
@@ -286,6 +286,39 @@ func (h *MaintenanceHandler) addQRBillFindings(ctx context.Context, add func(Fin
 			Detail: "Champs manquants : " + strings.Join(missing, ", ") + ". La QR-facture impose une adresse structurée (SIX IG v2.4 §4.2.2).",
 			Action: "Complétez Paramètres → Identité avant votre prochaine facture.",
 		})
+	}
+
+	// ── TVA facturée sans numéro de TVA ─────────────────────────────────────
+	//
+	// Le piège le plus coûteux pour un indépendant qui démarre. LedgerAlps
+	// applique 8.1 % par défaut à chaque ligne. Une entreprise non inscrite au
+	// registre des assujettis n'a **pas le droit** de faire figurer l'impôt sur
+	// ses factures (LTVA art. 27 al. 1) — et celle qui le fait quand même en
+	// devient **redevable** (al. 2), qu'elle l'ait encaissé ou non.
+	//
+	// Symétriquement, la LTVA art. 26 al. 2 let. a exige le numéro de TVA de
+	// l'émetteur sur toute facture portant de la TVA. Facturer de la TVA sans
+	// ce numéro est donc fautif dans les deux sens de lecture.
+	//
+	// L'écran ne corrige rien : il ne peut pas savoir si l'utilisateur est
+	// assujetti et a oublié de saisir son numéro, ou s'il ne l'est pas et
+	// facture à tort. Les deux se règlent différemment, et deviner à sa place
+	// serait pire que le signaler.
+	if vatNumber == "" {
+		if n, err := h.count(ctx, `
+			SELECT COUNT(*) FROM invoices
+			WHERE document_type = 'invoice' AND status <> 'draft'
+			  AND COALESCE(vat_amount, 0) <> 0`); err == nil && n > 0 {
+			add(Finding{
+				Severity: "error", Check: "vat_without_number", Count: n,
+				Title:  "TVA facturée sans numéro de TVA",
+				Detail: fmt.Sprintf("%d facture(s) émises portent de la TVA alors qu'aucun numéro de TVA n'est enregistré.", n),
+				Action: "Si vous êtes assujetti, saisissez votre numéro dans Paramètres → Identité : " +
+					"la LTVA art. 26 al. 2 let. a l'exige sur toute facture portant de la TVA. " +
+					"Si vous ne l'êtes pas, vous n'avez pas le droit de faire figurer la TVA (art. 27 al. 1) " +
+					"et vous en devenez redevable (art. 27 al. 2) — passez vos lignes à 0 % et corrigez les factures concernées.",
+			})
+		}
 	}
 
 	// IBAN de contacts : utilisés pour les virements fournisseurs (pain.001).

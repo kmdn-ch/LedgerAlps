@@ -54,6 +54,9 @@ type anonymiseResult struct {
 	LegalBasis    []string  `json:"legal_basis"`
 	WhatWasErased []string  `json:"what_was_erased"`
 	WhatWasKept   []string  `json:"what_was_kept"`
+	// Backups dit ce que l'anonymisation NE fait pas. Sans cette phrase, on
+	// promettrait un effacement plus complet qu'il ne l'est.
+	Backups string `json:"backups_notice"`
 }
 
 // AnonymiseContact POST /api/v1/contacts/:id/anonymise
@@ -162,5 +165,33 @@ func (h *ContactsHandler) AnonymiseContact(c *gin.Context) {
 			"les écritures au journal et leur chaîne d'intégrité",
 			"la date de l'anonymisation, comme preuve du traitement",
 		},
+		Backups: backupNotice(),
 	})
+}
+
+// backupNotice énonce la limite que l'anonymisation ne peut pas franchir.
+//
+// Une sauvegarde est une copie figée : celles prises AVANT l'anonymisation
+// contiennent encore les coordonnées effacées, et aucun traitement ne peut les
+// modifier sans détruire ce qui fait leur valeur — le fait qu'elles ne bougent
+// pas. Les réécrire reviendrait d'ailleurs à admettre qu'on peut réécrire une
+// sauvegarde, ce qui ruinerait la garantie qu'elles apportent aux livres
+// (CO art. 958f).
+//
+// Ce n'est pas un manquement à la nLPD : l'art. 6 al. 4 vise le traitement
+// courant, et la doctrine admet qu'une sauvegarde conserve la donnée jusqu'à sa
+// rotation normale, à la condition de ne pas s'en servir pour la faire
+// réapparaître. La condition est la partie qui engage l'utilisateur, donc elle
+// est écrite.
+//
+// Le dire est aussi la seule réponse tenable à « avez-vous tout effacé ? ».
+func backupNotice() string {
+	return fmt.Sprintf(
+		"Les sauvegardes déjà prises contiennent encore ces coordonnées : une sauvegarde est une copie figée, "+
+			"et la réécrire lui retirerait la valeur qu'elle a pour vos livres (CO art. 958f). "+
+			"LedgerAlps conserve les %d instantanés les plus récents ; les plus anciennes disparaissent d'elles-mêmes "+
+			"à mesure que de nouvelles sont prises. "+
+			"Ce que cela vous engage à faire : ne pas restaurer une sauvegarde antérieure pour retrouver ces données, "+
+			"et si vous en gardez des copies hors de cette machine (NAS, clé USB), appliquer la même règle.",
+		db.DefaultKeep)
 }

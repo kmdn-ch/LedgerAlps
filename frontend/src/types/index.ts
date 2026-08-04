@@ -366,4 +366,6 @@ export interface AnonymiseResult {
   legal_basis: string[]
   what_was_erased: string[]
   what_was_kept: string[]
+  // Ce que l'anonymisation NE fait pas : les sauvegardes déjà prises.
+  backups_notice: string
 }

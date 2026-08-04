@@ -143,11 +143,22 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 
 	subtotal, vatAmount, total := computeTotals(req.Lines)
 
-	// Use the first line's VAT rate as the representative rate for the invoice header.
-	primaryVATRate := 8.1
-	if len(req.Lines) > 0 && req.Lines[0].VATRate > 0 {
-		primaryVATRate = req.Lines[0].VATRate
-	}
+	// Taux représentatif porté par l'en-tête de la facture.
+	//
+	// Il valait 8.1 par défaut, et n'était remplacé que si la première ligne
+	// portait un taux **strictement positif** — ce qui confondait « 0 % » avec
+	// « non renseigné ». Une facture sans TVA était donc enregistrée à 8.1 %
+	// avec un montant de taxe nul.
+	//
+	// Ce n'est pas qu'un défaut d'affichage : la déclaration TVA agrège les
+	// factures **en groupant par ce taux** (voir services/vat). Le chiffre
+	// d'affaires d'un non-assujetti serait remonté comme taxable à 8.1 % sans
+	// impôt correspondant — une ligne qui ne se réconcilie pas, et que l'AFC
+	// demanderait d'expliquer.
+	//
+	// Le taux suit désormais les lignes. Une facture sans ligne n'a pas de TVA,
+	// donc 0 est la bonne réponse et non une valeur par défaut arbitraire.
+	primaryVATRate := headerVATRate(req.Lines)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -837,4 +848,16 @@ type recipientSnapshot struct {
 	City       string
 	Country    string
 	VATNumber  string
+}
+
+// headerVATRate retourne le taux représentatif porté par l'en-tête de facture.
+//
+// La déclaration TVA agrège les factures en GROUPANT sur cette valeur : elle
+// doit donc refléter les lignes, et non une valeur par défaut. Une facture sans
+// ligne n'a pas de TVA, d'où 0 plutôt qu'un taux arbitraire.
+func headerVATRate(lines []LineInput) float64 {
+	if len(lines) == 0 {
+		return 0
+	}
+	return lines[0].VATRate
 }

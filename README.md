@@ -152,6 +152,27 @@ personne ne peut ouvrir la sauvegarde — vous non plus.
 Le détail technique — et pourquoi ces choix — est dans le
 [guide de déploiement](docs/PRODUCTION.md#comment-le-chiffrement-fonctionne).
 
+**Je ne suis pas assujetti à la TVA. Que dois-je écrire sur mes factures ?**
+Aucune mention n'est légalement obligatoire. Ce qui existe est une
+**interdiction** : si vous n'êtes pas inscrit au registre des assujettis, vous
+n'avez pas le droit de faire figurer la TVA sur vos factures (LTVA art. 27
+al. 1) — et si vous le faites quand même, vous en devenez **redevable**
+(al. 2), même sans l'avoir encaissée.
+
+Concrètement : mettez vos lignes à **0 %**. LedgerAlps n'imprime alors aucune
+ligne de TVA, et votre IDE s'affiche seul. Beaucoup ajoutent par courtoisie une
+note du type « TVA non applicable — non assujetti » dans le champ Notes ; c'est
+un usage, pas une obligation. Le contrôle de cohérence vous prévient si des
+factures portent de la TVA sans numéro de TVA enregistré.
+
+**L'anonymisation d'un contact efface-t-elle aussi les sauvegardes ?**
+Non. Une sauvegarde est une copie figée : celles prises avant l'anonymisation
+contiennent encore les coordonnées, et les réécrire leur retirerait la valeur
+qu'elles ont pour vos livres. Elles disparaissent d'elles-mêmes à mesure que de
+nouvelles sont prises. D'ici là, la règle qui vous revient est de **ne pas
+restaurer une sauvegarde antérieure pour retrouver ces données** — et
+d'appliquer la même règle aux copies que vous gardez sur un NAS ou une clé USB.
+
 **Puis-je l'utiliser à plusieurs ?**
 Un seul compte pour l'instant. La gestion multi-utilisateurs avec rôles — dont
 un accès en lecture seule pour votre fiduciaire — est planifiée.

@@ -29,7 +29,11 @@ type CompanyInfo struct {
 	Country   string // ISO alpha-2, e.g. "CH"
 	IBAN      string // QR-IBAN preferred; regular IBAN fallback
 	QRIBAN    string
-	VATNumber string // e.g. "CHE-123.456.789 MWST"
+	VATNumber string // n° TVA, p. ex. "CHE-123.456.789 TVA"
+	// UIDNumber est le numéro d'identification des entreprises (IDE), commun à
+	// toutes les entreprises inscrites au registre — assujetties à la TVA ou
+	// non. Il n'était pas rendu du tout, alors qu'il identifie l'émetteur.
+	UIDNumber string // p. ex. "CHE-123.456.789"
 	LogoData  string // base64 data URL (data:image/png;base64,…) — optional
 }
 
@@ -153,20 +157,40 @@ func renderHeader(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		}
 	}
 
-	// Company name (large)
-	pdf.SetFont("Helvetica", "B", 14)
+	// Nom de l'émetteur. En 14 points il concurrençait le titre du document et
+	// débordait sur une raison sociale longue ; 11,5 le laisse lisible sans
+	// écraser le reste de l'en-tête.
+	pdf.SetFont("Helvetica", "B", 11.5)
 	pdf.SetXY(textX, 15)
-	pdf.CellFormat(115-textX+15, 7, latin1(inv.Company.Name), "", 1, "L", false, 0, "")
+	pdf.CellFormat(115-textX+15, 6, latin1(inv.Company.Name), "", 1, "L", false, 0, "")
 
-	// Company address (small)
+	// Adresse
 	pdf.SetFont("Helvetica", "", 9)
 	pdf.SetX(textX)
 	pdf.CellFormat(115-textX+15, 5, latin1(inv.Company.Address), "", 1, "L", false, 0, "")
 	pdf.SetX(textX)
 	pdf.CellFormat(115-textX+15, 5, latin1(inv.Company.City), "", 1, "L", false, 0, "")
-	if inv.Company.VATNumber != "" {
-		pdf.SetX(textX)
-		pdf.CellFormat(115-textX+15, 5, latin1("TVA/MwSt: "+inv.Company.VATNumber), "", 1, "L", false, 0, "")
+
+	// IDE et numéro de TVA. Ce sont deux choses distinctes : l'IDE identifie
+	// l'entreprise au registre, qu'elle soit assujettie ou non, tandis que le
+	// numéro de TVA (le même IDE suivi de la mention « TVA ») n'existe que pour
+	// un assujetti. La LTVA art. 26 al. 2 let. a exige ce dernier sur toute
+	// facture portant de la TVA.
+	//
+	// Quand les deux sont renseignés et que le numéro de TVA contient déjà
+	// l'IDE, une seule ligne suffit : les répéter donnerait deux fois le même
+	// numéro à un lecteur qui y chercherait une différence.
+	uid, vat := inv.Company.UIDNumber, inv.Company.VATNumber
+	switch {
+	case vat != "" && uid != "" && strings.Contains(normaliseUID(vat), normaliseUID(uid)):
+		companyLine(pdf, textX, "IDE / N° TVA : "+vat)
+	default:
+		if uid != "" {
+			companyLine(pdf, textX, "IDE : "+uid)
+		}
+		if vat != "" {
+			companyLine(pdf, textX, "N° TVA : "+vat)
+		}
 	}
 
 	// Document title (right). It must name what the document actually is: a
@@ -294,7 +318,14 @@ func renderTotals(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	}
 
 	totalRow(latin1("Sous-total:"), fmtMoney(inv.SubtotalAmount, inv.Currency), false)
-	totalRow(fmt.Sprintf("TVA %.1f%%:", inv.VATRate), fmtMoney(inv.VATAmount, inv.Currency), false)
+
+	// La ligne de TVA n'apparaît que s'il y a de la TVA. Elle était imprimée
+	// même à 0 %, ce qu'une entreprise non assujettie n'a pas le droit de faire
+	// figurer sur ses factures (LTVA art. 27 al. 1) — et qui la rendrait
+	// redevable de l'impôt ainsi mentionné (al. 2).
+	if inv.VATAmount != 0 || inv.VATRate != 0 {
+		totalRow(fmt.Sprintf("TVA %.1f%%:", inv.VATRate), fmtMoney(inv.VATAmount, inv.Currency), false)
+	}
 
 	// Separator line
 	y := pdf.GetY()
@@ -799,4 +830,28 @@ func dueDateLabel(docType string) string {
 // document. Only an invoice asks the recipient for money.
 func wantsPaymentSlip(docType string) bool {
 	return docType == "" || docType == "invoice"
+}
+
+// companyLine écrit une ligne d'identification de l'émetteur sous l'adresse.
+func companyLine(pdf *gofpdf.Fpdf, x float64, text string) {
+	pdf.SetX(x)
+	pdf.CellFormat(115-x+15, 5, latin1(text), "", 1, "L", false, 0, "")
+}
+
+// normaliseUID retire ponctuation, espaces et mentions pour comparer un IDE à
+// un numéro de TVA : « CHE-123.456.789 » et « CHE-123.456.789 TVA » désignent
+// la même entreprise, et les afficher tous les deux ferait chercher une
+// différence qui n'existe pas.
+func normaliseUID(v string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(v) {
+		if (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') {
+			b.WriteRune(r)
+		}
+	}
+	out := b.String()
+	for _, suffix := range []string{"TVA", "MWST", "IVA", "VAT"} {
+		out = strings.TrimSuffix(out, suffix)
+	}
+	return out
 }
