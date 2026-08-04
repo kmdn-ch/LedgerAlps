@@ -3,7 +3,9 @@ package invoicing
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
@@ -28,6 +30,11 @@ var (
 	ErrNotAnInvoice         = fmt.Errorf("seule une facture peut faire l'objet d'une note de crédit")
 	ErrInvoiceNotCreditable = fmt.Errorf("une facture au statut brouillon ou annulé ne peut pas être créditée")
 	ErrCreditExceedsInvoice = fmt.Errorf("le total des notes de crédit dépasserait le montant de la facture")
+	// Une facture ne devient pas une offre, ni une note de crédit une facture :
+	// leur numérotation, leur portée comptable et leur traitement TVA diffèrent.
+	// Changer de nature après émission effacerait la trace de ce qui a été
+	// envoyé (CO art. 957a al. 2 ch. 5).
+	ErrDocumentTypeImmutable = fmt.Errorf("le type d'un document ne peut pas être changé après sa création")
 )
 
 // validTransitions defines the allowed status state machine for a document
@@ -160,6 +167,14 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 	// donc 0 est la bonne réponse et non une valeur par défaut arbitraire.
 	primaryVATRate := headerVATRate(req.Lines)
 
+	// Facturer de la TVA sans être inscrit au registre des assujettis rend
+	// l'émetteur redevable de l'impôt mentionné (LTVA art. 27 al. 2), qu'il
+	// l'ait encaissé ou non. Le contrôle de cohérence le signalait après coup ;
+	// le refuser à la source évite d'avoir à corriger des factures envoyées.
+	if err := s.checkVATAllowed(ctx, s.db, vatAmount, primaryVATRate); err != nil {
+		return nil, err
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
@@ -274,14 +289,43 @@ func (s *Service) UpdateInvoice(ctx context.Context, invoiceID string, req Creat
 	if req.Currency == "" {
 		req.Currency = "CHF"
 	}
+
+	// Le type de document ne se DÉDUIT pas d'un champ omis. Il retombait sur
+	// « invoice », si bien qu'une modification sans ce champ transformait une
+	// note de crédit en facture : le lien vers la pièce corrigée survivait dans
+	// la base mais le document changeait de nature, ce que la LTVA art. 27
+	// al. 4 ne prévoit pas — et la note disparaissait du calcul de TVA en tant
+	// que correction. Un champ absent veut dire « inchangé ».
+	var currentType string
+	if err := s.db.QueryRowContext(ctx, db.Rebind(
+		`SELECT document_type FROM invoices WHERE id = ?`, s.usePostgres), invoiceID,
+	).Scan(&currentType); err != nil {
+		return nil, ErrInvoiceNotFound
+	}
 	if req.DocumentType == "" {
-		req.DocumentType = "invoice"
+		req.DocumentType = currentType
+	}
+	if req.DocumentType != currentType {
+		return nil, ErrDocumentTypeImmutable
 	}
 
 	subtotal, vatAmount, total := computeTotals(req.Lines)
-	primaryVATRate := 8.1
-	if len(req.Lines) > 0 && req.Lines[0].VATRate > 0 {
-		primaryVATRate = req.Lines[0].VATRate
+	primaryVATRate := headerVATRate(req.Lines)
+
+	// ── Garde-fou TVA ───────────────────────────────────────────────────────
+	if err := s.checkVATAllowed(ctx, s.db, vatAmount, primaryVATRate); err != nil {
+		return nil, err
+	}
+
+	// ── Garde-fou du plafond de crédit ──────────────────────────────────────
+	//
+	// Le plafond était vérifié à la CRÉATION d'une note de crédit et nulle part
+	// ailleurs. Modifier ensuite ses lignes le contournait entièrement : une
+	// note de 500 sur une facture de 500 pouvait passer à 1500 en HTTP 200,
+	// sous-évaluant la TVA due d'autant. Vérifié sur un serveur réel avant
+	// correction.
+	if err := s.checkCreditCap(ctx, s.db, invoiceID, total); err != nil {
+		return nil, err
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -860,4 +904,95 @@ func headerVATRate(lines []LineInput) float64 {
 		return 0
 	}
 	return lines[0].VATRate
+}
+
+// ─── Garde-fous ──────────────────────────────────────────────────────────────
+
+// ErrVATWithoutNumber refuse d'émettre un document portant de la TVA quand
+// aucun numéro de TVA n'est enregistré pour l'entreprise.
+// errors.New et non fmt.Errorf : le message contient « 0 % », que le
+// vérificateur de format lit comme un verbe inconnu — et il a raison, un
+// message statique n'a rien à faire dans une fonction de formatage.
+var ErrVATWithoutNumber = errors.New(
+	"aucun numéro de TVA n'est enregistré : vous ne pouvez pas facturer de TVA. " +
+		"Si vous êtes assujetti, saisissez-le dans Paramètres → Identité ; " +
+		"sinon, passez les lignes à 0 % — la LTVA art. 27 al. 1 interdit de faire " +
+		"figurer l'impôt, et l'al. 2 vous en rend redevable")
+
+type querier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// checkVATAllowed refuse la TVA à qui n'a pas de numéro de TVA.
+//
+// Ce n'est pas une préférence de présentation : la LTVA art. 27 al. 1 interdit
+// à qui n'est pas inscrit au registre des assujettis de faire figurer l'impôt
+// sur ses factures, et l'al. 2 le rend redevable de ce qu'il a mentionné, même
+// sans l'avoir encaissé. La LTVA art. 26 al. 2 let. a exige symétriquement ce
+// numéro sur toute facture portant de la TVA.
+//
+// L'absence de fiche société ne bloque pas : une installation neuve doit
+// pouvoir établir sa première facture avant d'avoir tout renseigné, et un refus
+// à ce stade ressemblerait à une panne.
+func (s *Service) checkVATAllowed(ctx context.Context, q querier, vatAmount, vatRate float64) error {
+	if vatAmount == 0 && vatRate == 0 {
+		return nil
+	}
+	var vatNumber string
+	err := q.QueryRowContext(ctx, db.Rebind(
+		`SELECT COALESCE(vat_number, '') FROM company_settings LIMIT 1`, s.usePostgres),
+	).Scan(&vatNumber)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load company settings: %w", err)
+	}
+	if strings.TrimSpace(vatNumber) == "" {
+		return ErrVATWithoutNumber
+	}
+	return nil
+}
+
+// checkCreditCap refuse qu'une note de crédit, additionnée à ses sœurs, dépasse
+// la facture qu'elle corrige. `documentID` est la note elle-même, exclue de la
+// somme pour que modifier son montant se compare à ce que les AUTRES ont déjà
+// crédité — sans quoi une note se compterait deux fois.
+//
+// Une tolérance d'un centime : les totaux sont arrondis à 5 centimes, donc
+// créditer ligne à ligne peut atterrir un ou deux centimes au-dessus sans que
+// personne n'ait sur-crédité quoi que ce soit.
+func (s *Service) checkCreditCap(ctx context.Context, q querier, documentID string, newTotal float64) error {
+	var correctsID sql.NullString
+	var docType string
+	if err := q.QueryRowContext(ctx, db.Rebind(
+		`SELECT document_type, corrects_invoice_id FROM invoices WHERE id = ?`, s.usePostgres),
+		documentID).Scan(&docType, &correctsID); err != nil {
+		return nil // le document n'existe pas encore, ou plus : rien à borner
+	}
+	if docType != DocumentTypeCreditNote || !correctsID.Valid {
+		return nil
+	}
+
+	var invoiceTotal float64
+	var invoiceNumber string
+	if err := q.QueryRowContext(ctx, db.Rebind(
+		`SELECT total_amount, invoice_number FROM invoices WHERE id = ?`, s.usePostgres),
+		correctsID.String).Scan(&invoiceTotal, &invoiceNumber); err != nil {
+		return nil
+	}
+
+	var others float64
+	if err := q.QueryRowContext(ctx, db.Rebind(`
+		SELECT COALESCE(SUM(total_amount), 0) FROM invoices
+		WHERE corrects_invoice_id = ? AND id <> ? AND status <> 'cancelled'`, s.usePostgres),
+		correctsID.String, documentID).Scan(&others); err != nil {
+		return fmt.Errorf("sum sibling credit notes: %w", err)
+	}
+
+	if others+newTotal > invoiceTotal+0.01 {
+		return fmt.Errorf("%w: %.2f déjà crédités + %.2f demandés > %.2f facturés (%s)",
+			ErrCreditExceedsInvoice, others, newTotal, invoiceTotal, invoiceNumber)
+	}
+	return nil
 }

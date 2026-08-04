@@ -220,6 +220,9 @@ export interface CompanySettings {
   vat_number: string
   phone: string
   email: string
+  bank_name: string
+  bank_address: string
+  bank_bic: string
   iban: string
   fiscal_year_start_month: number
   currency: string

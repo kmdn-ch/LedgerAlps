@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, Trash2, ArrowLeft, Save, UserPlus, X, AlertTriangle } from 'lucide-react'
 import { invoicesApi, contactsApi, settingsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
+import { refusalMessage } from '@/utils/refusal'
 import { formatCHF } from '@/utils'
 import type { Contact, CompanySettings } from '@/types'
 
@@ -248,7 +249,10 @@ export function NewInvoicePage() {
         }
       />
 
-      {create.error && <ErrorBanner message="Erreur lors de la création." />}
+      {/* Le message générique masquait la vraie raison d'un refus : sans TVA
+          enregistrée, le serveur explique pourquoi il refuse et ce qu'il faut
+          faire. Un « Erreur lors de la création » n'apprend rien. */}
+      {create.error && <ErrorBanner message={refusalMessage(create.error, 'Erreur lors de la création.')} />}
 
       <form onSubmit={handleSubmit(d => create.mutate(d))} className="space-y-5">
         {/* Infos document */}

@@ -123,14 +123,16 @@ func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byt
 	}
 	settingsQ := db.Rebind(`
 		SELECT company_name, address_street, address_postal_code, address_city, address_country,
-		       iban, vat_number, che_number, COALESCE(phone,''), COALESCE(email,''), logo_data
+		       iban, vat_number, che_number, COALESCE(phone,''), COALESCE(email,''),
+		       COALESCE(bank_name,''), COALESCE(bank_address,''), COALESCE(bank_bic,''), logo_data
 		FROM company_settings LIMIT 1`, h.usePostgres)
 	var dbName, dbStreet, dbPostal, dbCity, dbCountry, dbIBAN, dbVAT, dbCHE sql.NullString
-	var dbPhone, dbEmail sql.NullString
+	var dbPhone, dbEmail, dbBankName, dbBankAddr, dbBankBIC sql.NullString
 	var dbLogo sql.NullString
 	if err := h.db.QueryRowContext(ctx, settingsQ).Scan(
 		&dbName, &dbStreet, &dbPostal, &dbCity, &dbCountry,
-		&dbIBAN, &dbVAT, &dbCHE, &dbPhone, &dbEmail, &dbLogo,
+		&dbIBAN, &dbVAT, &dbCHE, &dbPhone, &dbEmail,
+		&dbBankName, &dbBankAddr, &dbBankBIC, &dbLogo,
 	); err == nil {
 		if dbName.Valid && dbName.String != "" {
 			company.Name = dbName.String
@@ -161,6 +163,15 @@ func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byt
 		}
 		if dbEmail.Valid {
 			company.Email = dbEmail.String
+		}
+		if dbBankName.Valid {
+			company.BankName = dbBankName.String
+		}
+		if dbBankAddr.Valid {
+			company.BankAddress = dbBankAddr.String
+		}
+		if dbBankBIC.Valid {
+			company.BankBIC = dbBankBIC.String
 		}
 		if dbLogo.Valid {
 			company.LogoData = dbLogo.String

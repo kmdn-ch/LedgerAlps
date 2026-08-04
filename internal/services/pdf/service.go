@@ -33,10 +33,13 @@ type CompanyInfo struct {
 	// UIDNumber est le numéro d'identification des entreprises (IDE), commun à
 	// toutes les entreprises inscrites au registre — assujetties à la TVA ou
 	// non. Il n'était pas rendu du tout, alors qu'il identifie l'émetteur.
-	UIDNumber string // p. ex. "CHE-123.456.789"
-	Phone     string
-	Email     string
-	LogoData  string // base64 data URL (data:image/png;base64,…) — optional
+	UIDNumber   string // p. ex. "CHE-123.456.789"
+	Phone       string
+	Email       string
+	BankName    string
+	BankAddress string
+	BankBIC     string
+	LogoData    string // base64 data URL (data:image/png;base64,…) — optional
 }
 
 // InvoiceLine is a single line item rendered on the PDF.
@@ -140,6 +143,9 @@ func Generate(inv InvoiceData) ([]byte, error) {
 
 	// ── Notes / terms ─────────────────────────────────────────────────────────
 	renderNotes(pdf, inv)
+
+	// ── Coordonnées de virement ───────────────────────────────────────────────
+	renderBankDetails(pdf, inv)
 
 	// ── Swiss QR payment slip (bottom 105 mm) ─────────────────────────────────
 	//
@@ -434,6 +440,50 @@ func renderTotals(pdf *gofpdf.Fpdf, inv InvoiceData) {
 
 	totalRow("TOTAL "+inv.Currency+":", fmtMoney(inv.TotalAmount, inv.Currency), true)
 	pdf.SetY(pdf.GetY() + 5)
+}
+
+// renderBankDetails imprime les coordonnées de virement quand elles existent.
+//
+// La QR-facture suffit à un paiement en Suisse : le bulletin porte tout ce que
+// la banque doit savoir. Elle ne suffit pas à un virement depuis l'étranger, où
+// l'on demande le nom de la banque et le BIC — ni à un client qui saisit le
+// virement à la main et veut vérifier où part l'argent.
+//
+// Le bloc n'apparaît que si quelque chose a été renseigné : imprimer un
+// intitulé « Coordonnées bancaires » suivi de rien ferait douter du reste.
+func renderBankDetails(pdf *gofpdf.Fpdf, inv InvoiceData) {
+	c := inv.Company
+	if c.BankName == "" && c.BankBIC == "" && c.BankAddress == "" {
+		return
+	}
+	if pdf.GetY()+20 > contentBottom {
+		pdf.AddPage()
+	}
+
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.SetX(15)
+	pdf.CellFormat(180, 5, latin1("Paiement par virement bancaire"), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 9)
+
+	line := func(label, value string) {
+		if value == "" {
+			return
+		}
+		pdf.SetX(15)
+		pdf.CellFormat(30, 5, latin1(label), "", 0, "L", false, 0, "")
+		pdf.CellFormat(150, 5, latin1(value), "", 1, "L", false, 0, "")
+	}
+	line("Banque :", c.BankName)
+	line("Adresse :", c.BankAddress)
+	line("BIC/SWIFT :", c.BankBIC)
+	iban := c.IBAN
+	if c.QRIBAN != "" {
+		iban = c.QRIBAN
+	}
+	line("IBAN :", formatIBAN(iban))
+	line(latin1("Bénéficiaire :"), c.Name)
+
+	pdf.SetY(pdf.GetY() + 3)
 }
 
 func renderNotes(pdf *gofpdf.Fpdf, inv InvoiceData) {

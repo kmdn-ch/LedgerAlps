@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Plus, Trash2, ArrowLeft, Save, UserPlus, X, AlertTriangle } from 'lucide-react'
 import { invoicesApi, contactsApi, settingsApi } from '@/api/client'
 import { PageHeader, ErrorBanner, LoadingSpinner } from '@/components/ui'
+import { refusalMessage } from '@/utils/refusal'
 import { formatCHF } from '@/utils'
 import type { Contact, CompanySettings, Invoice } from '@/types'
 
@@ -256,9 +257,7 @@ export function EditInvoicePage() {
       />
 
       {save.isError && (
-        <ErrorBanner message={
-          (save.error as any)?.response?.data?.error ?? 'Erreur lors de la sauvegarde.'
-        } />
+        <ErrorBanner message={refusalMessage(save.error, 'Erreur lors de la sauvegarde.')} />
       )}
 
       <form onSubmit={handleSubmit(d => save.mutate(d))} className="space-y-5">

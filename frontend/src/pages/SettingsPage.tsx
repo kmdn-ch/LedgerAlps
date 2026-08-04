@@ -18,6 +18,9 @@ const schema = z.object({
   che_number:            z.string().default(''),
   vat_number:            z.string().default(''),
   phone:                 z.string().default(''),
+  bank_name:             z.string().default(''),
+  bank_address:          z.string().default(''),
+  bank_bic:              z.string().default(''),
   email:                 z.string().default(''),
   address_street:        z.string().default(''),
   address_postal_code:   z.string().default(''),
@@ -62,6 +65,9 @@ export function SettingsPage() {
       che_number: '',
       vat_number: '',
       phone: '',
+      bank_name: '',
+      bank_address: '',
+      bank_bic: '',
       email: '',
       address_street: '',
       address_postal_code: '',
@@ -82,6 +88,9 @@ export function SettingsPage() {
         che_number:            company.che_number             ?? '',
         vat_number:            company.vat_number             ?? '',
         phone:                 company.phone                  ?? '',
+        bank_name:             company.bank_name              ?? '',
+        bank_address:          company.bank_address           ?? '',
+        bank_bic:              company.bank_bic               ?? '',
         email:                 company.email                  ?? '',
         address_street:        company.address_street         ?? '',
         address_postal_code:   company.address_postal_code   ?? '',
@@ -332,6 +341,37 @@ export function SettingsPage() {
                 <div className="col-span-2">
                   <label className="label">N° TVA AFC</label>
                   <input className="input font-mono" placeholder="CHE-123.456.789 MWST" {...register('vat_number')} />
+                  <p className="text-xs text-alpine-400 mt-1">
+                    Sans ce numéro, LedgerAlps refuse d'établir une facture portant de la TVA :
+                    la LTVA art. 27 al. 1 l'interdit à qui n'est pas assujetti, et l'al. 2 vous
+                    en rendrait redevable même sans l'avoir encaissée.
+                  </p>
+                </div>
+
+                {/* Coordonnées de virement. La QR-facture suffit à un paiement
+                    en Suisse ; un virement depuis l'étranger demande le nom de
+                    la banque et le BIC. Facultatif, donc présenté comme tel. */}
+                <div className="col-span-2 pt-2 border-t border-neutral-200">
+                  <h3 className="text-sm font-medium text-alpine-800 mb-1">
+                    Paiement par virement <span className="font-normal text-alpine-400">(facultatif)</span>
+                  </h3>
+                  <p className="text-xs text-alpine-400 mb-3">
+                    Ces informations s'ajoutent à la facture pour un client qui paie par virement
+                    plutôt qu'avec le QR code — typiquement depuis l'étranger. Laissez-les vides
+                    si vous n'encaissez qu'en Suisse.
+                  </p>
+                </div>
+                <div>
+                  <label className="label">Nom de la banque</label>
+                  <input className="input" placeholder="Banque Cantonale Vaudoise" {...register('bank_name')} />
+                </div>
+                <div>
+                  <label className="label">BIC / SWIFT</label>
+                  <input className="input font-mono uppercase" placeholder="BCVLCH2LXXX" {...register('bank_bic')} />
+                </div>
+                <div className="col-span-2">
+                  <label className="label">Adresse de la banque</label>
+                  <input className="input" placeholder="Place Saint-François 14, 1003 Lausanne" {...register('bank_address')} />
                 </div>
               </div>
             </div>

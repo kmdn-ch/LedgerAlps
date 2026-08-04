@@ -276,6 +276,13 @@ func (h *InvoicesHandler) CreateInvoice(c *gin.Context) {
 		Lines:        lines,
 	})
 	if err != nil {
+		// 409 : la demande est bien formée, elle se heurte à une règle légale.
+		// Le distinguer d'un 422 permet à l'interface de présenter un refus
+		// explicable plutôt qu'une erreur de saisie.
+		if errors.Is(err, invoicing.ErrVATWithoutNumber) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "vat_without_number"})
+			return
+		}
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
 	}
@@ -332,7 +339,16 @@ func (h *InvoicesHandler) UpdateInvoice(c *gin.Context) {
 		case invoicing.ErrInvoicePaid:
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			// Les refus métier arrivaient ici et sortaient en 500, ce qui les
+			// faisait passer pour une panne alors qu'ils sont une décision.
+			switch {
+			case errors.Is(err, invoicing.ErrCreditExceedsInvoice):
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "credit_exceeds_invoice"})
+			case errors.Is(err, invoicing.ErrVATWithoutNumber):
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "vat_without_number"})
+			default:
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
 		}
 		return
 	}

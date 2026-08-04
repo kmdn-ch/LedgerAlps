@@ -249,6 +249,9 @@ type CompanySettings struct {
 	VatNumber            string    `db:"vat_number"               json:"vat_number"`
 	Phone                string    `db:"phone"                json:"phone"`
 	Email                string    `db:"email"                json:"email"`
+	BankName             string    `db:"bank_name"            json:"bank_name"`
+	BankAddress          string    `db:"bank_address"         json:"bank_address"`
+	BankBIC              string    `db:"bank_bic"             json:"bank_bic"`
 	IBAN                 string    `db:"iban"                     json:"iban"`
 	FiscalYearStartMonth int       `db:"fiscal_year_start_month"  json:"fiscal_year_start_month"`
 	Currency             string    `db:"currency"                 json:"currency"`
