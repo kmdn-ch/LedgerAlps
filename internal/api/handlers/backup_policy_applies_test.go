@@ -24,12 +24,21 @@ import (
 
 const phraseDeTest = "colline-fromage-tunnel-95-Valais"
 
+// withAppData isole le dossier de données de l'application pour un test.
+//
+// Il faut détourner APPDATA *et* HOME/USERPROFILE : config.AppDataDir() ne lit
+// APPDATA que sous Windows et retombe sur os.UserHomeDir() partout ailleurs.
+// La première version ne posait qu'APPDATA — sous Linux, tous les tests
+// partageaient donc ~/.ledgeralps, la politique écrite par l'un fuyait dans le
+// suivant, et le test « sans politique » lisait celle du test précédent. Il
+// écrivait aussi dans le vrai profil du runner. Passé en local, tombé en CI.
 func withAppData(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("BACKUP_PASSPHRASE", "")
 	t.Setenv("APPDATA", dir)
-	t.Setenv("XDG_DATA_HOME", dir)
+	t.Setenv("HOME", dir)        // os.UserHomeDir() sur Unix
+	t.Setenv("USERPROFILE", dir) // os.UserHomeDir() sur Windows
 	return config.AppDataDir()
 }
 
@@ -130,5 +139,23 @@ func TestUneSauvegardeAvecLaPolitiqueEstChiffree(t *testing.T) {
 	}
 	if string(raw[:15]) == "SQLite format 3" {
 		t.Fatal("en-tête SQLite : le fichier est lisible sans clé")
+	}
+}
+
+// L'isolation est la condition de validite de tous les tests ci-dessus. La
+// verifier explicitement : sans cela, un dossier partage les fait passer ou
+// echouer pour des raisons qui n'ont rien a voir avec ce qu'ils mesurent.
+func TestChaqueTestALeSienDeDossier(t *testing.T) {
+	a := withAppData(t)
+	if err := db.NewBackupPolicy(a).Set(phraseDeTest); err != nil {
+		t.Fatal(err)
+	}
+	// Un second dossier, dans le meme test : il ne doit rien voir du premier.
+	b := withAppData(t)
+	if a == b {
+		t.Fatalf("les deux appels rendent le meme dossier: %s", a)
+	}
+	if _, src := db.NewBackupPolicy(b).Passphrase(); src != db.SourceNone {
+		t.Fatalf("source=%q dans un dossier neuf : l'isolation ne tient pas", src)
 	}
 }
