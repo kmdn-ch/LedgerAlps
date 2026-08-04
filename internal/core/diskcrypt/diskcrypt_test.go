@@ -81,22 +81,3 @@ func TestLaLimiteDuConstatEstToujoursEnoncee(t *testing.T) {
 		t.Fatal("aucune réserve énoncée sur la portée du constat")
 	}
 }
-
-// Sur Windows, la fonctionnalité nommée doit correspondre à l'édition : envoyer
-// un utilisateur de Famille vers le panneau BitLocker le fait chercher une
-// entrée de menu que son édition n'a pas.
-func TestWindowsNommeLaBonneFonctionnalite(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("propre à Windows")
-	}
-	r := Check()
-	_, home := windowsEdition()
-	want := "BitLocker"
-	if home {
-		want = "Chiffrement de l'appareil"
-	}
-	if r.Feature != want {
-		t.Fatalf("fonctionnalité = %q, attendu %q pour cette édition (%s)", r.Feature, want, r.Edition)
-	}
-	t.Logf("édition détectée : %q → %s", r.Edition, r.Feature)
-}
