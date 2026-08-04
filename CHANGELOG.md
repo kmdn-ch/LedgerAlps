@@ -5,7 +5,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
-## [Unreleased]
+## [1.4.7] — 2026-08-04
 
 ### Corrigé
 - **Le nom des sauvegardes était écrit en heure UTC** alors que l'interface affiche l'heure du fichier, que le système rend en heure locale. Une sauvegarde prise à 16 h 23 en Suisse s'appelait `…T14-23-05` et s'affichait « 16:23 » : deux heures d'écart entre l'explorateur de fichiers et le logiciel, sur des fichiers qu'il faut savoir identifier pendant dix ans (CO art. 958f). Le nom porte désormais l'heure locale suivie du décalage — `…T20-10-51+0200` — le décalage levant l'ambiguïté de la nuit du passage à l'heure d'hiver, où 02 h 30 existe deux fois.
