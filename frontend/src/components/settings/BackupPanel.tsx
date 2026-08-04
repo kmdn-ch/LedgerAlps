@@ -15,7 +15,8 @@ import { backupsApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner, EmptyState } from '@/components/ui'
 import { formatDate } from '@/utils'
 import { waitForShutdownThenGo } from '@/utils/restart'
-import type { BackupItem, PendingRestore } from '@/types'
+import { refusalMessage } from '@/utils/refusal'
+import type { BackupItem, PendingRestore, BackupPolicy } from '@/types'
 
 function formatSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} Mo`
@@ -139,6 +140,13 @@ export function BackupPanel() {
   // Le serveur répond, puis se coupe et relance une copie de lui-même. On
   // attend qu'il réponde à nouveau avant de recharger : recharger trop tôt
   // afficherait une erreur de connexion là où tout se passe bien.
+  // La politique sert ici aussi : le dialogue de creation doit dire que laisser
+  // le champ vide utilisera la phrase enregistree, et non produire du clair.
+  const storedPolicy = useQuery<BackupPolicy>({
+    queryKey: ['backups', 'policy'],
+    queryFn:  () => backupsApi.policy().then(r => r.data),
+  }).data
+
   const [restarting, setRestarting] = useState(false)
   const restart = useMutation({
     mutationFn: async () => {
@@ -160,6 +168,8 @@ export function BackupPanel() {
 
   return (
     <div className="space-y-5">
+      <AutoBackupPolicy />
+
       {/* ── Restauration en attente ─────────────────────────────────────── */}
       {pending && (
         <div className="rounded-md border border-warning-500 bg-warning-100 px-4 py-3 text-sm">
@@ -307,6 +317,20 @@ export function BackupPanel() {
                 USB ou un disque externe qui vous échappe.
               </p>
 
+              {/* Quand une phrase de passe est enregistrée, elle s'applique
+                  aussi ici. Le dire : sans cela, laisser le champ vide semble
+                  vouloir dire « en clair » — c'était d'ailleurs le cas, et le
+                  bouton produisait un fichier lisible sur une installation dont
+                  les sauvegardes automatiques étaient chiffrées. */}
+              {storedPolicy?.encrypting && (
+                <p className="rounded-md bg-neutral-50 border border-neutral-200 px-3 py-2 text-alpine-700">
+                  Vous avez enregistré une phrase de passe pour vos sauvegardes.
+                  <strong> Laissez ce champ vide</strong> pour l'utiliser. N'en saisissez une ici
+                  que pour protéger cette copie-là avec une phrase différente — par exemple si
+                  vous la remettez à votre fiduciaire.
+                </p>
+              )}
+
               <div>
                 <label className="label" htmlFor="create-passphrase">
                   Phrase de passe de chiffrement
@@ -395,7 +419,9 @@ export function BackupPanel() {
                 </button>
                 <button
                   onClick={() => create.mutate(passphrase)}
-                  disabled={create.isPending || !checksFor(passphrase).every(c => c.met)}
+                  disabled={create.isPending
+                    || !(checksFor(passphrase).every(c => c.met)
+                         || (passphrase === '' && storedPolicy?.encrypting))}
                   className="btn-primary btn-sm flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {create.isPending && <Loader2 size={14} className="animate-spin" />}
@@ -503,6 +529,197 @@ export function BackupPanel() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+
+// ─── Chiffrement des sauvegardes automatiques ────────────────────────────────
+//
+// Le défaut était : ne rien chiffrer, sans le dire. Mesuré sur une installation
+// réelle, le dossier contenait des fichiers SQLite dont l'en-tête, le numéro de
+// TVA, les adresses e-mail et l'IBAN se lisaient sans aucune clé — jusqu'à
+// quatorze copies complètes, dans le dossier que l'on copie justement sur un NAS
+// ou une clé USB.
+//
+// Renverser le défaut ne suffisait pas : une phrase de passe que l'utilisateur
+// ne peut pas produire après une panne de disque transforme dix ans de pièces à
+// conserver (CO art. 958f) en dix ans de pièces perdues. D'où la case à cocher
+// qui n'est pas une formalité — c'est le seul moment où il peut encore la noter.
+function AutoBackupPolicy() {
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState(false)
+  const [pass, setPass] = useState('')
+  const [show, setShow] = useState(false)
+  const [noted, setNoted] = useState(false)
+  const [alsoExisting, setAlsoExisting] = useState(true)
+
+  const policy = useQuery<BackupPolicy>({
+    queryKey: ['backups', 'policy'],
+    queryFn:  () => backupsApi.policy().then(r => r.data),
+  })
+
+  const reset = () => { setEditing(false); setPass(''); setNoted(false); setShow(false) }
+
+  const save = useMutation({
+    mutationFn: () => backupsApi.setPolicy(pass, alsoExisting),
+    onSuccess: () => {
+      reset()
+      qc.invalidateQueries({ queryKey: ['backups'] })
+    },
+  })
+
+  const clear = useMutation({
+    mutationFn: () => backupsApi.clearPolicy(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['backups'] }),
+  })
+
+  if (!policy.data) return null
+  const p = policy.data
+  const strong = checksFor(pass).every(c => c.met)
+
+  return (
+    <div className={`rounded-md border px-4 py-3 text-sm ${
+      p.encrypting ? 'border-neutral-200 bg-neutral-50' : 'border-warning-500 bg-warning-100'
+    }`}>
+      <div className="flex items-start gap-2">
+        {p.encrypting
+          ? <ShieldCheck size={16} className="mt-0.5 flex-shrink-0 text-success-700" />
+          : <ShieldOff  size={16} className="mt-0.5 flex-shrink-0 text-warning-700" />}
+        <div className="flex-1">
+          {p.encrypting ? (
+            <>
+              <p className="font-medium">Les sauvegardes automatiques sont chiffrées</p>
+              <p className="mt-1 text-alpine-700">
+                {p.source === 'env'
+                  ? <>La phrase de passe vient de la variable d'environnement <code className="text-xs">BACKUP_PASSPHRASE</code> de ce déploiement.</>
+                  : <>Phrase de passe conservée par LedgerAlps — {p.mechanism}.
+                      {!p.sealed && <> Sur ce système, seuls les droits du fichier la protègent.</>}</>}
+              </p>
+            </>
+          ) : p.source === 'unavailable' ? (
+            <>
+              <p className="font-medium">Votre phrase de passe est illisible sur ce compte</p>
+              <p className="mt-1 text-alpine-700">
+                Elle a été scellée sur un autre compte Windows ou une autre machine. En l'état,
+                les prochaines sauvegardes seront écrites <strong>en clair</strong>. Redéfinissez-la
+                ci-dessous — vos anciennes copies chiffrées, elles, exigent toujours la phrase
+                d'origine.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-medium">Les sauvegardes automatiques ne sont pas chiffrées</p>
+              <p className="mt-1 text-alpine-700">
+                Une copie de sauvegarde est un fichier complet de votre comptabilité, qui finit
+                souvent sur un NAS ou une clé USB. Sans phrase de passe, elle s'ouvre sans rien
+                demander.
+              </p>
+            </>
+          )}
+
+          {p.plaintext_count > 0 && (
+            <p className="mt-1.5 text-warning-700">
+              <strong>{p.plaintext_count} copie(s) déjà sur ce disque se lisent sans clé.</strong>
+              {' '}Enregistrer une phrase de passe ne les protège pas rétroactivement.
+            </p>
+          )}
+
+          {/* Le formulaire n'apparaît que si on le demande : sur une machine
+              déjà protégée, l'afficher en permanence invite à changer une
+              phrase qui marche. */}
+          {!editing && p.source !== 'env' && (
+            <div className="flex flex-wrap items-center gap-3 mt-3">
+              <button onClick={() => setEditing(true)} className="btn-secondary btn-sm">
+                {p.encrypting ? 'Changer la phrase de passe' : 'Chiffrer les sauvegardes'}
+              </button>
+              {p.encrypting && (
+                <button
+                  onClick={() => clear.mutate()}
+                  disabled={clear.isPending}
+                  className="text-xs text-alpine-600 hover:text-danger-700 underline underline-offset-2"
+                >
+                  Revenir à des sauvegardes en clair
+                </button>
+              )}
+            </div>
+          )}
+
+          {editing && (
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="label" htmlFor="autopass">Phrase de passe des sauvegardes</label>
+                <div className="relative">
+                  <input
+                    id="autopass"
+                    type={show ? 'text' : 'password'}
+                    value={pass}
+                    onChange={e => setPass(e.target.value)}
+                    autoComplete="new-password"
+                    className="input pr-10"
+                    placeholder="au moins 16 caractères"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShow(!show)}
+                    aria-label={show ? 'Masquer la phrase de passe' : 'Afficher la phrase de passe'}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-alpine-500 hover:text-alpine-900"
+                  >
+                    {show ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {pass && <PassphraseStrength value={pass} />}
+              </div>
+
+              {p.plaintext_count > 0 && (
+                <label className="flex items-start gap-2 text-alpine-700">
+                  <input
+                    type="checkbox"
+                    checked={alsoExisting}
+                    onChange={e => setAlsoExisting(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Chiffrer aussi les {p.plaintext_count} copie(s) déjà présentes.
+                    Chacune est relue et vérifiée avant que la version en clair soit supprimée.
+                  </span>
+                </label>
+              )}
+
+              <label className="flex items-start gap-2 text-alpine-700">
+                <input
+                  type="checkbox"
+                  checked={noted}
+                  onChange={e => setNoted(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <strong>Je l'ai notée ailleurs que sur cet ordinateur.</strong> LedgerAlps la
+                  retiendra pour vous à chaque démarrage, mais ne pourra plus vous la montrer.
+                  Le jour où cette machine n'est plus là, cette phrase est la seule chose qui
+                  ouvre vos sauvegardes.
+                </span>
+              </label>
+
+              {save.isError && (
+                <ErrorBanner message={refusalMessage(save.error, "La phrase de passe n'a pas pu être enregistrée.")} />
+              )}
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => save.mutate()}
+                  disabled={!strong || !noted || save.isPending}
+                  className="btn-primary btn-sm flex items-center gap-1.5"
+                >
+                  {save.isPending && <Loader2 size={13} className="animate-spin" />}
+                  Enregistrer
+                </button>
+                <button onClick={reset} className="btn-ghost btn-sm">Annuler</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

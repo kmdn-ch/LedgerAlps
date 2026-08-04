@@ -18,7 +18,7 @@ func newTestDB(t *testing.T) (*sql.DB, *config.Config) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	cfg := &config.Config{SQLitePath: dbPath}
 
-	database, err := sql.Open("sqlite", "file:"+dbPath+"?_journal_mode=WAL&_foreign_keys=on")
+	database, err := sql.Open(SQLiteDriver, sqliteDSN(dbPath, livePragmas...))
 	if err != nil {
 		t.Fatalf("opening test database: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestBackupSnapshotContainsData(t *testing.T) {
 		t.Fatalf("Backup: %v", err)
 	}
 
-	snap, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	snap, err := sql.Open(SQLiteDriver, sqliteDSN(path, "mode=ro"))
 	if err != nil {
 		t.Fatalf("opening snapshot: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestRestoreReplacesLiveDatabaseAndSnapshotsPrevious(t *testing.T) {
 		t.Errorf("pre-restore snapshot missing: %v", err)
 	}
 
-	reopened, err := sql.Open("sqlite", "file:"+cfg.SQLitePath)
+	reopened, err := sql.Open(SQLiteDriver, sqliteDSN(cfg.SQLitePath))
 	if err != nil {
 		t.Fatalf("reopening restored database: %v", err)
 	}

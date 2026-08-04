@@ -66,7 +66,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 1 | Factures fournisseurs & charges | 🔎 backend | [↓](#1--factures-fournisseurs--charges) |
 | 2 | Sauvegarde & restauration | ✅ | [↓](#2--sauvegarde--restauration) |
 | 3 | Limitation des tentatives de connexion | ✅ | — |
-| 4 | Chiffrement au repos | ✅ sauvegardes · ⛔ base | [↓](#4--chiffrement-au-repos) |
+| 4 | Chiffrement au repos | 🔎 sauvegardes · 🔎 base (option) · 🔎 conseil disque | [↓](#4--chiffrement-au-repos) |
 | 5 | HTTPS natif | 🔎 réseau à valider | [↓](#5--https-natif) |
 | 6 | Rotation du secret de signature | ✅ | [↓](#6--rotation-du-secret-de-signature) |
 | 7 | Maintenance & Système | ✅ conforme | [↓](#7--maintenance--système) |
@@ -103,18 +103,49 @@ restauration planifié.
 
 ### 4 — Chiffrement au repos
 
-**Sauvegardes : fait.** Argon2id + XChaCha20-Poly1305, en Go pur. Ce sont elles
-qui *quittent* la machine et échappent au contrôle de l'utilisateur.
+Trois protections distinctes. Les confondre conduit à en activer une et à se
+croire couvert pour les trois.
 
-**Base SQLite : bloqué par l'architecture.** SQLCipher est une bibliothèque C ;
-le projet compile avec `CGO_ENABLED=0` sur un pilote Go pur, ce qui donne la
-compilation croisée et le binaire unique. Trois options, aucune tranchée :
+| | Protège | État |
+|---|---|---|
+| **Chiffrement du disque** (BitLocker, LUKS) | Tout le poste | 🔎 conseil rendu applicable — édition Windows détectée, marche à suivre affichée |
+| **Sauvegardes** (Argon2id + XChaCha20) | La copie qui voyage | 🔎 chiffrées dès qu'une phrase de passe est enregistrée |
+| **Base de données** (VFS adiantum) | Le fichier, même copié ailleurs | 🔎 option, désactivée par défaut |
 
-| Option | Coût |
-|---|---|
-| Accepter CGO | fin du binaire unique et de la compilation croisée |
-| Chiffrer certaines colonnes | perte de la recherche et des tris dessus |
-| **S'en remettre au disque** (BitLocker, LUKS) | *appliqué en l'état* |
+**Le trou réel n'était pas celui du roadmap.** Les sauvegardes automatiques
+n'étaient chiffrées que si la variable d'environnement `BACKUP_PASSPHRASE`
+existait — c'est-à-dire jamais. Mesuré sur une installation réelle : jusqu'à
+quatorze copies complètes de la comptabilité, en clair, dans le dossier qu'on
+copie justement sur un NAS. En-tête SQLite, numéro de TVA, adresses e-mail et
+IBAN lisibles sans aucune clé.
+
+**Le chiffrement de la base n'était pas impossible, mais mal diagnostiqué.** Le
+blocage n'était pas SQLCipher — c'était le pilote : le paquet `vfs` de
+`modernc.org/sqlite` est en lecture seule, donc rien ne pouvait s'insérer
+dessous. `github.com/ncruces/go-sqlite3` expose un VFS écrivable et livre
+`vfs/adiantum`, en Go pur, `CGO_ENABLED=0` conservé. Coût mesuré : +0,36 ms par
+requête, +64 Mo de mémoire, +2,4 Mo de binaire.
+
+**Ce que le chiffrement de la base ajoute au disque chiffré** : une seule chose,
+et c'est pour elle qu'il existe — la protection *suit le fichier*. Une base
+copiée sur un NAS ou dans un dossier synchronisé reste illisible. Contre le vol
+du poste, BitLocker suffit ; il reste donc le premier conseil, et le chiffrement
+de la base s'adresse à ceux qui ne peuvent pas l'activer.
+
+**Ce qu'il n'ajoute pas** : rien contre un programme lancé sous le même compte
+Windows. Il peut demander la clé exactement comme LedgerAlps le fait.
+
+**La règle qui a décidé la conception** : chiffrer introduit une façon nouvelle
+de perdre dix ans de pièces (CO art. 958f). La clé est donc scellée au compte
+Windows *et* enveloppée dans une phrase de récupération obligatoire ; les
+sauvegardes ne dépendent jamais de la clé machine ; et si la clé devient
+illisible, LedgerAlps démarre en mode récupération plutôt que de refuser de
+démarrer. Ce dernier point manquait, et le logiciel était irrécupérable —
+constaté en effaçant le coffre sur un serveur réel.
+
+**Reste** : rien d'obligatoire. Le chiffrement de colonnes a été écarté — les
+données comptables ne sont pas des « données sensibles » au sens de la nLPD
+art. 5 let. c, et on paierait la recherche et les tris pour peu.
 
 ### 5 — HTTPS natif
 

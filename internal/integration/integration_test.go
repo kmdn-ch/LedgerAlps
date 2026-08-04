@@ -6,7 +6,8 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
-	_ "modernc.org/sqlite"
+	_ "github.com/ncruces/go-sqlite3/driver"
+	_ "github.com/ncruces/go-sqlite3/embed"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,7 +22,8 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/ncruces/go-sqlite3/driver"
+	_ "github.com/ncruces/go-sqlite3/embed"
 )
 
 // ─── Test server setup ────────────────────────────────────────────────────────

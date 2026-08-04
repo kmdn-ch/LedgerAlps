@@ -120,9 +120,29 @@ export const backupsApi = {
   stageRestore: (name: string, passphrase: string) =>
     api.post('/backups/restore', { name, passphrase, confirm: true }),
   cancelRestore: ()                            => api.delete('/backups/restore'),
-  // Redémarre le serveur pour appliquer la restauration préparée. Le serveur
-  // répond avant de s'arrêter, puis relance une copie de lui-même.
+  // La politique de chiffrement des sauvegardes automatiques. Elle est lue
+  // séparément de la liste : elle décrit ce qui va se passer, pas ce qui existe.
+  policy:      ()                              => api.get('/backups/policy'),
+  setPolicy:   (passphrase: string, encryptExisting: boolean) =>
+    api.put('/backups/policy', { passphrase, encrypt_existing: encryptExisting, acknowledged: true }),
+  clearPolicy: ()                              => api.delete('/backups/policy?confirm=true'),
+  // Redémarre le serveur pour appliquer une restauration ou une conversion
+  // préparée. Le serveur répond avant de s'arrêter, puis relance une copie de
+  // lui-même.
   restart: ()                                  => api.post('/system/restart'),
+}
+
+// Chiffrement de la base elle-même. Séparé des sauvegardes : ce sont deux
+// protections distinctes, et les confondre dans un seul écran a déjà produit
+// des questions du type « mes sauvegardes sont chiffrées, donc ma base aussi ? ».
+export const databaseApi = {
+  encryption:        ()                   => api.get('/database/encryption'),
+  enableEncryption:  (recovery: string)   =>
+    api.post('/database/encryption', { recovery_passphrase: recovery, acknowledged: true }),
+  disableEncryption: ()                   => api.delete('/database/encryption?confirm=true'),
+  cancelEncryption:  ()                   => api.delete('/database/encryption/pending'),
+  recoverKey:        (recovery: string)   =>
+    api.post('/database/encryption/recover', { recovery_passphrase: recovery }),
 }
 
 // ─── Maintenance & Système ────────────────────────────────────────────────────

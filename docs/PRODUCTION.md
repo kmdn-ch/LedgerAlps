@@ -267,33 +267,69 @@ même rotation. Il n'y a plus de fichiers `pre-restore` en clair qui
 s'accumulent : les versions antérieures à la v1.4.4 en produisaient, vous pouvez
 les supprimer.
 
-### Pourquoi la base de données est en clair
+### Chiffrement au repos : ce qui protège quoi
 
-`ledgeralps.db` est un fichier SQLite ordinaire : lisible par n'importe quel
-outil, sur n'importe quelle machine. C'est un choix subi, pas assumé, et il vaut
-d'être expliqué.
+Trois protections distinctes, qui ne couvrent pas la même chose. Les confondre
+conduit à en activer une et à se croire couvert pour les trois.
 
-SQLite ne chiffre pas nativement. Les extensions qui le font — SQLCipher, SEE —
-sont des **bibliothèques C**. LedgerAlps compile avec `CGO_ENABLED=0` sur un
-pilote SQLite en Go pur, et c'est précisément ce qui lui donne son binaire
-unique, sans dépendance système, compilable pour Windows depuis Linux. Adopter
-SQLCipher mettrait fin aux deux.
-
-**Les options réelles, avec leur coût :**
-
-| Option | Ce qu'elle protège | Ce qu'elle coûte |
+| | Protège | État par défaut |
 |---|---|---|
-| **Chiffrement du disque** (BitLocker, LUKS) | Tout : base, sauvegardes, `config.json`, et le reste du poste | Rien pour l'application. C'est une mesure du système d'exploitation |
-| Chiffrement applicatif de colonnes | Les seules colonnes sensibles | Plus de recherche ni de tri SQL dessus : lister vos contacts imposerait de déchiffrer chaque ligne. Et la clé reste sur la machine |
-| SQLCipher (CGO) | La base entière | Fin du binaire unique et de la compilation croisée ; une chaîne d'outils par plateforme |
-| VFS chiffré en Go pur | La base entière | Aucune implémentation que nous jugions assez mûre pour des données comptables |
+| **Chiffrement du disque** (BitLocker, LUKS) | Tout : base, sauvegardes, `config.json`, et le reste du poste | À activer par l'utilisateur — c'est une mesure du système d'exploitation |
+| **Sauvegardes chiffrées** (Argon2id + XChaCha20-Poly1305) | La copie qui voyage : NAS, clé USB | Actif dès qu'une phrase de passe est enregistrée |
+| **Base chiffrée** (VFS adiantum) | Le fichier `ledgeralps.db`, y compris copié ailleurs | Désactivé — option |
 
-**Le point commun de toutes les solutions logicielles** : le serveur doit
-pouvoir lire la base **sans intervention humaine** au démarrage. La clé vit donc
-sur la même machine que le fichier qu'elle protège. Contre un portable volé
-éteint, le chiffrement du disque gagne. Contre une machine allumée et
-compromise, rien au niveau applicatif n'aide — l'attaquant lit la mémoire du
-processus, où la base est déchiffrée de toute façon.
+**Commencez par le disque.** Il est gratuit, déjà dans votre système, et il
+couvre aussi vos documents et vos courriels. Les deux autres ne le remplacent
+pas.
+
+#### Chiffrement de la base
+
+`ledgeralps.db` peut être chiffré (Paramètres → Maintenance → Sécurité). Il l'est
+alors par blocs de 4 Kio, journal WAL compris.
+
+Cela a longtemps été porté comme impossible, et pour une bonne raison :
+SQLCipher est une bibliothèque C, or LedgerAlps compile avec `CGO_ENABLED=0`,
+ce qui lui donne son binaire unique et sa compilation croisée. Ce qui a débloqué
+la situation n'est pas SQLCipher mais un **changement de pilote SQLite** : le
+paquet `vfs` de `modernc.org/sqlite` est en lecture seule, donc rien ne pouvait
+s'insérer sous lui, alors que `github.com/ncruces/go-sqlite3` expose un VFS
+chiffrant en Go pur. Aucune dépendance C n'a été ajoutée.
+
+**Ce que cela apporte de plus que BitLocker** : une seule chose, mais réelle.
+Un disque chiffré ne suit pas le fichier ; la base copiée sur un NAS, un partage
+réseau ou un dossier synchronisé reste illisible.
+
+**Ce que cela n'apporte pas** : aucune protection contre un programme lancé sous
+le même compte. Il peut demander la clé exactement comme LedgerAlps le fait.
+
+#### La clé, et pourquoi il y en a deux copies
+
+La clé est scellée au compte Windows par DPAPI — le démarrage ne demande donc
+rien. Hors Windows, il n'existe pas d'équivalent utilisable par un serveur sans
+session de bureau : la clé est alors dans un fichier `0600`, et l'interface le
+dit au lieu de laisser croire à une protection absente.
+
+Un profil recréé ou un Windows réinstallé rend ce scellement illisible. Comme
+une comptabilité doit être conservée dix ans (CO art. 958f), une mesure de
+confidentialité ne peut pas créer une perte de données : une **phrase de
+récupération**, obligatoire à l'activation, enveloppe la même clé. Si la clé
+scellée devient illisible, LedgerAlps démarre en **mode récupération** — une
+page unique qui demande cette phrase, la desselle, la rescelle et relance
+l'application.
+
+**Vos sauvegardes ne dépendent jamais de cette clé.** Elles sont produites en
+clair puis rechiffrées avec votre phrase de passe de sauvegarde, donc
+restaurables sur n'importe quelle machine. Une sauvegarde chiffrée avec la clé
+de la machine deviendrait illisible le jour où cette machine n'est plus là :
+on échangerait un risque de confidentialité contre un risque de perte totale.
+
+#### Le point commun de toutes les solutions logicielles
+
+Le serveur doit pouvoir lire la base **sans intervention humaine** au démarrage.
+La clé vit donc sur la même machine que le fichier qu'elle protège. Contre un
+portable volé éteint, elle gagne. Contre une machine allumée et compromise, rien
+au niveau applicatif n'aide — l'attaquant lit la mémoire du processus, où la base
+est déchiffrée de toute façon.
 
 **LedgerAlps le vérifie.** Au démarrage, l'application lit l'état de BitLocker ;
 si le disque est protégé, l'avertissement de conformité disparaît de lui-même.

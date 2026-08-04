@@ -180,16 +180,38 @@ votre comptabilité ; il faudra simplement vous reconnecter.
 <details>
 <summary><b>Mes données sont-elles chiffrées sur le disque ?</b></summary>
 
-Vos **sauvegardes** peuvent l'être, si vous indiquez une phrase de passe. La
-**base de données elle-même n'est pas chiffrée** : SQLite ne le fait pas
-nativement, et les extensions qui le permettent obligeraient à abandonner le
-principe d'un logiciel qui s'installe sans rien d'autre.
+Trois protections, qui ne couvrent pas la même chose :
 
-La bonne protection est ailleurs, et elle est gratuite : **activez le chiffrement
-du disque** — BitLocker sur Windows, LUKS sur Linux. Il protège la base, les
-sauvegardes et tout le reste. Le
-[guide de déploiement](docs/PRODUCTION.md#pourquoi-la-base-de-données-est-en-clair)
-détaille pourquoi les autres options coûtent plus qu'elles ne rapportent.
+- **Vos sauvegardes** le sont dès que vous enregistrez une phrase de passe
+  (Paramètres → Sauvegardes). C'est la copie qui part sur une clé USB ou un NAS,
+  donc la plus exposée.
+- **La base elle-même** peut l'être, en option (Paramètres → Maintenance →
+  Sécurité). Elle reste alors illisible même copiée ailleurs.
+- **Le disque entier**, avec BitLocker ou LUKS. C'est par là qu'il faut
+  commencer : c'est gratuit, déjà dans votre système, et cela protège aussi vos
+  documents et vos courriels — ce que les deux autres ne font pas.
+
+Le [guide de déploiement](docs/PRODUCTION.md#chiffrement-au-repos--ce-qui-protège-quoi)
+détaille ce que chacune protège, et ce qu'aucune ne protège : un programme lancé
+sous votre compte Windows accède à vos données dans tous les cas.
+</details>
+
+<details>
+<summary><b>Si je chiffre la base, que se passe-t-il quand je change d'ordinateur ?</b></summary>
+
+LedgerAlps vous demande votre **phrase de récupération** — celle que vous avez
+notée en activant le chiffrement — puis redémarre normalement. C'est une page
+unique, qui s'ouvre toute seule.
+
+Cette phrase est obligatoire à l'activation, et pour une raison précise : la clé
+est normalement scellée à votre compte Windows, ce qui évite d'avoir à taper quoi
+que ce soit au quotidien. Un profil recréé ou un Windows réinstallé rend ce
+scellement illisible. Sans phrase de récupération, dix ans de pièces que le
+CO art. 958f vous impose de conserver deviendraient illisibles — une mesure de
+confidentialité ne doit pas créer une perte de données.
+
+Et si vous avez perdu les deux : vos **sauvegardes** ne dépendent pas de cette
+clé. Installez LedgerAlps normalement et restaurez la plus récente.
 </details>
 
 <details>

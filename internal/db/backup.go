@@ -94,10 +94,20 @@ func Backup(ctx context.Context, database *sql.DB, cfg *config.Config, dir, pass
 			fmt.Sprintf("%s%s-%d%s", backupPrefix, time.Now().Format(BackupTimeFormat), i, backupSuffix))
 	}
 
-	// VACUUM INTO takes a string literal, not a bind parameter; single quotes in
-	// the path are escaped by doubling them per SQL string-literal rules.
-	q := fmt.Sprintf("VACUUM INTO '%s'", strings.ReplaceAll(dest, "'", "''"))
-	if _, err := database.ExecContext(ctx, q); err != nil {
+	// La cible est écrite EN CLAIR, explicitement, même quand la base est
+	// chiffrée — puis rechiffrée ci-dessous avec la phrase de passe de
+	// l'utilisateur.
+	//
+	// Ce n'est pas un détail de forme. Une sauvegarde chiffrée avec la clé de la
+	// machine deviendrait illisible le jour où cette machine n'est plus là :
+	// on échangerait un risque de confidentialité contre un risque de perte
+	// totale, sur des livres à conserver dix ans (CO art. 958f).
+	//
+	// Mesuré : depuis une connexion chiffrée, « VACUUM INTO 'chemin' » échoue
+	// avec « unable to open database file », la cible héritant du VFS de la
+	// connexion. Sans cette ligne, la migration aurait cassé les sauvegardes en
+	// silence.
+	if _, err := database.ExecContext(ctx, vacuumIntoPlain(dest)); err != nil {
 		return "", fmt.Errorf("writing backup snapshot: %w", err)
 	}
 
@@ -234,7 +244,7 @@ func Verify(ctx context.Context, path string) error {
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("backup file: %w", err)
 	}
-	handle, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=ro", path))
+	handle, err := sql.Open(SQLiteDriver, sqliteDSN(path, "mode=ro"))
 	if err != nil {
 		return fmt.Errorf("opening backup: %w", err)
 	}

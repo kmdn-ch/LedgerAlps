@@ -286,6 +286,14 @@ export interface SystemHealth {
     status: 'encrypted' | 'not_encrypted' | 'unknown'
     mechanism?: string
     advisory: boolean
+    // Le nom que CE système donne à la chose à activer. Windows Famille
+    // l'appelle « Chiffrement de l'appareil » et n'a pas de panneau BitLocker :
+    // nommer l'autre envoie l'utilisateur chercher une entrée qui n'existe pas.
+    feature?: string
+    edition?: string
+    steps?: string[]
+    settings_uri?: string
+    caveat?: string
   }
   capabilities: Record<string, boolean>
   // Ce que la rétention nLPD art. 6 al. 4 fait réellement, en chiffres :
@@ -382,4 +390,37 @@ export interface AnonymiseResult {
   what_was_kept: string[]
   // Ce que l'anonymisation NE fait pas : les sauvegardes déjà prises.
   backups_notice: string
+}
+
+// Politique de chiffrement des sauvegardes automatiques.
+//
+// `encrypting` est la seule chose qui compte pour l'utilisateur : la prochaine
+// copie automatique sera-t-elle chiffrée ? Le serveur la calcule pour que
+// l'interface n'ait pas à la redériver et à se tromper de sens.
+export interface BackupPolicy {
+  source: 'none' | 'stored' | 'env' | 'unavailable'
+  encrypting: boolean
+  sealed: boolean
+  mechanism: string
+  // Combien de copies déjà sur le disque se lisent sans clé. Enregistrer une
+  // phrase de passe n'y change rien, et le laisser croire serait le mensonge
+  // le plus coûteux de cet écran.
+  plaintext_count: number
+}
+
+// État du chiffrement de la base.
+//
+// `encrypted` est lu sur le fichier lui-même à chaque appel, pas déduit de la
+// présence d'une clé : les deux peuvent diverger — une restauration écrit un
+// instantané en clair par-dessus une base chiffrée — et c'est le fichier qui
+// dit la vérité.
+export interface DatabaseEncryption {
+  encrypted: boolean
+  configured: boolean
+  key_available: boolean
+  has_recovery: boolean
+  sealed: boolean
+  mechanism: string
+  pending?: 'encrypt' | 'decrypt'
+  supported: boolean
 }

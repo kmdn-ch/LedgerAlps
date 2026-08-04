@@ -70,17 +70,34 @@ func (h *BackupsHandler) ListBackups(c *gin.Context) {
 
 // CreateBackup POST /api/v1/backups
 //
-// An empty passphrase produces a plaintext snapshot, which is the current
-// behaviour and stays available — a passphrase the user cannot remember turns
-// a lost machine into a lost ledger, so it must be their choice.
+// Sans phrase de passe explicite, celle enregistrée dans la politique s'applique.
+//
+// Le défaut inverse a été mesuré sur un serveur réel : la phrase de passe était
+// bien enregistrée, les sauvegardes automatiques bien chiffrées, et le bouton
+// « Créer une sauvegarde » produisait quand même un fichier en clair, parce
+// qu'il ne lisait que le corps de la requête. Le trou que la politique ferme
+// d'un côté restait ouvert de l'autre — et sur le chemin que l'utilisateur
+// emprunte justement avant de copier le fichier sur une clé USB.
+//
+// Une copie en clair reste possible, mais elle se demande maintenant :
+// « plaintext: true ». Le silence ne veut plus dire « en clair ».
 func (h *BackupsHandler) CreateBackup(c *gin.Context) {
 	var body struct {
 		Passphrase string `json:"passphrase"`
+		// Plaintext demande explicitement une copie non chiffrée, malgré la
+		// politique. Cas légitime : remettre le fichier à sa fiduciaire.
+		Plaintext bool `json:"plaintext"`
 	}
 	_ = c.ShouldBindJSON(&body)
 
-	// An empty passphrase means "do not encrypt", which stays a legitimate
-	// choice. A short one is not a choice, it is a mistake: this file can be
+	if body.Passphrase == "" && !body.Plaintext {
+		if stored, source := db.NewBackupPolicy(config.AppDataDir()).Passphrase(); stored != "" {
+			body.Passphrase = stored
+			_ = source
+		}
+	}
+
+	// A short passphrase is not a choice, it is a mistake: this file can be
 	// carried off and attacked offline, with no rate limit and nobody watching.
 	if body.Passphrase != "" {
 		if err := db.ValidatePassphrase(body.Passphrase); err != nil {
@@ -182,7 +199,19 @@ func (h *BackupsHandler) StageRestore(c *gin.Context) {
 	// It goes through Backup, so it lands in the list like any other snapshot
 	// and rotates with them, instead of accumulating as a special file nobody
 	// prunes.
-	undo, err := db.Backup(ctx, h.db, h.cfg, dir, body.Passphrase)
+	//
+	// Restaurer une sauvegarde EN CLAIR laissait la copie d'annulation en clair
+	// elle aussi — sur une installation dont le propriétaire a pourtant
+	// enregistré une phrase de passe. La politique s'applique donc ici comme
+	// ailleurs : c'est la copie de la comptabilité en cours, pas un fichier de
+	// second rang.
+	undoPass := body.Passphrase
+	if undoPass == "" {
+		if stored, _ := db.NewBackupPolicy(config.AppDataDir()).Passphrase(); stored != "" {
+			undoPass = stored
+		}
+	}
+	undo, err := db.Backup(ctx, h.db, h.cfg, dir, undoPass)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
 			"error": "impossible de sauvegarder la comptabilité actuelle avant la restauration: " + err.Error()})

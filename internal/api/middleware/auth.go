@@ -10,32 +10,51 @@ import (
 
 const claimsKey = "claims"
 
+// authenticate validates the Bearer JWT and stores the claims. It reports
+// whether the request may continue, and aborts with the right status when not.
+//
+// It deliberately does NOT call c.Next(). That distinction is the whole point of
+// this function existing: RequireAdmin used to be written as `auth(c)` followed
+// by an IsAdmin check, where `auth` was RequireAuth — whose last statement is
+// c.Next(). c.Next() runs the REST OF THE CHAIN, handler included. So the route
+// handler executed and wrote its response, and only then did RequireAdmin look
+// at IsAdmin and try to send 403 — on a response already committed with 200.
+//
+// The effect: every admin-only route answered any authenticated user in full,
+// with the ignored 403 body appended after the payload. Found by calling
+// GET /api/v1/backups on a running server with a non-admin token and reading
+// the bytes that came back.
+func authenticate(c *gin.Context, jwtSecret string) bool {
+	header := c.GetHeader("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing or malformed Authorization header"})
+		return false
+	}
+	token := strings.TrimPrefix(header, "Bearer ")
+	claims, err := security.ParseToken(jwtSecret, token)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+		return false
+	}
+	c.Set(claimsKey, claims)
+	return true
+}
+
 // RequireAuth validates the Bearer JWT in the Authorization header.
 // On success it stores the *security.Claims in the Gin context under "claims".
 func RequireAuth(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		header := c.GetHeader("Authorization")
-		if !strings.HasPrefix(header, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing or malformed Authorization header"})
+		if !authenticate(c, jwtSecret) {
 			return
 		}
-		token := strings.TrimPrefix(header, "Bearer ")
-		claims, err := security.ParseToken(jwtSecret, token)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
-			return
-		}
-		c.Set(claimsKey, claims)
 		c.Next()
 	}
 }
 
 // RequireAdmin extends RequireAuth by additionally checking IsAdmin.
 func RequireAdmin(jwtSecret string) gin.HandlerFunc {
-	auth := RequireAuth(jwtSecret)
 	return func(c *gin.Context) {
-		auth(c)
-		if c.IsAborted() {
+		if !authenticate(c, jwtSecret) {
 			return
 		}
 		claims := GetClaims(c)

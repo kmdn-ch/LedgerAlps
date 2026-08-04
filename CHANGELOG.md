@@ -5,6 +5,44 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
+## [Unreleased]
+
+### Sécurité
+
+- **Toute route réservée aux administrateurs répondait à n'importe quel utilisateur connecté.** `RequireAdmin` appelait `RequireAuth` comme une fonction ordinaire — or celle-ci se termine par `c.Next()`, qui exécute la suite de la chaîne, handler compris. Le contrôle du privilège n'intervenait donc qu'**après** que le handler avait répondu : le 403 arrivait sur une réponse déjà partie en 200, et finissait collé derrière la charge utile. Sauvegardes, restauration, contrôle d'intégrité, données personnelles : tout était lisible et actionnable par un compte non administrateur. Trouvé en appelant `GET /api/v1/backups` sur un serveur qui tourne, avec un jeton non-administrateur, et en lisant les octets renvoyés.
+
+- **Les sauvegardes automatiques ne sont plus écrites en clair par défaut.** Elles ne l'étaient que si la variable d'environnement `BACKUP_PASSPHRASE` existait — c'est-à-dire jamais. Mesuré sur une installation réelle : jusqu'à quatorze copies complètes de la comptabilité, en-tête SQLite, numéro de TVA, adresses e-mail et IBAN lisibles sans aucune clé, dans le dossier que l'on copie précisément sur un NAS ou une clé USB. Une phrase de passe se règle maintenant dans **Paramètres → Sauvegardes**, LedgerAlps la retient (scellée au compte Windows par DPAPI), et elle s'applique à toutes les copies. Les copies déjà présentes peuvent être chiffrées en une fois — chacune est relue et vérifiée avant que la version en clair disparaisse.
+
+- **La sauvegarde manuelle ignorait cette phrase de passe.** Le chemin automatique consultait la politique, le bouton « Créer une sauvegarde » non : sur une installation dont les sauvegardes automatiques étaient chiffrées, il produisait quand même un fichier lisible — et c'est le chemin qu'on emprunte juste avant de copier le fichier sur une clé USB. Une copie en clair reste possible, mais elle se demande désormais explicitement.
+
+### Ajouté
+
+- **Chiffrement de la base de données**, en option, désactivé par défaut (Paramètres → Maintenance → Sécurité). Le fichier `ledgeralps.db` est chiffré par blocs de 4 Kio, journal WAL compris.
+
+  Cela était porté comme impossible, et le diagnostic était faux : le blocage n'était pas SQLCipher mais le pilote SQLite. Le paquet `vfs` de `modernc.org/sqlite` est en lecture seule, donc rien ne pouvait s'insérer dessous ; `github.com/ncruces/go-sqlite3` expose un VFS écrivable et livre `vfs/adiantum`. Aucune dépendance C n'a été ajoutée, `CGO_ENABLED=0` et la compilation croisée sont conservés.
+
+  Ce que cela ajoute au chiffrement du disque : une seule chose, mais elle est réelle — la protection **suit le fichier**. Une base copiée sur un NAS ou dans un dossier synchronisé reste illisible, ce qu'un disque chiffré ne fait pas. Ce que cela n'ajoute pas : rien contre un programme lancé sous le même compte Windows, qui peut demander la clé comme LedgerAlps le fait. BitLocker reste donc le premier conseil.
+
+- **Mode récupération.** Si la base est chiffrée et que sa clé ne se descelle pas sur ce compte — nouveau PC, Windows réinstallé, profil recréé — LedgerAlps démarre sur une page unique qui demande la phrase de récupération, la desselle, la rescelle et relance l'application. Sans ce mode, le logiciel s'arrêtait avec un message dans un journal que personne ne lit et le point d'entrée de récupération devenait injoignable : la mesure censée protéger dix ans de pièces (CO art. 958f) créait la panne qu'elle devait empêcher. Constaté en effaçant le coffre à secrets sur un serveur réel.
+
+- **Coffre à secrets scellé au compte** (`internal/core/secretstore`). DPAPI sous Windows — aucun droit administrateur, aucune invite. Ailleurs, un fichier `0600`, et l'interface dit que les droits du fichier sont toute la protection plutôt que de laisser croire à un scellement absent.
+
+### Modifié
+
+- **Le conseil « activez BitLocker » est devenu suivable.** Il l'était mal : sous Windows Famille, ce panneau n'existe pas — la fonctionnalité s'appelle « Chiffrement de l'appareil » et se trouve ailleurs. LedgerAlps lit maintenant l'édition de Windows, nomme la bonne fonctionnalité, affiche la marche à suivre et ouvre le bon réglage. Un conseil qu'on ne peut pas suivre vaut à peine mieux que pas de conseil, et il abîme la confiance dans les autres.
+
+- **L'avis nLPD art. 8 affirmait que la base « restera en clair ».** Il le disait encore une fois la fonctionnalité livrée. Le garde-fou du dépôt a fait son travail — basculer la capacité `encrypted_database` a fait échouer la compilation en nommant l'avis. Il parle désormais de l'état constaté du disque de la machine, et non d'une limite du produit. Un troisième ancrage a été reconnu pour les avis ouverts : une **condition** évaluée à chaque affichage, qui est une garantie de fraîcheur plus forte qu'une capacité, pas plus faible.
+
+- **Pilote SQLite** : `github.com/ncruces/go-sqlite3` remplace `modernc.org/sqlite`. Mesuré sur la charge réelle de l'application (2 000 requêtes typiques) : 1,00 ms par requête contre 0,64 ms, soit +0,36 ms ; mémoire du processus 17 → 81 Mo ; binaire +2,4 Mo. La suite de tests complète passe sans qu'une seule requête SQL ait été modifiée.
+
+### Corrigé
+
+- **`VACUUM INTO 'chemin'` échoue depuis une connexion chiffrée** — la cible hérite du VFS de la connexion, sans clé. C'est la ligne qui produit toutes les sauvegardes : sans le voir, la migration les aurait cassées en silence. La cible nomme désormais le VFS par défaut explicitement, ce qui garantit aussi que la sauvegarde sort **en clair** avant d'être rechiffrée avec la phrase de passe de l'utilisateur — une sauvegarde chiffrée avec la clé de la machine deviendrait illisible le jour où cette machine n'est plus là.
+
+- **Une restauration ramenait une installation chiffrée en clair, sans un mot.** Une restauration écrit un instantané en clair par-dessus la base ; l'interface aurait continué d'afficher « chiffrée ». L'état est désormais réconcilié à chaque démarrage entre le fichier, la clé et la demande en attente.
+
+---
+
 ## [1.4.7] — 2026-08-04
 
 ### Corrigé

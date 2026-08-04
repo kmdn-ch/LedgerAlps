@@ -13,7 +13,9 @@ import (
 
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	_ "modernc.org/sqlite"
+	_ "github.com/ncruces/go-sqlite3/driver"
+	_ "github.com/ncruces/go-sqlite3/embed"
+	_ "github.com/ncruces/go-sqlite3/vfs/adiantum"
 )
 
 //go:embed migrations
@@ -28,9 +30,15 @@ func Open(cfg *config.Config) (*sql.DB, error) {
 		driver = "pgx"
 		dsn = cfg.PostgresDSN
 	} else {
-		driver = "sqlite"
-		// WAL mode + foreign keys enforced via DSN parameters (modernc.org/sqlite)
-		dsn = fmt.Sprintf("file:%s?_journal_mode=WAL&_foreign_keys=on", cfg.SQLitePath)
+		encrypted, encErr := IsDatabaseEncrypted(cfg.SQLitePath)
+		if encErr != nil {
+			return nil, encErr
+		}
+		if encrypted {
+			return openEncrypted(cfg)
+		}
+		driver = SQLiteDriver
+		dsn = sqliteDSN(cfg.SQLitePath, livePragmas...)
 	}
 
 	database, err := sql.Open(driver, dsn)

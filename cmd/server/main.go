@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -49,9 +50,36 @@ func main() {
 		}
 	}
 
+	// ── 1c. État de chiffrement de la base ────────────────────────────────────
+	//
+	// Après la restauration, et avant l'ouverture : une conversion remplace le
+	// fichier que chaque connexion utiliserait.
+	//
+	// C'est une réconciliation, pas seulement l'application d'une demande. Une
+	// restauration écrit un instantané EN CLAIR par-dessus la base ; sans ce
+	// passage, une installation dont le propriétaire avait activé le chiffrement
+	// reviendrait en clair sans un mot, pendant que l'interface continuerait à
+	// afficher « chiffrée ».
+	//
+	// Un échec est fatal, contrairement à la restauration : continuer
+	// signifierait ouvrir en clair une base que l'utilisateur croit protégée.
+	if done, err := db.ReconcileDatabaseEncryption(
+		context.Background(), cfg, config.AppDataDir()); err != nil {
+		log.Fatalf("FATAL: %v", err)
+	} else if done != "" {
+		fmt.Printf("LedgerAlps: %s\n", done)
+	}
+
 	// ── 2. Open database ──────────────────────────────────────────────────────
 	database, err := db.Open(cfg)
 	if err != nil {
+		// Base chiffree dont la cle ne se descelle pas sur ce compte : mourir
+		// ici rendrait la recuperation injoignable, alors que c'est exactement
+		// la situation pour laquelle la phrase de recuperation existe.
+		if errors.Is(err, db.ErrDatabaseKeyUnavailable) {
+			runRecoveryServer(cfg, err)
+			return
+		}
 		log.Fatalf("FATAL: cannot open database: %v", err)
 	}
 	defer database.Close()
@@ -91,21 +119,35 @@ func main() {
 	// when the newest one is older than a day. A failure here must never stop the
 	// server — the user still needs access to their books.
 	//
-	// BACKUP_PASSPHRASE encrypts these automatic snapshots. It is opt-in rather
-	// than generated: a key the software holds protects nothing against someone
-	// holding the machine, and a passphrase the user has not written down turns
-	// a lost laptop into a lost ledger.
+	// La phrase de passe vient du coffre scellé au compte, ou de
+	// BACKUP_PASSPHRASE qui reste prioritaire pour un déploiement serveur.
+	// Sans elle, la copie est écrite en clair — c'est un choix légitime, mais il
+	// est dit à voix haute au lieu d'être le comportement par défaut silencieux
+	// qu'il était.
+	//
 	// Une phrase faible est signalée mais n'empêche pas la sauvegarde : refuser
 	// ici laisserait l'utilisateur sans aucune copie, ce qui est pire qu'une
 	// copie moins bien protégée.
-	if autoPass := os.Getenv("BACKUP_PASSPHRASE"); autoPass != "" {
+	backupPolicy := db.NewBackupPolicy(config.AppDataDir())
+	autoPass, passSource := backupPolicy.Passphrase()
+	switch passSource {
+	case db.SourceEnv:
 		if err := db.ValidatePassphrase(autoPass); err != nil {
 			log.Printf("WARNING: BACKUP_PASSPHRASE est faible (%v) — les sauvegardes automatiques sont chiffrées, mais moins solidement", err)
 		}
+	case db.SourceUnavailable:
+		// Le secret existe mais n'a pas pu être descellé : compte ou machine
+		// différents. Le dire, plutôt que d'écrire une copie en clair sans
+		// prévenir quelqu'un qui croit ses sauvegardes protégées.
+		log.Printf("WARNING: la phrase de passe des sauvegardes est illisible sur ce compte — " +
+			"la sauvegarde automatique sera écrite EN CLAIR. Redéfinissez-la dans Paramètres → Maintenance → Sécurité.")
+	case db.SourceNone:
+		log.Printf("Les sauvegardes automatiques ne sont pas chiffrées. " +
+			"Paramètres → Maintenance → Sécurité pour définir une phrase de passe.")
 	}
 	if path, err := db.MaybeAutoBackup(
 		context.Background(), database, cfg, db.BackupDir(), db.DefaultInterval, db.DefaultKeep,
-		os.Getenv("BACKUP_PASSPHRASE"),
+		autoPass,
 	); err != nil {
 		log.Printf("WARNING: automatic backup failed: %v", err)
 	} else if path != "" {
@@ -224,6 +266,14 @@ func main() {
 	api.POST("/backups", middleware.RequireAdmin(cfg.JWTSecret), bh.CreateBackup)
 	api.POST("/backups/restore", middleware.RequireAdmin(cfg.JWTSecret), bh.StageRestore)
 	api.DELETE("/backups/restore", middleware.RequireAdmin(cfg.JWTSecret), bh.CancelRestore)
+	api.GET("/backups/policy", middleware.RequireAdmin(cfg.JWTSecret), bh.GetBackupPolicy)
+	api.PUT("/backups/policy", middleware.RequireAdmin(cfg.JWTSecret), bh.SetBackupPolicy)
+	api.DELETE("/backups/policy", middleware.RequireAdmin(cfg.JWTSecret), bh.ClearBackupPolicy)
+	api.GET("/database/encryption", middleware.RequireAdmin(cfg.JWTSecret), bh.GetDatabaseEncryption)
+	api.POST("/database/encryption", middleware.RequireAdmin(cfg.JWTSecret), bh.EnableDatabaseEncryption)
+	api.DELETE("/database/encryption", middleware.RequireAdmin(cfg.JWTSecret), bh.DisableDatabaseEncryption)
+	api.DELETE("/database/encryption/pending", middleware.RequireAdmin(cfg.JWTSecret), bh.CancelDatabaseEncryption)
+	api.POST("/database/encryption/recover", middleware.RequireAdmin(cfg.JWTSecret), bh.RecoverDatabaseKey)
 
 	// Redémarrage — proposé uniquement pour appliquer une restauration préparée.
 	// Le handler signale, main exécute : un handler ne doit pas démonter le

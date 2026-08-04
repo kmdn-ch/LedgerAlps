@@ -56,3 +56,47 @@ func TestUnknownCarriesNoMechanism(t *testing.T) {
 		t.Errorf("statut unknown mais mécanisme %q annoncé", r.Mechanism)
 	}
 }
+
+// Un avertissement sans marche à suivre transfère le problème à l'utilisateur.
+// « Activez BitLocker » suppose qu'il sache où c'est — et sous Windows Famille,
+// ce n'est pas où on lui dit d'aller, parce que ça s'appelle autrement.
+func TestUnAvertissementPorteToujoursUneMarcheASuivre(t *testing.T) {
+	r := Check()
+	if !r.Advisory {
+		t.Skipf("disque protégé sur cette machine (%s) : rien à conseiller", r.Feature)
+	}
+	if len(r.Steps) == 0 {
+		t.Fatal("avertissement affiché sans aucune marche à suivre")
+	}
+	if r.Feature == "" {
+		t.Fatal("aucun nom de fonctionnalité : l'utilisateur ne saura pas quoi chercher")
+	}
+}
+
+// Le constat porte sur le disque de démarrage seulement. Le dire même quand la
+// réponse est bonne : « chiffré » sans réserve serait une affirmation plus large
+// que ce qui a été vérifié.
+func TestLaLimiteDuConstatEstToujoursEnoncee(t *testing.T) {
+	if r := Check(); r.Caveat == "" {
+		t.Fatal("aucune réserve énoncée sur la portée du constat")
+	}
+}
+
+// Sur Windows, la fonctionnalité nommée doit correspondre à l'édition : envoyer
+// un utilisateur de Famille vers le panneau BitLocker le fait chercher une
+// entrée de menu que son édition n'a pas.
+func TestWindowsNommeLaBonneFonctionnalite(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("propre à Windows")
+	}
+	r := Check()
+	_, home := windowsEdition()
+	want := "BitLocker"
+	if home {
+		want = "Chiffrement de l'appareil"
+	}
+	if r.Feature != want {
+		t.Fatalf("fonctionnalité = %q, attendu %q pour cette édition (%s)", r.Feature, want, r.Edition)
+	}
+	t.Logf("édition détectée : %q → %s", r.Edition, r.Feature)
+}

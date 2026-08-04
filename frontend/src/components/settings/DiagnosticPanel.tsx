@@ -5,6 +5,7 @@
 // de ce qui s'est passé, ce que le CO art. 957a al. 2 ch. 5 interdit. Chaque
 // constat dit donc ce qui ne va pas et ce qu'il faut faire.
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -183,26 +184,7 @@ export function DiagnosticPanel() {
             )}
 
             {health.data.disk_encryption && (
-              <div className="text-sm">
-                <p className="text-alpine-500 text-xs uppercase tracking-wider mb-1.5">Chiffrement du disque</p>
-                {health.data.disk_encryption.status === 'encrypted' ? (
-                  <p className="flex items-center gap-1.5 text-success-700">
-                    <ShieldCheck size={14} /> Activé
-                    {health.data.disk_encryption.mechanism && <> ({health.data.disk_encryption.mechanism})</>}
-                  </p>
-                ) : health.data.disk_encryption.status === 'not_encrypted' ? (
-                  <p className="text-warning-700">
-                    <strong>Non activé.</strong> La base de données est lisible sur un poste volé.
-                    Activez BitLocker : c'est la seule mesure qui protège vraiment vos données au
-                    repos, et LedgerAlps ne peut pas la prendre à votre place.
-                  </p>
-                ) : (
-                  <p className="text-alpine-600">
-                    Impossible à vérifier sur ce système. Assurez-vous que le disque est chiffré
-                    (BitLocker, LUKS).
-                  </p>
-                )}
-              </div>
+              <DiskEncryption info={health.data.disk_encryption} />
             )}
 
             {/* Ce que le produit sait faire, tel que le serveur le déclare —
@@ -251,6 +233,84 @@ function Stat({ icon: Icon, label, value, warn }: {
         <Icon size={12} /> {label}
       </p>
       <p className="text-sm font-medium">{value}</p>
+    </div>
+  )
+}
+
+// ── Chiffrement du disque ────────────────────────────────────────────────────
+//
+// L'ancienne version disait « Activez BitLocker » et s'arrêtait là. Sous
+// Windows Famille, ce panneau n'existe pas : la fonctionnalité s'appelle
+// « Chiffrement de l'appareil » et se trouve ailleurs. Un conseil que
+// l'utilisateur ne peut pas suivre vaut à peine mieux que pas de conseil, et il
+// abîme la confiance dans les autres.
+//
+// Le serveur envoie donc le nom de la fonctionnalité, l'édition, la marche à
+// suivre et le lien direct. L'interface se contente de les afficher — elle ne
+// devine rien sur la machine, ce qu'elle ne peut de toute façon pas faire.
+function DiskEncryption({ info }: { info: NonNullable<SystemHealth['disk_encryption']> }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="text-sm">
+      <p className="text-alpine-500 text-xs uppercase tracking-wider mb-1.5">Chiffrement du disque</p>
+
+      {info.status === 'encrypted' ? (
+        <p className="flex items-center gap-1.5 text-success-700">
+          <ShieldCheck size={14} /> Activé
+          {info.mechanism && <> ({info.mechanism})</>}
+        </p>
+      ) : info.status === 'not_encrypted' ? (
+        <p className="text-warning-700">
+          <strong>Non activé.</strong> Sur un poste volé ou un disque démonté, vos livres se
+          lisent sans mot de passe. {info.feature ?? 'Le chiffrement du disque'} est gratuit et
+          déjà présent sur votre système — LedgerAlps ne peut pas l'activer à votre place.
+        </p>
+      ) : (
+        <p className="text-alpine-600">
+          <strong>Non vérifiable ici.</strong> LedgerAlps ne l'affirme donc dans aucun sens.
+          Assurez-vous vous-même que le disque est chiffré.
+        </p>
+      )}
+
+      {info.caveat && <p className="text-alpine-500 text-xs mt-1">{info.caveat}</p>}
+
+      {/* La marche à suivre reste repliée quand elle n'est pas nécessaire : sur
+          une machine déjà protégée, la dérouler serait du bruit. */}
+      {info.steps && info.steps.length > 0 && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            className="text-xs text-alpine-600 hover:text-alpine-900 underline underline-offset-2"
+          >
+            {open ? 'Masquer' : info.advisory ? `Comment activer ${info.feature}` : `Vérifier ${info.feature}`}
+          </button>
+
+          {open && (
+            <div className="mt-2 rounded-md bg-alpine-50 border border-alpine-200 p-3">
+              {info.edition && (
+                <p className="text-xs text-alpine-500 mb-2">Système détecté : {info.edition}</p>
+              )}
+              <ol className="list-decimal list-inside space-y-1 text-alpine-700 text-xs">
+                {info.steps.map((s, i) => <li key={i}>{s}</li>)}
+              </ol>
+              {info.settings_uri && (
+                <a
+                  href={info.settings_uri}
+                  className="inline-block mt-2 text-xs text-alpine-900 underline underline-offset-2"
+                >
+                  Ouvrir directement le réglage
+                </a>
+              )}
+              <p className="text-alpine-500 text-xs mt-2">
+                Une fois fait, revenez ici et actualisez : le constat se refait à chaque
+                affichage.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

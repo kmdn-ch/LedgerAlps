@@ -53,11 +53,18 @@ var Capabilities = map[Capability]bool{
 	// v1.4.4 — Argon2id + XChaCha20-Poly1305, opt-in per backup.
 	CapEncryptedBackups: true,
 
-	// Not planned. SQLCipher is a C library and the product builds with
-	// CGO_ENABLED=0 on a pure-Go SQLite driver, which is what gives it
-	// cross-compilation and a single dependency-free binary. Disk encryption
-	// (BitLocker, LUKS) is the answer, and the advisory says so.
-	CapEncryptedDatabase: false,
+	// Livre en v1.4.8, en option et desactive par defaut.
+	//
+	// Longtemps porte comme impossible : SQLCipher est une bibliotheque C, et le
+	// projet compile avec CGO_ENABLED=0. Ce qui a debloque la situation n'est pas
+	// SQLCipher mais un changement de pilote — le paquet vfs de modernc.org/sqlite
+	// est en lecture seule, donc rien ne pouvait s'inserer sous lui, alors que
+	// github.com/ncruces/go-sqlite3 expose un VFS chiffrant en Go pur.
+	//
+	// « true » decrit ce que le produit SAIT faire, pas l'etat d'une installation
+	// donnee : le chiffrement reste desactive par defaut, et l'avis correspondant
+	// doit donc parler de l'etat constate, pas d'une impossibilite.
+	CapEncryptedDatabase: true,
 
 	// v1.4.5 — TLS on any non-loopback interface, with a generated
 	// certificate when none is supplied.

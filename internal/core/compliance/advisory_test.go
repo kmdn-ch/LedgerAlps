@@ -3,6 +3,7 @@ package compliance
 import (
 	"crypto/ed25519"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -300,8 +301,22 @@ func TestAssumedCapabilitiesAreAllKnown(t *testing.T) {
 }
 
 // An advisory that is neither resolved nor tied to a capability drifts with
-// nothing to catch it. Requiring one or the other is what makes the check
+// nothing to catch it. Requiring one of the three is what makes the check
 // complete rather than decorative.
+//
+// Trois formes d'ancrage, pas deux :
+//
+//   - resolved_in_version — l'avis s'éteint à partir d'une version ;
+//   - assumes_absent — il s'éteint quand le produit acquiert une capacité ;
+//   - condition — il ne s'affiche que si un constat tient sur CETTE machine.
+//
+// La troisième a été ajoutée en écrivant l'avis nLPD art. 8. Il déclarait
+// « assumes_absent: encrypted_database », c'est-à-dire « cet avis vaut tant que
+// LedgerAlps ne sait pas chiffrer sa base » — vrai à l'époque. Depuis, le
+// produit sait le faire, mais l'avis reste juste : il ne parle pas de ce que le
+// produit sait faire, il parle du disque de la machine, qui n'est pas chiffré.
+// C'est la condition qui le retire, et elle le fait à chaque affichage, ce qui
+// est un ancrage plus fort qu'une capacité — pas plus faible.
 func TestOpenAdvisoriesDeclareWhatTheyAssume(t *testing.T) {
 	f, err := BundledFeed()
 	if err != nil {
@@ -311,9 +326,9 @@ func TestOpenAdvisoriesDeclareWhatTheyAssume(t *testing.T) {
 		if a.ResolvedInVersion != "" {
 			continue // already tied to a release
 		}
-		if len(a.AssumesAbsent) == 0 {
-			t.Errorf("l'avis ouvert %q ne déclare ni resolved_in_version ni assumes_absent : "+
-				"rien ne détectera qu'il est devenu faux", a.ID)
+		if len(a.AssumesAbsent) == 0 && a.Condition == "" {
+			t.Errorf("l'avis ouvert %q ne déclare ni resolved_in_version, ni assumes_absent, "+
+				"ni condition : rien ne détectera qu'il est devenu faux", a.ID)
 		}
 	}
 }
@@ -327,9 +342,45 @@ func TestCapabilityMapIsPopulated(t *testing.T) {
 	if !Has(CapEncryptedBackups) {
 		t.Error("CapEncryptedBackups devrait être vrai depuis la v1.4.4")
 	}
-	if Has(CapEncryptedDatabase) {
-		t.Error("CapEncryptedDatabase devrait être faux : SQLCipher est incompatible avec CGO_ENABLED=0")
+	if !Has(CapEncryptedDatabase) {
+		t.Error("CapEncryptedDatabase devrait être vrai depuis la v1.4.8")
 	}
+}
+
+// Le chiffrement de la base a longtemps été porté comme impossible, et l'avis
+// nLPD art. 8 le disait en toutes lettres : « la base restera en clair ». Il
+// l'affirmait encore après que le pilote a changé et que la fonctionnalité a
+// existé.
+//
+// C'est exactement le défaut que ce fichier existe pour empêcher : un avis qui
+// décrit une limite disparue apprend à l'utilisateur à ignorer les suivants. Ce
+// test garde la trace du cas, pour que la phrase ne revienne pas.
+func TestLAvisNLPDNeDeclarePlusLeChiffrementImpossible(t *testing.T) {
+	f, err := BundledFeed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	interdits := []string{
+		"restera", "will:", "SQLCipher", "incompatible",
+	}
+	for _, a := range f.Advisories {
+		if a.ID != "nlpd-art8-data-security" {
+			continue
+		}
+		for _, lang := range []string{"fr", "en"} {
+			body := Localised(a.Body, lang)
+			if body == "" {
+				t.Fatalf("avis sans corps en %q", lang)
+			}
+			for _, mot := range interdits {
+				if strings.Contains(body, mot) {
+					t.Errorf("l'avis contient encore %q (%s) : il décrit une limite qui n'existe plus", mot, lang)
+				}
+			}
+		}
+		return
+	}
+	t.Fatal("avis nlpd-art8-data-security introuvable")
 }
 
 // A typo in `condition` must not silently retire an advisory — the same failure

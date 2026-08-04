@@ -16,6 +16,7 @@ import { securityApi, backupsApi } from '@/api/client'
 import { SectionTitle, ErrorBanner } from '@/components/ui'
 import { targetURLAfterRestart, waitForShutdownThenGo } from '@/utils/restart'
 import type { RotateSecretResult } from '@/types'
+import { DatabaseEncryptionPanel } from './DatabaseEncryptionPanel'
 
 export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
   const [confirming, setConfirming] = useState(false)
@@ -41,6 +42,8 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
 
   return (
     <div>
+      <DatabaseEncryptionPanel />
+
       <SectionTitle>Sécurité</SectionTitle>
       <p className="text-sm text-alpine-600 mb-3">
         LedgerAlps signe vos sessions avec une clé conservée dans son fichier de

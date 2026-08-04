@@ -75,6 +75,34 @@ l'exécutable suffit.
 **Frontend embarqué.** `go:embed` intègre `frontend/dist`. Il n'y a donc ni
 serveur web à configurer, ni fichiers statiques à déployer séparément.
 
+### Le pilote SQLite, et pourquoi il a changé
+
+`github.com/ncruces/go-sqlite3` depuis la v1.4.8, `modernc.org/sqlite` avant.
+
+Les deux sont en Go pur et compilent avec `CGO_ENABLED=0` — c'est non négociable,
+c'est ce qui donne le binaire unique et la compilation croisée. Le changement
+tient à un seul point : **le chiffrement au repos de la base**. Le paquet `vfs`
+de modernc est en lecture seule, donc aucune couche chiffrante ne pouvait
+s'insérer sous lui ; ncruces expose un VFS écrivable, et livre `vfs/adiantum`.
+
+Ce que cela coûte, mesuré sur la charge réelle de l'application (2 000 requêtes
+typiques) : **1,00 ms par requête contre 0,64 ms**, soit +0,36 ms — invisible.
+La mémoire du processus passe de 17 à 81 Mo (SQLite tourne dans un bac à sable
+WebAssembly), et le binaire grossit de 2,4 Mo. La suite de tests complète est
+passée sans qu'une seule requête SQL soit modifiée.
+
+Deux pièges rencontrés en migrant, tous deux invisibles à la compilation :
+
+- **Les pragmas ne peuvent pas rester dans la DSN quand la base est chiffrée.**
+  Ils s'exécutent avant le rappel qui fournit la clé, touchent le fichier, et
+  échouent. La clé passe donc par un `PRAGMA` en tête du rappel d'initialisation
+  de connexion — ce qui a l'avantage de la tenir hors de toute chaîne susceptible
+  d'atterrir dans un journal.
+- **`VACUUM INTO 'chemin'` échoue depuis une connexion chiffrée** : la cible
+  hérite du VFS de la connexion, sans clé. C'est la ligne qui produit les
+  sauvegardes ; sans le voir, la migration les aurait cassées en silence. La
+  cible est désormais nommée `file:…?vfs=` — le VFS par défaut, explicitement.
+
 **SQLite par défaut, PostgreSQL possible.** Le mode WAL autorise des lectures
 concurrentes avec un rédacteur sérialisé, ce qui suffit largement à une PME.
 `db.Rebind` traduit les paramètres `?` en `$1` pour PostgreSQL : une seule
