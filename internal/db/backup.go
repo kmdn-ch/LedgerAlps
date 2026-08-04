@@ -23,8 +23,21 @@ import (
 // written file, and the result is compacted.
 
 const (
-	// BackupTimeFormat orders backups lexicographically by age.
-	BackupTimeFormat = "2006-01-02T15-04-05"
+	// BackupTimeFormat horodate le nom d'une sauvegarde en HEURE LOCALE, suivie
+	// du décalage UTC.
+	//
+	// Le nom était écrit en UTC alors que l'interface affiche l'heure du
+	// fichier, que le système rend en heure locale : une sauvegarde prise à
+	// 16 h 23 en Suisse s'appelait « …T14-23-05 » et s'affichait « 16:23 ».
+	// Deux heures d'écart entre ce qu'on lit dans l'explorateur de fichiers et
+	// ce qu'on lit dans le logiciel, sur des fichiers qu'il faut savoir
+	// identifier pendant dix ans (CO art. 958f).
+	//
+	// Le décalage (« +0200 ») est conservé dans le nom parce que l'heure locale
+	// seule est ambiguë une nuit par an : au passage à l'heure d'hiver, 02 h 30
+	// existe deux fois. Sans lui, deux sauvegardes distinctes porteraient un nom
+	// impossible à départager.
+	BackupTimeFormat = "2006-01-02T15-04-05-0700"
 	backupPrefix     = "ledgeralps-"
 	backupSuffix     = ".db"
 	// Encrypted snapshots keep the .db name and gain a suffix, so a directory
@@ -69,7 +82,7 @@ func Backup(ctx context.Context, database *sql.DB, cfg *config.Config, dir, pass
 	// that survives is dest+".enc"; checking only dest let two encrypted
 	// backups within the same second pick the same slot, and the second failed
 	// on an already-existing ciphertext instead of taking the next number.
-	dest := filepath.Join(dir, backupPrefix+time.Now().UTC().Format(BackupTimeFormat)+backupSuffix)
+	dest := filepath.Join(dir, backupPrefix+time.Now().Format(BackupTimeFormat)+backupSuffix)
 	for i := 1; ; i++ {
 		if free(dest) && free(dest+encryptedSuffix) {
 			break
@@ -78,7 +91,7 @@ func Backup(ctx context.Context, database *sql.DB, cfg *config.Config, dir, pass
 			return "", fmt.Errorf("could not find a free backup filename in %s", dir)
 		}
 		dest = filepath.Join(dir,
-			fmt.Sprintf("%s%s-%d%s", backupPrefix, time.Now().UTC().Format(BackupTimeFormat), i, backupSuffix))
+			fmt.Sprintf("%s%s-%d%s", backupPrefix, time.Now().Format(BackupTimeFormat), i, backupSuffix))
 	}
 
 	// VACUUM INTO takes a string literal, not a bind parameter; single quotes in
@@ -170,7 +183,23 @@ func ListBackups(dir string) ([]BackupInfo, error) {
 			CreatedAt: info.ModTime(),
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name > out[j].Name })
+	// Tri par date du fichier, du plus récent au plus ancien — et non par nom.
+	//
+	// L'ordre lexicographique des noms marchait tant qu'ils étaient en UTC. En
+	// heure locale il se casse une nuit par an : au passage à l'heure d'hiver,
+	// une sauvegarde de 02 h 30 (heure d'été) précède réellement une de 02 h 00
+	// (heure d'hiver) mais la suit dans l'alphabet. Comme c'est cet ordre qui
+	// désigne « la plus ancienne » à supprimer, la purge aurait effacé la
+	// mauvaise. Une date est un instant : elle ne connaît pas ce problème.
+	//
+	// Le nom départage deux fichiers de même horodatage, pour que l'ordre reste
+	// stable d'un appel à l'autre.
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.After(out[j].CreatedAt)
+		}
+		return out[i].Name > out[j].Name
+	})
 	return out, nil
 }
 
@@ -281,7 +310,7 @@ func Restore(ctx context.Context, cfg *config.Config, src, dir, passphrase strin
 				return "", fmt.Errorf("creating backup directory: %w", err)
 			}
 			backupOfCurrent = filepath.Join(dir,
-				fmt.Sprintf("%spre-restore-%s%s", backupPrefix, time.Now().UTC().Format(BackupTimeFormat), backupSuffix))
+				fmt.Sprintf("%spre-restore-%s%s", backupPrefix, time.Now().Format(BackupTimeFormat), backupSuffix))
 			if err := copyFile(cfg.SQLitePath, backupOfCurrent); err != nil {
 				return "", fmt.Errorf("snapshotting current database before restore: %w", err)
 			}

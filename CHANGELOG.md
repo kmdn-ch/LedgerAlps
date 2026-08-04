@@ -7,6 +7,19 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Corrigé
+- **Le nom des sauvegardes était écrit en heure UTC** alors que l'interface affiche l'heure du fichier, que le système rend en heure locale. Une sauvegarde prise à 16 h 23 en Suisse s'appelait `…T14-23-05` et s'affichait « 16:23 » : deux heures d'écart entre l'explorateur de fichiers et le logiciel, sur des fichiers qu'il faut savoir identifier pendant dix ans (CO art. 958f). Le nom porte désormais l'heure locale suivie du décalage — `…T20-10-51+0200` — le décalage levant l'ambiguïté de la nuit du passage à l'heure d'hiver, où 02 h 30 existe deux fois.
+- **L'ordre des sauvegardes reposait sur l'ordre alphabétique de leur nom.** En heure locale il se casse cette même nuit-là, et comme c'est cet ordre qui désigne la plus ancienne à purger, la purge aurait effacé la mauvaise copie. Il se lit maintenant sur la date du fichier, qui est un instant. Les sauvegardes nommées à l'ancien format restent listées et datées correctement.
+
+### Documentation
+- **Roadmap refondue** : sommaire scannable, priorités en une ligne chacune, décisions détaillées en dessous plutôt que dans des cellules de tableau — l'une atteignait 4 677 caractères. Trois diagrammes, dont le critère d'admission d'une fonctionnalité, qui dit ce qu'aucun tableau ne dit.
+- **Doublons retirés** : le point « Suppression & droit à l'effacement » décrivait un travail déjà livré dans Maintenance & Système ; l'ancien tableau répétait la conformité nLPD à trois endroits.
+- **Modules métier inscrits** comme piste retenue mais non engagée, avec les trois règles qui décident si un module reste un module — la troisième, « aucun champ dans le noyau », étant celle qui sera difficile à tenir.
+- **README refondu** : diagramme du trajet des données, capacités en grille, questions fréquentes repliables. Ajout de la réponse sur le non-assujetti à la TVA et sur ce que l'anonymisation ne fait pas.
+- Le périmètre du produit et l'horodatage des sauvegardes sont documentés dans `docs/ARCHITECTURE.md` et `docs/PRODUCTION.md`.
+
+---
+
 ---
 
 ## [1.4.6] — 2026-08-04

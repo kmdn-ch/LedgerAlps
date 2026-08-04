@@ -307,7 +307,33 @@ quelque chose à vérifier plutôt que comme un constat.
 gratuite sur Windows Pro et Linux, et elle couvre aussi le secret de signature
 dans `config.json` — que le chiffrement de la base laisserait, lui, en clair.
 
-### Comment le chiffrement fonctionne
+### Horodatage des sauvegardes
+
+Le nom d'une sauvegarde porte l'**heure locale** de la machine, suivie du
+décalage UTC :
+
+```
+ledgeralps-2026-08-04T20-10-51+0200.db
+```
+
+Il était écrit en UTC alors que l'interface affiche l'heure du fichier, que le
+système rend en heure locale : une sauvegarde prise à 16 h 23 en Suisse
+s'appelait `…T14-23-05` et s'affichait « 16:23 ». Deux heures d'écart entre
+l'explorateur de fichiers et le logiciel, sur des fichiers qu'il faut savoir
+identifier pendant dix ans (CO art. 958f).
+
+Le décalage est conservé parce que l'heure locale seule est ambiguë une nuit par
+an : au passage à l'heure d'hiver, 02 h 30 existe deux fois.
+
+L'ordre des sauvegardes — celui qui désigne la plus ancienne à purger — se lit
+désormais sur la **date du fichier**, pas sur son nom. En heure locale, l'ordre
+alphabétique se casse cette même nuit-là, et la purge aurait effacé la mauvaise
+copie. Les sauvegardes nommées à l'ancien format restent listées et datées
+correctement.
+
+---
+
+## Comment le chiffrement fonctionne
 
 Deux briques, aucune dépendance système — tout est en Go pur, ce qui préserve
 le binaire unique.

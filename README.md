@@ -1,91 +1,136 @@
+<div align="center">
+
 # LedgerAlps
 
-**Comptabilité et facturation pour les PME et indépendants suisses.**
+**Facturation et comptabilité pour les indépendants et PME de Suisse.**
 
-Vos données restent sur votre machine. Pas de cloud, pas d'abonnement, pas de
-compte à créer chez qui que ce soit.
+*Vos données restent sur votre machine. Pas de cloud, pas d'abonnement,
+pas de compte à créer chez qui que ce soit.*
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/kmdn-ch/LedgerAlps/actions/workflows/test.yml/badge.svg)](https://github.com/kmdn-ch/LedgerAlps/actions/workflows/test.yml)
+[![Télécharger](https://img.shields.io/github/v/release/kmdn-ch/LedgerAlps?label=t%C3%A9l%C3%A9charger&color=success)](https://github.com/kmdn-ch/LedgerAlps/releases/latest)
+
+</div>
 
 ---
 
 ## Installation
 
-Téléchargez l'installeur depuis la page
-**[Releases](https://github.com/kmdn-ch/LedgerAlps/releases/latest)** :
+Téléchargez `LedgerAlps_Setup_<version>_windows_amd64.exe` depuis la page
+**[Releases](https://github.com/kmdn-ch/LedgerAlps/releases/latest)**, puis
+double-cliquez.
 
-```
-LedgerAlps_Setup_<version>_windows_amd64.exe
-```
+Au premier lancement, LedgerAlps ouvre votre navigateur et vous demande de créer
+votre compte. **Il n'y a rien d'autre à configurer.**
 
-Double-cliquez, suivez l'assistant. Au premier lancement, LedgerAlps ouvre
-votre navigateur et vous demande de créer votre compte administrateur. C'est
-tout — il n'y a rien à configurer.
-
-> Vos données sont enregistrées dans `%APPDATA%\LedgerAlps\` et sont conservées
-> lors des mises à jour comme des désinstallations.
+> Vos données sont enregistrées dans `%APPDATA%\LedgerAlps\` et survivent aux
+> mises à jour comme aux désinstallations.
 
 *Linux : voir le [guide de déploiement](docs/PRODUCTION.md).*
 
-*LedgerAlps est publié pour **Windows x86-64** et **Linux x86-64**. Sur un PC
-Windows ARM, l'installeur ci-dessus fonctionne par émulation. Pour macOS ou
-ARM, il faut compiler depuis les sources — voir la
-[roadmap](ROADMAP.md#plateformes-prises-en-charge) pour le pourquoi.*
+---
+
+## Où vont vos données
+
+```mermaid
+flowchart LR
+    U["👤 Vous"] <--> N["🌐 Navigateur<br/>localhost"]
+    N <--> S["⚙️ LedgerAlps<br/>un seul fichier .exe"]
+    S <--> DB[("💾 ledgeralps.db<br/>votre disque")]
+    S -.->|"jamais"| C["☁️ Internet"]
+
+    style DB fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style C fill:#fafafa,stroke:#bdbdbd,stroke-dasharray:4 3
+    style S fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+```
+
+Le serveur, la base et l'interface tiennent dans **un seul exécutable**, écouté
+sur votre machine. Aucun appel réseau n'est fait — les avis de conformité
+eux-mêmes sont livrés avec l'application et fonctionnent hors ligne.
 
 ---
 
 ## Ce que fait LedgerAlps
 
-**Facturation**
-Créez vos factures et vos offres de prix, suivez leur statut, générez le PDF
-avec le bulletin **QR-facture** suisse conforme au standard des banques.
-Une offre acceptée se convertit en facture en un clic : l'offre est conservée
-telle qu'elle a été envoyée, et les deux documents restent liés.
+<table>
+<tr>
+<td width="50%" valign="top">
 
-**Comptabilité**
+### 📄 Facturation
+
+Factures, offres de prix et notes de crédit, avec le bulletin **QR-facture**
+suisse conforme au standard des banques (SIX IG v2.4).
+
+Une offre acceptée devient une facture en un clic : l'offre est conservée telle
+qu'elle a été envoyée, et les deux documents restent liés.
+
+</td>
+<td width="50%" valign="top">
+
+### 📚 Comptabilité
+
 Journal en partie double, plan comptable PME suisse préchargé, grand livre,
 balance de vérification, bilan et compte de résultat.
 
-**TVA**
-Déclaration selon la méthode effective ou les taux de la dette fiscale nette
-(TDFN), avec l'arrondi suisse à 5 centimes. Les factures fournisseurs
-alimentent l'impôt préalable déductible.
+Clôture d'exercice qui vire réellement le résultat, et **verrouille** la période
+close.
 
-**Banque**
-Export de virements et import de relevés bancaires aux formats ISO 20022
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🧾 TVA
+
+Méthode effective ou taux de la dette fiscale nette (TDFN), arrondi suisse à
+5 centimes. Les factures fournisseurs alimentent l'impôt préalable déductible.
+
+LedgerAlps **refuse** de facturer de la TVA si vous n'avez pas de numéro de TVA :
+la mentionner sans y avoir droit vous en rendrait redevable.
+
+</td>
+<td valign="top">
+
+### 🏦 Banque
+
+Export de virements et import de relevés aux formats **ISO 20022**
 (`pain.001`, `camt.053`).
 
-**Conformité**
-Écritures scellées par empreinte numérique (CO art. 957a), archive légale
-10 ans (CO art. 958f), et une **veille automatique** qui vous prévient dans
-l'application quand une loi ou un standard qui vous concerne évolue.
-**Paramètres → Maintenance** vous laisse vérifier vous-même que rien n'a été
-modifié ni retiré, d'un bouton : LedgerAlps recalcule chaque empreinte et
-contrôle le chaînage — c'est ce qui rend une **suppression** visible, qu'une
-vérification entrée par entrée ne verrait pas. Vous y clôturez aussi vos
-exercices : une fois bouclé, un exercice n'accepte plus aucune écriture, pas
-même antidatée. Et vous en téléchargez une **attestation d'intégrité** à
-remettre à votre fiduciaire, qui dit aussi bien ce qu'elle prouve que ce
-qu'elle ne prouve pas.
+Validation d'IBAN selon le registre officiel — longueur imposée par le pays et
+clé de contrôle, pas seulement le calcul MOD-97.
 
-**Données personnelles**
-Un client peut demander l'effacement de ses données : LedgerAlps anonymise sa
-fiche depuis **Paramètres → Maintenance**, tout en conservant ses factures —
-elles portent l'identité qu'elles avaient à l'émission, comme la loi l'exige
-pendant dix ans. Les adresses IP des tentatives de connexion bloquées sont
-effacées d'elles-mêmes après quelques mois.
+</td>
+</tr>
+<tr>
+<td valign="top">
 
-**Vos données restent les vôtres**
-L'archive légale (**Paramètres → Maintenance**) contient dix ans de pièces en
-JSON *et* en CSV : ouvrable dans un tableur, importable dans un autre logiciel
-comptable. Le verrouillage fournisseur ne tient pas au refus d'exporter, il
-tient au format de l'export.
+### 🔒 Conformité
 
-**Sauvegardes**
-Un instantané de votre comptabilité est pris automatiquement, et vous pouvez
-en déclencher un à tout moment depuis **Paramètres → Sauvegardes**, en le
-protégeant par une phrase de passe.
+Écritures scellées par une **chaîne d'empreintes SHA-256** (CO art. 957a) que
+vous pouvez vérifier vous-même, d'un bouton.
+
+Attestation d'intégrité téléchargeable pour votre fiduciaire — qui dit aussi bien
+ce qu'elle prouve que ce qu'elle ne prouve pas.
+
+</td>
+<td valign="top">
+
+### 💾 Sauvegardes
+
+Instantané automatique, chiffrable par une phrase de passe (Argon2id +
+XChaCha20-Poly1305).
+
+Restauration annulable : votre comptabilité actuelle est sauvegardée avant d'être
+remplacée.
+
+</td>
+</tr>
+</table>
+
+**Vos données sont les vôtres.** L'archive légale contient dix ans de pièces en
+JSON *et* en CSV — ouvrable dans un tableur, importable ailleurs. Le verrouillage
+fournisseur ne tient pas au refus d'exporter, il tient au format de l'export.
 
 ---
 
@@ -93,108 +138,149 @@ protégeant par une phrase de passe.
 
 | | LedgerAlps | Solutions cloud |
 |---|---|---|
-| Où sont vos données | sur votre machine | sur les serveurs d'un tiers |
-| Coût | gratuit, open source | abonnement mensuel |
-| Si le fournisseur ferme | rien ne change | vous devez migrer |
-| Accès à vos données | fichier que vous possédez | export, quand c'est proposé |
-| Fonctionne hors ligne | oui | non |
+| Où sont vos données | **sur votre machine** | sur les serveurs d'un tiers |
+| Coût | **gratuit, open source** | abonnement mensuel |
+| Si le fournisseur ferme | **rien ne change** | vous devez migrer |
+| Accès à vos données | **un fichier que vous possédez** | export, quand c'est proposé |
+| Fonctionne hors ligne | **oui** | non |
 
 ---
 
 ## Questions fréquentes
 
-**Mes données partent-elles quelque part ?**
-Non. LedgerAlps fonctionne entièrement sur votre machine. Les avis de
-conformité sont livrés avec l'application, sans appel réseau.
+<details>
+<summary><b>Mes données partent-elles quelque part ?</b></summary>
 
-**Que se passe-t-il si je perds mon ordinateur ?**
+Non. LedgerAlps fonctionne entièrement sur votre machine. Les avis de conformité
+sont livrés avec l'application, sans appel réseau.
+</details>
+
+<details>
+<summary><b>Que se passe-t-il si je perds mon ordinateur ?</b></summary>
+
 Vous perdez votre comptabilité si vous n'avez pas de copie ailleurs. Les
 sauvegardes automatiques sont écrites sur le **même** disque : copiez-les
-régulièrement sur un support externe. Le CO impose de conserver vos pièces dix
-ans.
+régulièrement sur un support externe. Le CO impose de conserver vos pièces
+dix ans.
+</details>
 
-**Que contient une sauvegarde ?**
-Tout ce que LedgerAlps enregistre, en un seul fichier : vos factures, offres de
-prix et notes de crédit avec leurs lignes, vos contacts, le journal et le plan
-comptable, les paiements, les exercices, les factures fournisseurs, les
-paramètres de votre société — logo compris — et le journal d'audit.
+<details>
+<summary><b>Que contient une sauvegarde ?</b></summary>
 
-Ce qui n'y est **pas** : le logiciel lui-même, et le fichier de configuration
-qui contient la clé de session. Restaurer sur une autre machine ramène donc
-toute votre comptabilité ; il faudra simplement vous reconnecter.
+Tout ce que LedgerAlps enregistre, en un seul fichier : factures, offres et notes
+de crédit avec leurs lignes, contacts, journal et plan comptable, paiements,
+exercices, factures fournisseurs, paramètres de société — logo compris — et le
+journal d'audit.
 
-**Mes données sont-elles chiffrées sur le disque ?**
+Ce qui n'y est **pas** : le logiciel lui-même, et le fichier de configuration qui
+contient la clé de session. Restaurer sur une autre machine ramène donc toute
+votre comptabilité ; il faudra simplement vous reconnecter.
+</details>
+
+<details>
+<summary><b>Mes données sont-elles chiffrées sur le disque ?</b></summary>
+
 Vos **sauvegardes** peuvent l'être, si vous indiquez une phrase de passe. La
 **base de données elle-même n'est pas chiffrée** : SQLite ne le fait pas
 nativement, et les extensions qui le permettent obligeraient à abandonner le
 principe d'un logiciel qui s'installe sans rien d'autre.
 
-La bonne protection est ailleurs, et elle est gratuite : **activez le
-chiffrement du disque** — BitLocker sur Windows, LUKS sur Linux. Il protège la
-base, les sauvegardes, et tout le reste de votre ordinateur. Le
+La bonne protection est ailleurs, et elle est gratuite : **activez le chiffrement
+du disque** — BitLocker sur Windows, LUKS sur Linux. Il protège la base, les
+sauvegardes et tout le reste. Le
 [guide de déploiement](docs/PRODUCTION.md#pourquoi-la-base-de-données-est-en-clair)
 détaille pourquoi les autres options coûtent plus qu'elles ne rapportent.
+</details>
 
-**Puis-je annuler une restauration ?**
-Oui. Avant de restaurer, LedgerAlps sauvegarde d'abord votre comptabilité
-actuelle — protégée par la même phrase de passe que la sauvegarde que vous
-restaurez. Si vous vous êtes trompé de fichier, elle est là, dans la liste.
+<details>
+<summary><b>Les sauvegardes sont-elles chiffrées ?</b></summary>
 
-**Les sauvegardes sont-elles chiffrées ?**
-Oui, si vous le demandez. À la création, LedgerAlps vous propose une phrase de
-passe : le fichier devient alors illisible sans elle. C'est ce qui compte quand
-la copie part sur une clé USB ou un NAS.
+Oui, si vous le demandez. À la création, LedgerAlps propose une phrase de passe :
+le fichier devient alors illisible sans elle. C'est ce qui compte quand la copie
+part sur une clé USB ou un NAS.
 
-Deux points à retenir : choisissez-la **différente de votre mot de passe de
-connexion**, et notez-la **ailleurs que sur cet ordinateur**. Sans elle,
-personne ne peut ouvrir la sauvegarde — vous non plus.
+Deux points : choisissez-la **différente de votre mot de passe de connexion**, et
+notez-la **ailleurs que sur cet ordinateur**. Sans elle, personne ne peut ouvrir
+la sauvegarde — vous non plus.
+</details>
 
-Le détail technique — et pourquoi ces choix — est dans le
-[guide de déploiement](docs/PRODUCTION.md#comment-le-chiffrement-fonctionne).
+<details>
+<summary><b>Puis-je annuler une restauration ?</b></summary>
 
-**Ai-je le droit d'exporter les documents d'un client depuis sa fiche ?**
+Oui. Avant de restaurer, LedgerAlps sauvegarde votre comptabilité actuelle —
+protégée par la même phrase de passe que la sauvegarde restaurée. Si vous vous
+êtes trompé de fichier, elle est là, dans la liste.
+</details>
+
+<details>
+<summary><b>Je ne suis pas assujetti à la TVA. Que dois-je écrire sur mes factures ?</b></summary>
+
+**Aucune mention n'est légalement obligatoire.** Ce qui existe est une
+**interdiction** : si vous n'êtes pas inscrit au registre des assujettis, vous
+n'avez pas le droit de faire figurer la TVA sur vos factures (LTVA art. 27 al. 1)
+— et si vous le faites quand même, vous en devenez **redevable** (al. 2), même
+sans l'avoir encaissée.
+
+Concrètement : laissez vos lignes à **0 %**. LedgerAlps n'imprime alors aucune
+ligne de TVA, votre IDE s'affiche seul, et il refusera de toute façon d'établir
+une facture portant de la TVA tant qu'aucun numéro de TVA n'est enregistré.
+
+Beaucoup ajoutent par courtoisie une note « TVA non applicable — non assujetti »
+dans le champ Notes ; c'est un usage, pas une obligation.
+</details>
+
+<details>
+<summary><b>Ai-je le droit d'exporter les documents d'un client depuis sa fiche ?</b></summary>
+
 Oui, sans réserve. Ces factures sont **vos** pièces comptables, que le CO
-art. 958f vous impose de conserver dix ans. Exporter vos propres livres ne pose
-aucune question de principe.
+art. 958f vous impose de conserver dix ans.
 
-C'est même l'inverse : cet export est le moyen de répondre à une demande
-d'**accès** (nLPD art. 25, à traiter dans les trente jours) ou de **remise des
-données** (art. 28, gratuitement). Sans lui, satisfaire ces droits supposerait
-de bricoler.
+C'est même l'inverse d'un problème : cet export est le moyen de répondre à une
+demande d'**accès** (nLPD art. 25, à traiter en trente jours) ou de **remise des
+données** (art. 28, gratuitement).
 
 Ce qui vous engage commence **après** : le fichier contient des données
-personnelles et quitte votre machine. Envoyez-le au bon destinataire, et ne le
-laissez pas traîner dans un dossier partagé.
+personnelles et quitte votre machine.
+</details>
 
-**Je ne suis pas assujetti à la TVA. Que dois-je écrire sur mes factures ?**
-Aucune mention n'est légalement obligatoire. Ce qui existe est une
-**interdiction** : si vous n'êtes pas inscrit au registre des assujettis, vous
-n'avez pas le droit de faire figurer la TVA sur vos factures (LTVA art. 27
-al. 1) — et si vous le faites quand même, vous en devenez **redevable**
-(al. 2), même sans l'avoir encaissée.
+<details>
+<summary><b>L'anonymisation d'un contact efface-t-elle aussi les sauvegardes ?</b></summary>
 
-Concrètement : mettez vos lignes à **0 %**. LedgerAlps n'imprime alors aucune
-ligne de TVA, et votre IDE s'affiche seul. Beaucoup ajoutent par courtoisie une
-note du type « TVA non applicable — non assujetti » dans le champ Notes ; c'est
-un usage, pas une obligation. Le contrôle de cohérence vous prévient si des
-factures portent de la TVA sans numéro de TVA enregistré.
-
-**L'anonymisation d'un contact efface-t-elle aussi les sauvegardes ?**
 Non. Une sauvegarde est une copie figée : celles prises avant l'anonymisation
 contiennent encore les coordonnées, et les réécrire leur retirerait la valeur
 qu'elles ont pour vos livres. Elles disparaissent d'elles-mêmes à mesure que de
-nouvelles sont prises. D'ici là, la règle qui vous revient est de **ne pas
-restaurer une sauvegarde antérieure pour retrouver ces données** — et
-d'appliquer la même règle aux copies que vous gardez sur un NAS ou une clé USB.
+nouvelles sont prises.
 
-**Puis-je l'utiliser à plusieurs ?**
-Un seul compte pour l'instant. La gestion multi-utilisateurs avec rôles — dont
-un accès en lecture seule pour votre fiduciaire — est planifiée.
+D'ici là, la règle qui vous revient : **ne pas restaurer une sauvegarde
+antérieure pour retrouver ces données** — et appliquer la même règle aux copies
+gardées sur un NAS ou une clé USB.
+</details>
 
-**Est-ce que je peux faire confiance aux calculs ?**
-Le code est ouvert et vérifiable, et la conformité QR-facture, TVA et
-comptable est couverte par des tests automatisés. Cela dit, **LedgerAlps est
-un outil, pas un conseil fiscal** : votre fiduciaire reste votre interlocuteur.
+<details>
+<summary><b>Puis-je l'utiliser à plusieurs ?</b></summary>
+
+Un seul compte pour l'instant. La gestion multi-utilisateurs avec rôles — dont un
+accès en lecture seule pour votre fiduciaire — est
+[planifiée](ROADMAP.md#9--multi-utilisateurs--permissions).
+</details>
+
+<details>
+<summary><b>Est-ce que je peux faire confiance aux calculs ?</b></summary>
+
+Le code est ouvert et vérifiable, et la conformité QR-facture, TVA et comptable
+est couverte par des tests automatisés. Cela dit, **LedgerAlps est un outil, pas
+un conseil fiscal** : votre fiduciaire reste votre interlocuteur.
+</details>
+
+---
+
+## Plateformes
+
+**Windows x86-64** et **Linux x86-64**. Sur un PC Windows ARM, l'installeur
+x86-64 fonctionne par émulation. Pour macOS ou ARM, il faut compiler depuis les
+sources — le [pourquoi](ROADMAP.md#plateformes-prises-en-charge) tient en une
+phrase : publier un binaire, c'est promettre qu'il fonctionne, et ceux-là
+n'étaient pas testés.
 
 ---
 
@@ -202,13 +288,13 @@ un outil, pas un conseil fiscal** : votre fiduciaire reste votre interlocuteur.
 
 | Document | Pour qui |
 |---|---|
-| [Déploiement serveur](docs/PRODUCTION.md) | installer sur Linux ou un serveur du bureau |
+| [Roadmap](ROADMAP.md) | ce qui arrive, et ce qui n'arrivera pas |
+| [Déploiement serveur](docs/PRODUCTION.md) | installer sur Linux ou un serveur de bureau |
 | [Architecture](docs/ARCHITECTURE.md) | comprendre comment c'est construit |
 | [Développement](docs/DEVELOPMENT.md) | compiler, tester, contribuer |
 | [Référence API](docs/API.md) | intégrer un autre outil |
 | [Veille de conformité](compliance/README.md) | suivi des évolutions légales |
 | [Branches et releases](docs/BRANCHING.md) | processus de publication |
-| [Roadmap](ROADMAP.md) | ce qui arrive ensuite |
 
 ---
 
@@ -218,9 +304,4 @@ Les contributions sont bienvenues — voir
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) pour compiler le projet et
 [docs/BRANCHING.md](docs/BRANCHING.md) pour le processus.
 
-Signalements de bugs et demandes de fonctionnalités :
-[Issues](https://github.com/kmdn-ch/LedgerAlps/issues).
-
-## Licence
-
-[MIT](LICENSE) — libre d'utilisation, y compris commerciale.
+**Licence MIT** — voir [LICENSE](LICENSE).

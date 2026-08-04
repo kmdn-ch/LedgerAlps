@@ -1,161 +1,357 @@
-# LedgerAlps — Roadmap
+# Roadmap
 
-> **Politique de versionnage**
-> - `vX.Y.0` — livraison d'un milestone fonctionnel complet
-> - `vX.Y.Z` (Z > 0) — correctifs groupés dans le cycle du milestone, taggés une fois stables
-> - On ne pose **jamais** un tag par commit isolé
-
----
-
-## En cours — Interface multilingue (FR / DE / IT / EN)
-
-La Suisse compte quatre langues officielles. LedgerAlps supportera FR, DE, IT et EN.
-
-> Ce milestone visait initialement le numéro v1.4. Celui-ci a été attribué à la
-> veille de conformité, livrée en premier ; conformément à la politique de
-> versionnage, le numéro de ce milestone sera fixé à sa livraison.
-
-| Langue | Code | Statut |
-|---|---|---|
-| Français | `fr` | ✅ Défaut actuel |
-| Deutsch | `de` | Planifié |
-| Italiano | `it` | Planifié |
-| English | `en` | Partiel (chaînes UI) |
-
-**Périmètre**
-- Traduction complète : menus, formulaires, libellés, messages d'erreur, gabarits de factures
-- Bulletin de paiement QR : libellés créancier/débiteur dans la langue choisie
-- PDF factures : langue liée au paramètre société ou par facture
-- Wizard premier démarrage : langue détectée depuis la locale Windows
-- Sélecteur de langue dans la barre de navigation
-
-**Plan technique**
-- `react-i18next` en frontend, fichiers `public/locales/{fr,de,it,en}/translation.json`
-- Backend : génération PDF language-aware (en-tête facture, libellés QR-bill)
-- NSIS : packs DE, FR, EN déjà présents — ajouter IT
+**LedgerAlps est un logiciel de facturation** qui tient derrière lui la
+comptabilité que la loi suisse exige d'un indépendant qui facture. Ce n'est pas
+une solution comptable complète, et ce n'est pas l'objectif.
 
 ---
 
-## Planifié
+## Ce qui entre dans le produit, et ce qui n'y entre pas
 
-Priorités arrêtées après audit de conformité (juil. 2026), révisées en août 2026
-après l'audit du flux offre de prix → facture. L'ordre reflète un principe
-simple : ce qui fait qu'un indépendant suisse choisit LedgerAlps plutôt qu'une
-solution cloud, c'est une comptabilité **complète**, des données qu'il ne peut
-**pas perdre**, et des données que **personne d'autre ne détient**.
+```mermaid
+flowchart TB
+    P["💡 Fonctionnalité proposée"] --> Q{"Sans elle, une facture suisse<br/>est-elle non conforme<br/>ou inexploitable ?"}
 
-> **Statuts.** ✅ **livré** = testé et validé par l'utilisateur. 🔎 **en
-> validation** = codé, CI verte, publié dans une pré-version, en attente de
-> validation. Le code écrit ne suffit pas : la recherche IDE répondait 403 à
-> tout le monde, l'archive ARM64 n'avait pas de serveur, le compteur « en
-> retard » affichait toujours zéro — chaque fois les tests passaient, mais le
-> chemin réellement emprunté par l'utilisateur n'avait jamais été parcouru.
+    Q -->|"Oui"| N["🔒 Noyau<br/><br/>verrouillage de période · chaîne d'intégrité<br/>déclaration TVA · QR-facture"]
+    Q -->|"Non, mais un métier en a besoin"| M["🔧 Module métier<br/><br/>pièces et main-d'œuvre · métré<br/>honoraires et débours"]
+    Q -->|"Non"| X["⛔ Écarté<br/><br/>comptabilité analytique · budget<br/>gestion de stock · mobile"]
 
-| Priorité | Fonctionnalité | Description |
+    style N fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style M fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style X fill:#fafafa,stroke:#bdbdbd,stroke-dasharray:4 3
+    style Q fill:#fff8e1,stroke:#f9a825,stroke-width:2px
+```
+
+Le risque, pour un logiciel qui marche, est de grossir vers ce que font les
+concurrents. Ce critère est la réponse : il tient en une question, et il se
+répond sans débat d'opinion.
+
+---
+
+## Où en est le produit
+
+**Statuts.** ✅ livré **et validé par l'utilisateur** · 🔎 livré, en attente de
+validation · ⏳ planifié · ⛔ bloqué, décision à prendre
+
+> Le code écrit ne suffit pas à cocher une case. La recherche IDE répondait 403
+> à tout le monde, l'archive ARM64 n'avait pas de serveur, l'empreinte
+> d'intégrité ne couvrait pas les valeurs enregistrées — chaque fois les tests
+> passaient, mais le chemin réellement emprunté par un utilisateur n'avait
+> jamais été parcouru.
+
+---
+
+## Conformité suisse — état
+
+| Obligation | Base légale | État |
 |---|---|---|
-| 1 | **Factures fournisseurs & charges** | ✅ Backend livré (API + TVA déductible). L'**impôt préalable** alimente désormais le chiffre 400 de la déclaration : auparavant figé à zéro, la TVA due était surévaluée. Reste : **interface de saisie**, écriture au journal à la comptabilisation (charge + TVA déductible / créanciers), notes de frais, pièces jointes (scan de facture). |
-| 2 | **Sauvegarde & restauration** | ✅ CLI et instantané automatique (v1.3.14, validé).<br>✅ **Interface (v1.4.4, validé)** : onglet Sauvegardes dans Paramètres — créer un instantané, saisir la phrase de passe de chiffrement, lister les copies et leur état. Restauration avec avertissement explicite : elle est *préparée* puis appliquée au démarrage suivant, un serveur ne pouvant pas échanger sous lui le fichier qu'il a ouvert. Bouton **« Redémarrer LedgerAlps maintenant »** pour l'appliquer sans fermer la fenêtre à la main. Annulable. La comptabilité remplacée est sauvegardée **à la préparation**, avec la même phrase de passe — donc chiffrée si vos sauvegardes le sont.<br>Reste : sauvegarde vers un dossier externe (NAS / clé USB), test de restauration planifié.
-| 3 | **Limitation des tentatives de connexion** | ✅ Livré en v1.3.14. Reste : journalisation des verrouillages dans l'audit trail. |
-| 4 | **Chiffrement au repos — sauvegardes ✅, base bloquée** | ✅ **Sauvegardes chiffrées (v1.4.4, validé).** Argon2id + XChaCha20-Poly1305, en Go pur. `BACKUP_PASSPHRASE` ou `--passphrase`. Ce sont elles qui *quittent* la machine (NAS, clé USB) et échappent au contrôle de l'utilisateur ; un instantané égaré exposait l'intégralité de la comptabilité et des données clients (nLPD art. 8, OPDo art. 1-6). La copie en clair n'est effacée qu'après relecture, déchiffrement et contrôle d'intégrité SQLite. Le chiffrement est authentifié : altération, troncature et réordonnancement sont refusés. La phrase de passe doit être distincte du mot de passe de session, sinon perdre le poste revient à perdre aussi les sauvegardes.<br>**Base SQLite chiffrée : bloqué par l'architecture.** SQLCipher est une bibliothèque **C**. Le projet compile avec `CGO_ENABLED=0` sur un pilote SQLite en Go pur (`modernc.org/sqlite`), ce qui donne la compilation croisée et le binaire unique sans dépendance système. L'adopter imposerait CGO, donc la fin des deux. Options réelles, à arbitrer : (a) accepter CGO et un toolchain de compilation croisée par plateforme ; (b) chiffrer au niveau applicatif les seules colonnes sensibles, au prix de la recherche et des tris sur ces colonnes ; (c) s'en remettre au chiffrement de disque (BitLocker, LUKS) et le documenter comme la mesure attendue. En l'état c'est (c) qui s'applique, faute de décision. L'avis `nlpd-art8-data-security` affiché dans l'application reste donc pertinent pour la base, mais plus pour les sauvegardes. |
-| 5 | **HTTPS natif pour l'accès réseau** | 🔎 **Livré en v1.4.5 — accès local validé, accès réseau en attente de validation.** Le serveur écoute par défaut sur `127.0.0.1` : jusqu'ici il écoutait sur **toutes** les interfaces, si bien qu'un portable sur un réseau public servait sa comptabilité en clair sans que personne l'ait choisi.<br>Rendre LedgerAlps joignable depuis un autre poste (`HOST`) impose désormais TLS : certificat fourni via `TLS_CERT`/`TLS_KEY`, sinon **auto-signé généré** dans `<données applicatives>/tls` — couvrant `localhost`, le nom de la machine et ses adresses IP, valable dix ans et réutilisé d'un démarrage à l'autre pour que l'exception accordée au navigateur tienne.<br>`ALLOW_INSECURE_HTTP=true` reste possible pour le seul cas légitime — un reverse proxy terminant TLS sur la même machine — et le journalise bruyamment, parce que c'est aussi le drapeau vers lequel on se tourne pour faire taire un avertissement.<br>Sans cela, mot de passe de connexion, jeton de session et phrase de passe de sauvegarde traversaient le réseau en clair (LPD art. 8, OPDo art. 3 al. 1 let. c).<br>Une option servant aussi en HTTPS sur `localhost` a été proposée en pré-version puis **retirée** : aucune sécurité réelle gagnée — le trafic ne quitte pas la machine — pour un avertissement de certificat à chaque nouveau profil de navigateur. Dépenser la confiance dans les avertissements sans rien protéger est un mauvais échange ; le raisonnement est dans [`docs/PRODUCTION.md`](docs/PRODUCTION.md#pourquoi-http-sur-localhost).<br>Reste : renouvellement automatique du certificat auto-signé à l'approche de l'échéance, et HSTS une fois qu'un certificat de confiance est la norme. |
-| 6 | **Rotation du secret de signature** | ✅ **Livré en v1.4.6 et validé.** Bouton **« Régénérer la clé de signature »** dans Paramètres → Maintenance → Sécurité, réservé aux administrateurs. La confirmation énonce la portée exacte plutôt qu'un avertissement vague : « êtes-vous sûr ? » n'aide personne à décider.<br>**Portée, vérifiée dans le code** : le secret ne sert qu'à signer et relire les jetons. Le régénérer déconnecte toutes les sessions, **et rien d'autre** — mots de passe (bcrypt) intacts, aucune donnée touchée, sauvegardes toujours utilisables (elles ne contiennent pas `config.json`, et leur chiffrement dérive d'une phrase de passe indépendante). Les jetons de rafraîchissement en base sont révoqués au passage, pour que la table cesse de décrire des sessions qui n'existent plus.<br>À utiliser en cas de suspicion de fuite du fichier de configuration : partagé dans un ticket de support, copié sur une clé, poussé par erreur dans un dépôt. Qui le détient forge un jeton valide pour n'importe quel compte, administrateur compris, sans connaître aucun mot de passe.<br>**Ne remplace pas le chiffrement du disque** : qui lit `config.json` lit aussi `ledgeralps.db`, posé dans le même dossier — il n'a alors nul besoin de forger un jeton.
-| 7 | **Paramètres → Maintenance & Système** | ✅ **Contrôle de cohérence et état du système (v1.4.5, validés).**<br>✅ **Piste d'audit, conformité & clôture, réversibilité, sécurité — livrés en v1.4.6 et validés.**<br><br>**Piste d'audit** — l'écran expose la chaîne d'empreintes du CO art. 957a et permet de **vérifier la chaîne entière**. Vérifier une entrée isolée ne détecte que la modification de son contenu ; supprimer une ligne laisse l'empreinte de toutes les autres valide. Le parcours contrôle aussi le chaînage et la continuité des numéros, et nomme la rupture. Limite énoncée : une troncature en **fin** de chaîne est indétectable par construction, c'est la sauvegarde qui répond.<br>⚠️ Ce travail a révélé que **l'empreinte ne couvrait pas les valeurs enregistrées** : aucune écriture ne pouvait se revérifier depuis l'origine. Corrigé ; les entrées antérieures sont signalées non vérifiables, jamais altérées.<br><br>**Conformité & clôture** — exercices comptables (déclaration d'un exercice décalé, clôture avec ses conséquences énoncées) et **verrouillage de période** (CO art. 958f, Olico art. 3) : un exercice clos refuse création **et** comptabilisation, y compris pour un brouillon créé avant la clôture.<br>⚠️ Trois défauts enchaînés trouvés ici, vérifiés sur un serveur réel : `fiscal_year_id` n'était renseigné nulle part ; la clôture, qui filtre dessus, marquait l'exercice clos **sans produire d'écriture de clôture** en répondant `200 closed` ; et cette écriture, insérée directement en `posted`, échappait à la chaîne d'intégrité. Corrigés, avec rattrapage des bases existantes au démarrage.<br><br>**Archivage Olico art. 9** — attestation d'intégrité exportable : état de la chaîne, empreinte de tête, périmètre couvert, et **ses limites** — l'horodatage vient de l'horloge du poste, pas d'une autorité tierce (RFC 3161), ce qui établit l'ordre des enregistrements mais pas une date opposable.<br><br>**Export de réversibilité** — l'archive légale contient désormais un dossier `csv/` en plus du JSON : séparateur point-virgule et BOM UTF-8 pour Excel en Suisse, lignes imbriquées extraites dans leurs propres fichiers avec clé étrangère, et un LISEZ-MOI documentant les relations. Le JSON était exact mais supposait d'écrire du code ; sans format ouvrable dans un tableur, « vos données vous appartiennent » restait sans moyen de l'exercer.<br><br>**QR-facture** — la validation SIX IG v2.4 existait sans écran. Elle est désormais exercée par le contrôle de cohérence : IBAN de la société absent ou invalide, adresse structurée incomplète, IBAN de contacts invalides. Silencieux quand il n'y a rien à dire.<br><br>**Sécurité** — voir le point 6.<br><br>Reste à livrer :<br><br>**1. Mode bac à sable** — duplication vers un environnement de test. ⚠️ Exige un marquage permanent et impossible à ignorer : le risque n'est pas technique mais humain — facturer un vrai client depuis le bac à sable, ou l'inverse. Non commencé.<br><br>**2. Console de rejeu ISO 20022 / eBill** — remappage `camt.053/.054`, `pain.001`. L'import et l'export existent côté backend ; la console de rejeu n'est pas commencée.<br><br>**3. Console de logs** — l'état du système est livré (moteur, volumétrie, sauvegardes, réseau, chiffrement du disque, capacités). La consultation des erreurs API demande une capture de journal qui n'existe pas encore ; non commencée.<br><br>**4. TVA AFC** — taux 8.1 / 2.6 / 3.8 % et méthodes effective / TDFN sont en place et vérifiés ; la transmission **e-TVA** ne l'est pas. Une déclaration se dépose aujourd'hui manuellement, ce qui reste conforme.<br><br>**Purge et nLPD — livré.** Anonymisation d'un contact (nLPD art. 6 al. 4 et art. 32) sans amputer les pièces comptables : ce que le CO art. 958f protège est la **pièce**, pas la fiche client. Cela n'était possible qu'après avoir figé l'identité du destinataire sur la facture — auparavant le PDF relisait le contact vivant, si bien que renommer un client réécrivait rétroactivement toutes ses factures passées, ce qui contredisait déjà le CO art. 958f et la LTVA art. 26.<br>Les durées de rétention des adresses IP sont désormais **appliquées** : anonymisation à 90 jours, suppression de l'événement à un an. Le schéma annonçait cette limite depuis sa création sans que rien ne l'exécute — un commentaire décrivant une garantie inexistante empêche de voir le manque. L'écran affiche les chiffres réels, pas la règle.<br><br>⚠️ **Le recalcul des soldes reste volontairement absent.** Cet écran montre, il ne répare pas : une comptabilité incohérente se corrige par une écriture, pas par un bouton — réparer en silence effacerait la trace (CO art. 957a al. 2 ch. 5). La réindexation ne touchera jamais aux numéros de documents émis.
-| 8 | **Notes de crédit — trace comptable et lien** | ✅ **Lien vers la facture corrigée (v1.4.4, validé)** : la note référence la facture, son PDF porte « Annule la facture : FA-… » (LTVA art. 27 al. 4, CO art. 957a al. 2 ch. 5), et le **montant est borné** — la somme des notes rattachées ne peut plus dépasser la facture, les crédits partiels s'additionnant contre le même plafond.<br>**Reste : l'écriture au journal — mais elle ne peut pas commencer ici.** Aucune facture ne passe d'écriture aujourd'hui : les ventes se saisissent manuellement au journal, seuls les paiements sont automatisés (banque / débiteurs, code 1020 / 1100). Contrepasser automatiquement le produit d'une note de crédit créerait donc un produit négatif sans contrepartie, et doublerait la correction si l'utilisateur l'a déjà passée lui-même. L'automatisation doit être prise dans l'ordre : d'abord la facture à l'émission (débiteurs / produits + TVA due, comptes 1100 / 3000-3200 / 2261), la note de crédit suivant alors le même mécanisme en sens inverse. À traiter avec l'écriture au journal des factures fournisseurs (voir « Factures fournisseurs & charges »). |
-| 9 | **Suppression & droit à l'effacement (nLPD)** | Endpoints `DELETE` (seules les routes logo et facture fournisseur brouillon en disposent). Effacement d'un contact avec conservation des pièces comptables exigées par le CO art. 958f — anonymisation plutôt que suppression physique. |
-| 10 | Multi-utilisateurs & Permissions | Rôles Admin / Comptable / Lecture seule. Cas d'usage central en Suisse : donner un accès **lecture seule à la fiduciaire** sans partager le compte admin. |
-| 11 | Rapprochement bancaire UI | L'import camt.053 existe déjà côté backend mais aucune interface ne permet de l'exploiter. Matching visuel contre le journal, workflow « matcher & passer ». |
-| 12 | **eBill** (remplace ZUGFeRD / Factur-X) | Réseau e-facturation suisse opéré par SIX, adopté par la majorité des banques CH. Plus pertinent pour une PME suisse que ZUGFeRD / Factur-X, orientés marché européen. |
-| 13 | **Validation contre le portail officiel SIX** | SIX exploite un [portail de validation](https://validation.iso-payments.ch/) des Swiss Payment Standards, qui contrôle le *payload* **et** l'image rendue contre les Implementation Guidelines. C'est la seule vérification faisant autorité, et celle qui manque : nos tests vérifient notre lecture de la spécification, pas la conformité réelle du bulletin produit. À faire : soumettre un PDF de référence et un `pain.001` à chaque évolution du format, et documenter le résultat. Le portail demande un compte.<br>**Sur une « certification ISO 20022 » — il n'y en a pas.** Le Registration Authority d'[iso20022.org](https://www.iso20022.org/faq) l'écrit explicitement : aucune autorité de certification n'existe pour cette norme, la conformité dépendant de la communauté qui l'implémente. Ce qui existe est une [liste de contrôle d'auto-évaluation](https://www.iso20022.org/sites/default/files/documents/D7/ISO20022_ComplianceChecklist.pdf). Les organismes qui vendent un « audit ISO 20022 certifiant » ne s'appuient donc sur rien. Ce qui a de la valeur en Suisse est la conformité aux **Swiss Payment Standards** de SIX — c'est-à-dire ce point-ci.<br>**Sur le logo « QR-Ready »** — non retenu en l'état. `qr-ready.ch` est associé à Epsitec SA (éditeur de Crésus, logiciel concurrent), n'est pas un programme SIX, ne documente aucun processus de certification, et la page QR-Ready d'Epsitec redirige aujourd'hui vers une 404. Afficher ce logo reviendrait à adopter la marque d'un concurrent sans validation vérifiable derrière. |
-| 14 | **Veille de conformité automatisée** | ✅ Livré en v1.4.0. Surveillance hebdomadaire des sources faisant autorité (Fedlex SPARQL pour nLPD/OPDo/LTVA/CO, SIX pour la QR-facture, EUR-Lex pour le RGPD) ; une évolution ouvre une issue, un mainteneur rédige l'avis en citant la source. Avis affichés dans l'application via un flux embarqué (fonctionne hors ligne). Boucle fermée par la **vérification de mise à jour** : la veille prévient l'équipe, l'équipe publie, l'application invite l'utilisateur à installer. Le flux distant signé Ed25519 reste implémenté et testé mais **volontairement non branché** — voir le raisonnement dans `compliance/README.md`. Voir [`compliance/README.md`](compliance/README.md). |
+| Traçabilité des écritures | CO art. 957a al. 2 ch. 5 | ✅ chaîne SHA-256 vérifiable |
+| Conservation dix ans | CO art. 958f | ✅ archive légale JSON + CSV |
+| Support modifiable admis | Olico art. 9 | ✅ attestation d'intégrité exportable |
+| Exercice bouclé immuable | CO art. 958f, Olico art. 3 | ✅ verrouillage de période |
+| Facture nommant son destinataire | LTVA art. 26 al. 2 | ✅ identité figée à l'émission |
+| Interdiction de mentionner la TVA sans l'être | LTVA art. 27 al. 1 et 2 | ✅ refusé à la source |
+| Correction par note de crédit | LTVA art. 27 al. 4, art. 41 | ✅ liée, bornée, signée en déclaration |
+| QR-facture | SIX IG v2.4 | ✅ conforme · ⏳ validation portail SIX |
+| Sécurité des données | nLPD art. 8, OPDo art. 3 | ✅ HTTPS réseau · ⛔ base en clair |
+| Effacement et rétention | nLPD art. 6 al. 4, art. 32 | ✅ anonymisation, purge des IP |
+| Portabilité | nLPD art. 25 et 28 | ✅ export par client, archive complète |
 
-> **Cap produit — à trancher, pas encore engagé.** LedgerAlps est un logiciel de
-> **facturation** qui tient la comptabilité que la loi suisse exige derrière,
-> pas une solution comptable complète. La différence n'est pas une question de
-> fonctionnalités mais de public : un indépendant qui facture, pas une fiduciaire
-> qui tient des livres pour autrui. Chaque ajout doit se justifier par « sans
-> cela, une facture suisse n'est pas conforme ou pas exploitable » — le
-> verrouillage de période, la chaîne d'intégrité et la déclaration TVA passent ce
-> test ; une comptabilité analytique, un budget ou une gestion de stock ne le
-> passent pas.
->
-> La piste d'évolution envisagée est **verticale, pas horizontale** : des modules
-> métier (garage, artisanat, professions libérales) qui ajoutent des lignes de
-> facturation propres à un métier — pièces et main-d'œuvre, forfaits, heures —
-> sans toucher au noyau. Un module ne doit rien pouvoir casser de ce qui existe :
-> il ajoute des façons de composer une facture, pas des règles comptables.
-> À reprendre quand un besoin réel se présentera, avec un métier précis.
+---
 
-**Écarté** — *Mobile / PWA* : incompatible avec l'architecture. LedgerAlps est un
-binaire local écouté sur `localhost` ; une « saisie hors-ligne avec sync »
-suppose un serveur central que le produit n'a pas, et ne veut pas avoir.
+## Priorités
 
-> Les numéros de version des milestones planifiés seront attribués à la livraison, pas à l'avance.
+| # | Sujet | État | Détail |
+|---|---|---|---|
+| 1 | Factures fournisseurs & charges | 🔎 backend | [↓](#1--factures-fournisseurs--charges) |
+| 2 | Sauvegarde & restauration | ✅ | [↓](#2--sauvegarde--restauration) |
+| 3 | Limitation des tentatives de connexion | ✅ | — |
+| 4 | Chiffrement au repos | ✅ sauvegardes · ⛔ base | [↓](#4--chiffrement-au-repos) |
+| 5 | HTTPS natif | 🔎 réseau à valider | [↓](#5--https-natif) |
+| 6 | Rotation du secret de signature | ✅ | [↓](#6--rotation-du-secret-de-signature) |
+| 7 | Maintenance & Système | ✅ conforme | [↓](#7--maintenance--système) |
+| 8 | Notes de crédit — écriture au journal | ⏳ | [↓](#8--notes-de-crédit--écriture-au-journal) |
+| 9 | Multi-utilisateurs & permissions | ⏳ | [↓](#9--multi-utilisateurs--permissions) |
+| 10 | Rapprochement bancaire (interface) | ⏳ | — |
+| 11 | eBill | ⏳ | [↓](#11--ebill) |
+| 12 | Validation contre le portail SIX | ⏳ | [↓](#12--validation-contre-le-portail-six) |
+| 13 | Veille de conformité automatisée | ✅ | — |
+| 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
+
+---
+
+## Détails
+
+### 1 — Factures fournisseurs & charges
+
+Backend livré : API, lignes multi-taux, garde anti-doublon. L'**impôt préalable**
+alimente le chiffre 400 de la déclaration ; il était figé à zéro, ce qui
+surévaluait la TVA due.
+
+**Reste** : interface de saisie, écriture au journal à la comptabilisation
+(charge + TVA déductible / créanciers), notes de frais, pièces jointes.
+
+### 2 — Sauvegarde & restauration
+
+Instantané `VACUUM INTO`, automatique au démarrage et à la demande, chiffrable.
+La restauration est *préparée* puis appliquée au redémarrage : un serveur ne peut
+pas échanger sous lui le fichier qu'il a ouvert. Annulable ; la comptabilité
+remplacée est sauvegardée **à la préparation**, avec la même phrase de passe.
+
+**Reste** : sauvegarde vers un dossier externe (NAS, clé USB), test de
+restauration planifié.
+
+### 4 — Chiffrement au repos
+
+**Sauvegardes : fait.** Argon2id + XChaCha20-Poly1305, en Go pur. Ce sont elles
+qui *quittent* la machine et échappent au contrôle de l'utilisateur.
+
+**Base SQLite : bloqué par l'architecture.** SQLCipher est une bibliothèque C ;
+le projet compile avec `CGO_ENABLED=0` sur un pilote Go pur, ce qui donne la
+compilation croisée et le binaire unique. Trois options, aucune tranchée :
+
+| Option | Coût |
+|---|---|
+| Accepter CGO | fin du binaire unique et de la compilation croisée |
+| Chiffrer certaines colonnes | perte de la recherche et des tris dessus |
+| **S'en remettre au disque** (BitLocker, LUKS) | *appliqué en l'état* |
+
+### 5 — HTTPS natif
+
+Le serveur écoute par défaut sur `127.0.0.1`. Le rendre joignable depuis un autre
+poste (`HOST`) impose TLS : certificat fourni, sinon auto-signé généré et
+**réutilisé d'un démarrage à l'autre**, pour que l'exception accordée au
+navigateur tienne.
+
+Une option servant aussi en HTTPS sur `localhost` a été proposée puis **retirée** :
+aucune sécurité gagnée — le trafic ne quitte pas la machine — pour un
+avertissement de certificat à chaque profil de navigateur. Dépenser la confiance
+dans les avertissements sans rien protéger est un mauvais échange.
+
+**Reste** : renouvellement automatique du certificat, HSTS.
+
+### 6 — Rotation du secret de signature
+
+Bouton dans **Maintenance → Sécurité**, administrateurs. La confirmation énonce
+la portée exacte : cela déconnecte toutes les sessions **et rien d'autre** —
+mots de passe intacts, aucune donnée touchée, sauvegardes utilisables.
+
+Ne remplace pas le chiffrement du disque : qui lit `config.json` lit aussi
+`ledgeralps.db`, dans le même dossier.
+
+### 7 — Maintenance & Système
+
+**Conforme.** Cinq sections, découpées par la question à laquelle chacune répond.
+
+```mermaid
+flowchart TB
+    M["Paramètres → Maintenance"]
+    M --> D["🩺 Diagnostic<br/><i>quelque chose ne va pas ?</i>"]
+    M --> C["🛡️ Conformité<br/><i>puis-je le prouver ?</i>"]
+    M --> A["📜 Piste d'audit<br/><i>mes livres ont-ils bougé ?</i>"]
+    M --> P["👤 Données personnelles<br/><i>que sait-on de mes clients ?</i>"]
+    M --> S["🌐 Sécurité & réseau<br/><i>qui peut m'atteindre ?</i>"]
+
+    D --> D1["cohérence, QR-facture,<br/>état du système"]
+    C --> C1["exercices, clôture,<br/>attestation Olico, archive"]
+    A --> A1["chaîne SHA-256,<br/>vérification complète"]
+    P --> P1["anonymisation nLPD,<br/>rétention des IP"]
+    S --> S1["clé de signature,<br/>adresse d'écoute, TLS"]
+```
+
+Trois défauts de fond ont été trouvés en construisant cet écran, tous corrigés :
+
+| Défaut | Conséquence réelle |
+|---|---|
+| L'empreinte ne couvrait pas les valeurs enregistrées | aucune écriture ne pouvait se revérifier, **depuis l'origine** |
+| `fiscal_year_id` n'était renseigné nulle part | la clôture répondait « close » **sans produire d'écriture de clôture** |
+| L'écriture de clôture échappait à la chaîne | la pièce qui vire le résultat était la seule hors CO art. 957a |
+
+**Ce qui reste n'est pas une question de conformité** — la loi n'exige aucun de
+ces points, et une déclaration TVA se dépose valablement à la main :
+
+- **Mode bac à sable** — duplication vers un environnement de test. ⚠️ Exige un
+  marquage impossible à ignorer : le risque n'est pas technique mais humain,
+  facturer un vrai client depuis le bac à sable.
+- **Console de rejeu ISO 20022** — import et export existent ; le rejeu, non.
+- **Console de logs** — l'état du système est livré ; la consultation des erreurs
+  API demande une capture de journal qui n'existe pas.
+- **Transmission e-TVA** — les taux et les deux méthodes sont en place et
+  vérifiés ; seule la télétransmission manque.
+
+⚠️ **Le recalcul des soldes reste volontairement absent.** Cet écran montre, il
+ne répare pas : une comptabilité incohérente se corrige par une écriture, pas par
+un bouton — réparer en silence effacerait la trace (CO art. 957a al. 2 ch. 5).
+
+### 8 — Notes de crédit — écriture au journal
+
+Le lien, le plafond et la mention légale sont livrés et validés. **L'écriture au
+journal ne peut pas commencer ici** : aucune facture ne passe d'écriture
+aujourd'hui, seuls les paiements sont automatisés. Contrepasser le produit d'une
+note créerait un produit négatif sans contrepartie, et doublerait la correction
+si l'utilisateur l'a déjà passée.
+
+L'ordre est imposé : d'abord la facture à l'émission (débiteurs / produits + TVA
+due), la note suivant le même mécanisme en sens inverse. À traiter avec
+l'écriture au journal des factures fournisseurs.
+
+### 9 — Multi-utilisateurs & permissions
+
+Rôles Admin / Comptable / Lecture seule. Cas d'usage central en Suisse : donner
+un accès **lecture seule à la fiduciaire** sans partager le compte administrateur.
+
+### 11 — eBill
+
+Réseau d'e-facturation suisse opéré par SIX, adopté par la majorité des banques.
+Plus pertinent pour une PME suisse que ZUGFeRD / Factur-X, orientés marché
+européen.
+
+### 12 — Validation contre le portail SIX
+
+SIX exploite un [portail de validation](https://validation.iso-payments.ch/) des
+Swiss Payment Standards, qui contrôle le *payload* **et** l'image rendue. C'est
+la seule vérification faisant autorité, et celle qui manque : nos tests
+vérifient notre lecture de la spécification, pas la conformité du bulletin
+produit. Le portail demande un compte.
+
+> **Il n'existe aucune « certification ISO 20022 ».** Le Registration Authority
+> [l'écrit explicitement](https://www.iso20022.org/faq) : aucune autorité de
+> certification n'existe pour cette norme. Ce qui existe est une
+> [liste d'auto-évaluation](https://www.iso20022.org/sites/default/files/documents/D7/ISO20022_ComplianceChecklist.pdf).
+> Les organismes qui vendent un « audit ISO 20022 certifiant » ne s'appuient sur
+> rien. Ce qui a de la valeur en Suisse est la conformité aux Swiss Payment
+> Standards de SIX.
+
+> **Logo « QR-Ready » — non retenu.** `qr-ready.ch` est associé à Epsitec SA
+> (éditeur de Crésus, concurrent), n'est pas un programme SIX, ne documente
+> aucun processus de certification, et sa page redirige aujourd'hui vers une
+> 404. L'afficher reviendrait à adopter la marque d'un concurrent sans
+> validation vérifiable derrière.
+
+### 14 — Modules métier
+
+**Piste retenue pour l'évolution du produit, non engagée.**
+
+Le risque, pour un logiciel qui marche, est de grossir vers ce que font les
+concurrents. La direction choisie est donc **verticale, pas horizontale** : des
+modules qui ajoutent des façons de *composer une facture* propres à un métier,
+sans toucher au noyau comptable.
+
+```mermaid
+flowchart TB
+    N["🔒 Noyau — intouchable<br/>comptabilité · TVA · QR-facture · intégrité"]
+    N --- M1["🔧 Garage<br/>pièces, main-d'œuvre,<br/>taux horaire atelier"]
+    N --- M2["🪚 Artisanat<br/>métré, forfaits,<br/>régie"]
+    N --- M3["⚖️ Professions libérales<br/>honoraires, débours,<br/>temps passé"]
+
+    style N fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style M1 fill:#f5f5f5,stroke:#9e9e9e
+    style M2 fill:#f5f5f5,stroke:#9e9e9e
+    style M3 fill:#f5f5f5,stroke:#9e9e9e
+```
+
+**Trois règles pour qu'un module reste un module :**
+
+1. **Absent sans que rien ne manque.** Une installation sans module produit des
+   factures complètes et conformes.
+2. **Présent sans qu'aucune règle comptable ne change.** Un module ajoute des
+   lignes, pas des traitements TVA ni des comptes.
+3. **Aucun champ dans le noyau.** C'est la règle qui sera difficile à tenir, et
+   c'est celle qui décide si le produit reste simple. Le danger n'est pas le
+   premier module : c'est le troisième, celui qui demandera « juste un petit
+   champ » au centre.
+
+**À reprendre quand un métier précis se présentera avec un besoin réel**, plutôt
+qu'en imaginant ce dont un garagiste pourrait avoir envie.
+
+---
+
+## Écarté
+
+**Mobile / PWA** — incompatible avec l'architecture. LedgerAlps est un binaire
+local écouté sur `localhost` ; une saisie hors-ligne avec synchronisation suppose
+un serveur central que le produit n'a pas, et ne veut pas avoir.
 
 ---
 
 ## Plateformes prises en charge
 
-**Windows x86-64** et **Linux x86-64**. Rien d'autre.
-
-| Plateforme | Livrable | Statut |
+| Plateforme | Livrable | État |
 |---|---|---|
-| Windows x86-64 | `LedgerAlps_Setup_*.exe` (+ archive `.zip`) | ✅ Pris en charge |
-| Linux x86-64 | archive `.tar.gz` | ✅ Pris en charge (paquets `.deb`/`.rpm` abandonnés en v1.4.5) |
-| macOS (Intel et Apple Silicon) | — | ❌ Abandonné après v1.4.1 |
-| Windows / Linux ARM64 | — | ❌ Abandonné après v1.4.1 |
+| Windows x86-64 | `LedgerAlps_Setup_*.exe` + `.zip` | ✅ |
+| Linux x86-64 | archive `.tar.gz` | ✅ *(paquets `.deb`/`.rpm` abandonnés en v1.4.5)* |
+| macOS (Intel, Apple Silicon) | — | ❌ abandonné après v1.4.1 |
+| Windows / Linux ARM64 | — | ❌ abandonné après v1.4.1 |
 
-**Pourquoi cet abandon.** Ces binaires étaient publiés parce que la compilation
-croisée en Go ne coûte rien, pas parce qu'ils étaient testés : il n'existe ni
-machine macOS ni machine ARM dans la CI ni dans le projet. Ils étaient donc
-livrés sans qu'aucune vérification n'ait été possible.
+**Pourquoi.** Ces binaires étaient publiés parce que la compilation croisée en Go
+ne coûte rien, pas parce qu'ils étaient testés : il n'existe ni machine macOS ni
+machine ARM dans la CI ni dans le projet.
 
 L'archive `windows_arm64` a rendu le coût concret : elle ne contenait que
-`ledgeralps-cli.exe`, sans serveur ni lanceur — soit un outil en ligne de
-commande sans rien à piloter. Quiconque téléchargeait le fichier portant le nom
-de son architecture obtenait un paquet inutilisable, et ce depuis la v1.3.15 au
-moins. Personne ne s'en est aperçu, précisément parce que personne ne testait.
+`ledgeralps-cli.exe`, sans serveur ni lanceur — un outil en ligne de commande
+sans rien à piloter, et ce depuis la v1.3.15. Personne ne s'en est aperçu,
+précisément parce que personne ne testait.
 
-Publier un binaire, c'est promettre qu'il fonctionne. Deux plateformes tenues
-valent mieux que six supposées.
+*Publier un binaire, c'est promettre qu'il fonctionne. Deux plateformes tenues
+valent mieux que six supposées.*
 
-**Paquets Linux abandonnés en v1.4.5**, pour la même raison à plus petite
-échelle : l'empaquetage `.deb`/`.rpm` suppose de suivre les conventions de
-plusieurs distributions, et personne ne le vérifiait sur une vraie machine.
-L'archive `.tar.gz` reste publiée. **Linux reste une plateforme de test** — la
-CI tourne sur Ubuntu, c'est là que `go test -race` s'exécute (impossible en
-local, faute de compilateur C) et là que les assertions de permissions de
-fichiers ont un sens, Windows ignorant les bits Unix. Abandonner l'empaquetage
-ne coûte aucune couverture ; abandonner Linux en coûterait beaucoup.
+**Linux reste une plateforme de test** même sans paquets : la CI tourne sur
+Ubuntu, c'est là que `go test -race` s'exécute — impossible en local, faute de
+compilateur C — et là que les assertions de permissions de fichiers ont un sens.
 
-**Conséquences pratiques**
-- **PC Windows ARM** (Surface, portables Snapdragon) : utiliser l'installeur
-  x86-64, que Windows exécute par émulation.
-- **macOS, Linux ARM, Raspberry Pi** : compiler depuis les sources
-  (`make build`, Go 1.26+). Le code reste portable ; c'est la *publication*
-  d'artefacts non testés qui s'arrête, pas la compatibilité.
-- `scripts/install.sh` refuse désormais ces plateformes avec un message
-  explicite, au lieu de tenter un téléchargement qui répondrait 404.
+**En pratique** — un PC Windows ARM utilise l'installeur x86-64, que Windows
+exécute par émulation. macOS, Linux ARM et Raspberry Pi se compilent depuis les
+sources (`make build`, Go 1.26+) : le code reste portable, c'est la *publication*
+d'artefacts non testés qui s'arrête.
 
 Une plateforme sera réintégrée le jour où elle sera testée en CI, pas avant.
 
 ---
 
-## Complété
+## En cours — interface multilingue
 
-| Version | Fonctionnalité | Date |
+La Suisse compte quatre langues officielles.
+
+| Langue | Code | État |
 |---|---|---|
-| v0.1.0 | Backend FastAPI, SQLAlchemy, modèles, API REST complète | avr. 2026 |
-| v1.0.0 | Réécriture Go — moteur comptable double-entrée, JWT, hash chain SHA-256, CO art. 957 | avr. 2026 |
-| v1.1.0 | ISO 20022 pain.001 / camt.053, export légal ZIP, dashboard stats | avr. 2026 |
-| v1.1.1 | Lanceur Windows (`-H=windowsgui`), wizard premier démarrage, config JSON, frontend embarqué (`go:embed`) | avr. 2026 |
-| v1.2.0 | Pipeline release GoReleaser + NSIS, CLI (`migrate`, `bootstrap`, `health`), endpoints reports / payments / audit-logs | avr. 2026 |
-| v1.3.0 | Logo société — sidebar, PDF, upload settings | avr. 2026 |
-| v1.3.1–v1.3.11 | PDF QR-bill : encodage Latin-1, conformité SPC 0200, layout BillLayout.java, suppression Swico S1, validation IBAN, avertissements UI | avr. 2026 |
-| v1.3.12 | CHE auto-fill ZEFIX, notification réinstallation, dialogue NSIS suppression données | avr. 2026 |
-| v1.3.13 | **Fix QR-bill SPC 0200 v2.3** : remplacement type adresse K→S (type K retiré en v2.3), croix suisse restaurée (`image/draw`), séparation NPA/localité pour adresse structurée | avr. 2026 |
-| v1.3.14 | **Conformité QR-facture IG v2.4** : appariement référence/compte imposé (QRR ⇄ QR-IBAN, SCOR/NON ⇄ IBAN standard), QRR restreinte au CHF, validation SCOR ISO 11649 (mod 97-10), IBAN CH/LI 21 car. — **sauvegarde & restauration** (snapshot `VACUUM INTO`, rétention, CLI `backup`/`backups`/`restore`, snapshot auto au démarrage) — **limitation des tentatives de connexion** (verrouillage par IP) | juil. 2026 |
-| v1.3.15 | **Factures fournisseurs** : API + lignes multi-taux, garde anti-doublon `UNIQUE(fournisseur, référence)` — l'**impôt préalable** alimente enfin le chiffre 400 de la déclaration TVA (figé à zéro auparavant : la TVA due était surévaluée) — **fix installeur** : BOM UTF-8 manquant (NSIS lisait le script en codepage ANSI → « donnÃ©es »), chaînes désormais localisées EN/FR — **fix tableau de bord** : la carte année fiscale interrogeait des colonnes inexistantes (`label`/`status`) et échouait à chaque appel — journalisation des verrouillages de connexion (`security_events`) | juil. 2026 |
-| v1.4.0 | **Veille de conformité** : surveillance hebdomadaire de Fedlex (SPARQL), SIX et EUR-Lex ; avis affichés dans l'application depuis un flux embarqué (hors ligne) ; **vérification de mise à jour** désactivable, sans identifiant ni télémétrie — suppression du code Python hérité et refonte complète de la documentation | juil. 2026 |
-| v1.4.3 | **Flux offre de prix → facture** : une offre entrait dans la déclaration TVA et sortait en PDF titré « FACTURE » avec bulletin QR (LTVA art. 27 al. 2, art. 40) — corrigé ; conversion offre → facture conservant les deux documents et les reliant (CO art. 957a al. 2 ch. 5, art. 958f al. 3) ; une offre ne peut plus être « payée » ; notes de crédit signées dans la déclaration (LTVA art. 41) | août 2026 |
-| v1.4.2 | **Plateformes publiées réduites à Windows x86-64 et Linux x86-64** — macOS et ARM abandonnés faute de machine de test (voir [Plateformes prises en charge](#plateformes-prises-en-charge)) — **fix** : l'archive `windows_arm64` ne contenait que le CLI, sans serveur ni lanceur, depuis la v1.3.15 — **fix** : le dossier d'installation survivait à la désinstallation, des reliquats d'avant la v1.1.1 faisant échouer le `RMDir` en silence — rattrapage des entrées 1.4.0 et 1.4.1 du CHANGELOG, livré dans chaque archive | août 2026 |
-| v1.4.1 | **Assistant de premier démarrage** : recherche IDE réparée (l'endpoint utilisé répondait 403 à tout le monde ; implémentation unifiée dans `internal/core/zefix`, elle existait en double) et enregistrement des données société corrigé — **sécurité** : jeton de rafraîchissement en cookie HttpOnly, déconnexion révoquée côté serveur, plus aucun appel à Google Fonts — bcrypt sorti du budget base de données (Bootstrap, Login) — bannières de conformité repliées, messages de validation, libellés d'accessibilité | juil. 2026 |
+| Français | `fr` | ✅ défaut actuel |
+| Deutsch | `de` | ⏳ |
+| Italiano | `it` | ⏳ |
+| English | `en` | 🔎 partiel (chaînes UI) |
+
+**Périmètre** : menus, formulaires, messages d'erreur, gabarits de facture,
+libellés créancier/débiteur du bulletin QR, langue de la facture liée au
+paramètre société. `react-i18next` en frontend, génération PDF *language-aware*
+côté serveur, pack NSIS italien à ajouter.
+
+---
+
+## Historique
+
+<details>
+<summary><b>Versions publiées</b> — cliquer pour dérouler</summary>
+
+| Version | Apport principal |
+|---|---|
+| **v1.4.6** | Clôture d'exercice réellement effectuée, verrouillage de période, piste d'audit vérifiable, attestation Olico art. 9, anonymisation nLPD, export CSV, rotation du secret, validation IBAN ISO 13616, factures multi-pages, garde-fous note de crédit et TVA |
+| **v1.4.5** | HTTPS natif, écoute sur `127.0.0.1` par défaut, Maintenance & Système (1ʳᵉ tranche), garde-fou mécanique des avis de conformité, détection BitLocker |
+| **v1.4.4** | Sauvegardes chiffrées (Argon2id + XChaCha20-Poly1305), interface de sauvegarde/restauration, notes de crédit liées et bornées |
+| **v1.4.3** | Flux offre → facture : une offre entrait dans la déclaration TVA et sortait titrée « FACTURE » avec bulletin QR (LTVA art. 27 al. 2) — corrigé ; conversion conservant les deux documents |
+| **v1.4.2** | Plateformes réduites à Windows et Linux x86-64 ; l'archive ARM64 ne contenait que le CLI depuis la v1.3.15 |
+| **v1.4.1** | Assistant de démarrage réparé (la recherche IDE répondait 403 à tout le monde), jeton de rafraîchissement en cookie HttpOnly |
+| **v1.4.0** | Veille de conformité : Fedlex (SPARQL), SIX, EUR-Lex ; avis embarqués, fonctionne hors ligne |
+| **v1.3.15** | Factures fournisseurs ; l'impôt préalable alimente enfin le chiffre 400 |
+| **v1.3.14** | QR-facture IG v2.4, sauvegarde/restauration CLI, limitation des tentatives de connexion |
+| **v1.3.13** | QR-bill SPC 0200 v2.3 : type d'adresse K→S, croix suisse restaurée |
+| **v1.3.0–v1.3.12** | Logo société, conformité QR-bill itérative, auto-remplissage IDE via ZEFIX |
+| **v1.2.0** | Pipeline GoReleaser + NSIS, CLI, endpoints rapports / paiements / audit |
+| **v1.1.x** | ISO 20022, export légal, lanceur Windows, frontend embarqué (`go:embed`) |
+| **v1.0.0** | Réécriture Go : moteur double-entrée, chaîne SHA-256 (CO art. 957a) |
+
+</details>
+
+---
+
+> **Versionnage.** `vX.Y.0` livre un milestone complet ; `vX.Y.Z` groupe les
+> correctifs d'un cycle. Jamais de tag par commit isolé. Les numéros de version
+> des milestones planifiés sont attribués **à la livraison**, pas à l'avance.

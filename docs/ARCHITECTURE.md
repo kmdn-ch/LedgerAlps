@@ -11,6 +11,22 @@ et sans cloud.
 
 ---
 
+## Périmètre du produit
+
+LedgerAlps est un logiciel de **facturation** qui tient derrière lui la
+comptabilité que la loi suisse exige d'un indépendant qui facture. Ce n'est pas
+une solution comptable complète.
+
+Le critère d'admission d'une fonctionnalité tient en une question : *sans elle,
+une facture suisse est-elle non conforme, ou inexploitable ?* Le verrouillage de
+période, la chaîne d'intégrité et la déclaration TVA passent ce test ; une
+comptabilité analytique ou une gestion de stock ne le passent pas.
+
+La direction d'évolution retenue est **verticale** — des modules métier qui
+ajoutent des façons de composer une facture sans toucher au noyau comptable.
+Voir [ROADMAP.md](../ROADMAP.md#14--modules-métier).
+
+
 ## Vue d'ensemble
 
 ```
