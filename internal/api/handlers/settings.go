@@ -26,14 +26,18 @@ func NewSettingsHandler(database *sql.DB, usePostgres bool) *SettingsHandler {
 
 // companySettingsRequest is the JSON body accepted by PUT /settings/company.
 type companySettingsRequest struct {
-	CompanyName          string `json:"company_name"`
-	LegalForm            string `json:"legal_form"`
-	AddressStreet        string `json:"address_street"`
-	AddressPostalCode    string `json:"address_postal_code"`
-	AddressCity          string `json:"address_city"`
-	AddressCountry       string `json:"address_country"`
-	CheNumber            string `json:"che_number"`
-	VatNumber            string `json:"vat_number"`
+	CompanyName       string `json:"company_name"`
+	LegalForm         string `json:"legal_form"`
+	AddressStreet     string `json:"address_street"`
+	AddressPostalCode string `json:"address_postal_code"`
+	AddressCity       string `json:"address_city"`
+	AddressCountry    string `json:"address_country"`
+	CheNumber         string `json:"che_number"`
+	VatNumber         string `json:"vat_number"`
+	// Coordonnées de contact. Pas exigées par la LTVA art. 26, mais une facture
+	// qu'on ne peut pas contester facilement se paie tard, ou pas.
+	Phone                string `json:"phone"`
+	Email                string `json:"email"`
 	IBAN                 string `json:"iban"`
 	FiscalYearStartMonth int    `json:"fiscal_year_start_month"`
 	Currency             string `json:"currency"`
@@ -50,7 +54,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 	q := db.Rebind(`
 		SELECT id, company_name, legal_form,
 		       address_street, address_postal_code, address_city, address_country,
-		       che_number, vat_number, iban,
+		       che_number, vat_number, COALESCE(phone,''), COALESCE(email,''), iban,
 		       fiscal_year_start_month, currency, logo_data,
 		       created_at, updated_at
 		FROM company_settings
@@ -60,7 +64,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 	err := h.db.QueryRowContext(ctx, q).Scan(
 		&s.ID, &s.CompanyName, &s.LegalForm,
 		&s.AddressStreet, &s.AddressPostalCode, &s.AddressCity, &s.AddressCountry,
-		&s.CheNumber, &s.VatNumber, &s.IBAN,
+		&s.CheNumber, &s.VatNumber, &s.Phone, &s.Email, &s.IBAN,
 		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
@@ -119,14 +123,14 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 			INSERT INTO company_settings
 			    (id, company_name, legal_form,
 			     address_street, address_postal_code, address_city, address_country,
-			     che_number, vat_number, iban,
+			     che_number, vat_number, phone, email, iban,
 			     fiscal_year_start_month, currency,
 			     created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, h.usePostgres)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, h.usePostgres)
 		if _, err := h.db.ExecContext(ctx, insertQ,
 			newID, req.CompanyName, req.LegalForm,
 			req.AddressStreet, req.AddressPostalCode, req.AddressCity, req.AddressCountry,
-			req.CheNumber, req.VatNumber, req.IBAN,
+			req.CheNumber, req.VatNumber, req.Phone, req.Email, req.IBAN,
 			req.FiscalYearStartMonth, req.Currency,
 			now, now,
 		); err != nil {
@@ -149,6 +153,8 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 			    address_country         = ?,
 			    che_number              = ?,
 			    vat_number              = ?,
+			    phone                   = ?,
+			    email                   = ?,
 			    iban                    = ?,
 			    fiscal_year_start_month = ?,
 			    currency                = ?,
@@ -157,7 +163,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		if _, err := h.db.ExecContext(ctx, updateQ,
 			req.CompanyName, req.LegalForm,
 			req.AddressStreet, req.AddressPostalCode, req.AddressCity, req.AddressCountry,
-			req.CheNumber, req.VatNumber, req.IBAN,
+			req.CheNumber, req.VatNumber, req.Phone, req.Email, req.IBAN,
 			req.FiscalYearStartMonth, req.Currency,
 			now,
 			existingID,
@@ -171,7 +177,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	q := db.Rebind(`
 		SELECT id, company_name, legal_form,
 		       address_street, address_postal_code, address_city, address_country,
-		       che_number, vat_number, iban,
+		       che_number, vat_number, COALESCE(phone,''), COALESCE(email,''), iban,
 		       fiscal_year_start_month, currency, logo_data,
 		       created_at, updated_at
 		FROM company_settings WHERE id = ?`, h.usePostgres)
@@ -180,7 +186,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	if err := h.db.QueryRowContext(ctx, q, existingID).Scan(
 		&s.ID, &s.CompanyName, &s.LegalForm,
 		&s.AddressStreet, &s.AddressPostalCode, &s.AddressCity, &s.AddressCountry,
-		&s.CheNumber, &s.VatNumber, &s.IBAN,
+		&s.CheNumber, &s.VatNumber, &s.Phone, &s.Email, &s.IBAN,
 		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
 		&s.CreatedAt, &s.UpdatedAt,
 	); err != nil {

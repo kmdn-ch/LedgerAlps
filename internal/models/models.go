@@ -247,6 +247,8 @@ type CompanySettings struct {
 	AddressCountry       string    `db:"address_country"          json:"address_country"`
 	CheNumber            string    `db:"che_number"               json:"che_number"`
 	VatNumber            string    `db:"vat_number"               json:"vat_number"`
+	Phone                string    `db:"phone"                json:"phone"`
+	Email                string    `db:"email"                json:"email"`
 	IBAN                 string    `db:"iban"                     json:"iban"`
 	FiscalYearStartMonth int       `db:"fiscal_year_start_month"  json:"fiscal_year_start_month"`
 	Currency             string    `db:"currency"                 json:"currency"`

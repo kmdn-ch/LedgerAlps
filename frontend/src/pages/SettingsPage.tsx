@@ -17,6 +17,8 @@ const schema = z.object({
   legal_form:            z.string().default(''),
   che_number:            z.string().default(''),
   vat_number:            z.string().default(''),
+  phone:                 z.string().default(''),
+  email:                 z.string().default(''),
   address_street:        z.string().default(''),
   address_postal_code:   z.string().default(''),
   address_city:          z.string().default(''),
@@ -59,6 +61,8 @@ export function SettingsPage() {
       legal_form: '',
       che_number: '',
       vat_number: '',
+      phone: '',
+      email: '',
       address_street: '',
       address_postal_code: '',
       address_city: '',
@@ -77,6 +81,8 @@ export function SettingsPage() {
         legal_form:            company.legal_form             ?? '',
         che_number:            company.che_number             ?? '',
         vat_number:            company.vat_number             ?? '',
+        phone:                 company.phone                  ?? '',
+        email:                 company.email                  ?? '',
         address_street:        company.address_street         ?? '',
         address_postal_code:   company.address_postal_code   ?? '',
         address_city:          company.address_city           ?? '',
@@ -284,6 +290,17 @@ export function SettingsPage() {
                     <label className="label">N° IDE suisse (CHE-…)</label>
                     <input className="input font-mono" placeholder="CHE-123.456.789" {...register('che_number')} />
                   </div>
+                  <div>
+                    <label className="label">Téléphone</label>
+                    <input className="input" placeholder="+41 24 000 00 00" {...register('phone')} />
+                  </div>
+                  <div>
+                    <label className="label">Courriel</label>
+                    <input className="input" type="email" placeholder="contact@exemple.ch" {...register('email')} />
+                  </div>
+                  {/* Téléphone et courriel apparaissent sur la facture. La LTVA
+                      art. 26 ne les exige pas ; une facture qu'on ne peut pas
+                      contester facilement se paie tard, ou pas. */}
                   <div className="col-span-2">
                     <label className="label">Adresse</label>
                     <input className="input mb-2" placeholder="Rue et numéro" {...register('address_street')} />

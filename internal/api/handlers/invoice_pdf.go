@@ -123,13 +123,14 @@ func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byt
 	}
 	settingsQ := db.Rebind(`
 		SELECT company_name, address_street, address_postal_code, address_city, address_country,
-		       iban, vat_number, che_number, logo_data
+		       iban, vat_number, che_number, COALESCE(phone,''), COALESCE(email,''), logo_data
 		FROM company_settings LIMIT 1`, h.usePostgres)
 	var dbName, dbStreet, dbPostal, dbCity, dbCountry, dbIBAN, dbVAT, dbCHE sql.NullString
+	var dbPhone, dbEmail sql.NullString
 	var dbLogo sql.NullString
 	if err := h.db.QueryRowContext(ctx, settingsQ).Scan(
 		&dbName, &dbStreet, &dbPostal, &dbCity, &dbCountry,
-		&dbIBAN, &dbVAT, &dbCHE, &dbLogo,
+		&dbIBAN, &dbVAT, &dbCHE, &dbPhone, &dbEmail, &dbLogo,
 	); err == nil {
 		if dbName.Valid && dbName.String != "" {
 			company.Name = dbName.String
@@ -154,6 +155,12 @@ func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byt
 		// aucune facture.
 		if dbCHE.Valid {
 			company.UIDNumber = dbCHE.String
+		}
+		if dbPhone.Valid {
+			company.Phone = dbPhone.String
+		}
+		if dbEmail.Valid {
+			company.Email = dbEmail.String
 		}
 		if dbLogo.Valid {
 			company.LogoData = dbLogo.String

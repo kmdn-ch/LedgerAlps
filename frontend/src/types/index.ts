@@ -218,6 +218,8 @@ export interface CompanySettings {
   address_country: string
   che_number: string
   vat_number: string
+  phone: string
+  email: string
   iban: string
   fiscal_year_start_month: number
   currency: string
@@ -244,6 +246,12 @@ export interface PendingRestore {
 }
 
 // ─── Maintenance & Système ────────────────────────────────────────────────────
+export interface FindingDocument {
+  id: string
+  number: string
+  detail?: string
+}
+
 export interface IntegrityFinding {
   severity: 'error' | 'warning' | 'info'
   check: string
@@ -251,6 +259,9 @@ export interface IntegrityFinding {
   detail: string
   action?: string
   count: number
+  // Les pièces visées. Un constat sans elles oblige à chercher à la main dans
+  // toute la liste, et c'est ce qui fait qu'on ne corrige pas.
+  documents?: FindingDocument[]
 }
 
 export interface IntegrityReport {

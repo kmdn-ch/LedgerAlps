@@ -5,6 +5,7 @@
 // de ce qui s'est passé, ce que le CO art. 957a al. 2 ch. 5 interdit. Chaque
 // constat dit donc ce qui ne va pas et ce qu'il faut faire.
 
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   ShieldCheck, AlertTriangle, XCircle, Info, RefreshCw, Loader2,
@@ -94,6 +95,34 @@ export function DiagnosticPanel() {
                         <span className={`ml-2 text-xs font-normal ${s.className}`}>{s.label}</span>
                       </p>
                       <p className="mt-1 text-alpine-600">{f.detail}</p>
+
+                      {/* Les pièces concernées, cliquables. Sans elles, un
+                          constat oblige à les chercher une à une dans toute la
+                          liste — et c'est là qu'on renonce à corriger. */}
+                      {f.documents && f.documents.length > 0 && (
+                        <ul className="mt-1.5 space-y-0.5">
+                          {f.documents.map(doc => (
+                            <li key={doc.id} className="flex flex-wrap items-baseline gap-x-2">
+                              <Link
+                                to={`/invoices/${doc.id}`}
+                                className="font-mono text-accent-700 hover:text-accent-600 font-medium"
+                              >
+                                {doc.number}
+                              </Link>
+                              {doc.detail && (
+                                <span className="text-alpine-500 text-xs">{doc.detail}</span>
+                              )}
+                            </li>
+                          ))}
+                          {f.count > f.documents.length && (
+                            <li className="text-xs text-alpine-500">
+                              … et {f.count - f.documents.length} autre(s). Au-delà, c'est le
+                              nombre qui informe, pas la liste.
+                            </li>
+                          )}
+                        </ul>
+                      )}
+
                       {f.action && <p className="mt-1.5">{f.action}</p>}
                     </div>
                   </div>

@@ -34,6 +34,8 @@ type CompanyInfo struct {
 	// toutes les entreprises inscrites au registre — assujetties à la TVA ou
 	// non. Il n'était pas rendu du tout, alors qu'il identifie l'émetteur.
 	UIDNumber string // p. ex. "CHE-123.456.789"
+	Phone     string
+	Email     string
 	LogoData  string // base64 data URL (data:image/png;base64,…) — optional
 }
 
@@ -97,7 +99,28 @@ type CustomerInfo struct {
 func Generate(inv InvoiceData) ([]byte, error) {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetMargins(15, 15, 15)
+	// Pas de saut de page automatique : les sections gèrent leur propre
+	// pagination, parce que le bulletin de versement occupe les 105 mm du bas
+	// de la DERNIÈRE page et qu'un saut décidé par la bibliothèque le
+	// recouvrirait.
 	pdf.SetAutoPageBreak(false, 0)
+
+	// Numérotation « Page n/N ». Sur une pièce comptable de plusieurs feuillets,
+	// c'est ce qui permet de constater qu'il n'en manque pas — et le CO
+	// art. 958f impose de la conserver complète dix ans.
+	pdf.AliasNbPages("{nb}")
+	pdf.SetFooterFunc(func() {
+		if pdf.PageNo() == 1 && pdf.PageCount() == 1 {
+			return // une facture d'une page n'a pas besoin qu'on le lui dise
+		}
+		pdf.SetY(-12)
+		pdf.SetFont("Helvetica", "", 8)
+		pdf.SetTextColor(120, 120, 120)
+		pdf.CellFormat(0, 6, latin1(fmt.Sprintf("Page %d/{nb}", pdf.PageNo())),
+			"", 0, "C", false, 0, "")
+		pdf.SetTextColor(0, 0, 0)
+	})
+
 	pdf.AddPage()
 
 	// ── Header: company + invoice title ──────────────────────────────────────
@@ -127,6 +150,13 @@ func Generate(inv InvoiceData) ([]byte, error) {
 	// without entitlement. A credit note is excluded too — the money owed
 	// flows the other way, so a slip asking the customer to pay is backwards.
 	if wantsPaymentSlip(inv.DocumentType) {
+		// Le bulletin occupe les 105 mm du bas. Si le contenu déborde dans cette
+		// bande, il faut une page de plus : imprimer le bulletin par-dessus les
+		// dernières lignes rendrait la facture illisible ET le bulletin
+		// inutilisable par la banque, qui lit une zone à position fixe.
+		if pdf.GetY() > slipTop-5 {
+			pdf.AddPage()
+		}
 		if err := renderPaymentSlip(pdf, inv); err != nil {
 			// Non-fatal: log but still return the PDF without slip
 			_ = err
@@ -180,6 +210,20 @@ func renderHeader(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	// Quand les deux sont renseignés et que le numéro de TVA contient déjà
 	// l'IDE, une seule ligne suffit : les répéter donnerait deux fois le même
 	// numéro à un lecteur qui y chercherait une différence.
+	// Téléphone et courriel : une facture doit permettre de poser une question
+	// sans chercher ailleurs. Ce n'est pas exigé par la LTVA art. 26, mais une
+	// facture qu'on ne peut pas contester facilement se paie tard, ou pas.
+	var contact []string
+	if inv.Company.Phone != "" {
+		contact = append(contact, inv.Company.Phone)
+	}
+	if inv.Company.Email != "" {
+		contact = append(contact, inv.Company.Email)
+	}
+	if len(contact) > 0 {
+		companyLine(pdf, textX, strings.Join(contact, "  ·  "))
+	}
+
 	uid, vat := inv.Company.UIDNumber, inv.Company.VATNumber
 	switch {
 	case vat != "" && uid != "" && strings.Contains(normaliseUID(vat), normaliseUID(uid)):
@@ -271,31 +315,81 @@ func renderMeta(pdf *gofpdf.Fpdf, inv InvoiceData) {
 }
 
 func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
-	// Table header
-	pdf.SetFont("Helvetica", "B", 9)
-	pdf.SetFillColor(240, 240, 240)
-	pdf.SetX(15)
-	pdf.CellFormat(90, 7, "Description", "1", 0, "L", true, 0, "")
-	pdf.CellFormat(20, 7, latin1("Qt\u00e9"), "1", 0, "C", true, 0, "")
-	pdf.CellFormat(30, 7, "Prix unit.", "1", 0, "R", true, 0, "")
-	pdf.CellFormat(15, 7, "TVA%", "1", 0, "C", true, 0, "")
-	pdf.CellFormat(25, 7, "Total", "1", 1, "R", true, 0, "")
+	// La colonne TVA ne s'affiche que s'il y a de la TVA quelque part. Une
+	// entreprise non assujettie n'a pas le droit de faire figurer l'impôt sur
+	// ses factures (LTVA art. 27 al. 1), et « 0.0 % » est une mention de
+	// l'impôt : elle affirme un taux. Sa place est reprise par la description,
+	// qui en a toujours l'usage.
+	showVAT := inv.VATAmount != 0 || inv.VATRate != 0
+	for _, l := range inv.Lines {
+		if l.VATRate != 0 {
+			showVAT = true
+		}
+	}
 
-	// Table rows
-	pdf.SetFont("Helvetica", "", 9)
+	wDesc, wQty, wPrice, wVAT, wTotal := 90.0, 20.0, 30.0, 15.0, 25.0
+	if !showVAT {
+		wDesc += wVAT
+		wVAT = 0
+	}
+
+	header := func() {
+		pdf.SetFont("Helvetica", "B", 9)
+		pdf.SetFillColor(240, 240, 240)
+		pdf.SetX(15)
+		pdf.CellFormat(wDesc, 7, "Description", "1", 0, "L", true, 0, "")
+		pdf.CellFormat(wQty, 7, latin1("Qt\u00e9"), "1", 0, "C", true, 0, "")
+		pdf.CellFormat(wPrice, 7, "Prix unit.", "1", 0, "R", true, 0, "")
+		if showVAT {
+			pdf.CellFormat(wVAT, 7, "TVA%", "1", 0, "C", true, 0, "")
+		}
+		pdf.CellFormat(wTotal, 7, "Total", "1", 1, "R", true, 0, "")
+		pdf.SetFont("Helvetica", "", 9)
+	}
+	header()
+
 	pdf.SetFillColor(255, 255, 255)
 	fill := false
 	for _, line := range inv.Lines {
-		pdf.SetFillColor(255, 255, 255)
-		if fill {
-			pdf.SetFillColor(250, 250, 250)
+		desc := latin1(line.Description)
+
+		// Une description longue s'enroule au lieu de déborder sur la colonne
+		// voisine. La hauteur de ligne suit le nombre de lignes de texte, sans
+		// quoi une justification détaillée écraserait le montant d'à côté.
+		wrapped := pdf.SplitLines([]byte(desc), wDesc-2)
+		if len(wrapped) == 0 {
+			wrapped = [][]byte{{}}
 		}
-		pdf.SetX(15)
-		pdf.CellFormat(90, 6, latin1(line.Description), "1", 0, "L", fill, 0, "")
-		pdf.CellFormat(20, 6, fmtFloat(line.Quantity), "1", 0, "C", fill, 0, "")
-		pdf.CellFormat(30, 6, fmtMoney(line.UnitPrice, inv.Currency), "1", 0, "R", fill, 0, "")
-		pdf.CellFormat(15, 6, fmt.Sprintf("%.1f%%", line.VATRate), "1", 0, "C", fill, 0, "")
-		pdf.CellFormat(25, 6, fmtMoney(line.LineTotal, inv.Currency), "1", 1, "R", fill, 0, "")
+		rowH := float64(len(wrapped)) * 5
+		if rowH < 6 {
+			rowH = 6
+		}
+
+		// Saut de page avant la ligne, jamais au milieu : une ligne de facture
+		// coupée en deux entre deux pages est illisible et se prête aux
+		// contestations.
+		if pdf.GetY()+rowH > contentBottom {
+			pdf.AddPage()
+			header()
+		}
+
+		bg := 255.0
+		if fill {
+			bg = 250
+		}
+		pdf.SetFillColor(int(bg), int(bg), int(bg))
+
+		y := pdf.GetY()
+		pdf.SetXY(15, y)
+		pdf.MultiCell(wDesc, rowH/float64(len(wrapped)), desc, "1", "L", fill)
+
+		pdf.SetXY(15+wDesc, y)
+		pdf.CellFormat(wQty, rowH, fmtFloat(line.Quantity), "1", 0, "C", fill, 0, "")
+		pdf.CellFormat(wPrice, rowH, fmtMoney(line.UnitPrice, inv.Currency), "1", 0, "R", fill, 0, "")
+		if showVAT {
+			pdf.CellFormat(wVAT, rowH, fmt.Sprintf("%.1f%%", line.VATRate), "1", 0, "C", fill, 0, "")
+		}
+		pdf.CellFormat(wTotal, rowH, fmtMoney(line.LineTotal, inv.Currency), "1", 1, "R", fill, 0, "")
 		fill = !fill
 	}
 
@@ -305,6 +399,12 @@ func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
 func renderTotals(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	x := 130.0
 	w1, w2 := 35.0, 30.0
+
+	// Le bloc des totaux ne se coupe pas : trois lignes et un trait, séparés
+	// entre deux pages, se lisent comme deux totaux différents.
+	if pdf.GetY()+20 > contentBottom {
+		pdf.AddPage()
+	}
 
 	totalRow := func(label, val string, bold bool) {
 		if bold {
@@ -338,6 +438,9 @@ func renderTotals(pdf *gofpdf.Fpdf, inv InvoiceData) {
 
 func renderNotes(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	if inv.Notes != nil && *inv.Notes != "" {
+		if pdf.GetY()+15 > contentBottom {
+			pdf.AddPage()
+		}
 		pdf.SetFont("Helvetica", "I", 9)
 		pdf.SetX(15)
 		pdf.MultiCell(180, 5, latin1(*inv.Notes), "", "L", false)
@@ -360,9 +463,13 @@ func renderNotes(pdf *gofpdf.Fpdf, inv InvoiceData) {
 //	Font: title 11pt bold; PP labels 8pt bold, PP values 10pt; RC labels 6pt bold, RC values 8pt
 
 const (
-	slipTop      = 192.0 // 297 − 105 mm
-	receiptWidth = 62.0
-	pageWidth    = 210.0
+	slipTop = 192.0 // 297 − 105 mm
+	// contentBottom borne le contenu d'une page. Une marge de 15 mm en bas
+	// laisse la place au numéro de page — qui, sur une pièce comptable de
+	// plusieurs feuillets, est ce qui permet de constater qu'il n'en manque pas.
+	contentBottom = 275.0
+	receiptWidth  = 62.0
+	pageWidth     = 210.0
 )
 
 // renderPaymentSlip draws the Swiss QR-bill payment slip at the bottom 105 mm.

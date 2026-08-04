@@ -34,6 +34,14 @@ func NewMaintenanceHandler(database *sql.DB, cfg *config.Config) *MaintenanceHan
 	return &MaintenanceHandler{db: database, cfg: cfg, usePostgres: cfg.UsePostgres()}
 }
 
+// FindingDocument identifie une pièce visée par un constat, de façon à ce que
+// l'écran puisse y conduire d'un clic.
+type FindingDocument struct {
+	ID     string `json:"id"`
+	Number string `json:"number"`
+	Detail string `json:"detail,omitempty"`
+}
+
 // Finding is one thing worth a human's attention.
 type Finding struct {
 	// Severity is "error" when the books are wrong, "warning" when something
@@ -46,7 +54,12 @@ type Finding struct {
 	Detail   string `json:"detail"`
 	// Action tells the user what to do. A finding they cannot act on is noise.
 	Action string `json:"action,omitempty"`
-	Count  int    `json:"count"`
+	// Documents concernés, pour que le constat soit actionnable. « 1 facture
+	// porte des notes de crédit qui dépassent son montant » n'aide personne
+	// sans le numéro de la facture : il reste à la chercher à la main dans
+	// toute la liste, et c'est ce qui fait qu'on ne corrige pas.
+	Documents []FindingDocument `json:"documents,omitempty"`
+	Count     int               `json:"count"`
 }
 
 // IntegrityCheck GET /api/v1/maintenance/integrity
@@ -186,6 +199,17 @@ func (h *MaintenanceHandler) IntegrityCheck(c *gin.Context) {
 			Title:  "Factures créditées au-delà de leur montant",
 			Detail: fmt.Sprintf("%d facture(s) portent des notes de crédit dont le total dépasse la facture.", n),
 			Action: "Créées avant la v1.4.4, quand rien ne l'empêchait. Annulez la note de crédit en trop : votre TVA est sous-évaluée.",
+			Documents: h.listDocuments(ctx, `
+				SELECT i.id, i.invoice_number,
+				       'créditée à hauteur de ' || printf('%.2f', COALESCE(cn.credited, 0))
+				         || ' pour un montant de ' || printf('%.2f', i.total_amount)
+				FROM invoices i
+				JOIN (SELECT corrects_invoice_id AS iid, SUM(total_amount) AS credited
+				      FROM invoices
+				      WHERE document_type = 'credit_note' AND status <> 'cancelled'
+				      GROUP BY corrects_invoice_id) cn ON cn.iid = i.id
+				WHERE cn.credited > i.total_amount + 0.01
+				ORDER BY i.invoice_number`, 20),
 		})
 	}
 
@@ -317,6 +341,13 @@ func (h *MaintenanceHandler) addQRBillFindings(ctx context.Context, add func(Fin
 					"la LTVA art. 26 al. 2 let. a l'exige sur toute facture portant de la TVA. " +
 					"Si vous ne l'êtes pas, vous n'avez pas le droit de faire figurer la TVA (art. 27 al. 1) " +
 					"et vous en devenez redevable (art. 27 al. 2) — passez vos lignes à 0 % et corrigez les factures concernées.",
+				Documents: h.listDocuments(ctx, `
+					SELECT id, invoice_number,
+					       'TVA ' || printf('%.2f', vat_amount) || ' sur ' || printf('%.2f', total_amount)
+					FROM invoices
+					WHERE document_type = 'invoice' AND status <> 'draft'
+					  AND COALESCE(vat_amount, 0) <> 0
+					ORDER BY issue_date DESC`, 20),
 			})
 		}
 	}
@@ -457,4 +488,31 @@ func (h *MaintenanceHandler) count(ctx context.Context, q string) (int, error) {
 func (h *MaintenanceHandler) fail(c *gin.Context, err error) {
 	c.JSON(http.StatusInternalServerError, gin.H{
 		"error": "le contrôle d'intégrité n'a pas pu s'exécuter: " + err.Error()})
+}
+
+// listDocuments exécute une requête rendant (id, numéro, précision) et retourne
+// au plus `limit` lignes.
+//
+// La borne existe parce qu'un constat qui déroulerait deux cents numéros
+// cesserait d'être lisible — et parce qu'à ce stade, c'est le compte global qui
+// informe, pas l'énumération.
+func (h *MaintenanceHandler) listDocuments(ctx context.Context, query string, limit int) []FindingDocument {
+	rows, err := h.db.QueryContext(ctx, db.Rebind(query, h.usePostgres))
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	out := []FindingDocument{}
+	for rows.Next() && len(out) < limit {
+		var d FindingDocument
+		if err := rows.Scan(&d.ID, &d.Number, &d.Detail); err != nil {
+			return out
+		}
+		out = append(out, d)
+	}
+	if rows.Err() != nil {
+		return out
+	}
+	return out
 }
