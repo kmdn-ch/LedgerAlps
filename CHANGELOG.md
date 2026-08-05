@@ -9,6 +9,27 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Ajouté
 
+- **Point 8 — les factures passent au journal à leur envoi.** Débiteurs au débit du total TTC, produits au crédit du hors-taxe, TVA due au crédit du reste ; la note de crédit contrepasse à l'identique. Jusqu'ici aucun document ne passait d'écriture — seuls les paiements étaient automatisés — si bien qu'une facture n'apparaissait au journal qu'à son encaissement, ce qui décale le produit d'un exercice à l'autre.
+
+  **Le réglage est éteint sur les installations existantes**, et c'est délibéré : qui tenait une comptabilité complète saisissait ces écritures à la main, et les automatiser d'office doublerait le produit et la TVA due sur tout un exercice. La migration éteint le réglage pour les fiches déjà présentes et le laisse actif pour les nouvelles. Paramètres → Facturation pour l'allumer après vérification.
+
+- **Point 10 — rapprochement bancaire.** L'import camt.053 existait et ne gardait rien : le relevé était analysé, renvoyé au navigateur, puis oublié. Les écritures sont conservées, avec au plus une suggestion et la raison qui l'a désignée — référence du bulletin (certaine), montant exact sur une seule facture ouverte (probable), et *rien du tout* quand plusieurs factures correspondent, parce que désigner la première serait un tirage au sort présenté comme une analyse.
+
+  **Rapprocher n'encaisse pas** : identifier un versement et enregistrer un paiement restent deux gestes. Solder une créance parce qu'un montant correspondait est une erreur qu'on ne découvre qu'en relançant un client qui a déjà payé.
+
+- **Point 12 — dossier de validation SIX.** Chaque facture produit une archive à déposer sur le portail des Swiss Payment Standards : le payload exact du QR, le bulletin, la marche à suivre. Le payload sort de la **même fonction que l'impression**, extraite pour cela — deux constructions séparées divergeraient, et on ferait alors valider autre chose que ce qu'on envoie aux clients. Le compte du portail reste à créer par l'utilisateur : un logiciel n'ouvre pas de compte au nom de quelqu'un d'autre.
+
+### Écarté
+
+- **Point 11 — eBill.** Vérifié sur la spécification publique de SIX : eBill n'est pas un format qu'on produit mais une **API REST OAuth 2.0 exposée par un « Network Partner »**, avec un contrat entre votre entreprise et ce partenaire, un identifiant émetteur attribué par lui, et des jetons contre son serveur. LedgerAlps ne peut rien envoyer sans un contrat qu'il n'est pas en position de signer — et transmettre supposerait des appels sortants, ce que le produit ne fait pas.
+
+  Ce que le réseau accepte, LedgerAlps le produit déjà : la charge utile d'un dépôt est un PDF, l'en-tête `X-BCFORMAT` pouvant valoir `QRBill`. Qui signe avec un Network Partner dépose donc le bulletin imprimé par LedgerAlps.
+
+---
+
+
+### Ajouté
+
 - **La protection se choisit à l'installation.** L'assistant du premier lancement enchaîne désormais trois écrans : l'entreprise et le compte, puis la protection de la base, puis celle des sauvegardes.
 
   C'est le bon moment, et pas seulement pour l'ergonomie : **la base n'existe pas encore**. En posant la clé avant que le serveur démarre, elle naît chiffrée — aucune conversion, aucun redémarrage, et la comptabilité n'est jamais écrite en clair, pas même le temps d'une migration. La phrase de passe des sauvegardes est enregistrée dans le même mouvement, si bien que l'instantané pris au tout premier démarrage est déjà chiffré.

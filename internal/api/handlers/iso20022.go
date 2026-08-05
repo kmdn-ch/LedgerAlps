@@ -8,13 +8,25 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/services/banking"
 	"github.com/kmdn-ch/ledgeralps/internal/services/iso20022"
 )
 
 // ISO20022Handler handles ISO 20022 payment generation and bank statement import.
-type ISO20022Handler struct{}
+type ISO20022Handler struct {
+	// reconcile conserve les écritures analysées. Nil dans les tests qui
+	// n'exercent que la lecture du XML.
+	reconcile *banking.Service
+}
 
 func NewISO20022Handler() *ISO20022Handler { return &ISO20022Handler{} }
+
+// NewISO20022HandlerWithReconciliation branche la conservation des écritures.
+// Le constructeur sans service reste, pour les tests qui n'exercent que
+// l'analyse du XML.
+func NewISO20022HandlerWithReconciliation(svc *banking.Service) *ISO20022Handler {
+	return &ISO20022Handler{reconcile: svc}
+}
 
 // ─── pain.001 — Credit Transfer Export ───────────────────────────────────────
 
@@ -141,6 +153,22 @@ func (h *ISO20022Handler) ImportCamt053(c *gin.Context) {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Conserver ce qui vient d'être analysé. Sans cela, le relevé était lu,
+	// renvoyé au navigateur, puis oublié : impossible de savoir ce qui avait
+	// déjà été traité, et réimporter le relevé du mois obligeait à tout revoir.
+	// Les doublons sont comptés, pas réécrits.
+	var imported, duplicate int
+	if h.reconcile != nil {
+		res, impErr := h.reconcile.Import(c.Request.Context(), entries)
+		if impErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": impErr.Error()})
+			return
+		}
+		imported, duplicate = res.Imported, res.Duplicate
+	}
+	_ = imported
+	_ = duplicate
 
 	// Convert to API-friendly response
 	type entryResponse struct {

@@ -71,11 +71,11 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 5 | HTTPS natif | 🔎 réseau à valider | [↓](#5--https-natif) |
 | 6 | Rotation du secret de signature | ✅ | [↓](#6--rotation-du-secret-de-signature) |
 | 7 | Maintenance & Système | ✅ conforme | [↓](#7--maintenance--système) |
-| 8 | Notes de crédit — écriture au journal | ⏳ | [↓](#8--notes-de-crédit--écriture-au-journal) |
+| 8 | Notes de crédit — écriture au journal | 🔎 livré, éteint par défaut | [↓](#8--notes-de-crédit--écriture-au-journal) |
 | 9 | Multi-utilisateurs & permissions | ⏳ | [↓](#9--multi-utilisateurs--permissions) |
-| 10 | Rapprochement bancaire (interface) | ⏳ | — |
-| 11 | eBill | ⏳ | [↓](#11--ebill) |
-| 12 | Validation contre le portail SIX | ⏳ | [↓](#12--validation-contre-le-portail-six) |
+| 10 | Rapprochement bancaire (interface) | 🔎 livré | [↓](#10--rapprochement-bancaire) |
+| 11 | eBill | ⛔ écarté — réseau fermé | [↓](#11--ebill) |
+| 12 | Validation contre le portail SIX | 🔎 dossier livré | [↓](#12--validation-contre-le-portail-six) |
 | 13 | Veille de conformité automatisée | ✅ | — |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
@@ -246,34 +246,106 @@ un bouton — réparer en silence effacerait la trace (CO art. 957a al. 2 ch. 5)
 
 ### 8 — Notes de crédit — écriture au journal
 
-Le lien, le plafond et la mention légale sont livrés et validés. **L'écriture au
-journal ne peut pas commencer ici** : aucune facture ne passe d'écriture
-aujourd'hui, seuls les paiements sont automatisés. Contrepasser le produit d'une
-note créerait un produit négatif sans contrepartie, et doublerait la correction
-si l'utilisateur l'a déjà passée.
+**Livré.** Une facture envoyée passe au journal : débiteurs au débit du total
+TTC, produits au crédit du hors-taxe, TVA due au crédit du reste. La note de
+crédit contrepasse à l'identique. La ligne de TVA est omise quand il n'y en a
+pas — une ligne à zéro n'est pas une information.
 
-L'ordre est imposé : d'abord la facture à l'émission (débiteurs / produits + TVA
-due), la note suivant le même mécanisme en sens inverse. À traiter avec
-l'écriture au journal des factures fournisseurs.
+L'ordre était imposé, et c'est pourquoi ce point attendait : contrepasser le
+produit d'une note alors que la facture n'a jamais été passée créerait un
+produit négatif sans contrepartie.
+
+**Éteint sur les installations existantes, et c'est délibéré.** Qui tenait une
+comptabilité complète saisissait ces écritures à la main ; les automatiser
+d'office doublerait le produit et la TVA due sur tout un exercice. La migration
+éteint le réglage pour les fiches déjà présentes et le laisse actif pour celles
+créées ensuite. À allumer dans Paramètres → Facturation, après vérification.
+
+L'idempotence tient au lien `journal_entry_id` : un document déjà rattaché à une
+écriture n'en produit pas une seconde, quel que soit le nombre de clics.
+
+**Reste** : l'écriture des factures fournisseurs, qui suit le même mécanisme en
+sens inverse.
 
 ### 9 — Multi-utilisateurs & permissions
 
 Rôles Admin / Comptable / Lecture seule. Cas d'usage central en Suisse : donner
 un accès **lecture seule à la fiduciaire** sans partager le compte administrateur.
 
+### 10 — Rapprochement bancaire
+
+**Livré.** L'import camt.053 existait mais ne gardait rien : le relevé était
+analysé, renvoyé au navigateur, puis oublié. Impossible de savoir ce qui avait
+déjà été traité, et réimporter le relevé du mois obligeait à tout revoir.
+
+Les écritures sont désormais conservées, avec au plus une suggestion chacune et
+la raison qui l'a désignée :
+
+| Règle | Confiance | Pourquoi |
+|---|---|---|
+| Référence du bulletin | certaine | recopiée par la banque — une correspondance, pas une ressemblance |
+| Montant exact, une seule facture ouverte | probable | fiable *tant qu'un seul candidat répond* |
+| Plusieurs factures au même montant | *rien n'est proposé* | désigner la première serait un tirage au sort présenté comme une analyse |
+
+**Rapprocher n'encaisse pas**, et c'est la décision structurante. Identifier un
+versement et enregistrer un paiement restent deux gestes : le second se fait
+depuis la facture, par le chemin déjà éprouvé. Solder une créance parce qu'un
+montant correspondait est une erreur qu'on ne découvre qu'en relançant un client
+qui a déjà payé — ou en ne relançant jamais celui qui n'a pas payé.
+
+La réimportation ne duplique rien : chaque écriture porte une empreinte
+combinant date, montant et références. La référence bancaire seule ne suffisait
+pas — toutes les banques ne la renseignent pas — et le montant seul non plus :
+deux versements identiques le même jour existent, et les fondre ferait
+disparaître un encaissement.
+
+**Reste** : créer le paiement depuis l'écran de rapprochement, une fois le geste
+éprouvé sur des relevés réels.
+
 ### 11 — eBill
 
-Réseau d'e-facturation suisse opéré par SIX, adopté par la majorité des banques.
-Plus pertinent pour une PME suisse que ZUGFeRD / Factur-X, orientés marché
-européen.
+**Écarté sous la forme « LedgerAlps envoie vos factures eBill ».** Le réseau
+n'est pas ouvert, et l'obstacle n'est pas technique.
+
+Vérifié sur la spécification publique de SIX : eBill n'est pas un format qu'on
+produit, c'est une **API REST OAuth 2.0 exposée par un « Network Partner »** —
+un prestataire sous contrat avec SIX. Il faut :
+
+- un contrat entre **votre entreprise** et un Network Partner ;
+- un identifiant émetteur (*biller PID*) attribué par lui ;
+- des jetons OAuth, contre son propre serveur.
+
+Deux conséquences. La première : LedgerAlps ne peut rien envoyer sans un contrat
+qu'il n'est pas en position de signer. La seconde, plus lourde : transmettre
+supposerait des **appels sortants**, ce que le produit ne fait pas — c'est la
+promesse qui le définit.
+
+**Ce que le réseau accepte, LedgerAlps le produit déjà.** La charge utile d'un
+dépôt eBill est un PDF, l'en-tête `X-BCFORMAT` pouvant valoir `QRBill` : le
+bulletin QR-facture que LedgerAlps imprime. Qui signe avec un Network Partner
+dépose donc ce PDF, sans que LedgerAlps ait à s'y connecter.
+
+**Reste** : rien côté produit. Si le besoin devient réel, ce sera un module au
+sens du §14, pas une fonction du noyau.
 
 ### 12 — Validation contre le portail SIX
 
-SIX exploite un [portail de validation](https://validation.iso-payments.ch/) des
-Swiss Payment Standards, qui contrôle le *payload* **et** l'image rendue. C'est
-la seule vérification faisant autorité, et celle qui manque : nos tests
-vérifient notre lecture de la spécification, pas la conformité du bulletin
-produit. Le portail demande un compte.
+**Livré, dans la part qui revient au logiciel.** Chaque facture produit un
+dossier à déposer (bouton *Validation SIX*) : le **payload exact** encodé dans
+le QR, le bulletin en PDF, et la marche à suivre.
+
+Le payload sort de la même fonction que l'impression — extraite pour cela. Deux
+constructions séparées divergeraient un jour, et ce jour-là on ferait valider
+autre chose que ce qu'on envoie aux clients, c'est-à-dire qu'on validerait pour
+rien.
+
+**Le compte reste à créer par vous.** Le portail en demande un ; un logiciel
+n'ouvre pas de compte au nom de quelqu'un d'autre. C'est la seule part qui ne
+s'automatise pas, et le dossier le dit.
+
+Pourquoi cela compte : nos tests vérifient **notre lecture** de la
+spécification, pas la conformité du bulletin produit. Ils passeraient tous avec
+un contresens.
 
 > **Il n'existe aucune « certification ISO 20022 ».** Le Registration Authority
 > [l'écrit explicitement](https://www.iso20022.org/faq) : aucune autorité de

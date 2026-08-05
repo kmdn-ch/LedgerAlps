@@ -139,3 +139,18 @@ func Migrate(database *sql.DB, usePostgres bool) error {
 	}
 	return nil
 }
+
+// MigrationSQL returns the SQL of one embedded migration, by version.
+//
+// Exposé pour que les tests puissent rejouer une migration sur une base montée
+// à la main. Une migration qui doit se comporter différemment selon ce qui
+// existe déjà — comme l'extinction d'un réglage pour les installations
+// antérieures — ne se vérifie pas autrement : la suite normale part toujours
+// d'une base vide, où le cas n'existe pas.
+func MigrationSQL(version string) (string, error) {
+	content, err := migrationsFS.ReadFile(path.Join("migrations", version+".up.sql"))
+	if err != nil {
+		return "", fmt.Errorf("migration %s introuvable: %w", version, err)
+	}
+	return string(content), nil
+}

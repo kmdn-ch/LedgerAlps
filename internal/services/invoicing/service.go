@@ -405,6 +405,26 @@ func (s *Service) Transition(ctx context.Context, invoiceID string, to models.In
 				return fmt.Errorf("update invoice status: %w", err)
 			}
 
+			// Comptabilisation à l'émission : brouillon → envoyée.
+			//
+			// C'est le moment où l'opération existe pour un tiers, donc celui
+			// où elle se rapporte à l'exercice (CO art. 958b). Un échec ne
+			// défait pas la transition — la facture EST envoyée, le nier
+			// serait pire — mais il remonte, pour que personne ne croie
+			// l'écriture passée.
+			if models.InvoiceStatus(current) == models.InvoiceStatusDraft &&
+				to == models.InvoiceStatusSent &&
+				journalEntryID == "" &&
+				s.accountingSvc != nil &&
+				s.autoPostEnabled(ctx) {
+
+				if _, err := s.PostIssuedDocument(
+					ctx, invoiceID, documentType, invoiceNumber, createdByID, issueDate, "",
+				); err != nil {
+					return fmt.Errorf("document envoyé, mais l'écriture au journal a échoué: %w", err)
+				}
+			}
+
 			// Automatic reversal: sent → cancelled with a linked journal entry.
 			if models.InvoiceStatus(current) == models.InvoiceStatusSent &&
 				to == models.InvoiceStatusCancelled &&

@@ -4,6 +4,7 @@ package pdf
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -524,81 +525,63 @@ const (
 
 // renderPaymentSlip draws the Swiss QR-bill payment slip at the bottom 105 mm.
 // Uses SPC 0200 v2.3 structured address type S throughout.
-func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
+// errNoIBAN signale qu'aucun IBAN n'est configuré. Ce n'est pas une panne : le
+// bulletin est simplement omis. Le dossier de validation, lui, doit le dire.
+var errNoIBAN = errors.New("aucun IBAN n'est configuré : le bulletin de versement ne peut pas être produit")
+
+// qrReferenceFor choisit l'IBAN et le type de référence du bulletin.
+//
+// Extrait du rendu pour que le dossier de validation SIX porte la MÊME
+// référence que le bulletin imprimé. La règle n'est pas anodine : un QR-IBAN
+// impose QRR, un IBAN ordinaire impose SCOR ou NON, et les banques rejettent
+// l'appariement contraire (IG v2.4 §4.2.2, champ 28).
+func qrReferenceFor(inv InvoiceData) (iban, refType, ref string, err error) {
 	// ── Determine IBAN and reference type ─────────────────────────────────────
-	iban := inv.Company.IBAN
+	iban = inv.Company.IBAN
 	if inv.Company.QRIBAN != "" {
 		iban = inv.Company.QRIBAN
 	}
 	if iban == "" {
-		return nil // no IBAN configured — skip slip silently
+		return "", "", "", errNoIBAN
 	}
 
 	// Reference type must match the account type (IG v2.4 §4.2.2, field 28):
 	// a QR-IBAN mandates QRR, a regular IBAN mandates SCOR or NON. The QR
 	// reference is also restricted to CHF since IG v2.4.
-	refType := "NON"
-	var ref string
+	refType = "NON"
 	if inv.Company.QRIBAN != "" {
 		if inv.Currency != "CHF" {
 			// QRR is CHF-only; a QR-IBAN cannot carry any other reference type,
 			// so fall back to the regular IBAN rather than emit an invalid pairing.
 			iban = inv.Company.IBAN
 			if iban == "" {
-				return fmt.Errorf("QR-IBAN cannot be used for %s invoices (QRR is CHF-only) and no regular IBAN is configured", inv.Currency)
+				return "", "", "", fmt.Errorf("QR-IBAN cannot be used for %s invoices (QRR is CHF-only) and no regular IBAN is configured", inv.Currency)
 			}
 		} else {
 			qrRef, err := compliance.GenerateQRRReference(extractDigits(inv.InvoiceNumber))
 			if err != nil {
 				// A QR-IBAN with a non-QRR reference is rejected by banks, so
 				// surface the failure instead of silently emitting an invalid slip.
-				return fmt.Errorf("QR-IBAN requires a QRR reference but generation failed for invoice %q: %w", inv.InvoiceNumber, err)
+				return "", "", "", fmt.Errorf("QR-IBAN requires a QRR reference but generation failed for invoice %q: %w", inv.InvoiceNumber, err)
 			}
 			refType = "QRR"
 			ref = qrRef
 		}
 	}
 
-	// ── Split combined "postal town" strings into separate fields for S type ──
-	// CompanyInfo.City is stored as "8001 Zürich"; the QR payload needs them split.
-	credPostal, credTown := splitPostalCity(inv.Company.City)
-	debtorPostal, debtorTown := splitPostalCity(inv.Customer.City)
+	return iban, refType, ref, nil
+}
 
-	// Default country to CH when empty (required by structured address)
-	credCountry := inv.Company.Country
-	if credCountry == "" {
-		credCountry = "CH"
+func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
+	iban, refType, ref, err := qrReferenceFor(inv)
+	if errors.Is(err, errNoIBAN) {
+		return nil // no IBAN configured — skip slip silently
 	}
-	debtorCountry := inv.Customer.Country
-	if debtorCountry == "" {
-		debtorCountry = "CH"
+	if err != nil {
+		return err
 	}
 
-	payload, err := compliance.GenerateQRBillPayload(compliance.QRBillData{
-		// Creditor — structured address (S), building nr included in Street per §4.2.2
-		CreditorIBAN:       iban,
-		CreditorName:       inv.Company.Name,
-		CreditorStreet:     inv.Company.Address, // "Bahnhofstrasse 1" — building nr allowed in StrtNm
-		CreditorPostalCode: credPostal,
-		CreditorTown:       credTown,
-		CreditorCountry:    credCountry,
-		// Amount
-		Amount:   inv.TotalAmount,
-		Currency: inv.Currency,
-		// Debtor — only include when name is non-empty and address is complete enough
-		DebtorName:       inv.Customer.Name,
-		DebtorStreet:     inv.Customer.Address,
-		DebtorPostalCode: debtorPostal,
-		DebtorTown:       debtorTown,
-		DebtorCountry:    debtorCountry,
-		// Reference
-		ReferenceType: refType,
-		Reference:     ref,
-		// Message — unstructured, max 140 chars
-		Message:       inv.InvoiceNumber,
-		InvoiceNumber: inv.InvoiceNumber,
-		InvoiceDate:   inv.IssueDate,
-	})
+	payload, err := compliance.GenerateQRBillPayload(buildQRBillData(inv, iban, refType, ref))
 	if err != nil {
 		return err
 	}
@@ -1011,4 +994,60 @@ func normaliseUID(v string) string {
 		out = strings.TrimSuffix(out, suffix)
 	}
 	return out
+}
+
+// buildQRBillData assemble la donnée du bulletin à partir de la facture.
+//
+// Extrait du rendu pour que le dossier de validation SIX fasse valider
+// EXACTEMENT le payload imprimé. Deux constructions séparées divergeraient un
+// jour, et ce jour-là on ferait valider autre chose que ce qu'on envoie aux
+// clients — c'est-à-dire qu'on validerait pour rien.
+func buildQRBillData(inv InvoiceData, iban, refType, ref string) compliance.QRBillData {
+	credPostal, credTown := splitPostalCity(inv.Company.City)
+	debtorPostal, debtorTown := splitPostalCity(inv.Customer.City)
+
+	credCountry := inv.Company.Country
+	if credCountry == "" {
+		credCountry = "CH"
+	}
+	debtorCountry := inv.Customer.Country
+	if debtorCountry == "" {
+		debtorCountry = "CH"
+	}
+
+	return compliance.QRBillData{
+		// Creditor — structured address (S), building nr included in Street per §4.2.2
+		CreditorIBAN:       iban,
+		CreditorName:       inv.Company.Name,
+		CreditorStreet:     inv.Company.Address, // "Bahnhofstrasse 1" — building nr allowed in StrtNm
+		CreditorPostalCode: credPostal,
+		CreditorTown:       credTown,
+		CreditorCountry:    credCountry,
+		// Amount
+		Amount:   inv.TotalAmount,
+		Currency: inv.Currency,
+		// Debtor — only include when name is non-empty and address is complete enough
+		DebtorName:       inv.Customer.Name,
+		DebtorStreet:     inv.Customer.Address,
+		DebtorPostalCode: debtorPostal,
+		DebtorTown:       debtorTown,
+		DebtorCountry:    debtorCountry,
+		// Reference
+		ReferenceType: refType,
+		Reference:     ref,
+		// Message — unstructured, max 140 chars
+		Message:       inv.InvoiceNumber,
+		InvoiceNumber: inv.InvoiceNumber,
+		InvoiceDate:   inv.IssueDate,
+	}
+}
+
+// QRPayload rend le payload encodé dans le QR d'une facture, sans dessiner quoi
+// que ce soit. C'est ce que le portail SIX contrôle.
+func QRPayload(inv InvoiceData) (string, error) {
+	iban, refType, ref, err := qrReferenceFor(inv)
+	if err != nil {
+		return "", err
+	}
+	return compliance.GenerateQRBillPayload(buildQRBillData(inv, iban, refType, ref))
 }

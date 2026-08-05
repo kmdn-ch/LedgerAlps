@@ -25,6 +25,7 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	embeddedFrontend "github.com/kmdn-ch/ledgeralps/internal/frontend"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
+	"github.com/kmdn-ch/ledgeralps/internal/services/banking"
 	"github.com/kmdn-ch/ledgeralps/internal/services/updatecheck"
 	"github.com/kmdn-ch/ledgeralps/version"
 )
@@ -260,6 +261,7 @@ func main() {
 	api.GET("/invoices", ih.ListInvoices)
 	api.GET("/invoices/:id", ih.GetInvoice)
 	api.GET("/invoices/:id/pdf", ih.GetInvoicePDF)
+	api.GET("/invoices/:id/six-validation", ih.SixValidationDossier)
 	// Téléchargement groupé : un PDF si un seul document, un ZIP si plusieurs.
 	api.POST("/invoices/bulk-pdf", ih.BulkInvoicePDF)
 	api.POST("/invoices", ih.CreateInvoice)
@@ -334,9 +336,15 @@ func main() {
 	})
 
 	// ISO 20022 — pain.001 export + camt.053 import
-	isoH := handlers.NewISO20022Handler()
+	bankingSvc := banking.New(database, cfg.UsePostgres())
+	isoH := handlers.NewISO20022HandlerWithReconciliation(bankingSvc)
+	recoh := handlers.NewReconciliationHandler(database, cfg.UsePostgres())
 	api.POST("/payments/export", isoH.ExportPain001)
 	api.POST("/bank-statements/import", isoH.ImportCamt053)
+	api.GET("/bank-entries", recoh.ListBankEntries)
+	api.PUT("/bank-entries/:id/match", recoh.MatchBankEntry)
+	api.DELETE("/bank-entries/:id/match", recoh.UnmatchBankEntry)
+	api.PUT("/bank-entries/:id/ignore", recoh.IgnoreBankEntry)
 
 	// Legal archive export — CO art. 958f (10-year retention)
 	expH := handlers.NewExportHandler(database, cfg.UsePostgres())

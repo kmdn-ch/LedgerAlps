@@ -251,6 +251,11 @@ export const invoicesApi = {
     api.post('/invoices/bulk-pdf', { ids }, { responseType: 'blob', timeout: 300_000 }),
   downloadPDF: (id: string) =>
     api.get(`/invoices/${id}/pdf`, { responseType: 'blob' }),
+  // Dossier a deposer sur le portail de validation SIX : le payload exact du QR
+  // et le bulletin, avec la marche a suivre. Le portail est la seule
+  // verification qui fasse autorite sur la conformite du bulletin produit.
+  sixValidation: (id: string) =>
+    api.get(`/invoices/${id}/six-validation`, { responseType: 'blob' }),
 }
 
 // ─── TVA ──────────────────────────────────────────────────────────────────────
@@ -259,6 +264,18 @@ export const vatApi = {
 }
 
 // ─── ISO 20022 ────────────────────────────────────────────────────────────────
+// Rapprochement bancaire. Les écritures d'un relevé, leurs suggestions, et la
+// décision de l'utilisateur. Aucune de ces routes n'encaisse quoi que ce soit :
+// rapprocher identifie un versement, il ne solde pas une créance.
+export const bankEntriesApi = {
+  list:    (all = false) => api.get('/bank-entries' + (all ? '?all=true' : '')),
+  match:   (id: string, invoiceId: string) =>
+    api.put(`/bank-entries/${id}/match`, { invoice_id: invoiceId }),
+  unmatch: (id: string) => api.delete(`/bank-entries/${id}/match`),
+  ignore:  (id: string, ignored: boolean) =>
+    api.put(`/bank-entries/${id}/ignore`, { ignored }),
+}
+
 export const isoApi = {
   // pain.001.001.09 — générer un fichier de paiement
   exportPain001: (data: {

@@ -224,6 +224,10 @@ export interface CompanySettings {
   bank_address: string
   bank_bic: string
   iban: string
+  // Comptabilise la facture au journal dès son envoi. Éteint sur les
+  // installations antérieures à ce réglage : l'allumer d'office y doublerait
+  // les écritures saisies à la main.
+  auto_post_invoices?: boolean
   fiscal_year_start_month: number
   currency: string
   logo_data?: string | null
@@ -436,4 +440,30 @@ export interface SecuritySettings {
   // 0 = déconnexion automatique désactivée.
   idle_logout_minutes: number
   access_minutes: number
+}
+
+// Écriture d'un relevé bancaire, avec au plus une suggestion.
+//
+// La raison de la suggestion compte autant que la suggestion : « même montant »
+// et « référence du bulletin » n'engagent pas la même confiance.
+export interface BankEntry {
+  id: string
+  amount: number
+  currency: string
+  is_credit: boolean
+  booking_date: string
+  qr_reference?: string
+  counterparty?: string
+  remittance?: string
+  ignored: boolean
+  invoice_id?: string
+  invoice_number?: string
+  suggestion?: {
+    invoice_id: string
+    invoice_number: string
+    contact_name: string
+    total_amount: number
+    confidence: 'certaine' | 'probable' | 'possible'
+    reason: string
+  }
 }

@@ -46,7 +46,30 @@ var errInvoiceNotFound = errors.New("invoice not found")
 // téléchargement groupé depuis la fiche client. Deux implémentations auraient
 // fini par diverger, et c'est le lot téléchargé — celui qu'on archive ou qu'on
 // transmet — qui aurait porté la version périmée.
+// buildInvoicePDF rend le PDF et son nom de fichier.
 func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byte, string, error) {
+	data, filename, err := h.invoiceDataFor2(ctx, id)
+	if err != nil {
+		return nil, "", err
+	}
+	pdfBytes, err := pdfsvc.Generate(data)
+	if err != nil {
+		return nil, "", errors.New("pdf generation failed")
+	}
+	return pdfBytes, filename, nil
+}
+
+// invoiceDataFor rend la donnée du document, sans le dessiner.
+//
+// Séparé du rendu pour que le dossier de validation SIX parte de la MÊME
+// donnée que l'impression : c'est ce qui garantit qu'on fait valider ce qu'on
+// envoie réellement aux clients.
+func (h *InvoicesHandler) invoiceDataFor(ctx context.Context, id string) (pdfsvc.InvoiceData, error) {
+	data, _, err := h.invoiceDataFor2(ctx, id)
+	return data, err
+}
+
+func (h *InvoicesHandler) invoiceDataFor2(ctx context.Context, id string) (pdfsvc.InvoiceData, string, error) {
 	// Load invoice
 	var inv models.Invoice
 	// The join resolves the number of the invoice a credit note cancels: LTVA
@@ -70,10 +93,10 @@ func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byt
 		&inv.Notes, &inv.Terms, &inv.CreatedAt, &inv.UpdatedAt, &correctsNumber,
 		&rcp.Name, &rcp.Address, &rcp.PostalCode, &rcp.City, &rcp.Country, &rcp.VATNumber)
 	if err == sql.ErrNoRows {
-		return nil, "", errInvoiceNotFound
+		return pdfsvc.InvoiceData{}, "", errInvoiceNotFound
 	}
 	if err != nil {
-		return nil, "", errors.New("database error")
+		return pdfsvc.InvoiceData{}, "", errors.New("database error")
 	}
 
 	// Load invoice lines
@@ -82,14 +105,14 @@ func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byt
 		FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence`, h.usePostgres)
 	rows, err := h.db.QueryContext(ctx, linesQ, id)
 	if err != nil {
-		return nil, "", errors.New("database error")
+		return pdfsvc.InvoiceData{}, "", errors.New("database error")
 	}
 	defer rows.Close()
 	var pdfLines []pdfsvc.InvoiceLine
 	for rows.Next() {
 		var l pdfsvc.InvoiceLine
 		if err := rows.Scan(&l.Description, &l.Quantity, &l.UnitPrice, &l.VATRate, &l.LineTotal); err != nil {
-			return nil, "", errors.New("scan error")
+			return pdfsvc.InvoiceData{}, "", errors.New("scan error")
 		}
 		pdfLines = append(pdfLines, l)
 	}
@@ -107,7 +130,7 @@ func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byt
 		&ct.IBAN, &ct.QRIBAN, &ct.VATNumber, &ct.PaymentTermDays, &isActive,
 		&ct.CreatedAt, &ct.UpdatedAt)
 	if err != nil && err != sql.ErrNoRows {
-		return nil, "", errors.New("database error")
+		return pdfsvc.InvoiceData{}, "", errors.New("database error")
 	}
 	ct.IsActive = isActive == 1
 
@@ -236,11 +259,6 @@ func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byt
 		Customer:              customer,
 	}
 
-	pdfBytes, err := pdfsvc.Generate(data)
-	if err != nil {
-		return nil, "", errors.New("pdf generation failed")
-	}
-
 	// Le préfixe suit le type de document : un fichier nommé « facture-… » qui
 	// contient une offre de prix se retrouve classé au mauvais endroit, et le
 	// nom survit au classement bien plus longtemps que la mémoire de qui l'a
@@ -252,7 +270,7 @@ func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byt
 	case "credit_note":
 		prefix = "note-credit"
 	}
-	return pdfBytes, fmt.Sprintf("%s-%s.pdf", prefix, inv.InvoiceNumber), nil
+	return data, fmt.Sprintf("%s-%s.pdf", prefix, inv.InvoiceNumber), nil
 }
 
 func envOr(key, fallback string) string {

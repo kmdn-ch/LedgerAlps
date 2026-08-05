@@ -21,6 +21,7 @@ const schema = z.object({
   bank_name:             z.string().default(''),
   bank_address:          z.string().default(''),
   bank_bic:              z.string().default(''),
+  auto_post_invoices:    z.boolean().default(false),
   email:                 z.string().default(''),
   address_street:        z.string().default(''),
   address_postal_code:   z.string().default(''),
@@ -44,6 +45,7 @@ const TABS = [
 
 import { BackupPanel } from '@/components/settings/BackupPanel'
 import { MaintenancePanel } from '@/components/settings/MaintenancePanel'
+import { ReconciliationPanel } from '@/components/settings/ReconciliationPanel'
 
 export function SettingsPage() {
   const [tab,   setTab]   = useState('identity')
@@ -68,6 +70,7 @@ export function SettingsPage() {
       bank_name: '',
       bank_address: '',
       bank_bic: '',
+      auto_post_invoices: false,
       email: '',
       address_street: '',
       address_postal_code: '',
@@ -91,6 +94,7 @@ export function SettingsPage() {
         bank_name:             company.bank_name              ?? '',
         bank_address:          company.bank_address           ?? '',
         bank_bic:              company.bank_bic               ?? '',
+        auto_post_invoices:    company.auto_post_invoices     ?? false,
         email:                 company.email                  ?? '',
         address_street:        company.address_street         ?? '',
         address_postal_code:   company.address_postal_code   ?? '',
@@ -377,6 +381,14 @@ export function SettingsPage() {
             </div>
           )}
 
+          {/* Le rapprochement vit dans l'onglet Banque : c'est là qu'on vient
+              quand on a le relevé sous les yeux. */}
+          {tab === 'banking' && (
+            <div className="card mt-5">
+              <ReconciliationPanel />
+            </div>
+          )}
+
           {/* ─── Facturation ──────────────────────────────────────────── */}
           {tab === 'invoicing' && (
             <div className="card">
@@ -384,6 +396,24 @@ export function SettingsPage() {
                 <h2 className="text-sm font-semibold text-alpine-800">Paramètres de facturation</h2>
               </div>
               <div className="card-body grid grid-cols-2 gap-4">
+                {/* Comptabilisation automatique. Eteinte sur les installations
+                    anterieures a ce reglage : l'allumer d'office y doublerait
+                    les ecritures deja saisies a la main. */}
+                <div className="col-span-2 rounded-md border border-neutral-200 px-3 py-2.5">
+                  <label className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" className="mt-0.5" {...register('auto_post_invoices')} />
+                    <span>
+                      <span className="font-medium">Comptabiliser les factures a l'envoi</span>
+                      <span className="block text-alpine-600 text-xs mt-0.5">
+                        Une ecriture est passee au journal des qu'une facture part : debiteurs au
+                        debit, produits et TVA due au credit. La note de credit contrepasse.
+                        <strong> N'activez ceci que si vous ne saisissez pas deja ces ecritures
+                        vous-meme</strong> — sinon elles seraient comptees deux fois.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
                 <div>
                   <label className="label">Devise principale</label>
                   <select className="select" {...register('currency')}>

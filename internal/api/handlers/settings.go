@@ -40,9 +40,14 @@ type companySettingsRequest struct {
 	Email string `json:"email"`
 	// Coordonnées de la banque. L'IBAN suffit à la QR-facture ; un virement
 	// depuis l'étranger demande le nom de la banque et le BIC.
-	BankName             string `json:"bank_name"`
-	BankAddress          string `json:"bank_address"`
-	BankBIC              string `json:"bank_bic"`
+	BankName    string `json:"bank_name"`
+	BankAddress string `json:"bank_address"`
+	BankBIC     string `json:"bank_bic"`
+	// AutoPostInvoices comptabilise la facture au journal dès son envoi.
+	// Pointeur : « absent » veut dire « ne touche pas », et se distingue de
+	// « posé à faux », qui est une extinction volontaire. Sans cette
+	// distinction, enregistrer la fiche société éteindrait le réglage.
+	AutoPostInvoices     *bool  `json:"auto_post_invoices,omitempty"`
 	IBAN                 string `json:"iban"`
 	FiscalYearStartMonth int    `json:"fiscal_year_start_month"`
 	Currency             string `json:"currency"`
@@ -61,17 +66,20 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 		       address_street, address_postal_code, address_city, address_country,
 		       che_number, vat_number, COALESCE(phone,''), COALESCE(email,''),
 		       COALESCE(bank_name,''), COALESCE(bank_address,''), COALESCE(bank_bic,''), iban,
+		       COALESCE(auto_post_invoices,0),
 		       fiscal_year_start_month, currency, logo_data,
 		       created_at, updated_at
 		FROM company_settings
 		LIMIT 1`, h.usePostgres)
 
 	var s models.CompanySettings
+	var autoPost int
 	err := h.db.QueryRowContext(ctx, q).Scan(
 		&s.ID, &s.CompanyName, &s.LegalForm,
 		&s.AddressStreet, &s.AddressPostalCode, &s.AddressCity, &s.AddressCountry,
 		&s.CheNumber, &s.VatNumber, &s.Phone, &s.Email,
 		&s.BankName, &s.BankAddress, &s.BankBIC, &s.IBAN,
+		&autoPost,
 		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
@@ -88,6 +96,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
+	s.AutoPostInvoices = autoPost == 1
 
 	c.JSON(http.StatusOK, s)
 }
@@ -186,28 +195,45 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		}
 	}
 
+	// La comptabilisation automatique se met à jour séparément, et seulement
+	// quand elle est fournie. L'inclure dans l'UPDATE ci-dessus l'éteindrait à
+	// chaque enregistrement de la fiche société : le formulaire de l'entreprise
+	// ne porte pas ce champ, il arriverait donc à faux et couperait la
+	// comptabilisation sans que personne ne l'ait demandé.
+	if req.AutoPostInvoices != nil {
+		autoQ := db.Rebind(`UPDATE company_settings SET auto_post_invoices = ?, updated_at = ?`, h.usePostgres)
+		if _, err := h.db.ExecContext(ctx, autoQ, boolToSQL(*req.AutoPostInvoices), now); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			return
+		}
+	}
+
 	// Return the updated row.
 	q := db.Rebind(`
 		SELECT id, company_name, legal_form,
 		       address_street, address_postal_code, address_city, address_country,
 		       che_number, vat_number, COALESCE(phone,''), COALESCE(email,''),
 		       COALESCE(bank_name,''), COALESCE(bank_address,''), COALESCE(bank_bic,''), iban,
+		       COALESCE(auto_post_invoices,0),
 		       fiscal_year_start_month, currency, logo_data,
 		       created_at, updated_at
 		FROM company_settings WHERE id = ?`, h.usePostgres)
 
 	var s models.CompanySettings
+	var autoPostOut int
 	if err := h.db.QueryRowContext(ctx, q, existingID).Scan(
 		&s.ID, &s.CompanyName, &s.LegalForm,
 		&s.AddressStreet, &s.AddressPostalCode, &s.AddressCity, &s.AddressCountry,
 		&s.CheNumber, &s.VatNumber, &s.Phone, &s.Email,
 		&s.BankName, &s.BankAddress, &s.BankBIC, &s.IBAN,
+		&autoPostOut,
 		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
 		&s.CreatedAt, &s.UpdatedAt,
 	); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
+	s.AutoPostInvoices = autoPostOut == 1
 
 	c.JSON(http.StatusOK, s)
 }
@@ -320,4 +346,13 @@ func (h *SettingsHandler) DeleteLogo(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// boolToSQL rend 1 ou 0 : SQLite n'a pas de type booléen, et écrire un `true`
+// Go y produirait la chaîne « true », que COALESCE(...,0) relirait comme 0.
+func boolToSQL(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

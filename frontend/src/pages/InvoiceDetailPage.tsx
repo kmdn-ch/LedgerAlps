@@ -260,6 +260,22 @@ export function InvoiceDetailPage() {
     downloadBlob(resp.data, `${prefix}_${invoice.invoice_number}.pdf`)
   }
 
+  // Dossier de validation SIX : le payload exact du QR et le bulletin, à
+  // déposer sur le portail des Swiss Payment Standards. C'est la seule
+  // vérification qui fasse autorité — nos tests vérifient notre lecture de la
+  // spécification, pas la conformité du bulletin produit.
+  const [dossierBusy, setDossierBusy] = useState(false)
+  const downloadSixDossier = async () => {
+    if (!invoice) return
+    setDossierBusy(true)
+    try {
+      const resp = await invoicesApi.sixValidation(invoice.id)
+      downloadBlob(resp.data, `validation-six_${invoice.invoice_number}.zip`)
+    } finally {
+      setDossierBusy(false)
+    }
+  }
+
   if (isLoading) return <LoadingSpinner />
   if (error || !invoice) return (
     <ErrorBanner message="Impossible de charger la facture." />
@@ -379,6 +395,16 @@ export function InvoiceDetailPage() {
               <button onClick={handleDownload} className="btn-ghost btn-sm" title="Télécharger PDF">
                 <Download size={14} />
               </button>
+              {invoice.document_type !== 'quote' && (
+                <button
+                  onClick={downloadSixDossier}
+                  disabled={dossierBusy}
+                  className="btn-ghost btn-sm"
+                  title="Payload du QR et bulletin, à déposer sur le portail de validation SIX"
+                >
+                  {dossierBusy ? 'Préparation…' : 'Validation SIX'}
+                </button>
+              )}
             </div>
           }
         />

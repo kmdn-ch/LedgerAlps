@@ -238,20 +238,24 @@ type Payment struct {
 
 // CompanySettings holds the one-row singleton for this installation's tenant profile.
 type CompanySettings struct {
-	ID                   string    `db:"id"                       json:"id"`
-	CompanyName          string    `db:"company_name"             json:"company_name"`
-	LegalForm            string    `db:"legal_form"               json:"legal_form"`
-	AddressStreet        string    `db:"address_street"           json:"address_street"`
-	AddressPostalCode    string    `db:"address_postal_code"      json:"address_postal_code"`
-	AddressCity          string    `db:"address_city"             json:"address_city"`
-	AddressCountry       string    `db:"address_country"          json:"address_country"`
-	CheNumber            string    `db:"che_number"               json:"che_number"`
-	VatNumber            string    `db:"vat_number"               json:"vat_number"`
-	Phone                string    `db:"phone"                json:"phone"`
-	Email                string    `db:"email"                json:"email"`
-	BankName             string    `db:"bank_name"            json:"bank_name"`
-	BankAddress          string    `db:"bank_address"         json:"bank_address"`
-	BankBIC              string    `db:"bank_bic"             json:"bank_bic"`
+	ID                string `db:"id"                       json:"id"`
+	CompanyName       string `db:"company_name"             json:"company_name"`
+	LegalForm         string `db:"legal_form"               json:"legal_form"`
+	AddressStreet     string `db:"address_street"           json:"address_street"`
+	AddressPostalCode string `db:"address_postal_code"      json:"address_postal_code"`
+	AddressCity       string `db:"address_city"             json:"address_city"`
+	AddressCountry    string `db:"address_country"          json:"address_country"`
+	CheNumber         string `db:"che_number"               json:"che_number"`
+	VatNumber         string `db:"vat_number"               json:"vat_number"`
+	Phone             string `db:"phone"                json:"phone"`
+	Email             string `db:"email"                json:"email"`
+	BankName          string `db:"bank_name"            json:"bank_name"`
+	BankAddress       string `db:"bank_address"         json:"bank_address"`
+	BankBIC           string `db:"bank_bic"             json:"bank_bic"`
+	// AutoPostInvoices comptabilise la facture au journal dès son envoi. Éteint
+	// sur les installations antérieures à ce réglage : l'allumer d'office y
+	// doublerait les écritures saisies à la main.
+	AutoPostInvoices     bool      `db:"auto_post_invoices"   json:"auto_post_invoices"`
 	IBAN                 string    `db:"iban"                     json:"iban"`
 	FiscalYearStartMonth int       `db:"fiscal_year_start_month"  json:"fiscal_year_start_month"`
 	Currency             string    `db:"currency"                 json:"currency"`
