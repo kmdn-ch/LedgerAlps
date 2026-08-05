@@ -110,6 +110,12 @@ type PolicyStatus struct {
 	// Setting a passphrase does not retroactively protect them, and a count is
 	// the only honest way to say so.
 	PlaintextCount int `json:"plaintext_count"`
+	// EncryptedCount is how many snapshots would become unopenable if the
+	// stored passphrase were removed and nobody had written it down.
+	//
+	// Compté pour que l'avertissement soit concret : « vos 7 sauvegardes
+	// chiffrées » se lit, « vos sauvegardes chiffrées » se survole.
+	EncryptedCount int `json:"encrypted_count"`
 }
 
 // Status describes the policy and what is actually on disk.
@@ -123,7 +129,13 @@ func (p *BackupPolicy) Status(dir string) PolicyStatus {
 	}
 	if entries, err := ListBackups(dir); err == nil {
 		for _, e := range entries {
-			if enc, encErr := IsEncrypted(e.Path); encErr == nil && !enc {
+			enc, encErr := IsEncrypted(e.Path)
+			if encErr != nil {
+				continue
+			}
+			if enc {
+				st.EncryptedCount++
+			} else {
 				st.PlaintextCount++
 			}
 		}

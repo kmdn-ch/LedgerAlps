@@ -27,6 +27,9 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Modifié
 
+- **Revenir à des sauvegardes en clair demande maintenant confirmation, et dit ce que personne ne devine.** Le bouton agissait au premier clic. Or l'opération n'efface pas seulement la protection des copies à venir : elle **efface la phrase de passe conservée**. Les sauvegardes déjà chiffrées, elles, le restent — et si personne ne l'a notée ailleurs, elles deviennent définitivement illisibles. Le dialogue annonce donc **combien** de copies chiffrées sont en jeu, ce que l'opération ne touche pas, et pourquoi le dossier de sauvegarde est justement celui qui voyage.
+
+
 - **Les tableaux respirent.** Les montants d'une ligne de facture touchaient le bord : le pas passe de 14 à 13 px, les cellules de bord reçoivent une marge supplémentaire — elles longent un bord arrondi, dont le rayon mange visuellement le padding — et les chiffres passent en `tabular-nums`, ce qui les aligne en colonne et permet de comparer deux totaux d'un coup d'œil.
 
 ---

@@ -410,6 +410,9 @@ export interface BackupPolicy {
   // phrase de passe n'y change rien, et le laisser croire serait le mensonge
   // le plus coûteux de cet écran.
   plaintext_count: number
+  // Combien deviendraient illisibles si la phrase conservée était effacée sans
+  // que personne ne l'ait notée ailleurs.
+  encrypted_count: number
 }
 
 // État du chiffrement de la base.

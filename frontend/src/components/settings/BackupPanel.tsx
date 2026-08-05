@@ -14,7 +14,7 @@ import {
 import { backupsApi } from '@/api/client'
 import {
   SectionTitle, LoadingSpinner, ErrorBanner, EmptyState,
-  PassphraseField, PassphraseStrength, passphraseIsStrong,
+  PassphraseField, PassphraseStrength, passphraseIsStrong, ConfirmDialog,
 } from '@/components/ui'
 import { formatDate } from '@/utils'
 
@@ -489,6 +489,7 @@ function AutoBackupPolicy() {
   const [pass, setPass] = useState('')
   const [noted, setNoted] = useState(false)
   const [alsoExisting, setAlsoExisting] = useState(true)
+  const [confirmingClear, setConfirmingClear] = useState(false)
 
   const policy = useQuery<BackupPolicy>({
     queryKey: ['backups', 'policy'],
@@ -571,7 +572,7 @@ function AutoBackupPolicy() {
               </button>
               {p.encrypting && (
                 <button
-                  onClick={() => clear.mutate()}
+                  onClick={() => setConfirmingClear(true)}
                   disabled={clear.isPending}
                   className="text-xs text-alpine-600 hover:text-danger-700 underline underline-offset-2"
                 >
@@ -647,6 +648,52 @@ function AutoBackupPolicy() {
           )}
         </div>
       </div>
+
+      {/* Revenir en clair efface la phrase de passe conservée. Ce n'est pas
+          seulement « les prochaines copies ne seront plus protégées » : les
+          copies DÉJÀ chiffrées restent chiffrées, et si personne n'a noté la
+          phrase ailleurs, elles deviennent définitivement illisibles.
+
+          C'est la conséquence que l'utilisateur ne devine pas, donc celle que
+          le dialogue met en premier. Le composant impose de fournir les
+          conséquences plutôt qu'un « êtes-vous sûr » : répétée, la question
+          devient un réflexe et le clic précède la lecture. */}
+      <ConfirmDialog
+        open={confirmingClear}
+        tone="danger"
+        title="Revenir à des sauvegardes en clair ?"
+        consequences={[
+          <>
+            <strong>La phrase de passe conservée sera effacée.</strong>{' '}
+            {p.encrypted_count > 0 ? (
+              <>Vos <strong>{p.encrypted_count} sauvegarde(s) déjà chiffrée(s)</strong> le
+              resteront et exigeront toujours cette phrase. Si vous ne l'avez pas notée
+              ailleurs, elles deviennent <strong>définitivement illisibles</strong>.</>
+            ) : (
+              <>Aucune sauvegarde chiffrée n'existe encore sur ce disque, rien n'est donc
+              perdu — mais notez-la tout de même si vous en avez copié une ailleurs.</>
+            )}
+          </>,
+          <>
+            Les prochaines sauvegardes automatiques seront écrites <strong>en clair</strong> :
+            n'importe qui pouvant lire le fichier lira votre comptabilité — numéros de TVA,
+            adresses, IBAN — sans rien demander.
+          </>,
+          <>
+            C'est la copie qui voyage. Le dossier de sauvegarde finit sur un NAS ou une clé
+            USB, et c'est précisément là qu'elle échappe à votre contrôle.
+          </>,
+        ]}
+        reassurance={
+          <>Rien n'est supprimé : vos sauvegardes existantes restent en place, et vous pouvez
+          réactiver le chiffrement à tout moment. Il ne protégera alors que les copies
+          suivantes.</>
+        }
+        confirmLabel="Revenir en clair"
+        busy={clear.isPending}
+        onConfirm={() => { setConfirmingClear(false); clear.mutate() }}
+        onCancel={() => setConfirmingClear(false)}
+      />
     </div>
   )
 }

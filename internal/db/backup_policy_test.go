@@ -211,3 +211,63 @@ func makeTinyDB(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 }
+
+// L'avertissement affiché avant de revenir en clair annonce combien de
+// sauvegardes deviendraient illisibles. « Vos 7 sauvegardes chiffrées » se lit ;
+// « vos sauvegardes chiffrées » se survole.
+//
+// Le compte doit donc être juste : annoncer zéro alors qu'il en existe ferait
+// dire à l'écran que rien n'est en jeu, au moment précis où quelque chose l'est.
+func TestLeStatutCompteLesCopiesChiffreesEtEnClair(t *testing.T) {
+	t.Setenv("BACKUP_PASSPHRASE", "")
+	dir := t.TempDir()
+	const phrase = "colline-fromage-tunnel-95-Valais"
+
+	// Deux copies en clair, deux chiffrées.
+	src := filepath.Join(dir, "source.db")
+	makeTinyDB(t, src)
+	for _, n := range []string{
+		"ledgeralps-2026-08-01T10-00-00+0200.db",
+		"ledgeralps-2026-08-02T10-00-00+0200.db",
+		"ledgeralps-2026-08-03T10-00-00+0200.db",
+		"ledgeralps-2026-08-04T10-00-00+0200.db",
+	} {
+		if err := copyFile(src, filepath.Join(dir, n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.Remove(src)
+
+	// Chiffrer les deux premières seulement.
+	for _, n := range []string{
+		"ledgeralps-2026-08-01T10-00-00+0200.db",
+		"ledgeralps-2026-08-02T10-00-00+0200.db",
+	} {
+		if _, err := encryptInPlace(context.Background(), filepath.Join(dir, n), phrase); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	st := NewBackupPolicy(t.TempDir()).Status(dir)
+	if st.EncryptedCount != 2 {
+		t.Errorf("EncryptedCount = %d, attendu 2 — l'avertissement sous-estimerait ce qui est en jeu",
+			st.EncryptedCount)
+	}
+	if st.PlaintextCount != 2 {
+		t.Errorf("PlaintextCount = %d, attendu 2", st.PlaintextCount)
+	}
+}
+
+// Sans aucune sauvegarde chiffrée, le compte est zéro : l'écran doit alors dire
+// que rien n'est perdu, et non brandir un avertissement sans objet.
+func TestSansCopieChiffreeLeCompteEstZero(t *testing.T) {
+	t.Setenv("BACKUP_PASSPHRASE", "")
+	dir := t.TempDir()
+	src := filepath.Join(dir, "ledgeralps-2026-08-01T10-00-00+0200.db")
+	makeTinyDB(t, src)
+
+	st := NewBackupPolicy(t.TempDir()).Status(dir)
+	if st.EncryptedCount != 0 {
+		t.Fatalf("EncryptedCount = %d sur un dossier sans copie chiffrée", st.EncryptedCount)
+	}
+}
