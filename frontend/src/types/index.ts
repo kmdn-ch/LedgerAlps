@@ -20,63 +20,86 @@ export interface TokenResponse {
 // ─── Plan comptable ───────────────────────────────────────────────────────────
 export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
 
+// Ces types décrivent ce que le serveur Go rend RÉELLEMENT.
+//
+// Ils décrivaient auparavant une autre API — `number` au lieu de `code`,
+// `account_number`/`debit`/`credit` au lieu de `code`/`total_debit`/
+// `total_credit`, des lignes que la liste du journal ne rend pas. TypeScript ne
+// pouvait rien signaler : les noms étaient cohérents entre eux, simplement
+// absents de la réponse. Le résultat se voyait à l'écran — une colonne de
+// numéros vide, une balance entièrement à « — » — et nulle part ailleurs.
+
 export interface Account {
   id: string
-  number: string
+  code: string
   name: string
   account_type: AccountType
+  description: string
   is_active: boolean
-  parent_id: string | null
 }
 
-export interface AccountBalance {
-  account_number: string
-  account_name: string
-  account_type: string
-  debit: string
-  credit: string
-  balance: string
-  as_of: string | null
+/** Une ligne de la balance de vérification (GET /accounts/trial-balance). */
+export interface TrialBalanceLine {
+  id: string
+  code: string
+  name: string
+  account_type: AccountType
+  total_debit: number
+  total_credit: number
+  balance: number
 }
 
 // ─── Journal ──────────────────────────────────────────────────────────────────
 export type JournalEntryStatus = 'draft' | 'posted' | 'reversed'
 
-export interface JournalLine {
-  id: string
-  debit_account_id: string | null
-  credit_account_id: string | null
-  amount: string
-  currency: string
-  amount_chf: string
-  description: string | null
-}
-
+/** Une écriture telle que la LISTE la rend : sans ses lignes, avec son total. */
 export interface JournalEntry {
   id: string
   date: string
   reference: string
   description: string
   status: JournalEntryStatus
-  posted_at: string | null
-  lines: JournalLine[]
+  is_reversal: boolean
+  /** Total des débits. Dans une écriture équilibrée, il vaut celui des crédits. */
+  total: number
+  /** Nom de l'auteur — CO art. 957a al. 2 ch. 5. */
+  author: string
   created_at: string
+  updated_at: string
+}
+
+/** Une ligne du DÉTAIL (GET /journal/:id), avec le compte en clair. */
+export interface JournalLineView {
+  id: string
+  account_id: string
+  account_code: string
+  account_name: string
+  debit_amount: number
+  credit_amount: number
+  description: string
+  sequence: number
+}
+
+export interface JournalEntryDetail {
+  entry: JournalEntry
+  lines: JournalLineView[]
+  /** Vide tant que l'écriture est un brouillon : rien ne la scelle encore. */
+  integrity_hash: string
+}
+
+/** Une ligne envoyée au serveur. Le compte se désigne par son NUMÉRO. */
+export interface JournalLineCreate {
+  account_code: string
+  debit_amount?: number
+  credit_amount?: number
+  description?: string
+  sequence?: number
 }
 
 export interface JournalEntryCreate {
   date: string
   description: string
   lines: JournalLineCreate[]
-  reference?: string
-}
-
-export interface JournalLineCreate {
-  debit_account?: string
-  credit_account?: string
-  amount: number
-  currency?: string
-  description?: string
-  vat_code?: string
 }
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────

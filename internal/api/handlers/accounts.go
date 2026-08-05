@@ -128,11 +128,23 @@ func (h *AccountsHandler) TrialBalance(c *gin.Context) {
 		}
 	}
 
+	// Les brouillons NE COMPTENT PAS.
+	//
+	// La condition `je.status = 'posted'` est portée par une jointure EXTERNE :
+	// elle décide si l'écriture est rattachée, pas si la ligne est retenue. Une
+	// ligne appartenant à un brouillon survivait donc à la jointure avec `je`
+	// à NULL, et sa somme entrait quand même dans la balance. Vérifié sur un
+	// serveur réel : un brouillon jamais comptabilisé apparaissait à la balance,
+	// au bilan et au compte de résultat — c'est-à-dire dans des états qui ne
+	// doivent contenir que des écritures scellées (CO art. 957a, 958).
+	//
+	// Le CASE rétablit la règle sans transformer la jointure en jointure
+	// interne : un compte sans mouvement doit rester présent, à zéro.
 	baseQuery := `
 		SELECT
 		    a.id, a.code, a.name, a.account_type,
-		    COALESCE(SUM(jl.debit_amount), 0)  AS total_debit,
-		    COALESCE(SUM(jl.credit_amount), 0) AS total_credit
+		    COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.debit_amount  END), 0) AS total_debit,
+		    COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.credit_amount END), 0) AS total_credit
 		FROM accounts a
 		LEFT JOIN journal_lines jl ON jl.account_id = a.id
 		LEFT JOIN journal_entries je ON je.id = jl.entry_id AND je.status = 'posted'`

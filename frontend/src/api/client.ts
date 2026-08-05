@@ -127,6 +127,9 @@ export const journalApi = {
     date_from?: string; date_to?: string
     status?: string; reference?: string
   }) => api.get('/journal', { params }),
+  // Le détail avec ses lignes : la liste ne rend qu'un total, et une écriture
+  // qu'on ne peut pas relire ne se contrôle pas.
+  get:    (id: string)     => api.get(`/journal/${id}`),
   create: (data: unknown)  => api.post('/journal', data),
   post:   (id: string)     => api.post(`/journal/${id}/post`),
 }

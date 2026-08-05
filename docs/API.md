@@ -111,13 +111,59 @@ de passe utilisable à quelqu'un qui n'a plus le droit d'entrer.
 
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
-| GET | `/accounts` | auth | Plan comptable |
-| POST | `/accounts` | auth | Créer un compte |
-| GET | `/accounts/trial-balance` | auth | Balance de vérification |
-| GET | `/accounts/:code/balance` | auth | Solde d'un compte |
-| GET | `/journal` | auth | Écritures du journal |
-| POST | `/journal` | auth | Créer une écriture (brouillon) |
-| POST | `/journal/:id/post` | auth | Valider une écriture — scellée par hachage (CO art. 957a) |
+| GET | `/accounts` | lecture | Plan comptable. Champs : `id`, `code`, `name`, `account_type`, `description`, `is_active` |
+| POST | `/accounts` | écriture comptable | Créer un compte |
+| GET | `/accounts/trial-balance` | lecture | Balance de vérification. Champs : `code`, `name`, `total_debit`, `total_credit`, `balance`. Optionnel : `as_of=AAAA-MM-JJ`. **Écritures comptabilisées uniquement** |
+| GET | `/accounts/:code/balance` | lecture | Solde d'un compte |
+| GET | `/journal` | lecture | Liste paginée. Filtres : `date_from`, `date_to`, `status`, `reference`, `page`, `page_size`. Chaque ligne porte son `total` (somme des débits) et l'`author` de l'écriture |
+| GET | `/journal/:id` | lecture | Détail : les lignes avec `account_code` et `account_name` en clair, plus `integrity_hash` — vide tant que l'écriture est un brouillon |
+| POST | `/journal` | écriture comptable | Créer une écriture (brouillon) |
+| POST | `/journal/:id/post` | écriture comptable | Comptabiliser — scellée par hachage (CO art. 957a) |
+
+### Créer une écriture
+
+Le compte se désigne par son **numéro** (`account_code`) ou par son identifiant
+(`account_id`). Le numéro est ce qu'un comptable a sous les yeux ; exiger
+l'identifiant obligeait chaque client à charger le plan comptable et à faire la
+traduction — ce qui a produit un formulaire qui répondait 422 à toute saisie.
+
+```json
+{
+  "date": "2026-08-05",
+  "description": "Vente comptant",
+  "lines": [
+    { "account_code": "1000", "debit_amount": 1076.50 },
+    { "account_code": "3200", "credit_amount": 1000.00 },
+    { "account_code": "2200", "credit_amount": 76.50, "description": "TVA 8.1%" }
+  ]
+}
+```
+
+Refus, tous en 422, et tous nommant la ligne en cause :
+
+| Cause | Message |
+|---|---|
+| Moins de deux lignes | « une écriture comporte au moins deux lignes : ce qui est débité et ce qui est crédité » |
+| Numéro inconnu | « ligne 1 : le compte 10 n'existe pas dans le plan comptable » |
+| Compte désactivé | « ligne 2 : le compte 1109 est désactivé » |
+| Ni débit ni crédit | « ligne 3 : ni débit ni crédit » |
+| Les deux à la fois | « ligne 1 : un compte est débité ou crédité, pas les deux » |
+| Montant négatif | « ligne 2 : un montant ne peut pas être négatif — inscrivez-le de l'autre côté » |
+| Déséquilibre | « l'écriture n'est pas équilibrée : débit 100.00, crédit 10.00, **écart 90.00** » |
+
+L'écart est donné parce qu'il désigne presque toujours la faute de frappe :
+90.00 sur 100.00 est un zéro oublié, 9.00 une décimale décalée.
+
+### Brouillon et écriture comptabilisée
+
+Un brouillon **ne compte nulle part** : ni à la balance, ni au bilan, ni au
+compte de résultat, et il ne porte aucune empreinte. `POST /journal/:id/post` le
+scelle dans la chaîne du CO art. 957a et le fait entrer dans les états. C'est
+irréversible : une correction se fait par contrepassation.
+
+Le journal n'est **pas** filtré sur l'auteur. Il doit être complet et se
+rapprocher de la balance (CO art. 957a al. 2 ch. 2 et 3) ; ce qui borne l'accès
+est le rôle, pas un filtre par créateur.
 
 ## Facturation
 

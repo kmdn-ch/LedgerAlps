@@ -18,8 +18,16 @@ type ErrNotDoubleEntry struct {
 	Credit float64
 }
 
+// Error dit l'ÉCART, pas seulement le refus.
+//
+// « vérifiez la partie double » oblige à recompter à la main une écriture de
+// dix lignes. Donner les deux totaux et leur différence désigne presque
+// toujours la faute de frappe : un écart de 90.00 sur un montant de 100.00 est
+// un zéro oublié, un écart de 9.00 une décimale décalée.
 func (e ErrNotDoubleEntry) Error() string {
-	return fmt.Sprintf("double-entry violation: debit %.2f ≠ credit %.2f (CO art. 957)", e.Debit, e.Credit)
+	return fmt.Sprintf(
+		"l'écriture n'est pas équilibrée : débit %.2f, crédit %.2f, écart %.2f (CO art. 957)",
+		e.Debit, e.Credit, abs(e.Debit-e.Credit))
 }
 
 // ErrAlreadyPosted is returned when trying to post an already-posted entry.

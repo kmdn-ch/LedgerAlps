@@ -127,8 +127,12 @@ func (h *ReportsHandler) BalanceSheet(c *gin.Context) {
 		    a.code,
 		    a.name,
 		    a.account_type,
-		    COALESCE(SUM(jl.debit_amount),  0) AS total_debit,
-		    COALESCE(SUM(jl.credit_amount), 0) AS total_credit
+		    -- Le CASE, et non la seule condition de jointure : celle-ci décide
+		    -- si l'écriture est RATTACHÉE, pas si la ligne est RETENUE. Une
+		    -- ligne de brouillon survivait à la jointure avec je à NULL et sa
+		    -- somme entrait au bilan. Vérifié sur un serveur réel.
+		    COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.debit_amount  END), 0) AS total_debit,
+		    COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.credit_amount END), 0) AS total_credit
 		FROM accounts a
 		LEFT JOIN journal_lines jl ON jl.account_id = a.id
 		LEFT JOIN journal_entries je
@@ -220,8 +224,10 @@ func (h *ReportsHandler) IncomeStatement(c *gin.Context) {
 		    a.code,
 		    a.name,
 		    a.account_type,
-		    COALESCE(SUM(jl.debit_amount),  0) AS total_debit,
-		    COALESCE(SUM(jl.credit_amount), 0) AS total_credit
+		    -- Même correction qu'au bilan : sans le CASE, un brouillon jamais
+		    -- comptabilisé gonflait le résultat de l'exercice.
+		    COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.debit_amount  END), 0) AS total_debit,
+		    COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.credit_amount END), 0) AS total_credit
 		FROM accounts a
 		LEFT JOIN journal_lines jl ON jl.account_id = a.id
 		LEFT JOIN journal_entries je

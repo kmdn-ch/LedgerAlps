@@ -7,6 +7,38 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Corrigé
+
+- **Le bilan et le compte de résultat comptaient les brouillons.** Une écriture jamais comptabilisée — donc scellée par rien, et modifiable — apparaissait dans la balance de vérification, au bilan et au compte de résultat. La condition `status = 'posted'` était portée par une jointure **externe**, qui décide si l'écriture est *rattachée* et non si la ligne est *retenue* : les lignes de brouillon survivaient à la jointure et leurs montants entraient dans les totaux.
+
+  Vérifié sur un serveur réel avant et après : un brouillon de CHF 100 produisait un actif de CHF 100 au bilan et CHF 100 de produits au compte de résultat, avec un bilan déséquilibré par construction. C'est le défaut le plus grave des trois, parce qu'il ne se voyait pas — les états s'affichaient normalement, simplement faux. Trois tests le tiennent désormais fermé.
+
+- **Le journal ne fonctionnait pas — trois défauts indépendants, chacun suffisant.**
+
+  *La liste ne demandait rien au serveur.* Sa source était une promesse résolue sur un tableau vide, vestige de maquette : le journal restait vide même après une écriture réussie.
+
+  *Le formulaire parlait une autre langue que l'API.* Il envoyait `debit_account` / `credit_account` / `amount` là où le serveur attend un compte et un montant au débit ou au crédit, et une seule ligne là où une écriture en comporte au moins deux. **Chaque enregistrement répondait 422**, quelle que soit la saisie.
+
+  *Le message d'erreur accusait toujours la partie double.* Un numéro de compte inexistant, une date mal formée, un montant manquant : tout devenait « vérifiez la partie double ». Un avertissement qui se trompe de cause est pire qu'aucun.
+
+- **La page Plan comptable lisait des champs que le serveur n'envoie pas.** La colonne des numéros lisait `number` là où l'API rend `code` : elle était **vide** sur les quatre-vingt-un comptes. La balance de vérification lisait `account_number`, `debit`, `credit` là où l'API rend `code`, `total_debit`, `total_credit` : chaque colonne affichait « — », et la ligne « Équilibrée ✓ » ne pouvait jamais apparaître puisqu'elle cherchait un total que le serveur ne rend pas. Les types TypeScript décrivaient fidèlement une API qui n'existait plus, donc rien ne pouvait le signaler à la compilation.
+
+- **Le journal se filtrait sur son auteur.** La liste ne montrait à un non-administrateur que les écritures qu'il avait lui-même créées, sous couvert de minimisation des données. C'est un contresens comptable : le journal doit être complet et se rapprocher de la balance (CO art. 957a al. 2 ch. 2 et 3). Deux personnes travaillant sur les mêmes livres voyaient deux journaux différents, tous deux en désaccord avec le bilan. Ce qui protège ici est le rôle, pas un filtre — et la minimisation nLPD porte sur les données personnelles, pas sur des pièces que la loi oblige à conserver dix ans.
+
+### Ajouté
+
+- **Le journal, réellement utilisable.** Les comptes se désignent par leur **numéro** — « 1000 », « 3200 » — et non plus par un identifiant interne que personne ne connaît ; le nom du compte s'affiche sous le champ pendant la frappe, et un numéro inconnu est signalé avant l'envoi. Les totaux débit et crédit se calculent en direct avec l'écart s'il y en a un. Un débit et un crédit sur la même ligne forment une écriture simple ; laisser un côté vide permet une ventilation (une vente répartie entre produit et TVA, par exemple).
+
+  La liste rend le **montant** et l'**auteur** de chaque écriture — la traçabilité du CO art. 957a al. 2 ch. 5 devient lisible plutôt qu'affirmée. Une ligne se déplie sur son détail : chaque compte en clair, débit, crédit, libellé, et l'**empreinte** qui la scelle. Un brouillon n'en porte aucune, et l'écran le dit : « rien ne la scelle et elle ne compte ni à la balance, ni au bilan, ni au compte de résultat ».
+
+  La comptabilisation passe par une confirmation qui énonce ce qu'elle fait — scellement irréversible, entrée dans les états, correction par contrepassation seulement.
+
+- **Les refus disent ce qui ne va pas.** « ligne 1 : le compte 10 n'existe pas dans le plan comptable » plutôt que 422 muet. « l'écriture n'est pas équilibrée : débit 100.00, crédit 10.00, **écart 90.00** » plutôt que « vérifiez la partie double » — un écart de 90.00 sur 100.00 désigne le zéro oublié. Sont aussi refusés : un compte à la fois débité et crédité sur la même ligne (l'écriture s'équilibrerait en s'annulant, laissant deux mouvements fantômes) et un montant négatif (la contrepartie s'écrit de l'autre côté, pas avec un signe).
+
+- **La balance de vérification, en état de servir.** Elle masque par défaut les comptes sans mouvement — soixante-dix-huit lignes à zéro noient le contrôle — avec un repli pour la vue complète que demande une fiduciaire. Le total est calculé et l'équilibre annoncé. Un écart, qui ne devrait jamais survenir puisque le serveur refuse toute écriture déséquilibrée, est traité comme un défaut d'intégrité et renvoie vers la vérification et la sauvegarde, plutôt qu'affiché comme un nombre au milieu d'un tableau.
+
+- `GET /journal/:id` — le détail d'une écriture avec ses lignes, les comptes en clair et l'empreinte d'intégrité.
+
 ### Sécurité
 
 - **Le compte administrateur est protégé par un second facteur (code à usage unique, TOTP — RFC 6238).** Un compte administrateur peut créer des comptes, restaurer une sauvegarde, déverrouiller une période et déchiffrer la base. Jusqu'ici, un mot de passe seul l'en séparait — réutilisé sur un autre site, deviné, lu par-dessus l'épaule, il suffisait.

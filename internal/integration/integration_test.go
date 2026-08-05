@@ -80,8 +80,9 @@ func newTestServer(t *testing.T) (*gin.Engine, *sql.DB, *config.Config) {
 	accountingSvc := accounting.New(database, false)
 
 	jh := handlers.NewJournalHandler(database, false)
-	jwh := handlers.NewJournalWriteHandler(accountingSvc)
+	jwh := handlers.NewJournalWriteHandler(accountingSvc, database, false)
 	api.GET("/journal", jh.ListJournal)
+	api.GET("/journal/:id", jh.GetJournalEntry)
 	api.POST("/journal", jwh.CreateEntry)
 	api.POST("/journal/:id/post", jwh.PostEntry)
 

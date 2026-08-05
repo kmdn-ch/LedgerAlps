@@ -274,10 +274,11 @@ func main() {
 
 	// Journal
 	jh := handlers.NewJournalHandler(database, cfg.UsePostgres())
-	jwh := handlers.NewJournalWriteHandler(accountingSvc)
+	jwh := handlers.NewJournalWriteHandler(accountingSvc, database, cfg.UsePostgres())
 	api.GET("/journal", jh.ListJournal)
-	api.POST("/journal", jwh.CreateEntry)
-	api.POST("/journal/:id/post", jwh.PostEntry)
+	api.GET("/journal/:id", jh.GetJournalEntry)
+	api.POST("/journal", authorizer.Require(authz.PermWriteAccounting), jwh.CreateEntry)
+	api.POST("/journal/:id/post", authorizer.Require(authz.PermWriteAccounting), jwh.PostEntry)
 
 	// Accounts
 	ah := handlers.NewAccountsHandler(database, cfg.UsePostgres())

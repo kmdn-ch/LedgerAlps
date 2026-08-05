@@ -71,6 +71,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 5 | HTTPS natif | 🔎 réseau à valider | [↓](#5--https-natif) |
 | 6 | Rotation du secret de signature | ✅ | [↓](#6--rotation-du-secret-de-signature) |
 | 7 | Maintenance & Système | ✅ conforme | [↓](#7--maintenance--système) |
+| 7b | Journal et plan comptable | 🔎 réparés | [↓](#7b--journal-et-plan-comptable) |
 | 8 | Notes de crédit — écriture au journal | 🔎 livré, éteint par défaut | [↓](#8--notes-de-crédit--écriture-au-journal) |
 | 9 | Multi-utilisateurs & permissions | 🔎 livré | [↓](#9--multi-utilisateurs--permissions) |
 | 9b | Second facteur & réinitialisation d'accès | 🔎 livré | [↓](#9b--second-facteur--réinitialisation-daccès) |
@@ -244,6 +245,42 @@ ces points, et une déclaration TVA se dépose valablement à la main :
 ⚠️ **Le recalcul des soldes reste volontairement absent.** Cet écran montre, il
 ne répare pas : une comptabilité incohérente se corrige par une écriture, pas par
 un bouton — réparer en silence effacerait la trace (CO art. 957a al. 2 ch. 5).
+
+### 7b — Journal et plan comptable
+
+**Réparés.** Ces deux écrans ne fonctionnaient pas — pas à moitié, pas du tout —
+et l'un des défauts touchait les états financiers eux-mêmes.
+
+**Le plus grave : les brouillons comptaient.** Une écriture jamais
+comptabilisée, donc scellée par rien et encore modifiable, apparaissait dans la
+balance, au bilan et au compte de résultat. La condition `status = 'posted'`
+était portée par une jointure externe, qui décide si l'écriture est *rattachée*
+et non si la ligne est *retenue*. Les états s'affichaient normalement, simplement
+faux. Vérifié sur un serveur réel avant et après ; trois tests le tiennent
+fermé.
+
+**Le journal ne pouvait rien enregistrer.** Le formulaire envoyait
+`debit_account` / `credit_account` / `amount` là où l'API attend un compte et un
+montant au débit ou au crédit, et une seule ligne là où une écriture en comporte
+au moins deux : chaque saisie répondait 422. La liste, elle, ne demandait rien au
+serveur — sa source était un tableau vide en dur.
+
+**Le plan comptable lisait des champs inexistants.** La colonne des numéros
+lisait `number` là où l'API rend `code` : vide sur les quatre-vingt-un comptes.
+La balance lisait `account_number` / `debit` / `credit` : entièrement à « — ».
+Les types TypeScript décrivaient fidèlement une API qui n'existait plus, donc
+rien ne pouvait le signaler à la compilation.
+
+**Ce qui a été livré au passage** : les comptes se désignent par leur numéro avec
+le nom affiché pendant la frappe ; les totaux et l'écart se calculent en direct ;
+la liste rend le montant et l'auteur ; une ligne se déplie sur son détail avec
+l'empreinte qui la scelle ; les refus nomment la ligne et la cause, écart
+compris. La balance masque les comptes sans mouvement, calcule son total et
+annonce l'équilibre.
+
+**Reste** : le journal ne se filtre pas encore par date ou par compte depuis
+l'interface — l'API le permet déjà. À faire quand un dossier réel comptera
+assez d'écritures pour que ce soit gênant.
 
 ### 8 — Notes de crédit — écriture au journal
 

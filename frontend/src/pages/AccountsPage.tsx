@@ -1,12 +1,35 @@
 // LedgerAlps — Plan comptable et balance de vérification
+//
+// Cette page lisait des champs que le serveur n'envoie pas.
+//
+// La colonne des numéros lisait `number` là où l'API rend `code` : elle était
+// donc VIDE sur les quatre-vingt-un comptes. La balance lisait
+// `account_number`, `account_name`, `debit`, `credit` là où l'API rend `code`,
+// `name`, `total_debit`, `total_credit` : chaque colonne affichait « — », et le
+// total « Équilibrée ✓ » ne pouvait jamais apparaître puisque la ligne TOTAL
+// qu'elle cherchait n'existe pas côté serveur — elle se calcule ici.
+//
+// TypeScript ne pouvait rien signaler : les types décrivaient fidèlement une
+// API qui n'existait plus. Le défaut ne se voyait qu'à l'écran.
+//
+// # À quoi sert cette page
+//
+// Le plan comptable est le dictionnaire du journal : sans lui, on ne sait pas
+// qu'une vente de services se crédite au 3200. La balance de vérification est
+// le document de contrôle — la seule vue qui prouve que débit = crédit sur
+// l'ensemble des livres, et le premier que demande une fiduciaire. Les deux
+// portent sur des écritures COMPTABILISÉES : un brouillon n'y figure pas.
+//
+// On n'y crée pas de compte. Le plan PME suisse est normalisé, et inventer un
+// numéro fausserait les états qui regroupent par tranche.
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen } from 'lucide-react'
+import { BookOpen, Scale } from 'lucide-react'
 import { accountsApi } from '@/api/client'
-import { PageHeader, LoadingSpinner, EmptyState } from '@/components/ui'
+import { PageHeader, LoadingSpinner, EmptyState, ErrorBanner } from '@/components/ui'
 import { formatCHF } from '@/utils'
-import type { Account, AccountBalance } from '@/types'
+import type { Account, TrialBalanceLine } from '@/types'
 
 const TYPE_LABELS: Record<string, string> = {
   asset:     'Actif',
@@ -16,52 +39,54 @@ const TYPE_LABELS: Record<string, string> = {
   expense:   'Charges',
 }
 
-const TYPE_COLOR: Record<string, string> = {
-  asset:     'text-blue-700 bg-blue-50',
-  liability: 'text-purple-700 bg-purple-50',
-  equity:    'text-emerald-700 bg-emerald-50',
-  revenue:   'text-green-700 bg-green-50',
-  expense:   'text-red-700 bg-red-50',
-}
+// L'ordre du plan comptable suisse, et non l'ordre d'arrivée : « Actif, Passif,
+// Capitaux propres, Produits, Charges » est celui qu'on lit et qu'on apprend.
+const TYPE_ORDER = ['asset', 'liability', 'equity', 'revenue', 'expense']
 
 export function AccountsPage() {
   const [view, setView] = useState<'accounts' | 'balance'>('accounts')
+  // Quatre-vingt-un comptes dont trois bougent : montrer les soixante-dix-huit
+  // autres à zéro noie le contrôle. Le repli reste possible — une balance
+  // complète est ce qu'une fiduciaire demande.
+  const [tousLesComptes, setTousLesComptes] = useState(false)
 
-  const { data: accounts = [], isLoading: accLoading } = useQuery<Account[]>({
+  const accounts = useQuery<Account[]>({
     queryKey: ['accounts'],
     queryFn:  () => accountsApi.list().then(r => r.data),
-    enabled:  view === 'accounts',
   })
 
-  const { data: balance = [], isLoading: balLoading } = useQuery<AccountBalance[]>({
+  const balance = useQuery<TrialBalanceLine[]>({
     queryKey: ['trial-balance'],
     queryFn:  () => accountsApi.trialBalance().then(r => r.data),
     enabled:  view === 'balance',
   })
 
-  // Grouper les comptes par type
-  const grouped = accounts.reduce<Record<string, Account[]>>((acc, a) => {
-    const t = a.account_type
-    if (!acc[t]) acc[t] = []
-    acc[t].push(a)
-    return acc
-  }, {})
+  const grouped = useMemo(() => {
+    const g: Record<string, Account[]> = {}
+    for (const a of accounts.data ?? []) {
+      (g[a.account_type] ??= []).push(a)
+    }
+    return g
+  }, [accounts.data])
 
-  const totalRow = balance.find(b => b.account_number === 'TOTAL')
-  const balanceRows = balance.filter(b => b.account_number !== 'TOTAL')
+  const lignes = balance.data ?? []
+  const avecMouvement = lignes.filter(l => l.total_debit !== 0 || l.total_credit !== 0)
+  const affichees = tousLesComptes ? lignes : avecMouvement
+
+  // Le total se calcule ici : le serveur rend des lignes, pas un pied de
+  // tableau. Dans des livres cohérents, débit et crédit sont égaux — c'est
+  // exactement ce que la balance sert à vérifier.
+  const totalDebit  = lignes.reduce((s, l) => s + l.total_debit, 0)
+  const totalCredit = lignes.reduce((s, l) => s + l.total_credit, 0)
+  const ecart = Math.round((totalDebit - totalCredit) * 100) / 100
 
   return (
     <div>
       <PageHeader
         title="Plan comptable"
         subtitle="PME suisse — CO art. 957"
-        actions={
-          <div className="flex gap-2">
-          </div>
-        }
       />
 
-      {/* Tabs */}
       <div className="flex gap-1 mb-5 bg-alpine-100 rounded-lg p-1 w-fit">
         {[
           { key: 'accounts', label: 'Plan comptable' },
@@ -81,11 +106,21 @@ export function AccountsPage() {
         ))}
       </div>
 
-      {/* Plan comptable */}
+      {/* ── Plan comptable ─────────────────────────────────────────────────── */}
       {view === 'accounts' && (
         <div className="space-y-5">
-          {accLoading && <LoadingSpinner />}
-          {Object.entries(grouped).map(([type, accs]) => (
+          {accounts.isLoading && <LoadingSpinner />}
+          {accounts.isError && <ErrorBanner message="Le plan comptable n'a pas pu être lu." />}
+
+          {!accounts.isLoading && (accounts.data?.length ?? 0) > 0 && (
+            <p className="text-sm text-alpine-600">
+              Ces numéros sont ceux à saisir dans le journal. Le plan est celui des PME suisses ;
+              il n&rsquo;est pas modifiable depuis l&rsquo;interface, car les états financiers
+              regroupent les comptes par tranche de numéro.
+            </p>
+          )}
+
+          {TYPE_ORDER.filter(t => grouped[t]?.length).map(type => (
             <div key={type} className="card">
               <div className="card-header">
                 <div className="flex items-center gap-2">
@@ -93,7 +128,7 @@ export function AccountsPage() {
                   <span className="font-semibold text-sm text-alpine-800">
                     {TYPE_LABELS[type] ?? type}
                   </span>
-                  <span className="badge badge-draft">{accs.length} comptes</span>
+                  <span className="badge badge-draft">{grouped[type].length} comptes</span>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -102,23 +137,22 @@ export function AccountsPage() {
                     <tr>
                       <th style={{ width: '90px' }}>N°</th>
                       <th>Désignation</th>
-                      <th style={{ width: '120px' }}>Type</th>
+                      <th>Usage</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {accs.map(a => (
-                      <tr key={a.id}>
+                    {grouped[type].map(a => (
+                      <tr key={a.id} className={a.is_active ? '' : 'opacity-50'}>
                         <td>
-                          <span className="font-mono text-accent-700 font-medium">
-                            {a.number}
-                          </span>
+                          <span className="font-mono text-accent-700 font-medium">{a.code}</span>
                         </td>
-                        <td className="text-alpine-800">{a.name}</td>
-                        <td>
-                          <span className={`badge text-xs ${TYPE_COLOR[a.account_type] ?? 'badge-draft'}`}>
-                            {TYPE_LABELS[a.account_type] ?? a.account_type}
-                          </span>
+                        <td className="text-alpine-800">
+                          {a.name}
+                          {!a.is_active && (
+                            <span className="ml-2 text-xs text-alpine-500">(désactivé)</span>
+                          )}
                         </td>
+                        <td className="text-alpine-600 text-xs">{a.description || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -126,73 +160,112 @@ export function AccountsPage() {
               </div>
             </div>
           ))}
-          {!accLoading && accounts.length === 0 && (
+
+          {!accounts.isLoading && !accounts.isError && (accounts.data?.length ?? 0) === 0 && (
             <EmptyState
               title="Plan comptable vide"
-              description="Exécutez 'make seed' pour charger le plan comptable PME suisse."
+              description="Le plan PME suisse est normalement chargé au premier démarrage. Son absence signale une base incomplète : restaurez une sauvegarde ou signalez-le."
             />
           )}
         </div>
       )}
 
-      {/* Balance de vérification */}
+      {/* ── Balance de vérification ────────────────────────────────────────── */}
       {view === 'balance' && (
-        <div className="card">
-          <div className="table-wrapper">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th style={{ width: '90px' }}>Compte</th>
-                  <th>Désignation</th>
-                  <th className="text-right">Débit CHF</th>
-                  <th className="text-right">Crédit CHF</th>
-                  <th className="text-right">Solde CHF</th>
-                </tr>
-              </thead>
-              <tbody>
-                {balLoading && (
-                  <tr><td colSpan={5}><LoadingSpinner /></td></tr>
-                )}
-                {balanceRows.map(row => (
-                  <tr key={row.account_number}>
-                    <td>
-                      <span className="font-mono text-accent-700 font-medium">
-                        {row.account_number}
-                      </span>
-                    </td>
-                    <td className="text-alpine-800">{row.account_name}</td>
-                    <td className="text-right font-mono tabular-nums text-alpine-700">
-                      {parseFloat(row.debit) > 0 ? formatCHF(row.debit) : '—'}
-                    </td>
-                    <td className="text-right font-mono tabular-nums text-alpine-700">
-                      {parseFloat(row.credit) > 0 ? formatCHF(row.credit) : '—'}
-                    </td>
-                    <td className={`text-right font-mono tabular-nums font-medium ${
-                      parseFloat(row.balance) < 0 ? 'text-danger-700' : 'text-alpine-900'
-                    }`}>
-                      {formatCHF(row.balance)}
-                    </td>
-                  </tr>
-                ))}
-                {totalRow && (
-                  <tr className="bg-alpine-900 text-white font-semibold">
-                    <td className="font-mono">TOTAL</td>
-                    <td>Balance de vérification</td>
-                    <td className="text-right font-mono">{formatCHF(totalRow.debit)}</td>
-                    <td className="text-right font-mono">{formatCHF(totalRow.credit)}</td>
-                    <td className="text-right font-mono">
-                      {parseFloat(totalRow.balance) === 0
-                        ? <span className="text-success-500">Équilibrée ✓</span>
-                        : formatCHF(totalRow.balance)
-                      }
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-alpine-600 max-w-2xl">
+              Totaux des écritures <strong>comptabilisées</strong>. Les brouillons n&rsquo;y
+              figurent pas : ils ne sont scellés par rien et ne font pas encore partie des livres.
+            </p>
+            <label className="flex items-center gap-2 text-sm text-alpine-600 shrink-0">
+              <input type="checkbox" checked={tousLesComptes}
+                     onChange={e => setTousLesComptes(e.target.checked)} />
+              Montrer les comptes sans mouvement
+            </label>
           </div>
-          {!balLoading && balanceRows.length === 0 && (
-            <EmptyState title="Aucune écriture" description="Le journal est vide." />
+
+          <div className="card">
+            <div className="table-wrapper">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '90px' }}>Compte</th>
+                    <th>Désignation</th>
+                    <th className="text-right">Débit CHF</th>
+                    <th className="text-right">Crédit CHF</th>
+                    <th className="text-right">Solde CHF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {balance.isLoading && (
+                    <tr><td colSpan={5}><LoadingSpinner /></td></tr>
+                  )}
+                  {balance.isError && (
+                    <tr><td colSpan={5}>
+                      <ErrorBanner message="La balance n'a pas pu être lue." />
+                    </td></tr>
+                  )}
+                  {affichees.map(row => (
+                    <tr key={row.id}>
+                      <td>
+                        <span className="font-mono text-accent-700 font-medium">{row.code}</span>
+                      </td>
+                      <td className="text-alpine-800">{row.name}</td>
+                      <td className="text-right font-mono tabular-nums text-alpine-700">
+                        {row.total_debit > 0 ? formatCHF(row.total_debit) : '—'}
+                      </td>
+                      <td className="text-right font-mono tabular-nums text-alpine-700">
+                        {row.total_credit > 0 ? formatCHF(row.total_credit) : '—'}
+                      </td>
+                      <td className={`text-right font-mono tabular-nums font-medium ${
+                        row.balance < 0 ? 'text-danger-700' : 'text-alpine-900'
+                      }`}>
+                        {formatCHF(row.balance)}
+                      </td>
+                    </tr>
+                  ))}
+                  {!balance.isLoading && !balance.isError && affichees.length > 0 && (
+                    <tr className="bg-alpine-900 text-white font-semibold">
+                      <td className="font-mono">TOTAL</td>
+                      <td>Balance de vérification</td>
+                      <td className="text-right font-mono tabular-nums">{formatCHF(totalDebit)}</td>
+                      <td className="text-right font-mono tabular-nums">{formatCHF(totalCredit)}</td>
+                      <td className="text-right font-mono tabular-nums">
+                        {ecart === 0
+                          ? <span className="text-success-500">Équilibrée</span>
+                          : formatCHF(ecart)}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {!balance.isLoading && !balance.isError && avecMouvement.length === 0 && (
+              <EmptyState
+                title="Aucune écriture comptabilisée"
+                description="La balance se remplit à mesure que les écritures sont comptabilisées. Un brouillon n'y figure pas."
+              />
+            )}
+          </div>
+
+          {/* Un écart à la balance est un défaut d'intégrité, pas une erreur de
+              saisie : le serveur refuse toute écriture déséquilibrée. S'il
+              apparaît, il faut le dire clairement plutôt que d'afficher un
+              nombre au milieu d'un tableau. */}
+          {!balance.isLoading && affichees.length > 0 && ecart !== 0 && (
+            <div className="rounded-md border border-danger-500 bg-danger-500/5 px-4 py-3 text-sm">
+              <p className="font-medium flex items-center gap-1.5">
+                <Scale size={15} /> La balance ne s&rsquo;équilibre pas ({formatCHF(ecart)})
+              </p>
+              <p className="text-alpine-700 mt-1">
+                Cela ne devrait pas arriver : LedgerAlps refuse toute écriture dont le débit ne
+                vaut pas le crédit. Lancez la vérification d&rsquo;intégrité dans
+                Paramètres&nbsp;→&nbsp;Maintenance et conservez une copie de la base avant toute
+                autre opération.
+              </p>
+            </div>
           )}
         </div>
       )}
