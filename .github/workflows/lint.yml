@@ -30,6 +30,19 @@ jobs:
           # goinstall compiles golangci-lint with the installed Go toolchain (1.26),
           # so it can lint modules targeting go1.26 without version mismatch errors.
           install-mode: goinstall
+          # verify: false retire une dépendance RÉSEAU du build.
+          #
+          # L'étape « config verify » télécharge un schéma JSON depuis
+          # golangci-lint.run pour valider .golangci.yml. Le 5 août 2026, cette
+          # requête a expiré et le build a échoué sur un commit parfaitement
+          # sain — le même a réussi au réessai, sans qu'une ligne ait changé.
+          #
+          # Un build qui échoue parce qu'un site externe était lent apprend à
+          # réessayer plutôt qu'à lire l'échec, et c'est ainsi qu'on finit par
+          # ignorer un vrai échec. La contrepartie est mince : une erreur dans
+          # ce fichier se manifeste de toute façon au lancement des linters,
+          # une seconde plus tard.
+          verify: false
           args: --timeout=5m --config=.golangci.yml
 
   mod-check:
