@@ -276,11 +276,11 @@ type p1CdOrPrtry struct {
 // présente pas dans le produit tel qu'il est, et le supposer réglé serait pire
 // que ne pas le traiter.
 func paymentTypeInfo(txs []CreditTransfer) *p1PmtTpInf {
-	for _, t := range txs {
-		if strings.EqualFold(t.Currency, "EUR") {
-			return &p1PmtTpInf{SvcLvl: &p1SvcLvl{Cd: "SEPA"}}
-		}
-		break
+	if len(txs) == 0 {
+		return nil
+	}
+	if strings.EqualFold(txs[0].Currency, "EUR") {
+		return &p1PmtTpInf{SvcLvl: &p1SvcLvl{Cd: "SEPA"}}
 	}
 	return nil
 }
