@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -30,13 +31,24 @@ type Pain001Request struct {
 
 // CreditTransfer represents one outgoing payment.
 type CreditTransfer struct {
-	EndToEndID    string  // invoice number or unique reference
-	CreditorName  string
-	CreditorIBAN  string
-	Amount        float64
-	Currency      string // CHF or EUR
-	Reference     string // QRR ref or free text
-	Unstructured  string // optional free message
+	EndToEndID   string // invoice number or unique reference
+	CreditorName string
+	CreditorIBAN string
+	Amount       float64
+	Currency     string // CHF or EUR
+	Reference    string // référence structurée : QR à 27 chiffres, ou ISO 11649
+	// ReferenceType dit COMMENT encoder la référence : « QRR » ou « SCOR ».
+	//
+	// La distinction n'est pas cosmétique. SCOR appartient à la liste de codes
+	// externes ISO 20022 et s'écrit dans <Cd> ; QRR est propre aux Swiss Payment
+	// Standards et s'écrit dans <Prtry>. Écrire QRR dans <Cd> — ce que faisait
+	// cette fonction — produit un document que les schémas ISO rejettent, parce
+	// que le code n'existe pas dans leur liste.
+	//
+	// Vide avec une Reference non vide vaut QRR, pour ne pas casser un appel
+	// existant.
+	ReferenceType string
+	Unstructured  string // motif en texte libre, quand il n'y a pas de référence
 }
 
 // GeneratePain001 returns a pain.001.001.09 XML document as bytes.
@@ -75,10 +87,20 @@ func GeneratePain001(req Pain001Request) ([]byte, error) {
 			CdtrAcct: p1Acct{ID: p1AcctID{IBAN: normalizeIBAN(t.CreditorIBAN)}},
 		}
 		if t.Reference != "" {
+			kind := t.ReferenceType
+			if kind == "" {
+				kind = "QRR"
+			}
+			cdOrPrtry := p1CdOrPrtry{Prtry: kind}
+			if kind == "SCOR" {
+				// SCOR figure dans la liste de codes externes ISO ; QRR n'y est
+				// pas et reste propriétaire.
+				cdOrPrtry = p1CdOrPrtry{Cd: kind}
+			}
 			txInfo.RmtInf = &p1RmtInf{
 				Strd: &p1Strd{
 					CdtrRefInf: p1CdtrRefInf{
-						Tp:  p1RefTp{CdOrPrtry: p1CdOrPrtry{Cd: "QRR"}},
+						Tp:  p1RefTp{CdOrPrtry: cdOrPrtry},
 						Ref: t.Reference,
 					},
 				},
@@ -105,9 +127,7 @@ func GeneratePain001(req Pain001Request) ([]byte, error) {
 				PmtMtd:   "TRF",
 				NbOfTxs:  len(req.Transactions),
 				CtrlSum:  fmt.Sprintf("%.2f", ctrlSum),
-				PmtTpInf: p1PmtTpInf{
-					SvcLvl: p1SvcLvl{Cd: "SEPA"},
-				},
+				PmtTpInf: paymentTypeInfo(req.Transactions),
 				ReqdExctnDt: p1ReqdExctnDt{
 					Dt: req.ExecutionDate.Format("2006-01-02"),
 				},
@@ -152,7 +172,7 @@ type p1PmtInf struct {
 	PmtMtd       string           `xml:"PmtMtd"`
 	NbOfTxs      int              `xml:"NbOfTxs"`
 	CtrlSum      string           `xml:"CtrlSum"`
-	PmtTpInf     p1PmtTpInf      `xml:"PmtTpInf"`
+	PmtTpInf     *p1PmtTpInf     `xml:"PmtTpInf,omitempty"`
 	ReqdExctnDt  p1ReqdExctnDt   `xml:"ReqdExctnDt"`
 	Dbtr         p1Party          `xml:"Dbtr"`
 	DbtrAcct     p1Acct           `xml:"DbtrAcct"`
@@ -160,8 +180,15 @@ type p1PmtInf struct {
 	CdtTrfTxInf  []p1CdtTrfTxInf `xml:"CdtTrfTxInf"`
 }
 
+// PmtTpInf est OMIS pour un virement suisse ordinaire.
+//
+// Le niveau de service « SEPA » ne concerne que les virements en euros dans
+// l'espace SEPA. L'annoncer sur un paiement en francs vers un IBAN suisse
+// décrit un service que l'opération n'utilise pas, et expose au rejet par la
+// banque destinataire du fichier. Il n'est donc posé que pour un virement en
+// euros.
 type p1PmtTpInf struct {
-	SvcLvl p1SvcLvl `xml:"SvcLvl"`
+	SvcLvl *p1SvcLvl `xml:"SvcLvl,omitempty"`
 }
 
 type p1SvcLvl struct {
@@ -237,7 +264,25 @@ type p1RefTp struct {
 }
 
 type p1CdOrPrtry struct {
-	Cd string `xml:"Cd"`
+	Cd    string `xml:"Cd,omitempty"`
+	Prtry string `xml:"Prtry,omitempty"`
+}
+
+// paymentTypeInfo n'annonce le niveau de service SEPA que s'il s'applique.
+//
+// Le lot est homogène en pratique — on paie ses fournisseurs suisses en francs —
+// et la première devise décide. Un lot mêlant francs et euros relèverait de deux
+// types de paiement distincts, ce qui demande deux fichiers ; le cas ne se
+// présente pas dans le produit tel qu'il est, et le supposer réglé serait pire
+// que ne pas le traiter.
+func paymentTypeInfo(txs []CreditTransfer) *p1PmtTpInf {
+	for _, t := range txs {
+		if strings.EqualFold(t.Currency, "EUR") {
+			return &p1PmtTpInf{SvcLvl: &p1SvcLvl{Cd: "SEPA"}}
+		}
+		break
+	}
+	return nil
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

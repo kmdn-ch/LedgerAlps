@@ -63,19 +63,20 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 
 | # | Sujet | État | Détail |
 |---|---|---|---|
-| 1 | Factures fournisseurs & charges | 🔎 backend | [↓](#1--factures-fournisseurs--charges) |
+| 1 | Factures fournisseurs & charges | 🔎 livré | [↓](#1--factures-fournisseurs--charges) |
+| 1b | Ordre de paiement pain.001 | 🔎 livré | [↓](#1b--ordre-de-paiement-pain001) |
 | 2 | Sauvegarde & restauration | ✅ | [↓](#2--sauvegarde--restauration) |
 | 3 | Limitation des tentatives de connexion | ✅ | — |
-| 4 | Chiffrement au repos | 🔎 sauvegardes · 🔎 base (option) · 🔎 conseil disque | [↓](#4--chiffrement-au-repos) |
-| 4b | Durée de vie des sessions | 🔎 inactivité + rotation automatique | [↓](#4b--durée-de-vie-des-sessions) |
+| 4 | Chiffrement au repos | ✅ | [↓](#4--chiffrement-au-repos) |
+| 4b | Durée de vie des sessions | ✅ | [↓](#4b--durée-de-vie-des-sessions) |
 | 5 | HTTPS natif | 🔎 réseau à valider | [↓](#5--https-natif) |
 | 6 | Rotation du secret de signature | ✅ | [↓](#6--rotation-du-secret-de-signature) |
 | 7 | Maintenance & Système | ✅ conforme | [↓](#7--maintenance--système) |
-| 7b | Journal et plan comptable | 🔎 réparés | [↓](#7b--journal-et-plan-comptable) |
+| 7b | Journal et plan comptable | ✅ | [↓](#7b--journal-et-plan-comptable) |
 | 8 | Notes de crédit — écriture au journal | 🔎 livré, éteint par défaut | [↓](#8--notes-de-crédit--écriture-au-journal) |
-| 9 | Multi-utilisateurs & permissions | 🔎 livré | [↓](#9--multi-utilisateurs--permissions) |
-| 9b | Second facteur & réinitialisation d'accès | 🔎 livré | [↓](#9b--second-facteur--réinitialisation-daccès) |
-| 10 | Rapprochement bancaire (interface) | 🔎 livré | [↓](#10--rapprochement-bancaire) |
+| 9 | Multi-utilisateurs & permissions | ✅ | [↓](#9--multi-utilisateurs--permissions) |
+| 9b | Second facteur & réinitialisation d'accès | ✅ | [↓](#9b--second-facteur--réinitialisation-daccès) |
+| 10 | Rapprochement bancaire (interface) | ✅ | [↓](#10--rapprochement-bancaire) |
 | 11 | eBill | ⛔ écarté — réseau fermé | [↓](#11--ebill) |
 | 12 | Validation contre le portail SIX | 🔎 dossier livré | [↓](#12--validation-contre-le-portail-six) |
 | 13 | Veille de conformité automatisée | ✅ | — |
@@ -87,12 +88,54 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 
 ### 1 — Factures fournisseurs & charges
 
-Backend livré : API, lignes multi-taux, garde anti-doublon. L'**impôt préalable**
-alimente le chiffre 400 de la déclaration ; il était figé à zéro, ce qui
-surévaluait la TVA due.
+**Livré.** L'API existait depuis longtemps — lignes multi-taux, garde
+anti-doublon, impôt préalable alimentant le chiffre 400 de la déclaration — mais
+sans interface : saisir une facture fournisseur demandait de forger une requête
+HTTP, c'est-à-dire que la fonction n'existait pas pour les gens à qui ce produit
+s'adresse. L'écran **Achats** la porte désormais.
 
-**Reste** : interface de saisie, écriture au journal à la comptabilisation
-(charge + TVA déductible / créanciers), notes de frais, pièces jointes.
+**L'écriture au journal manquait aussi.** Le statut « comptabilisée » l'annonçait
+depuis l'origine — le schéma dit « posted to the journal, counts for VAT » — mais
+rien ne l'écrivait : la charge n'entrait dans les livres que si quelqu'un la
+saisissait à la main, pendant que la TVA déductible alimentait déjà la
+déclaration. Les livres et la déclaration racontaient deux histoires. La
+comptabilisation écrit maintenant charge + TVA déductible au débit, créanciers au
+crédit, et scelle l'écriture. Vérifié sur un serveur réel : trois lignes, comptes
+6500 / 2262 / 2000, empreinte de 64 caractères.
+
+**Reste** : notes de frais et pièces jointes.
+
+### 1b — Ordre de paiement pain.001
+
+**Livré.** L'export existait, mais il fallait décrire chaque virement à la main
+dans un corps JSON — l'écran le disait sans détour : « exportez via l'API
+POST /api/v1/payments/export ». Autant dire que la fonction n'existait pas.
+
+L'écran **Achats** liste les factures fournisseurs comptabilisées, on coche
+celles à régler, et LedgerAlps produit le fichier XML à déposer dans l'e-banking.
+Rien ne sort de la machine : le fichier est téléchargé, pas transmis.
+
+**Les montants ne viennent pas du navigateur.** La sélection ne transmet que des
+identifiants ; le créancier, l'IBAN, le montant et la référence sont relus par le
+serveur dans les livres. C'est la différence entre « payer ces factures » et
+« virer ces sommes » — dans le second cas, une page web dicterait ce qui part à
+la banque.
+
+**Générer n'est pas payer.** Aucun statut ne bouge : la facture reste
+« comptabilisée » jusqu'à ce que le débit apparaisse au relevé, ce qu'établit le
+rapprochement camt.053 (point 10). Marquer « payée » à la génération affirmerait
+ce que rien ne soutient.
+
+**Deux corrections de conformité au passage.** Le niveau de service « SEPA »
+était annoncé sur tous les paiements, y compris en francs vers un IBAN suisse —
+il ne concerne que les virements en euros dans l'espace SEPA et exposait au
+rejet. Et la référence QR était écrite dans `<Cd>`, réservé à la liste de codes
+externes ISO où « QRR » ne figure pas ; elle passe en `<Prtry>`, `SCOR` restant
+en `<Cd>`. La règle QRR ⇔ QR-IBAN (SIX IG v2.4 §4.2.2) est vérifiée avant
+l'export : l'inadéquation entre référence et IBAN est la première cause de rejet
+bancaire, et le refus nomme la facture et le fournisseur à corriger.
+
+**Reste** : la confirmation par le portail de validation SIX (point 12).
 
 ### 2 — Sauvegarde & restauration
 

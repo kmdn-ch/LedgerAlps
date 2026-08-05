@@ -76,6 +76,14 @@ et la lecture est un accès par clé primaire : le coût est nul. Le jeton ne pr
 donc que l'identité — ce qu'un compte a le droit de faire se demande à la base,
 au moment où il le fait.
 
+**Ce qui part vers l'extérieur est relu dans les livres, jamais reçu du client.**
+L'ordre de paiement ne transmet que des identifiants de factures ; le créancier,
+l'IBAN, le montant et la référence sont relus côté serveur. Accepter des montants
+depuis le navigateur reviendrait à laisser une page web dicter ce qui part à la
+banque — un script injecté, une extension bavarde ou une erreur d'arrondi côté
+interface suffiraient. La règle vaut pour toute sortie de valeur : le client
+désigne, le serveur décide.
+
 **Les refus vivent au point de passage obligé, pas route par route.** Trois
 filtres globaux s'appliquent à tout le groupe authentifié : écriture interdite
 aux rôles en lecture seule, mot de passe temporaire à remplacer, second facteur à
@@ -89,6 +97,13 @@ Les seules routes montées **hors** du groupe filtré sont celles qui permettent
 sortir d'un de ces états : changement de mot de passe, inscription et
 vérification du second facteur. Les y inclure enfermerait le compte
 définitivement.
+
+**Toute route d'écriture déclare sa permission**, même lorsque le filtre global
+la couvrirait déjà. Les deux barrières attrapent des erreurs différentes : le
+filtre couvre la route qu'on oublie d'annoter, la permission déclarée couvre le
+rôle qui écrit sans en avoir le droit sur une route précise. Une fonction
+ajoutée plus tard doit donc rester inaccessible à un rôle en lecture seule sans
+que personne ait à y penser.
 
 **Migrations embarquées.** Les fichiers SQL sont compilés dans le binaire
 (`embed.FS`) et appliqués au démarrage, une transaction par migration.

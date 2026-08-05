@@ -4,22 +4,32 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/services/banking"
 	"github.com/kmdn-ch/ledgeralps/internal/services/iso20022"
 )
 
 // ISO20022Handler handles ISO 20022 payment generation and bank statement import.
 type ISO20022Handler struct {
-	// reconcile conserve les écritures analysées. Nil dans les tests qui
+	// reconcile conserve les ecritures analysees. Nil dans les tests qui
 	// n'exercent que la lecture du XML.
 	reconcile *banking.Service
+	// run construit les virements depuis les factures fournisseurs. Nil dans les
+	// tests qui n'exercent que la generation du XML.
+	run *PaymentRunHandler
 }
 
 func NewISO20022Handler() *ISO20022Handler { return &ISO20022Handler{} }
+
+// WithPaymentRun branche la selection de factures fournisseurs.
+func (h *ISO20022Handler) WithPaymentRun(run *PaymentRunHandler) *ISO20022Handler {
+	h.run = run
+	return h
+}
 
 // NewISO20022HandlerWithReconciliation branche la conservation des écritures.
 // Le constructeur sans service reste, pour les tests qui n'exercent que
@@ -31,27 +41,43 @@ func NewISO20022HandlerWithReconciliation(svc *banking.Service) *ISO20022Handler
 // ─── pain.001 — Credit Transfer Export ───────────────────────────────────────
 
 type pain001Transaction struct {
-	EndToEndID   string  `json:"end_to_end_id"  binding:"required"`
-	CreditorName string  `json:"creditor_name"  binding:"required"`
-	CreditorIBAN string  `json:"creditor_iban"  binding:"required"`
-	Amount       float64 `json:"amount"         binding:"required,gt=0"`
-	Currency     string  `json:"currency"`
-	Reference    string  `json:"reference"`    // QRR ref (structured)
-	Unstructured string  `json:"unstructured"` // free text
+	EndToEndID    string  `json:"end_to_end_id"  binding:"required"`
+	CreditorName  string  `json:"creditor_name"  binding:"required"`
+	CreditorIBAN  string  `json:"creditor_iban"  binding:"required"`
+	Amount        float64 `json:"amount"         binding:"required,gt=0"`
+	Currency      string  `json:"currency"`
+	Reference     string  `json:"reference"`      // reference structuree
+	ReferenceType string  `json:"reference_type"` // QRR ou SCOR
+	Unstructured  string  `json:"unstructured"`   // motif en texte libre
 }
 
+// pain001Request accepte DEUX formes.
+//
+// La forme historique decrit chaque virement a la main. Elle reste, pour les
+// integrations qui l'utilisent deja.
+//
+// La forme utile — celle de l'interface — ne transmet que des identifiants de
+// factures fournisseurs : le serveur relit lui-meme le creancier, l'IBAN, le
+// montant et la reference dans les livres. C'est la difference entre « payer ces
+// factures » et « virer ces sommes » : dans le second cas, un navigateur
+// compromis ou une erreur d'arrondi cote interface suffirait a changer un
+// montant qui part a la banque.
+//
+// Les champs du debiteur ne sont plus obligatoires : ils viennent de la fiche
+// entreprise, que personne ne devrait retaper a chaque paiement.
 type pain001Request struct {
-	ExecutionDate string               `json:"execution_date" binding:"required"` // YYYY-MM-DD
-	DebtorName    string               `json:"debtor_name"    binding:"required"`
-	DebtorIBAN    string               `json:"debtor_iban"    binding:"required"`
-	DebtorBIC     string               `json:"debtor_bic"`
-	Transactions  []pain001Transaction `json:"transactions"   binding:"required,min=1"`
+	ExecutionDate string `json:"execution_date" binding:"required"` // YYYY-MM-DD
+	DebtorName    string `json:"debtor_name"`
+	DebtorIBAN    string `json:"debtor_iban"`
+	DebtorBIC     string `json:"debtor_bic"`
+
+	SupplierInvoiceIDs []string             `json:"supplier_invoice_ids"`
+	Transactions       []pain001Transaction `json:"transactions"`
 }
 
 // ExportPain001 godoc
 // POST /api/v1/payments/export
-// Generates a pain.001.001.09 XML file for the given payment batch.
-// Returns application/xml as a download.
+// Generates a pain.001.001.09 XML file. Returns application/xml as a download.
 func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 	var req pain001Request
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -61,33 +87,77 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 
 	execDate, err := time.Parse("2006-01-02", req.ExecutionDate)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "execution_date must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "la date d'execution doit etre au format AAAA-MM-JJ"})
 		return
 	}
 
-	// Fall back to company env var if debtor name not provided per-request
-	if req.DebtorName == "" {
-		req.DebtorName = os.Getenv("COMPANY_NAME")
-	}
-	if req.DebtorIBAN == "" {
-		req.DebtorIBAN = os.Getenv("COMPANY_IBAN")
+	var txs []iso20022.CreditTransfer
+
+	switch {
+	case len(req.SupplierInvoiceIDs) > 0:
+		if h.run == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "payment run unavailable"})
+			return
+		}
+		built, err := h.run.buildRunTransactions(c.Request.Context(), req.SupplierInvoiceIDs)
+		if err != nil {
+			// Le refus nomme la facture et ce qui manque. Produire un fichier
+			// ampute laisserait croire que tout est paye, et le manque ne se
+			// decouvrirait qu'a la relance du fournisseur.
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+		txs = built
+		if req.DebtorName == "" || req.DebtorIBAN == "" {
+			name, iban := h.run.debtor(c.Request.Context())
+			if req.DebtorName == "" {
+				req.DebtorName = name
+			}
+			if req.DebtorIBAN == "" {
+				req.DebtorIBAN = iban
+			}
+		}
+
+	case len(req.Transactions) > 0:
+		txs = make([]iso20022.CreditTransfer, len(req.Transactions))
+		for i, t := range req.Transactions {
+			cur := t.Currency
+			if cur == "" {
+				cur = "CHF"
+			}
+			txs[i] = iso20022.CreditTransfer{
+				EndToEndID:    t.EndToEndID,
+				CreditorName:  t.CreditorName,
+				CreditorIBAN:  t.CreditorIBAN,
+				Amount:        t.Amount,
+				Currency:      cur,
+				Reference:     t.Reference,
+				ReferenceType: t.ReferenceType,
+				Unstructured:  t.Unstructured,
+			}
+		}
+
+	default:
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "aucune facture selectionnee"})
+		return
 	}
 
-	txs := make([]iso20022.CreditTransfer, len(req.Transactions))
-	for i, t := range req.Transactions {
-		cur := t.Currency
-		if cur == "" {
-			cur = "CHF"
-		}
-		txs[i] = iso20022.CreditTransfer{
-			EndToEndID:   t.EndToEndID,
-			CreditorName: t.CreditorName,
-			CreditorIBAN: t.CreditorIBAN,
-			Amount:       t.Amount,
-			Currency:     cur,
-			Reference:    t.Reference,
-			Unstructured: t.Unstructured,
-		}
+	// L'IBAN de l'entreprise est verifie AVANT la generation : sans lui, le
+	// generateur echoue sur un message technique, alors que la correction est
+	// dans Parametres -> Entreprise.
+	if strings.TrimSpace(req.DebtorIBAN) == "" {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "l'IBAN de votre entreprise n'est pas renseigne (Parametres -> Entreprise) : " +
+				"aucun ordre de paiement ne peut etre produit sans compte a debiter"})
+		return
+	}
+	if err := compliance.ValidateIBAN(req.DebtorIBAN); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": fmt.Sprintf("l'IBAN de votre entreprise n'est pas valide (%v) — "+
+				"corrigez-le dans Parametres -> Entreprise", err)})
+		return
 	}
 
 	xmlBytes, err := iso20022.GeneratePain001(iso20022.Pain001Request{
@@ -102,7 +172,7 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 		return
 	}
 
-	filename := fmt.Sprintf("pain001-%s.xml", req.ExecutionDate)
+	filename := fmt.Sprintf("paiements-%s.xml", req.ExecutionDate)
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	c.Data(http.StatusOK, "application/xml; charset=UTF-8", xmlBytes)
 }

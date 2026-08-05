@@ -454,7 +454,7 @@ export function InvoiceDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
         {/* Résumé financier */}
-        <div className="lg:col-span-2 card">
+        <div className="lg:col-span-2 card card-pad">
           <SectionTitle>Montants</SectionTitle>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between text-alpine-600">
@@ -485,7 +485,7 @@ export function InvoiceDetailPage() {
         </div>
 
         {/* Infos facture */}
-        <div className="card space-y-3">
+        <div className="card card-pad space-y-3">
           <SectionTitle>Informations</SectionTitle>
           <dl className="text-sm space-y-2">
             <div className="flex justify-between">
@@ -513,7 +513,7 @@ export function InvoiceDetailPage() {
       </div>
 
       {/* Lignes de facture */}
-      <div className="card mb-6">
+      <div className="card card-pad mb-6">
         <SectionTitle>Lignes</SectionTitle>
         <div className="table-wrapper">
           <table className="table">
@@ -553,13 +553,13 @@ export function InvoiceDetailPage() {
       {(invoice.notes || invoice.terms) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           {invoice.notes && (
-            <div className="card">
+            <div className="card card-pad">
               <SectionTitle>Remarques</SectionTitle>
               <p className="text-sm text-alpine-600 whitespace-pre-line">{invoice.notes}</p>
             </div>
           )}
           {invoice.terms && (
-            <div className="card">
+            <div className="card card-pad">
               <SectionTitle>Conditions</SectionTitle>
               <p className="text-sm text-alpine-600 whitespace-pre-line">{invoice.terms}</p>
             </div>

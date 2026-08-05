@@ -4,7 +4,7 @@ import { NavLink } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard, FileText, Users, BookOpen,
-  BarChart3, Settings, LogOut, Mountain, ArrowLeftRight,
+  BarChart3, Settings, LogOut, Mountain, ArrowLeftRight, ShoppingCart,
 } from 'lucide-react'
 import { cn } from '@/utils'
 import { useAuthStore } from '@/store/auth'
@@ -18,6 +18,9 @@ const NAV = [
   // l'impression de deux registres séparés, qu'ils ne sont pas — une offre
   // acceptée devient une facture, et les deux se citent.
   { to: '/invoices',  icon: FileText,        label: 'Facturation'     },
+  // Les achats vivent à côté de la facturation : ce sont les deux sens du
+  // même flux, et payer un fournisseur commence par saisir sa facture.
+  { to: '/purchases', icon: ShoppingCart,    label: 'Achats'          },
   { to: '/contacts',  icon: Users,           label: 'Contacts'        },
   { to: '/journal',   icon: ArrowLeftRight,  label: 'Journal'         },
   { to: '/accounts',  icon: BookOpen,        label: 'Plan comptable'  },

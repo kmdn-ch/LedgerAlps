@@ -8,6 +8,7 @@ import { InvoicesPage }   from '@/pages/InvoicesPage'
 import { NewInvoicePage } from '@/pages/NewInvoicePage'
 import { ContactsPage }   from '@/pages/ContactsPage'
 import { AccountsPage }   from '@/pages/AccountsPage'
+import { PurchasesPage }  from '@/pages/PurchasesPage'
 import { JournalPage }    from '@/pages/JournalPage'
 import { ReportsPage }    from '@/pages/ReportsPage'
 import { SettingsPage }   from '@/pages/SettingsPage'
@@ -112,6 +113,7 @@ export const router = createBrowserRouter([
       { path: 'invoices/:invoiceId',      element: <InvoiceDetailPage /> },
       { path: 'invoices/:invoiceId/edit', element: <EditInvoicePage   /> },
       { path: 'quotes',       element: <InvoicesPage mode="quote" /> },
+      { path: 'purchases',    element: <PurchasesPage  /> },
       { path: 'contacts',                element: <ContactsPage      /> },
       { path: 'contacts/:contactId',     element: <ContactDetailPage /> },
       { path: 'accounts',     element: <AccountsPage   /> },

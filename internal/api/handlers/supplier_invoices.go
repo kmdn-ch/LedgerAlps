@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
 // SupplierInvoicesHandler manages received supplier invoices (factures d'achat).
@@ -20,10 +22,19 @@ import (
 type SupplierInvoicesHandler struct {
 	db          *sql.DB
 	usePostgres bool
+	// accountingSvc ecrit au journal a la comptabilisation. Nil dans les tests
+	// qui n'exercent que la saisie.
+	accountingSvc *accounting.Service
 }
 
 func NewSupplierInvoicesHandler(database *sql.DB, usePostgres bool) *SupplierInvoicesHandler {
 	return &SupplierInvoicesHandler{db: database, usePostgres: usePostgres}
+}
+
+// WithAccounting branche l'ecriture au journal a la comptabilisation.
+func (h *SupplierInvoicesHandler) WithAccounting(svc *accounting.Service) *SupplierInvoicesHandler {
+	h.accountingSvc = svc
+	return h
 }
 
 // supplierInvoiceStatuses are the permitted status values.
@@ -58,8 +69,14 @@ type supplierInvoice struct {
 	VATRate            float64               `json:"vat_rate"`
 	AmountPaid         float64               `json:"amount_paid"`
 	ExpenseAccountCode string                `json:"expense_account_code,omitempty"`
-	Notes              string                `json:"notes,omitempty"`
-	CreatedAt          time.Time             `json:"created_at"`
+	// PaymentReference est la reference du bulletin de versement — celle qui
+	// voyage dans l'ordre de virement pour que le fournisseur rapproche
+	// l'encaissement. A ne pas confondre avec SupplierReference, qui est le
+	// numero de la facture chez lui.
+	PaymentReference string    `json:"payment_reference,omitempty"`
+	JournalEntryID   string    `json:"journal_entry_id,omitempty"`
+	Notes            string    `json:"notes,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
 	Lines              []supplierInvoiceLine `json:"lines,omitempty"`
 }
 
@@ -70,6 +87,7 @@ type createSupplierInvoiceRequest struct {
 	DueDate            string                `json:"due_date"`
 	Currency           string                `json:"currency"`
 	ExpenseAccountCode string                `json:"expense_account_code"`
+	PaymentReference   string                `json:"payment_reference"`
 	Notes              string                `json:"notes"`
 	Lines              []supplierInvoiceLine `json:"lines"              binding:"required,min=1,dive"`
 }
@@ -146,6 +164,7 @@ func (h *SupplierInvoicesHandler) ListSupplierInvoices(c *gin.Context) {
 		       si.issue_date, COALESCE(si.due_date, ''), si.currency,
 		       si.subtotal_amount, si.vat_amount, si.total_amount, si.vat_rate,
 		       si.amount_paid, COALESCE(si.expense_account_code, ''),
+		       COALESCE(si.payment_reference, ''), COALESCE(si.journal_entry_id, ''),
 		       COALESCE(si.notes, ''), si.created_at
 		FROM supplier_invoices si
 		LEFT JOIN contacts ct ON ct.id = si.supplier_id`+where+`
@@ -195,6 +214,7 @@ func (h *SupplierInvoicesHandler) GetSupplierInvoice(c *gin.Context) {
 		       si.issue_date, COALESCE(si.due_date, ''), si.currency,
 		       si.subtotal_amount, si.vat_amount, si.total_amount, si.vat_rate,
 		       si.amount_paid, COALESCE(si.expense_account_code, ''),
+		       COALESCE(si.payment_reference, ''), COALESCE(si.journal_entry_id, ''),
 		       COALESCE(si.notes, ''), si.created_at
 		FROM supplier_invoices si
 		LEFT JOIN contacts ct ON ct.id = si.supplier_id
@@ -202,7 +222,8 @@ func (h *SupplierInvoicesHandler) GetSupplierInvoice(c *gin.Context) {
 	err := h.db.QueryRowContext(ctx, q, id).Scan(&s.ID, &s.SupplierID, &s.SupplierName,
 		&s.SupplierReference, &s.Status, &s.IssueDate, &s.DueDate, &s.Currency,
 		&s.SubtotalAmount, &s.VATAmount, &s.TotalAmount, &s.VATRate, &s.AmountPaid,
-		&s.ExpenseAccountCode, &s.Notes, &s.CreatedAt)
+		&s.ExpenseAccountCode, &s.PaymentReference, &s.JournalEntryID,
+		&s.Notes, &s.CreatedAt)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "supplier invoice not found"})
 		return
@@ -313,11 +334,12 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 		INSERT INTO supplier_invoices
 		  (id, supplier_id, supplier_reference, status, issue_date, due_date, currency,
 		   subtotal_amount, vat_amount, total_amount, vat_rate, amount_paid,
-		   expense_account_code, notes, created_by_id, created_at, updated_at)
-		VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`, h.usePostgres)
+		   expense_account_code, payment_reference, notes, created_by_id, created_at, updated_at)
+		VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`, h.usePostgres)
 	if _, err := tx.ExecContext(ctx, insQ, id, req.SupplierID, req.SupplierReference,
 		req.IssueDate, duePtr, req.Currency, subtotal, vat, total, dominantRate,
-		nullIfEmpty(req.ExpenseAccountCode), nullIfEmpty(req.Notes), userPtr, now, now); err != nil {
+		nullIfEmpty(req.ExpenseAccountCode), strings.TrimSpace(req.PaymentReference),
+		nullIfEmpty(req.Notes), userPtr, now, now); err != nil {
 		// The UNIQUE(supplier_id, supplier_reference) constraint is the
 		// duplicate-payment guard; report it as a conflict, not a 500.
 		if isUniqueViolation(err) {
@@ -393,12 +415,32 @@ func (h *SupplierInvoicesHandler) TransitionSupplierInvoice(c *gin.Context) {
 		return
 	}
 
+	// Comptabiliser ECRIT au journal. Le statut l'annoncait depuis l'origine
+	// sans que rien ne l'ecrive : la charge n'entrait dans les livres que si
+	// quelqu'un la saisissait a la main, pendant que la TVA deductible
+	// alimentait deja la declaration. L'echec bloque la transition — rien n'est
+	// engage vis-a-vis d'un tiers, et laisser passer le statut sans l'ecriture
+	// recreerait exactement ce defaut.
+	var entryID string
+	if req.Status == "booked" && current != "booked" && current != "paid" {
+		userID := ""
+		if claims := mw.GetClaims(c); claims != nil {
+			userID = claims.UserID
+		}
+		var err error
+		entryID, err = h.postSupplierInvoice(ctx, id, userID, c.ClientIP())
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
 	updQ := db.Rebind("UPDATE supplier_invoices SET status = ?, updated_at = ? WHERE id = ?", h.usePostgres)
 	if _, err := h.db.ExecContext(ctx, updQ, req.Status, time.Now().UTC(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"id": id, "status": req.Status})
+	c.JSON(http.StatusOK, gin.H{"id": id, "status": req.Status, "journal_entry_id": entryID})
 }
 
 // DeleteSupplierInvoice DELETE /api/v1/supplier-invoices/:id

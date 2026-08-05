@@ -6,6 +6,7 @@ import {
   BookOpen, BarChart3, Calendar, AlertCircle,
 } from 'lucide-react'
 import { isoApi } from '@/api/client'
+import { PaymentRunPanel } from '@/components/payments/PaymentRunPanel'
 import { PageHeader, SectionTitle, ErrorBanner } from '@/components/ui'
 
 export function ReportsPage() {
@@ -151,29 +152,9 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* pain.001 export */}
-      <SectionTitle>Paiements — ISO 20022 pain.001</SectionTitle>
-      <div className="card mb-8">
-        <div className="card-body">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-alpine-100 flex items-center
-                            justify-center flex-shrink-0">
-              <Download size={18} className="text-alpine-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-alpine-900 mb-1">Fichier de paiements pain.001</h3>
-              <p className="text-sm text-alpine-600 mb-3">
-                Générez un fichier XML pain.001.001.09 pour initier des virements en masse
-                depuis votre e-banking (compatible UBS, PostFinance, Raiffeisen, CS/UBS).
-              </p>
-              <div className="flex items-center gap-2 p-3 bg-alpine-50 rounded-lg text-sm text-alpine-600">
-                <AlertCircle size={14} className="text-alpine-400 flex-shrink-0" />
-                Utilisez le journal comptable pour sélectionner les écritures à payer,
-                puis exportez via l'API <code className="font-mono text-xs">POST /api/v1/payments/export</code>.
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* pain.001 — sélection de factures fournisseurs, plus de bricolage d'API */}
+      <div className="card card-pad mb-8">
+        <PaymentRunPanel />
       </div>
 
       {/* Archivage légal */}

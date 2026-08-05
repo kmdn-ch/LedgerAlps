@@ -128,6 +128,16 @@ remplacée.
 </tr>
 </table>
 
+**Achats et paiements.** Saisissez les factures que vous recevez : la TVA payée à
+vos fournisseurs se déduit de celle que vous encaissez, et la charge entre dans
+votre résultat. Une fois comptabilisées, cochez celles à régler — LedgerAlps
+produit le fichier de paiement **ISO 20022 pain.001** que vous déposez dans votre
+e-banking (UBS, PostFinance, Raiffeisen, Banques cantonales).
+
+Le fichier est téléchargé sur votre poste, jamais transmis : LedgerAlps ne parle
+à aucune banque. Et générer le fichier ne marque rien comme payé — c'est le
+relevé bancaire, importé au format camt.053, qui l'établit.
+
 **Comptes et accès.** Trois rôles — administrateur, comptable, lecture seule —
 pour ouvrir vos livres à votre fiduciaire sans lui donner les clés. Le compte
 administrateur est protégé par un **second facteur** : un code à six chiffres

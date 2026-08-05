@@ -7,6 +7,37 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Ajouté
+
+- **Achats — un écran pour saisir, comptabiliser et payer les factures fournisseurs.** L'API existait depuis longtemps ; l'interface, non. Saisir une facture reçue demandait de forger une requête HTTP, ce qui revient à dire que la fonction n'existait pas.
+
+  La comptabilisation **écrit désormais au journal** : charge et TVA déductible au débit, créanciers au crédit, écriture scellée. Le statut « comptabilisée » l'annonçait depuis l'origine — le schéma dit « posted to the journal, counts for VAT » — mais rien ne l'écrivait : la charge n'entrait dans les livres que si quelqu'un la saisissait à la main, pendant que la TVA déductible alimentait déjà la déclaration. Les livres et la déclaration racontaient deux histoires différentes.
+
+- **Ordre de paiement pain.001, utilisable sans forger de requête.** L'écran disait « exportez via l'API `POST /api/v1/payments/export` » et laissait décrire chaque virement à la main dans un corps JSON. On coche maintenant les factures à régler et LedgerAlps produit le fichier XML à déposer dans l'e-banking.
+
+  **Les montants ne viennent pas du navigateur** : la sélection ne transmet que des identifiants, et le créancier, l'IBAN, le montant et la référence sont relus par le serveur dans les livres. C'est la différence entre « payer ces factures » et « virer ces sommes » — dans le second cas, une page web dicterait ce qui part à la banque.
+
+  **Générer n'est pas payer** : aucun statut ne bouge. La facture reste « comptabilisée » jusqu'à ce que le débit apparaisse au relevé, ce qu'établit le rapprochement camt.053. L'écran le dit, parce qu'un bouton suivi d'un silence laisse croire l'affaire réglée.
+
+  Une facture qu'on ne peut pas payer est **montrée** avec ce qui manque et où le corriger — « Aucun IBAN sur la fiche du fournisseur (Contacts → …) » — plutôt que masquée : une dette qui disparaît de l'écran sans explication est pire qu'une dette visible.
+
+- **Référence de paiement sur les factures fournisseurs.** Celle du bulletin de versement, à ne pas confondre avec le numéro de facture du fournisseur. Sans elle le virement part quand même, mais il arrive anonyme et la relance suit.
+
+### Corrigé
+
+- **Le fichier de paiement annonçait le niveau de service « SEPA » sur tous les virements**, y compris en francs vers un IBAN suisse. SEPA ne concerne que les virements en euros dans l'espace SEPA ; l'annoncer décrit un service que l'opération n'utilise pas et expose au rejet par la banque. Il n'est plus posé que pour un paiement en euros.
+
+- **La référence QR était écrite dans `<Cd>`**, l'élément réservé à la liste de codes externes ISO 20022 — où « QRR » ne figure pas. Elle passe en `<Prtry>` ; `SCOR`, qui appartient bien à cette liste, reste en `<Cd>`.
+
+- **La règle QRR ⇔ QR-IBAN est vérifiée avant l'export** (SIX IG QR-facture v2.4 §4.2.2, champs 28 et 29). Une référence QR exige un QR-IBAN, un IBAN ordinaire n'accepte pas de référence QR : l'inadéquation entre les deux est la première cause de rejet bancaire. Le refus nomme la facture, le fournisseur et la correction.
+
+- **Le contenu des cartes touchait le cadre sur la fiche facture.** `.card` ne porte aucune marge intérieure — elle vient de `.card-body`, absent sur ces cartes — si bien qu'un montant aligné à droite semblait sortir de la boîte. Une classe `.card-pad` porte cette marge pour les cartes sans structure interne ; l'ajouter à `.card` l'aurait doublée partout ailleurs.
+
+### Sécurité
+
+- **Les routes d'achat et de paiement déclarent leur permission**, en plus du filtre global qui refuse déjà toute écriture à un rôle en lecture seule. Vérifié sur un serveur réel avec un compte `viewer` : il **consulte** ce qu'il y a à payer (200) mais ne peut ni produire d'ordre de paiement, ni saisir une facture fournisseur, ni comptabiliser, ni importer un relevé bancaire — **403** sur les quatre. Deux barrières qui couvrent des erreurs différentes : une permission oubliée sur une route future, et une route d'écriture non annotée.
+
+
 ### Corrigé
 
 - **Un code de secours était impossible à saisir.** L'écran de vérification invitait à en entrer un dans le champ du code à six chiffres — champ plafonné à **sept caractères**, avec clavier numérique et espacement de chiffres. Un code de secours en fait onze : la moitié se perdait à la frappe. La consigne décrivait un mécanisme qui n'existait pas, au moment précis où l'on a le moins envie de chercher.

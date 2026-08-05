@@ -281,11 +281,34 @@ comptent dans la déclaration TVA.
 
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
-| GET | `/supplier-invoices` | auth | Liste paginée |
-| GET | `/supplier-invoices/:id` | auth | Détail avec lignes |
-| POST | `/supplier-invoices` | auth | Créer (refus si doublon fournisseur + référence) |
-| POST | `/supplier-invoices/:id/transition` | auth | Changer de statut |
-| DELETE | `/supplier-invoices/:id` | auth | Supprimer — brouillons uniquement (CO art. 958f) |
+| GET | `/supplier-invoices` | lecture | Liste paginée |
+| GET | `/supplier-invoices/:id` | lecture | Détail avec lignes |
+| POST | `/supplier-invoices` | écriture documents | Créer (refus si doublon fournisseur + référence) |
+| POST | `/supplier-invoices/:id/transition` | écriture comptable | Changer de statut |
+| DELETE | `/supplier-invoices/:id` | écriture comptable | Supprimer — brouillons uniquement (CO art. 958f) |
+
+### Comptabiliser écrit au journal
+
+Le passage à `booked` écrit et **scelle** l'écriture :
+
+```
+Débit  <expense_account_code>   montant hors taxe   (6500 par défaut)
+Débit  2262 TVA déductible      montant de TVA      (omis s'il n'y en a pas)
+Crédit 2000 Créanciers          montant TTC
+```
+
+La réponse porte le `journal_entry_id`. L'opération est **idempotente par le
+lien** : une facture déjà rattachée à une écriture n'en produit pas une seconde,
+si bien qu'un aller-retour de statut ne double ni la charge ni la TVA déductible.
+
+Un échec **bloque** la transition. Contrairement à l'émission d'une facture
+client — où le document est déjà parti et où nier l'envoi serait pire — rien
+n'est engagé vis-à-vis d'un tiers, et laisser passer le statut sans l'écriture
+recréerait le défaut que cette route corrige.
+
+`payment_reference` est la référence du **bulletin de versement**, à ne pas
+confondre avec `supplier_reference` qui est le numéro de la facture chez le
+fournisseur. C'est elle qui voyage dans l'ordre de virement.
 
 ## Sauvegardes
 
@@ -473,7 +496,46 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/payments` | auth | Liste |
 | GET | `/payments/:id` | auth | Détail |
 | POST | `/payments` | auth | Enregistrer un paiement |
-| POST | `/payments/export` | auth | Export virements `pain.001.001.09` |
+| GET | `/payments/payable` | lecture | Factures fournisseurs comptabilisées et non réglées, avec le compte à débiter et, le cas échéant, ce qui empêche le paiement |
+| POST | `/payments/export` | écriture comptable | Ordre de virement `pain.001.001.09` |
+
+### Produire un ordre de paiement
+
+La forme utile ne transmet que des identifiants de factures :
+
+```json
+{ "execution_date": "2026-08-10", "supplier_invoice_ids": ["…", "…"] }
+```
+
+Le créancier, l'IBAN, le montant et la référence sont **relus par le serveur**
+dans les livres. Accepter des montants depuis le client reviendrait à laisser
+une page web dicter ce qui part à la banque. La forme historique
+(`transactions[]` décrivant chaque virement) reste acceptée pour les
+intégrations existantes.
+
+Le compte à débiter vient de la fiche entreprise ; il n'y a rien à saisir.
+
+**Générer n'est pas payer** : aucun statut ne change. La facture reste
+`booked` jusqu'à ce que le débit apparaisse au relevé, ce qu'établit l'import
+camt.053.
+
+Refus, en 422, nommant toujours la facture concernée :
+
+| Cause | Effet |
+|---|---|
+| Facture plus payable (réglée, annulée) | refus global, avec invitation à recharger |
+| Fournisseur sans IBAN | « Aucun IBAN sur la fiche du fournisseur (Contacts → …) » |
+| Référence QR sans QR-IBAN | exigence des SIX IG v2.4 §4.2.2 — la référence QR impose un QR-IBAN |
+| Référence d'un format inconnu | ni 27 chiffres (QRR) ni ISO 11649 (`RF…`) |
+| IBAN de l'entreprise absent ou invalide | renvoie vers Paramètres → Entreprise |
+
+### Ce que le fichier contient
+
+`SvcLvl` n'est posé que pour un virement en **euros** : « SEPA » sur un paiement
+en francs vers un IBAN suisse décrit un service que l'opération n'utilise pas et
+expose au rejet. La référence QR s'écrit dans `<Prtry>` — « QRR » ne figure pas
+dans la liste de codes externes ISO 20022 — tandis que `SCOR`, qui y figure,
+s'écrit dans `<Cd>`.
 | POST | `/bank-statements/import` | auth | Import relevés `camt.053.001.08` |
 
 ## Audit, conformité, archivage

@@ -300,12 +300,16 @@ func main() {
 	// Invoices
 	ih := handlers.NewInvoicesHandler(database, cfg.UsePostgres(), accountingSvc)
 	// Supplier invoices (factures d'achat) — source of deductible input VAT
-	sih := handlers.NewSupplierInvoicesHandler(database, cfg.UsePostgres())
+	sih := handlers.NewSupplierInvoicesHandler(database, cfg.UsePostgres()).WithAccounting(accountingSvc)
+	// Consulter les achats est une lecture ; les saisir, les comptabiliser ou les
+	// effacer ne l'est pas. Les permissions sont declarees route par route, en
+	// plus du filtre global qui refuse deja toute ecriture a un role en lecture
+	// seule — deux barrieres qui couvrent des erreurs differentes.
 	api.GET("/supplier-invoices", sih.ListSupplierInvoices)
 	api.GET("/supplier-invoices/:id", sih.GetSupplierInvoice)
-	api.POST("/supplier-invoices", sih.CreateSupplierInvoice)
-	api.POST("/supplier-invoices/:id/transition", sih.TransitionSupplierInvoice)
-	api.DELETE("/supplier-invoices/:id", sih.DeleteSupplierInvoice)
+	api.POST("/supplier-invoices", authorizer.Require(authz.PermWriteDocuments), sih.CreateSupplierInvoice)
+	api.POST("/supplier-invoices/:id/transition", authorizer.Require(authz.PermWriteAccounting), sih.TransitionSupplierInvoice)
+	api.DELETE("/supplier-invoices/:id", authorizer.Require(authz.PermWriteAccounting), sih.DeleteSupplierInvoice)
 
 	api.GET("/invoices", ih.ListInvoices)
 	api.GET("/invoices/:id", ih.GetInvoice)
@@ -386,13 +390,20 @@ func main() {
 
 	// ISO 20022 — pain.001 export + camt.053 import
 	bankingSvc := banking.New(database, cfg.UsePostgres())
-	isoH := handlers.NewISO20022HandlerWithReconciliation(bankingSvc)
+	runh := handlers.NewPaymentRunHandler(database, cfg.UsePostgres())
+	isoH := handlers.NewISO20022HandlerWithReconciliation(bankingSvc).WithPaymentRun(runh)
 	recoh := handlers.NewReconciliationHandler(database, cfg.UsePostgres())
-	api.POST("/payments/export", isoH.ExportPain001)
-	api.POST("/bank-statements/import", isoH.ImportCamt053)
+
+	// Lire ce qu'il y a a payer est une consultation ; produire l'ordre de
+	// virement ne l'est pas. Un compte en lecture seule voit donc la liste et ne
+	// peut pas en tirer un fichier — la permission est declaree, en plus du
+	// filtre global qui refuse deja toute ecriture a ce role.
+	api.GET("/payments/payable", authorizer.Require(authz.PermRead), runh.ListPayable)
+	api.POST("/payments/export", authorizer.Require(authz.PermWriteAccounting), isoH.ExportPain001)
+	api.POST("/bank-statements/import", authorizer.Require(authz.PermWriteAccounting), isoH.ImportCamt053)
 	api.GET("/bank-entries", recoh.ListBankEntries)
-	api.PUT("/bank-entries/:id/match", recoh.MatchBankEntry)
-	api.DELETE("/bank-entries/:id/match", recoh.UnmatchBankEntry)
+	api.PUT("/bank-entries/:id/match", authorizer.Require(authz.PermWriteAccounting), recoh.MatchBankEntry)
+	api.DELETE("/bank-entries/:id/match", authorizer.Require(authz.PermWriteAccounting), recoh.UnmatchBankEntry)
 	api.PUT("/bank-entries/:id/ignore", recoh.IgnoreBankEntry)
 
 	// Legal archive export — CO art. 958f (10-year retention)

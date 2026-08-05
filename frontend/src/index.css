@@ -57,6 +57,15 @@
     @apply px-6 py-4 border-b border-alpine-100 flex items-center justify-between;
   }
   .card-body  { @apply px-6 py-4; }
+  /* .card ne porte AUCUNE marge intérieure : elle vient de .card-header,
+     .card-body ou .card-footer. Une carte dont le contenu est posé
+     directement — le cas de la fiche facture — colle donc au cadre, et un
+     montant aligné à droite semble sortir de la boîte.
+
+     .card-pad est cette marge pour les cartes sans structure interne. Une
+     classe séparée plutôt qu'un padding sur .card : ajouter la marge à .card
+     la doublerait partout où .card-body existe déjà. */
+  .card-pad   { @apply px-5 py-4 sm:px-6 sm:py-5; }
   .card-footer { @apply px-6 py-4 border-t border-alpine-100 bg-alpine-50/50 rounded-b-xl; }
 
   /* ─── Form controls ───────────────────────────────────────────────────── */

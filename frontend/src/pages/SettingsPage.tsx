@@ -403,7 +403,7 @@ export function SettingsPage() {
           {/* Le rapprochement vit dans l'onglet Banque : c'est là qu'on vient
               quand on a le relevé sous les yeux. */}
           {effectiveTab === 'banking' && (
-            <div className="card mt-5">
+            <div className="card card-pad mt-5">
               <ReconciliationPanel />
             </div>
           )}

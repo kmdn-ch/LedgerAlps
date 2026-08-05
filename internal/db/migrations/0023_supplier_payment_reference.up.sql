@@ -1,0 +1,23 @@
+-- Référence de paiement portée par la facture d'un fournisseur.
+--
+-- `supplier_reference` est le NUMÉRO de la facture chez le fournisseur — ce qui
+-- est imprimé en haut du document. Ce n'est pas ce qui doit voyager dans un
+-- ordre de virement : ce que la banque transporte est la référence du bulletin
+-- de versement, celle qui permet au fournisseur de rapprocher l'encaissement
+-- sans intervention humaine.
+--
+-- Sans elle, le virement part quand même, mais il arrive « anonyme » : le
+-- fournisseur doit le pointer à la main, et une relance suit souvent. Un fichier
+-- de paiement dépourvu de référence est donc à moitié utilisable, ce qui est la
+-- pire des situations — il fonctionne assez pour qu'on croie avoir fini.
+--
+-- Deux formats la remplissent, et ils ne se mélangent pas (SIX IG QR-facture
+-- v2.4 §4.2.2, champs 28 et 29) :
+--
+--   QRR  — référence QR à 27 chiffres, EXIGE un QR-IBAN chez le fournisseur.
+--   SCOR — référence créancière ISO 11649, avec un IBAN ordinaire.
+--
+-- La colonne accueille les deux ; le type est déduit à l'export à partir de sa
+-- forme et de l'IBAN disponible, plutôt que demandé à l'utilisateur — personne
+-- ne connaît la différence, et une case mal cochée fait rejeter le paiement.
+ALTER TABLE supplier_invoices ADD COLUMN payment_reference TEXT NOT NULL DEFAULT '';

@@ -134,6 +134,30 @@ export const journalApi = {
   post:   (id: string)     => api.post(`/journal/${id}/post`),
 }
 
+// ─── Factures fournisseurs (achats) ───────────────────────────────────────────
+export const supplierInvoicesApi = {
+  list:   (params?: { status?: string; page?: number; page_size?: number }) =>
+    api.get('/supplier-invoices', { params }),
+  get:    (id: string)   => api.get(`/supplier-invoices/${id}`),
+  create: (data: unknown) => api.post('/supplier-invoices', data),
+  transition: (id: string, status: string) =>
+    api.post(`/supplier-invoices/${id}/transition`, { status }),
+}
+
+// ─── Paiements fournisseurs (pain.001) ────────────────────────────────────────
+//
+// L'export ne transmet QUE des identifiants de factures : le serveur relit
+// lui-même le créancier, l'IBAN, le montant et la référence dans les livres.
+// Envoyer les montants depuis le navigateur reviendrait à laisser une page web
+// dicter ce qui part à la banque.
+export const paymentsApi = {
+  payable: () => api.get('/payments/payable'),
+  exportRun: (executionDate: string, supplierInvoiceIds: string[]) =>
+    api.post('/payments/export',
+      { execution_date: executionDate, supplier_invoice_ids: supplierInvoiceIds },
+      { responseType: 'text' }),
+}
+
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 // ─── Sauvegardes ──────────────────────────────────────────────────────────────
 // Créer un instantané est immédiat : SQLite écrit une copie cohérente d'une
