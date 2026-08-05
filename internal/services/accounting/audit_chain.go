@@ -37,6 +37,27 @@ func AppendAuditEntry(
 	userID, action, recordID, ipAddress string,
 	afterState map[string]any,
 ) (chainedHash string, at time.Time, err error) {
+	return AppendAuditEntryFor(ctx, tx, usePostgres,
+		"journal_entries", userID, action, recordID, ipAddress, afterState)
+}
+
+// AppendAuditEntryFor écrit un maillon pour n'importe quelle table.
+//
+// Le nom de la table était figé à « journal_entries », si bien que la chaîne
+// d'empreintes ne couvrait QUE le journal. Les factures, les contacts et les
+// paiements n'y laissaient aucune trace : ils portaient un created_by_id — qui
+// a créé — mais rien sur qui a modifié, transformé ou annulé quoi.
+//
+// La vérification relit `table_name` sur la ligne et recalcule à partir d'elle :
+// ouvrir ce paramètre est donc rétrocompatible, les maillons existants
+// continuant de se vérifier contre « journal_entries ».
+func AppendAuditEntryFor(
+	ctx context.Context,
+	tx execQuerier,
+	usePostgres bool,
+	tableName, userID, action, recordID, ipAddress string,
+	afterState map[string]any,
+) (chainedHash string, at time.Time, err error) {
 	rawAfterJSON, err := json.Marshal(afterState)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("encode after_state: %w", err)
@@ -49,7 +70,7 @@ func AppendAuditEntry(
 
 	now := time.Now().UTC().Truncate(time.Second)
 	entryHash := security.ComputeEntryHash(
-		userID, action, "journal_entries", recordID,
+		userID, action, tableName, recordID,
 		maskedBefore, maskedAfter, ipAddress, now,
 	)
 
@@ -76,9 +97,9 @@ func AppendAuditEntry(
 		INSERT INTO audit_logs (id, user_id, action, table_name, record_id,
 		                        before_state, after_state, ip_address,
 		                        entry_hash, prev_hash, sequence_number, created_at, hash_version)
-		VALUES (?, ?, ?, 'journal_entries', ?, ?, ?, ?, ?, ?, ?, ?, 2)`, usePostgres)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2)`, usePostgres)
 	if _, err := tx.ExecContext(ctx, insertAudit,
-		db.NewID(), userID, action, recordID,
+		db.NewID(), userID, action, tableName, recordID,
 		beforePtr, maskedAfter, ipAddress,
 		entryHash, prevHashPtr, lastSeq+1, now); err != nil {
 		return "", time.Time{}, fmt.Errorf("insert audit log: %w", err)

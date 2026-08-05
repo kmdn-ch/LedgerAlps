@@ -45,7 +45,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 
 | Obligation | Base légale | État |
 |---|---|---|
-| Traçabilité des écritures | CO art. 957a al. 2 ch. 5 | ✅ chaîne SHA-256 vérifiable |
+| Traçabilité des écritures et des documents | CO art. 957a al. 2 ch. 5 | ✅ chaîne SHA-256 vérifiable, auteur de chaque action |
 | Conservation dix ans | CO art. 958f | ✅ archive légale JSON + CSV |
 | Support modifiable admis | Olico art. 9 | ✅ attestation d'intégrité exportable |
 | Exercice bouclé immuable | CO art. 958f, Olico art. 3 | ✅ verrouillage de période |
@@ -305,6 +305,22 @@ inadministrable, et il n'y a aucun mot de passe de secours derrière.
 Un compte se **désactive**, il ne se supprime pas : les écritures portent
 l'identifiant de leur auteur, et l'effacer romprait la traçabilité du
 CO art. 957a al. 2 ch. 5.
+
+**Sauvegardes et Maintenance sont refusées à la lecture seule, en lecture aussi.**
+Vérifié sur un serveur réel : `/backups`, `/backups/policy`,
+`/database/encryption`, `/maintenance/*`, `/settings/server`,
+`/settings/security`, `/security-events`, `/users` et `/audit-logs` répondent
+403 ; l'import camt.053, la création de contact, de facture et d'écriture aussi.
+Les onglets correspondants ne sont pas seulement masqués — ils ne sont pas
+rendus, et une adresse tapée à la main se recale sur un onglet autorisé.
+
+Masquer sans interdire ne protège de rien ; interdire sans masquer use la
+confiance dans l'interface. Il faut les deux, et c'est le serveur qui décide.
+
+**Le compte en cours est annoncé en permanence**, en bas du menu, avec ce que le
+rôle implique plutôt que son seul nom. « Compte ADMINISTRATEUR — ne pas utiliser
+pour le travail courant » n'est pas une politesse : un compte administrateur
+laissé ouvert sur un poste partagé est la porte que personne ne pense à fermer.
 
 **Reste** : rien d'obligatoire. Des permissions plus fines — un comptable sans
 accès à la TVA, par exemple — attendront qu'un besoin réel les demande.

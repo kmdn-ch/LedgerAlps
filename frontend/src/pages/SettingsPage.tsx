@@ -34,6 +34,15 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
+// Les onglets réservés à l'administration ne sont pas seulement masqués : ils
+// ne sont pas rendus, leur contenu n'est pas monté, et leurs routes répondent
+// 403 côté serveur — le rôle y étant relu dans la base à chaque requête.
+//
+// Masquer sans interdire ne protège de rien : l'adresse reste tapable et
+// l'appel réseau reste faisable. Interdire sans masquer use la confiance dans
+// l'interface. Il faut les deux, et c'est le serveur qui décide.
+const ADMIN_ONLY = new Set(['backups', 'maintenance'])
+
 const TABS = [
   { key: 'identity',  label: 'Identité',    icon: Building2  },
   { key: 'banking',   label: 'Banque',       icon: CreditCard },
@@ -46,6 +55,7 @@ const TABS = [
 import { BackupPanel } from '@/components/settings/BackupPanel'
 import { MaintenancePanel } from '@/components/settings/MaintenancePanel'
 import { ReconciliationPanel } from '@/components/settings/ReconciliationPanel'
+import { useAuthStore } from '@/store/auth'
 
 export function SettingsPage() {
   const [tab,   setTab]   = useState('identity')
@@ -136,6 +146,15 @@ export function SettingsPage() {
 
   if (isLoading) return null
 
+  const role = useAuthStore(st => st.role)
+  const isAdmin = role === 'admin'
+  const visibleTabs = TABS.filter(t => isAdmin || !ADMIN_ONLY.has(t.key))
+
+  // Un onglet réservé sélectionné par un lien ou un rechargement ne doit pas
+  // rester actif : sans ce recalage, la page afficherait un panneau vide dont
+  // chaque appel répondrait 403.
+  const effectiveTab = visibleTabs.some(t => t.key === tab) ? tab : visibleTabs[0].key
+
   return (
     <div>
       <PageHeader
@@ -143,7 +162,7 @@ export function SettingsPage() {
         subtitle="Configuration de votre société"
         actions={
           // L'onglet Sauvegardes n'a rien à enregistrer : ses actions lui sont propres.
-          tab === 'backups' || tab === 'maintenance' ? null : (
+          effectiveTab === 'backups' || effectiveTab === 'maintenance' ? null : (
             <button
               form="settings-form"
               type="submit"
@@ -176,13 +195,13 @@ export function SettingsPage() {
         {/* Nav latérale */}
         <nav className="w-44 flex-shrink-0">
           <div className="space-y-0.5">
-            {TABS.map(t => (
+            {visibleTabs.map(t => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg
                             text-sm text-left transition-all ${
-                  tab === t.key
+                  effectiveTab === t.key
                     ? 'bg-alpine-800 text-white font-medium'
                     : 'text-alpine-600 hover:bg-alpine-100 hover:text-alpine-900'
                 }`}
@@ -194,7 +213,7 @@ export function SettingsPage() {
           </div>
         </nav>
 
-        {tab === 'backups' ? (
+        {effectiveTab === 'backups' ? (
           <div className="flex-1"><BackupPanel /></div>
         ) : tab === 'maintenance' ? (
           <div className="flex-1"><MaintenancePanel /></div>
@@ -203,7 +222,7 @@ export function SettingsPage() {
         <form id="settings-form" onSubmit={handleSubmit(d => save.mutate(d))} className="flex-1 space-y-5">
 
           {/* ─── Identité ─────────────────────────────────────────────── */}
-          {tab === 'identity' && (
+          {effectiveTab === 'identity' && (
             <>
               {/* Logo */}
               <div className="card">
@@ -329,7 +348,7 @@ export function SettingsPage() {
           )}
 
           {/* ─── Banque ───────────────────────────────────────────────── */}
-          {tab === 'banking' && (
+          {effectiveTab === 'banking' && (
             <div className="card">
               <div className="card-header">
                 <h2 className="text-sm font-semibold text-alpine-800">Coordonnées bancaires et TVA</h2>
@@ -383,14 +402,14 @@ export function SettingsPage() {
 
           {/* Le rapprochement vit dans l'onglet Banque : c'est là qu'on vient
               quand on a le relevé sous les yeux. */}
-          {tab === 'banking' && (
+          {effectiveTab === 'banking' && (
             <div className="card mt-5">
               <ReconciliationPanel />
             </div>
           )}
 
           {/* ─── Facturation ──────────────────────────────────────────── */}
-          {tab === 'invoicing' && (
+          {effectiveTab === 'invoicing' && (
             <div className="card">
               <div className="card-header">
                 <h2 className="text-sm font-semibold text-alpine-800">Paramètres de facturation</h2>
@@ -438,7 +457,7 @@ export function SettingsPage() {
           )}
 
           {/* ─── Légal ────────────────────────────────────────────────── */}
-          {tab === 'legal' && (
+          {effectiveTab === 'legal' && (
             <div className="space-y-4">
               <div className="card border-warning-100 bg-warning-100/30">
                 <div className="card-body">

@@ -10,6 +10,7 @@ import {
 import { cn } from '@/utils'
 import { useAuthStore } from '@/store/auth'
 import { settingsApi, healthApi, authApi } from '@/api/client'
+import { AccountBanner } from './AccountBanner'
 
 const NAV = [
   { to: '/',          icon: LayoutDashboard, label: 'Tableau de bord' },
@@ -98,6 +99,12 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* Avec quel compte travaille-t-on ? Un administrateur qui se croit en
+          lecture seule modifie sans s'en rendre compte, et un compte
+          administrateur laissé ouvert sur un poste partagé est la porte que
+          personne ne pense à fermer. */}
+      <AccountBanner />
 
       {/* Footer utilisateur */}
       <div className="border-t border-alpine-700/50 px-3 py-3 space-y-0.5">

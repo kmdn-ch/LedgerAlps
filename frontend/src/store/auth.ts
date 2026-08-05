@@ -12,16 +12,22 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { User } from '@/types'
+import type { User, UserRole } from '@/types'
 
 interface AuthState {
   user: User | null
   /** En mémoire uniquement : perdu au rechargement, restauré via le cookie. */
   accessToken: string | null
   isAuth: boolean
+  // Le rôle sert UNIQUEMENT à l'affichage : ne pas proposer un écran qui
+  // répondra 403, et dire à l'utilisateur avec quel compte il travaille. Le
+  // serveur relit le rôle dans la base à chaque requête et ne fait aucune
+  // confiance à cette valeur — la modifier dans le navigateur ne donne aucun
+  // droit.
+  role: UserRole | null
   /** Vrai tant que la tentative de restauration de session est en cours. */
   isRestoring: boolean
-  setAuth: (user: User, accessToken: string) => void
+  setAuth: (user: User, accessToken: string, role?: UserRole | null) => void
   setAccessToken: (token: string) => void
   setRestoring: (v: boolean) => void
   logout: () => void
@@ -33,17 +39,18 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       accessToken: null,
       isAuth: false,
+      role: null,
       isRestoring: false,
 
-      setAuth: (user, accessToken) =>
-        set({ user, accessToken, isAuth: true, isRestoring: false }),
+      setAuth: (user, accessToken, role = null) =>
+        set({ user, accessToken, isAuth: true, isRestoring: false, role }),
 
       setAccessToken: (token) => set({ accessToken: token }),
 
       setRestoring: (v) => set({ isRestoring: v }),
 
       logout: () =>
-        set({ user: null, accessToken: null, isAuth: false, isRestoring: false }),
+        set({ user: null, accessToken: null, isAuth: false, isRestoring: false, role: null }),
     }),
     {
       name: 'ledgeralps-auth',
@@ -51,6 +58,7 @@ export const useAuthStore = create<AuthState>()(
       partialize: (s) => ({
         user: s.user,
         isAuth: s.isAuth,
+        role: s.role,
       }),
     },
   ),

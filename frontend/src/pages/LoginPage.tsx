@@ -39,7 +39,7 @@ export function LoginPage() {
       const res = await authApi.login(data.email, data.password)
       const user = { id: '', email: data.email, name: data.email.split('@')[0],
                      is_active: true, is_admin: false, created_at: '' }
-      setAuth(user, res.data.access_token)
+      setAuth(user, res.data.access_token, res.data.role ?? null)
       navigate('/')
     } catch {
       setError('Identifiants incorrects.')

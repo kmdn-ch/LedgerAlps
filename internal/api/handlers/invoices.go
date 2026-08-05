@@ -366,7 +366,14 @@ func (h *InvoicesHandler) TransitionInvoice(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.Transition(c.Request.Context(), id, models.InvoiceStatus(body.Status)); err != nil {
+	// TransitionBy et non Transition : sans auteur, « qui a annulé cette
+	// facture » reste sans réponse. Le chemin HTTP est le seul qui connaisse
+	// l'utilisateur, c'est donc lui qui doit le transmettre.
+	actor := invoicing.Actor{IP: c.ClientIP()}
+	if claims := mw.GetClaims(c); claims != nil {
+		actor.UserID = claims.UserID
+	}
+	if err := h.svc.TransitionBy(c.Request.Context(), id, models.InvoiceStatus(body.Status), actor); err != nil {
 		switch err {
 		case invoicing.ErrInvoiceNotFound:
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

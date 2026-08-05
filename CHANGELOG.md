@@ -7,6 +7,25 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Sécurité
+
+- **Un compte en lecture seule n'accède plus du tout à Sauvegardes ni à Maintenance — en lecture non plus.** Ces écrans exposent le dossier de sauvegarde, l'état du chiffrement, la santé du système et les événements de sécurité : les consulter est déjà sensible. Vérifié sur un serveur réel, `/backups`, `/backups/policy`, `/database/encryption`, `/maintenance/*`, `/settings/server`, `/settings/security`, `/security-events`, `/users` et `/audit-logs` répondent **403** ; l'import camt.053, la création de contact, de facture, d'offre et d'écriture au journal aussi.
+
+  Les onglets correspondants ne sont plus rendus du tout, et une adresse tapée à la main se recale sur un onglet autorisé au lieu d'afficher un panneau vide dont chaque appel échoue. Masquer sans interdire ne protège de rien ; interdire sans masquer use la confiance dans l'interface.
+
+### Ajouté
+
+- **Le compte en cours est annoncé en permanence**, en bas du menu, avec ce que le rôle implique plutôt que son seul nom. « Compte ADMINISTRATEUR — ne pas utiliser pour le travail courant, ce compte peut effacer les sauvegardes, changer les rôles et déchiffrer la base ». « Compte en lecture seule — vous n'êtes pas autorisé à faire des modifications ». Un administrateur qui se croit en lecture seule modifie sans s'en rendre compte, et un compte administrateur laissé ouvert sur un poste partagé est la porte que personne ne pense à fermer.
+
+- **Les actions sur les documents entrent dans la chaîne d'empreintes du CO art. 957a al. 2 ch. 5.** La phrase affichée dans l'interface — « les documents portent le nom de leur auteur » — ne se vérifiait qu'à moitié : la chaîne ne couvrait que le journal. Une facture portait `created_by_id`, c'est-à-dire qui l'avait créée, et **rien** sur qui l'avait envoyée, corrigée ou annulée — soit tout ce qui arrive à une pièce après sa naissance.
+
+  Les traces entrent dans la **même** chaîne que les écritures, avec le même numéro de séquence et la même vérification : réattribuer une action à un autre compte casse l'empreinte, et un test le prouve. Un second registre non chaîné aurait la force d'une table qu'on peut modifier — c'est-à-dire aucune.
+
+  Deux limites, énoncées plutôt que masquées : la trace est écrite **après** l'action et non dans sa transaction, si bien qu'une coupure entre les deux laisse l'action sans trace ; et une action sans auteur connu n'écrit **rien**, plutôt qu'une trace anonyme qui ferait croire à une couverture inexistante.
+
+---
+
+
 ### Ajouté
 
 - **Point 9 — trois rôles : Administrateur, Comptable, Lecture seule.** Le cas central est celui de la fiduciaire : lui ouvrir les livres sans lui donner les clés. Jusqu'ici il n'y avait qu'un interrupteur — administrateur ou non — si bien que partager l'accès revenait à partager le compte, avec le droit de modifier les livres et d'effacer les sauvegardes.

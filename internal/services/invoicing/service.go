@@ -381,6 +381,14 @@ func (s *Service) UpdateInvoice(ctx context.Context, invoiceID string, req Creat
 // When an invoice transitions from sent → cancelled and has a linked journal entry,
 // a reversal entry is automatically created and posted (CO art. 957a).
 func (s *Service) Transition(ctx context.Context, invoiceID string, to models.InvoiceStatus) error {
+	return s.TransitionBy(ctx, invoiceID, to, Actor{})
+}
+
+// TransitionBy applique la transition en traçant son auteur.
+//
+// Le chemin HTTP passe toujours par ici : sans auteur, une transition
+// n'apparaît nulle part, et « qui a annulé cette facture » reste sans réponse.
+func (s *Service) TransitionBy(ctx context.Context, invoiceID string, to models.InvoiceStatus, actor Actor) error {
 	// Load current status, invoice_number, journal_entry_id, created_by_id, and issue_date.
 	getQ := db.Rebind(`
 		SELECT status, invoice_number, COALESCE(journal_entry_id, ''), created_by_id, issue_date,
@@ -424,6 +432,13 @@ func (s *Service) Transition(ctx context.Context, invoiceID string, to models.In
 					return fmt.Errorf("document envoyé, mais l'écriture au journal a échoué: %w", err)
 				}
 			}
+
+			s.record(ctx, actor, accsvc.ActionDocumentTransition, invoiceID, map[string]any{
+				"document_type": documentType,
+				"number":        invoiceNumber,
+				"from":          current,
+				"to":            string(to),
+			})
 
 			// Automatic reversal: sent → cancelled with a linked journal entry.
 			if models.InvoiceStatus(current) == models.InvoiceStatusSent &&
