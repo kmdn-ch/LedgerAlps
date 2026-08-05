@@ -128,6 +128,22 @@ remplacée.
 </tr>
 </table>
 
+**Comptes et accès.** Trois rôles — administrateur, comptable, lecture seule —
+pour ouvrir vos livres à votre fiduciaire sans lui donner les clés. Le compte
+administrateur est protégé par un **second facteur** : un code à six chiffres
+calculé par votre téléphone, hors ligne, avec l'application de votre choix
+(Aegis, KeePassXC, FreeOTP conviennent et sont libres). Dix codes de secours sont
+remis à l'inscription — notez-les : sans eux, un téléphone perdu ferme la porte
+définitivement.
+
+Un mot de passe oublié se règle depuis Paramètres → Sécurité : l'administrateur
+réinitialise l'accès, ce qui remplace le mot de passe par un mot de passe
+temporaire — sans jamais lire l'ancien — que la personne devra changer à sa
+connexion suivante.
+
+> À la première connexion après la mise à jour, l'administrateur devra inscrire
+> son téléphone avant de pouvoir travailler.
+
 **Vos données sont les vôtres.** L'archive légale contient dix ans de pièces en
 JSON *et* en CSV — ouvrable dans un tableur, importable ailleurs. Le verrouillage
 fournisseur ne tient pas au refus d'exporter, il tient au format de l'export.

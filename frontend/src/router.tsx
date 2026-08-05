@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react'
 import { useAuthStore }   from '@/store/auth'
 import { authApi }        from '@/api/client'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
+import { MFAEnrolmentPage } from '@/pages/MFAEnrolmentPage'
 
 /**
  * Protège les routes et restaure la session au chargement.
@@ -28,13 +29,21 @@ import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
  * F5 renverrait l'utilisateur à l'écran de connexion.
  */
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  // Un mot de passe temporaire n'ouvre rien d'autre que son propre changement.
-  // Le serveur refuse déjà toute autre requête ; ce détour évite d'afficher une
-  // application dont chaque appel échouerait.
+  // Tous les hooks AVANT le moindre retour anticipé.
+  //
+  // React identifie un hook par son rang d'appel : un `return` placé au milieu
+  // change ce rang au rendu suivant, et l'état d'un hook se retrouve lu par un
+  // autre. Ce composant redirigeait déjà avant d'appeler ses hooks suivants ;
+  // ça tenait parce que la redirection démonte tout, mais chaque garde ajoutée
+  // rapprochait la panne.
+  //
+  // Un mot de passe temporaire n'ouvre rien d'autre que son propre changement,
+  // et un administrateur sans second facteur ne peut rien faire non plus. Le
+  // serveur refuse déjà toute autre requête dans les deux cas ; ces détours
+  // évitent d'afficher une application dont chaque appel échouerait.
   const mustChange = useAuthStore(s => s.mustChangePassword)
-  if (mustChange) return <Navigate to="/change-password" replace />
-
-  const isAuth = useAuthStore(s => s.isAuth)
+  const needsMfa   = useAuthStore(s => s.mfaEnrolmentRequired)
+  const isAuth     = useAuthStore(s => s.isAuth)
   // État initial calculé une seule fois : y a-t-il une session à restaurer ?
   const [restoring, setRestoring] = useState(() => {
     const s = useAuthStore.getState()
@@ -67,6 +76,8 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     return () => { monte = false }
   }, [])
 
+  if (mustChange) return <Navigate to="/change-password" replace />
+  if (needsMfa) return <Navigate to="/second-facteur" replace />
   if (!isAuth) return <Navigate to="/login" replace />
 
   // Sans cette attente, les pages partiraient chercher leurs données sans
@@ -88,6 +99,9 @@ export const router = createBrowserRouter([
   // accès à rien d'autre, et l'inclure dans RequireAuth l'y renverrait en
   // boucle.
   { path: '/change-password', element: <ChangePasswordPage /> },
+  // Hors de la coquille protégée pour la même raison : un administrateur non
+  // inscrit n'a accès à rien d'autre, et l'inclure l'y renverrait en boucle.
+  { path: '/second-facteur', element: <MFAEnrolmentPage /> },
   {
     path: '/',
     element: <RequireAuth><AppLayout /></RequireAuth>,

@@ -91,6 +91,25 @@ export const authApi = {
   // vit hors du groupe filtré, sans quoi le compte serait enfermé.
   changePassword: (current: string, next: string) =>
     api.post('/auth/change-password', { current_password: current, new_password: next }),
+
+  // ─── Second facteur ────────────────────────────────────────────────────────
+  //
+  // La vérification passe DÉLIBÉRÉMENT hors de l'instance intercepté.
+  //
+  // Deux raisons, et les deux se voient à l'usage : l'intercepteur de requête
+  // écraserait le jeton d'attente par un jeton de session résiduel, et celui de
+  // réponse traiterait le 401 d'un code faux comme une session expirée — il
+  // tenterait un rafraîchissement, puis déconnecterait et renverrait vers
+  // /login. Une faute de frappe sur six chiffres perdrait la connexion en cours.
+  mfaVerify: (mfaToken: string, code: string) =>
+    axios.post(`${BASE_URL}/auth/mfa/verify`, { code }, {
+      withCredentials: true,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mfaToken}` },
+    }),
+  mfaStatus:  () => api.get('/auth/mfa'),
+  mfaSetup:   () => api.post('/auth/mfa/setup', null),
+  mfaConfirm: (code: string) => api.post('/auth/mfa/confirm', { code }),
+  mfaDisable: (password: string) => api.delete('/auth/mfa', { data: { password } }),
 }
 
 // ─── Comptes ──────────────────────────────────────────────────────────────────
@@ -206,6 +225,10 @@ export const usersApi = {
   setRole:   (id: string, role: string)   => api.put(`/users/${id}/role`, { role }),
   setActive: (id: string, active: boolean) =>
     api.put(`/users/${id}/active`, { is_active: active }),
+  // Deux gestes séparés, tracés séparément côté serveur : réunis, ils
+  // permettraient à un administrateur de se substituer entièrement à un compte.
+  resetPassword: (id: string) => api.post(`/users/${id}/reset-password`, null),
+  removeMfa:     (id: string) => api.delete(`/users/${id}/mfa`),
 }
 
 export const securityApi = {

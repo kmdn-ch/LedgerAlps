@@ -19,6 +19,7 @@ import type { RotateSecretResult } from '@/types'
 import { DatabaseEncryptionPanel } from './DatabaseEncryptionPanel'
 import { SessionSecurityPanel } from './SessionSecurityPanel'
 import { UsersPanel } from './UsersPanel'
+import { MFAPanel } from './MFAPanel'
 
 export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
   const [confirming, setConfirming] = useState(false)
@@ -139,6 +140,7 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
         )}
       </div>
       <SessionSecurityPanel />
+      <MFAPanel />
       <UsersPanel />
     </div>
   )

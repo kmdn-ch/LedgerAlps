@@ -9,6 +9,28 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Sécurité
 
+- **Le compte administrateur est protégé par un second facteur (code à usage unique, TOTP — RFC 6238).** Un compte administrateur peut créer des comptes, restaurer une sauvegarde, déverrouiller une période et déchiffrer la base. Jusqu'ici, un mot de passe seul l'en séparait — réutilisé sur un autre site, deviné, lu par-dessus l'épaule, il suffisait.
+
+  **Ce que cela protège, et ce que cela ne protège pas.** Le second facteur couvre le cas où le *mot de passe* fuit. Il ne protège **pas** de quelqu'un qui lit déjà le fichier de base : le secret y est, et celui-là n'a besoin d'aucun code. Ce qui répond à cette menace est le chiffrement de la base et celui du disque. Le dire évite de croire couvert un risque qui ne l'est pas.
+
+  **TOTP plutôt qu'autre chose.** Le SMS demande un opérateur, un numéro et un appel sortant — trois choses que LedgerAlps n'a pas et ne veut pas. Le courriel a les mêmes défauts et une faiblesse de plus : la boîte est souvent le compte qu'on cherche justement à protéger. WebAuthn serait plus solide mais exige HTTPS et un matériel que la plupart des PME n'ont pas. TOTP fonctionne hors ligne, avec n'importe quelle application — y compris libre : Aegis, KeePassXC, FreeOTP — et aucun tiers n'est dans la boucle.
+
+  L'algorithme est implémenté ici plutôt qu'importé : il tient en quarante lignes, et les **vecteurs de test officiels de la RFC 6238** sont vérifiés par le suite de tests. Un code ne sert **qu'une fois** — la fenêtre acceptée est enregistrée et refusée ensuite —, la tolérance est d'une fenêtre de trente secondes de chaque côté, et la comparaison est à temps constant.
+
+  **Le blocage est technique.** Vérifié sur un serveur réel : un administrateur non inscrit reçoit **403** sur `/users`, `/backups`, `/contacts`, `/invoices` et `/journal` — en lecture comprise. Les seules routes ouvertes sont celles de l'inscription, montées hors du groupe filtré : les y inclure aurait enfermé le compte hors de sa propre installation.
+
+  **Le jeton d'attente ne vaut rien ailleurs.** Après un mot de passe accepté, la connexion ne délivre ni jeton d'accès ni cookie : seulement un jeton d'attente de cinq minutes, refusé par le filtre d'authentification sur **toute** autre route — donc aussi sur celles qui n'existent pas encore. La vérification est derrière la limitation de tentatives existante : cinq échecs et la porte se ferme quinze minutes.
+
+  **Dix codes de secours, montrés une seule fois, hachés en base.** Sans eux, un téléphone perdu enfermerait définitivement le dernier administrateur — plus personne ne pourrait créer de compte, restaurer une sauvegarde ni rendre le droit de le faire : le second facteur créerait la panne qu'il est censé prévenir. Ils sont hachés comme des mots de passe, ne servent qu'une fois, et leur usage est tracé.
+
+  *À la première connexion après cette mise à jour, l'administrateur sera conduit à inscrire son téléphone avant de pouvoir travailler.* C'est voulu : une protection qu'on peut remettre à plus tard n'est jamais activée. Les autres rôles peuvent l'activer s'ils le souhaitent, sans y être contraints — un comptable écrit dans un journal chaîné et tracé, et n'a pas les clés de l'installation.
+
+- **L'administrateur peut réinitialiser l'accès d'un compte.** Un mot de passe oublié n'avait aucune issue : le produit refuse de supprimer un compte, parce que les écritures portent l'identifiant de leur auteur et que l'effacer casserait la traçabilité du CO art. 957a al. 2 ch. 5.
+
+  « Réinitialiser » **remplace** le mot de passe — il n'est jamais révélé, pas même à l'administrateur — par un mot de passe temporaire de quinze caractères tiré au hasard, affiché **une seule fois** et jamais écrit dans le journal de sécurité. Le compte devra en choisir un autre à sa connexion suivante et ne pourra rien faire avant. Les sessions ouvertes tombent : une réinitialisation sert souvent à reprendre la main sur un compte qu'on craint compromis.
+
+  **Elle ne retire pas le second facteur.** Un administrateur qui pourrait, d'un clic, remettre à zéro le mot de passe *et* le second facteur d'un autre compte pourrait s'y substituer entièrement — le second facteur ne protégerait alors plus de rien face à lui. Le retrait du second facteur est un geste séparé, confirmé séparément et tracé séparément. On ne réinitialise pas son propre accès, ni celui d'un compte désactivé.
+
 - **Un compte créé par un administrateur doit changer son mot de passe à la première connexion, et ne peut rien faire avant.** Le mot de passe choisi *pour* quelqu'un d'autre lui est transmis par message, par téléphone ou sur un papier : il est connu de deux personnes et a voyagé par un canal qui n'est pas fait pour ça. Tant qu'il vaut, l'administrateur peut se connecter au nom de l'autre — et les actions seraient tracées sous un compte qui n'est pas celui de leur auteur réel, ce qui rend le journal d'audit **trompeur** et non simplement incomplet.
 
   Le blocage est technique : vérifié sur un serveur réel, un compte marqué reçoit 403 sur `GET /invoices`, `GET /contacts`, `GET /reports/*` comme sur toute écriture. La seule route ouverte est le changement lui-même, montée hors du groupe filtré — l'y inclure aurait enfermé le compte définitivement. Le nouveau mot de passe exige 12 caractères, minuscule, majuscule et chiffre, doit différer de l'ancien, et le mot de passe actuel est vérifié même sur un compte marqué : sans quoi un jeton volé suffirait à s'approprier le compte. Les autres sessions tombent au changement.

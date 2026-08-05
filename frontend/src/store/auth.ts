@@ -29,10 +29,16 @@ interface AuthState {
   // router vers l'écran de changement ; le serveur refuse de toute façon toute
   // requête d'un tel compte, cette valeur ne donne donc aucun accès.
   mustChangePassword: boolean
+  // Vrai quand un compte administrateur n'a pas encore inscrit de second
+  // facteur. Même statut que ci-dessus : sert à router, ne donne aucun accès —
+  // le serveur refuse toute requête d'un administrateur non inscrit.
+  mfaEnrolmentRequired: boolean
   /** Vrai tant que la tentative de restauration de session est en cours. */
   isRestoring: boolean
-  setAuth: (user: User, accessToken: string, role?: UserRole | null, mustChange?: boolean) => void
+  setAuth: (user: User, accessToken: string, role?: UserRole | null,
+            mustChange?: boolean, mfaEnrolment?: boolean) => void
   clearMustChange: () => void
+  clearMfaEnrolment: () => void
   setAccessToken: (token: string) => void
   setRestoring: (v: boolean) => void
   logout: () => void
@@ -46,13 +52,16 @@ export const useAuthStore = create<AuthState>()(
       isAuth: false,
       role: null,
       mustChangePassword: false,
+      mfaEnrolmentRequired: false,
       isRestoring: false,
 
-      setAuth: (user, accessToken, role = null, mustChange = false) =>
+      setAuth: (user, accessToken, role = null, mustChange = false, mfaEnrolment = false) =>
         set({ user, accessToken, isAuth: true, isRestoring: false, role,
-              mustChangePassword: mustChange }),
+              mustChangePassword: mustChange, mfaEnrolmentRequired: mfaEnrolment }),
 
       clearMustChange: () => set({ mustChangePassword: false }),
+
+      clearMfaEnrolment: () => set({ mfaEnrolmentRequired: false }),
 
       setAccessToken: (token) => set({ accessToken: token }),
 
@@ -60,7 +69,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () =>
         set({ user: null, accessToken: null, isAuth: false, isRestoring: false,
-              role: null, mustChangePassword: false }),
+              role: null, mustChangePassword: false, mfaEnrolmentRequired: false }),
     }),
     {
       name: 'ledgeralps-auth',
@@ -70,6 +79,7 @@ export const useAuthStore = create<AuthState>()(
         isAuth: s.isAuth,
         role: s.role,
         mustChangePassword: s.mustChangePassword,
+        mfaEnrolmentRequired: s.mfaEnrolmentRequired,
       }),
     },
   ),

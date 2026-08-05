@@ -56,9 +56,11 @@ Voir [ROADMAP.md](../ROADMAP.md#14--modules-métier).
 | `cmd/cli` | CLI d'administration (`migrate`, `bootstrap`, `health`, `backup`, `restore`) |
 | `cmd/launcher` | Lanceur Windows (`-H=windowsgui`) : démarrage, assistant, navigateur |
 | `internal/api/handlers` | Handlers HTTP — une famille de routes par fichier |
-| `internal/api/middleware` | Authentification, CORS, en-têtes de sécurité, limitation de débit |
+| `internal/api/middleware` | Authentification, autorisation par rôle, CORS, en-têtes de sécurité, limitation de débit |
 | `internal/core/compliance` | Règles suisses : QR-facture, IBAN, arrondi 5 centimes, avis de conformité |
 | `internal/core/security` | Hachage de mots de passe, JWT, chaîne de hachage d'audit |
+| `internal/core/authz` | Rôles et permissions — table de droits, refus par défaut |
+| `internal/core/mfa` | Second facteur TOTP (RFC 6238), vérifié contre les vecteurs officiels |
 | `internal/services` | Logique métier : comptabilité, facturation, TVA, PDF, ISO 20022 |
 | `internal/db` | Connexion, migrations embarquées, sauvegardes |
 | `internal/models` | Structures de données partagées |
@@ -66,6 +68,27 @@ Voir [ROADMAP.md](../ROADMAP.md#14--modules-métier).
 | `compliance/` | Veille légale automatisée — voir [compliance/README.md](../compliance/README.md) |
 
 ## Décisions structurantes
+
+**Les droits se lisent dans la base, jamais dans le jeton.** Un jeton d'accès vit
+une heure ; si le rôle y était inscrit, rétrograder ou désactiver quelqu'un le
+laisserait agir avec ses anciens droits pendant tout ce temps. La base est locale
+et la lecture est un accès par clé primaire : le coût est nul. Le jeton ne prouve
+donc que l'identité — ce qu'un compte a le droit de faire se demande à la base,
+au moment où il le fait.
+
+**Les refus vivent au point de passage obligé, pas route par route.** Trois
+filtres globaux s'appliquent à tout le groupe authentifié : écriture interdite
+aux rôles en lecture seule, mot de passe temporaire à remplacer, second facteur à
+inscrire pour les administrateurs. Un quatrième refus vit dans le filtre
+d'authentification lui-même : un jeton d'attente de second facteur n'ouvre aucune
+route. Une garde qu'il faut penser à déclarer s'oublie une fois — et cette
+fois-là ouvre un trou que rien ne signale. Les routes qui n'existent pas encore
+sont couvertes.
+
+Les seules routes montées **hors** du groupe filtré sont celles qui permettent de
+sortir d'un de ces états : changement de mot de passe, inscription et
+vérification du second facteur. Les y inclure enfermerait le compte
+définitivement.
 
 **Migrations embarquées.** Les fichiers SQL sont compilés dans le binaire
 (`embed.FS`) et appliqués au démarrage, une transaction par migration.

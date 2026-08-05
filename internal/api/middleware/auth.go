@@ -36,8 +36,50 @@ func authenticate(c *gin.Context, jwtSecret string) bool {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 		return false
 	}
+	// Un jeton d'attente de second facteur n'est pas une session. Le refus est
+	// ici, au point de passage obligé, et non sur chaque route : une route
+	// ajoutée demain le rejette sans que personne ait à y penser. L'inverse —
+	// autoriser par défaut et bloquer route par route — s'oublie une fois, et
+	// cette fois-là une moitié de connexion vaut une session complète.
+	if claims.MFAPending {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"error":        "connexion incomplète : le second facteur n'a pas été validé",
+			"mfa_required": true,
+		})
+		return false
+	}
 	c.Set(claimsKey, claims)
 	return true
+}
+
+// RequireMFAChallenge n'accepte QUE le jeton d'attente.
+//
+// La symétrie compte : ce filtre est le seul endroit qui accepte un jeton
+// d'attente, et il refuse un jeton d'accès complet. Présenter une session déjà
+// valide à l'étape de vérification n'a pas de sens, et l'accepter permettrait
+// de consommer un code de secours depuis une session ordinaire.
+func RequireMFAChallenge(jwtSecret string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		header := c.GetHeader("Authorization")
+		if !strings.HasPrefix(header, "Bearer ") {
+			c.AbortWithStatusJSON(http.StatusUnauthorized,
+				gin.H{"error": "missing or malformed Authorization header"})
+			return
+		}
+		claims, err := security.ParseToken(jwtSecret, strings.TrimPrefix(header, "Bearer "))
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "cette étape a expiré : recommencez la connexion"})
+			return
+		}
+		if !claims.MFAPending {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "cette étape suit une saisie de mot de passe"})
+			return
+		}
+		c.Set(claimsKey, claims)
+		c.Next()
+	}
 }
 
 // RequireAuth validates the Bearer JWT in the Authorization header.

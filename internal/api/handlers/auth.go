@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
+	"github.com/kmdn-ch/ledgeralps/internal/core/authz"
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
@@ -108,6 +109,52 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Second facteur : le mot de passe ne suffit plus.
+	//
+	// Rien n'est délivré ici qu'un jeton d'attente de cinq minutes, qui ne vaut
+	// que pour /auth/mfa/verify. Ni jeton d'accès, ni cookie de
+	// rafraîchissement : une session ne naît qu'après le code.
+	if h.mfaEnabled(c.Request.Context(), userID) {
+		challenge, err := security.GenerateMFAChallengeToken(h.cfg.JWTSecret, userID, isAdmin)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate token"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"mfa_required": true,
+			"mfa_token":    challenge,
+			"expires_in":   300,
+		})
+		return
+	}
+
+	h.issueSession(c, userID, isAdmin, role, mustChange == 1)
+}
+
+// mfaEnabled dit si le compte a un second facteur CONFIRMÉ.
+//
+// Un secret créé mais jamais confirmé ne compte pas : quelqu'un qui a fermé
+// l'assistant en cours de route serait sinon réclamé un code qu'aucun téléphone
+// ne calcule, et il ne pourrait plus entrer.
+func (h *AuthHandler) mfaEnabled(ctx context.Context, userID string) bool {
+	q := db.Rebind(
+		`SELECT COUNT(*) FROM user_mfa WHERE user_id = ? AND confirmed_at IS NOT NULL`,
+		h.cfg.UsePostgres())
+	var n int
+	if err := h.db.QueryRowContext(ctx, q, userID).Scan(&n); err != nil {
+		return false
+	}
+	return n > 0
+}
+
+// issueSession délivre la vraie session : jeton d'accès, cookie de
+// rafraîchissement, et ce que l'interface doit savoir.
+//
+// Extraite de Login parce que la vérification du second facteur mène exactement
+// au même endroit. Deux copies auraient divergé — et la copie qui aurait oublié
+// une règle serait justement celle qu'on emprunte après avoir prouvé son
+// identité deux fois.
+func (h *AuthHandler) issueSession(c *gin.Context, userID string, isAdmin bool, role string, mustChange bool) {
 	accessTTL := time.Duration(h.cfg.JWTAccessMinutes) * time.Minute
 	accessToken, err := security.GenerateAccessToken(h.cfg.JWTSecret, userID, isAdmin, accessTTL)
 	if err != nil {
@@ -124,10 +171,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// Persist refresh token so Refresh/Logout endpoints can validate/revoke it.
 	//
-	// A fresh context: the one above was opened before CheckPassword, and bcrypt
-	// is deliberately slow. Reusing it meant a correct password on a slow machine
-	// could still end in "database error" — the login had already spent most of
-	// its five seconds hashing before reaching this insert.
+	// A fresh context: the one used for the password check was opened before
+	// CheckPassword, and bcrypt is deliberately slow. Reusing it meant a correct
+	// password on a slow machine could still end in "database error" — the login
+	// had already spent most of its five seconds hashing before this insert.
 	insCtx, insCancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer insCancel()
 
@@ -158,7 +205,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		// L'interface envoie directement à l'écran de changement. Le serveur
 		// n'en dépend pas : chaque route refuse le compte tant que le mot de
 		// passe temporaire vaut encore.
-		"must_change_password": mustChange == 1,
+		"must_change_password": mustChange,
+		// Même logique pour l'inscription du second facteur : l'interface
+		// conduit à l'écran, le serveur refuse de toute façon tant que c'est
+		// dû.
+		"mfa_enrolment_required": role == string(authz.RoleAdmin) &&
+			!h.mfaEnabled(c.Request.Context(), userID),
 	})
 }
 

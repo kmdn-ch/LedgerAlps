@@ -73,6 +73,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 7 | Maintenance & Système | ✅ conforme | [↓](#7--maintenance--système) |
 | 8 | Notes de crédit — écriture au journal | 🔎 livré, éteint par défaut | [↓](#8--notes-de-crédit--écriture-au-journal) |
 | 9 | Multi-utilisateurs & permissions | 🔎 livré | [↓](#9--multi-utilisateurs--permissions) |
+| 9b | Second facteur & réinitialisation d'accès | 🔎 livré | [↓](#9b--second-facteur--réinitialisation-daccès) |
 | 10 | Rapprochement bancaire (interface) | 🔎 livré | [↓](#10--rapprochement-bancaire) |
 | 11 | eBill | ⛔ écarté — réseau fermé | [↓](#11--ebill) |
 | 12 | Validation contre le portail SIX | 🔎 dossier livré | [↓](#12--validation-contre-le-portail-six) |
@@ -324,6 +325,59 @@ laissé ouvert sur un poste partagé est la porte que personne ne pense à ferme
 
 **Reste** : rien d'obligatoire. Des permissions plus fines — un comptable sans
 accès à la TVA, par exemple — attendront qu'un besoin réel les demande.
+
+### 9b — Second facteur & réinitialisation d'accès
+
+**Livré.** Deux manques que le point 9 laissait ouverts : le compte
+administrateur n'était protégé que par un mot de passe, et un mot de passe
+oublié n'avait aucune issue — le produit refusant de supprimer un compte.
+
+**Second facteur par code à usage unique (TOTP, RFC 6238), obligatoire pour les
+administrateurs.** Un compte administrateur peut créer des comptes, restaurer
+une sauvegarde, déverrouiller une période et déchiffrer la base. Un mot de passe
+réutilisé sur un autre site, deviné ou lu par-dessus l'épaule suffisait.
+
+Ce qu'il protège : le cas où le **mot de passe** fuit. Ce qu'il ne protège pas :
+quelqu'un qui lit déjà le fichier de base — le secret y est, et celui-là n'a
+besoin d'aucun code. C'est le chiffrement de la base et du disque (point 4) qui
+répond à cette menace, pas celui-ci.
+
+TOTP plutôt qu'autre chose : le SMS demande un opérateur et un appel sortant, le
+courriel protège mal la boîte qui est souvent la cible, WebAuthn exige HTTPS et
+du matériel. TOTP fonctionne hors ligne, avec n'importe quelle application — y
+compris libre : Aegis, KeePassXC, FreeOTP — et aucun tiers n'est dans la boucle.
+L'algorithme est écrit ici, pas importé : quarante lignes, vérifiées contre les
+**vecteurs de test officiels de la RFC 6238**.
+
+Vérifié sur un serveur réel : un administrateur non inscrit reçoit 403 sur
+`/users`, `/backups`, `/contacts`, `/invoices` et `/journal`, lecture comprise.
+Le jeton d'attente délivré après le mot de passe vit cinq minutes, ne vaut que
+pour `/auth/mfa/verify`, et le filtre d'authentification le refuse partout
+ailleurs — donc aussi sur les routes qui n'existent pas encore. Un code ne sert
+qu'une fois. La vérification est derrière la limitation de tentatives existante.
+
+**Dix codes de secours, montrés une fois, hachés en base.** Sans eux, un
+téléphone perdu enfermerait définitivement le dernier administrateur : le second
+facteur créerait la panne qu'il est censé prévenir.
+
+**Réinitialisation d'accès par l'administrateur.** « Réinitialiser » remplace le
+mot de passe — jamais révélé, pas même à l'administrateur — par un mot de passe
+temporaire tiré au hasard, affiché une seule fois et absent du journal de
+sécurité. Le compte devra en choisir un autre à sa connexion suivante et ne peut
+rien faire avant. Les sessions ouvertes tombent.
+
+Elle ne retire **pas** le second facteur. Réunis en un seul geste, les deux
+permettraient à un administrateur de se substituer entièrement à n'importe quel
+compte, et le second facteur ne protégerait plus de rien face à lui. Le retrait
+est une action séparée, confirmée et tracée à part.
+
+**À la première connexion après la mise à jour**, l'administrateur d'une
+installation existante sera conduit à inscrire son téléphone avant de pouvoir
+travailler. C'est voulu : une protection qu'on peut remettre à plus tard n'est
+jamais activée.
+
+**Reste** : rien d'obligatoire. Une clé matérielle (WebAuthn) attendrait HTTPS
+généralisé et un besoin réel.
 
 ### 10 — Rapprochement bancaire
 

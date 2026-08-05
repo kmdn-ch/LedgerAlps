@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Mountain, Eye, EyeOff } from 'lucide-react'
+import { Mountain, Eye, EyeOff, Smartphone, ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
 import { authApi } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
@@ -28,6 +28,53 @@ export function LoginPage() {
   const [error,  setError]    = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Deuxième étape. Le jeton d'attente ne vit qu'ici, en mémoire, et cinq
+  // minutes au plus : il ne vaut que pour l'échange contre une vraie session,
+  // et le serveur le refuse sur toute autre route.
+  const [challenge, setChallenge] = useState<{ token: string; email: string } | null>(null)
+  const [code, setCode] = useState('')
+
+  // Poser la session, quel que soit le chemin qui y a mené. Une seule fonction :
+  // deux copies auraient divergé, et celle qui aurait oublié une règle serait
+  // justement celle empruntée après avoir prouvé son identité deux fois.
+  const enter = (email: string, data: {
+    access_token: string; role?: string | null
+    must_change_password?: boolean; mfa_enrolment_required?: boolean
+  }) => {
+    const user = { id: '', email, name: email.split('@')[0],
+                   is_active: true, is_admin: false, created_at: '' }
+    setAuth(user, data.access_token, (data.role ?? null) as never,
+            data.must_change_password === true,
+            data.mfa_enrolment_required === true)
+    if (data.must_change_password === true) { navigate('/change-password'); return }
+    if (data.mfa_enrolment_required === true) { navigate('/second-facteur'); return }
+    navigate('/')
+  }
+
+  const submitCode = async () => {
+    if (!challenge) return
+    setLoading(true)
+    setError('')
+    try {
+      const res = await authApi.mfaVerify(challenge.token, code.trim())
+      enter(challenge.email, res.data)
+    } catch (e) {
+      const status = (e as { response?: { status?: number } }).response?.status
+      if (status === 401) {
+        setError("Code incorrect. Vérifiez l'heure de votre téléphone : un décalage de plus " +
+                 "d'une minute décale tous les codes.")
+      } else if (status === 429) {
+        setError('Trop de tentatives. Patientez quelques minutes avant de réessayer.')
+      } else {
+        setError("La vérification a échoué. Recommencez la connexion.")
+        setChallenge(null)
+      }
+      setCode('')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
@@ -37,11 +84,13 @@ export function LoginPage() {
     setError('')
     try {
       const res = await authApi.login(data.email, data.password)
-      const user = { id: '', email: data.email, name: data.email.split('@')[0],
-                     is_active: true, is_admin: false, created_at: '' }
-      setAuth(user, res.data.access_token, res.data.role ?? null,
-              res.data.must_change_password === true)
-      navigate(res.data.must_change_password === true ? '/change-password' : '/')
+      // Le mot de passe est juste, mais il ne suffit pas : rien n'a encore été
+      // délivré qu'un jeton d'attente.
+      if (res.data.mfa_required === true) {
+        setChallenge({ token: res.data.mfa_token, email: data.email })
+        return
+      }
+      enter(data.email, res.data)
     } catch {
       setError('Identifiants incorrects.')
     } finally {
@@ -84,8 +133,14 @@ export function LoginPage() {
         {/* Card */}
         <div className="bg-alpine-900/80 border border-alpine-700/50 rounded-2xl
                         backdrop-blur-sm shadow-modal p-8">
-          <h1 className="font-display font-700 text-lg text-white mb-1">Connexion</h1>
-          <p className="text-sm text-alpine-400 mb-6">Accédez à votre espace.</p>
+          <h1 className="font-display font-700 text-lg text-white mb-1">
+            {challenge ? 'Vérification' : 'Connexion'}
+          </h1>
+          <p className="text-sm text-alpine-400 mb-6">
+            {challenge
+              ? 'Saisissez le code affiché par votre application d’authentification.'
+              : 'Accédez à votre espace.'}
+          </p>
 
           {error && (
             <div className="bg-danger-500/10 border border-danger-500/30 rounded-lg
@@ -94,6 +149,67 @@ export function LoginPage() {
             </div>
           )}
 
+          {/* Deuxième étape : le mot de passe est accepté, la session n'existe
+              pas encore. Rien de ce qui s'affiche ici n'ouvre quoi que ce soit
+              tant que le code n'est pas validé par le serveur. */}
+          {challenge ? (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2.5 text-sm text-alpine-300">
+                <Smartphone size={16} className="text-accent-500 mt-0.5 shrink-0" />
+                <span>
+                  Ouvrez votre application d&rsquo;authentification et recopiez les six
+                  chiffres affichés pour <strong className="text-white">{challenge.email}</strong>.
+                </span>
+              </div>
+
+              <div>
+                <label htmlFor="otp"
+                       className="block text-xs font-medium text-alpine-400 mb-1.5 uppercase tracking-wide">
+                  Code à six chiffres
+                </label>
+                <input
+                  id="otp"
+                  autoFocus
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={7}
+                  value={code}
+                  onChange={e => setCode(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') submitCode() }}
+                  className="w-full px-3 py-2.5 bg-alpine-800/80 border border-alpine-700 rounded-lg
+                             text-center text-xl tracking-[0.4em] text-white
+                             focus:outline-none focus:ring-2 focus:ring-accent-500/50"
+                  placeholder="000000"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={submitCode}
+                disabled={loading || code.trim().length < 6}
+                className="w-full py-2.5 bg-accent-500 hover:bg-accent-600 text-white font-medium
+                           rounded-lg text-sm transition-all duration-150 active:scale-[0.98]
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Vérification…' : 'Valider'}
+              </button>
+
+              {/* Le téléphone perdu ne doit pas enfermer dehors : les codes de
+                  secours acceptés ici sont ceux notés à l'inscription. */}
+              <p className="text-xs text-alpine-500">
+                Téléphone perdu ou indisponible ? Saisissez ici l&rsquo;un des codes de secours
+                notés lors de l&rsquo;inscription. Chacun ne sert qu&rsquo;une fois.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => { setChallenge(null); setCode(''); setError('') }}
+                className="text-xs text-alpine-400 hover:text-alpine-200 flex items-center gap-1"
+              >
+                <ArrowLeft size={12} /> Revenir à la connexion
+              </button>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-alpine-400 mb-1.5 uppercase tracking-wide">
@@ -148,6 +264,7 @@ export function LoginPage() {
               {loading ? 'Connexion…' : 'Se connecter'}
             </button>
           </form>
+          )}
         </div>
 
         <p className="text-center text-xs text-alpine-600 mt-6">

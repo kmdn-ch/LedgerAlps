@@ -219,6 +219,27 @@ func main() {
 	// temporaire puisse faire, et la placer dans le groupe la bloquerait
 	// elle-même — le compte serait alors définitivement enfermé.
 	v1.POST("/auth/change-password", middleware.RequireAuth(cfg.JWTSecret), authHandler.ChangePassword)
+
+	// Second facteur.
+	//
+	// La vérification est derrière la limitation de tentatives : six chiffres se
+	// devinent en un million d'essais, ce qui est peu pour une machine et beaucoup
+	// pour quelqu'un à qui l'on ferme la porte au bout de quelques erreurs. Elle
+	// n'accepte QUE le jeton d'attente, et le filtre d'authentification refuse ce
+	// jeton partout ailleurs.
+	v1.POST("/auth/mfa/verify", loginLimiter.Middleware(),
+		middleware.RequireMFAChallenge(cfg.JWTSecret), authHandler.MFAVerify)
+
+	// Inscription et retrait, hors du groupe filtré pour la même raison que le
+	// changement de mot de passe : un administrateur non inscrit ne peut rien
+	// faire d'autre, et si ces routes étaient dans le groupe elles se
+	// bloqueraient elles-mêmes — le compte serait enfermé hors de sa propre
+	// installation.
+	v1.GET("/auth/mfa", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFAStatus)
+	v1.POST("/auth/mfa/setup", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFASetup)
+	v1.POST("/auth/mfa/confirm", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFAConfirm)
+	v1.DELETE("/auth/mfa", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFADisable)
+
 	v1.POST("/auth/register", loginLimiter.Middleware(), authHandler.Register)
 	v1.POST("/auth/bootstrap", loginLimiter.Middleware(), authHandler.Bootstrap) // one-shot: creates first admin user
 
@@ -244,6 +265,12 @@ func main() {
 	// pas remplacé, une action tracée sous ce compte ne prouve pas qui l'a faite.
 	// Le compte ne peut donc RIEN faire, pas même lire.
 	api.Use(authorizer.RequirePasswordChanged())
+
+	// Un compte administrateur détient les clés de l'installation : créer des
+	// comptes, restaurer une sauvegarde, déverrouiller une période. Son mot de
+	// passe est la seule chose qui en sépare quelqu'un. Tant qu'un second facteur
+	// n'est pas inscrit, il ne peut rien faire d'autre que l'inscrire.
+	api.Use(authorizer.RequireMFAEnrolled())
 
 	// Journal
 	jh := handlers.NewJournalHandler(database, cfg.UsePostgres())
@@ -419,6 +446,11 @@ func main() {
 	api.POST("/users", authorizer.Require(authz.PermAdmin), uh.CreateUser)
 	api.PUT("/users/:id/role", authorizer.Require(authz.PermAdmin), uh.UpdateUserRole)
 	api.PUT("/users/:id/active", authorizer.Require(authz.PermAdmin), uh.SetUserActive)
+	// Deux gestes séparés, tracés séparément. Réunis en un seul clic, ils
+	// permettraient à un administrateur de se substituer entièrement à n'importe
+	// quel compte — et le second facteur ne protégerait plus de rien face à lui.
+	api.POST("/users/:id/reset-password", authorizer.Require(authz.PermAdmin), uh.ResetPassword)
+	api.DELETE("/users/:id/mfa", authorizer.Require(authz.PermAdmin), uh.RemoveMFA)
 
 	api.GET("/settings/company", sh.GetCompany)
 	api.PUT("/settings/company", authorizer.Require(authz.PermAdmin), sh.PutCompany)

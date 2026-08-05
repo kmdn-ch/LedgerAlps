@@ -27,6 +27,78 @@ Toutes les routes applicatives sont préfixées par `/api/v1`.
 | POST | `/auth/login` | public | Connexion → jetons |
 | POST | `/auth/refresh` | public | Renouveler le jeton d'accès |
 | POST | `/auth/logout` | public | Révoquer le jeton de rafraîchissement |
+| POST | `/auth/change-password` | auth | Choisir son mot de passe. Seule route ouverte à un compte au mot de passe temporaire |
+| POST | `/auth/mfa/verify` | jeton d'attente | Deuxième étape de la connexion : code TOTP ou code de secours |
+| GET | `/auth/mfa` | auth | État du second facteur du compte connecté |
+| POST | `/auth/mfa/setup` | auth | Préparer une inscription — rend le secret, l'URI `otpauth://` et le QR |
+| POST | `/auth/mfa/confirm` | auth | Confirmer par un premier code — rend les codes de secours, une seule fois |
+| DELETE | `/auth/mfa` | auth | Retirer le second facteur. Mot de passe redemandé |
+
+### Connexion en deux temps
+
+`POST /auth/login` rend l'une de deux réponses.
+
+Sans second facteur, la réponse habituelle : `access_token`, `role`,
+`must_change_password`, `mfa_enrolment_required`, plus le cookie de
+rafraîchissement.
+
+Avec un second facteur **confirmé**, aucune session n'est créée :
+
+```json
+{ "mfa_required": true, "mfa_token": "…", "expires_in": 300 }
+```
+
+`mfa_token` vit cinq minutes et ne vaut **que** pour `POST /auth/mfa/verify`.
+Le filtre d'authentification le refuse sur toute autre route — y compris celles
+qui n'existent pas encore : le refus est écrit au point de passage obligé,
+plutôt que route par route où il finirait par être oublié une fois.
+
+`POST /auth/mfa/verify` accepte le code à six chiffres **ou** un code de secours,
+et rend alors la réponse de session habituelle. Un code TOTP ne sert qu'une
+fois : la fenêtre acceptée est enregistrée et refusée ensuite. La route est
+derrière la limitation de tentatives — cinq échecs, quinze minutes de fermeture.
+
+### Ce que le second facteur protège
+
+Le cas où le **mot de passe** fuit. Il ne protège pas de quelqu'un qui lit déjà
+le fichier de base : le secret y est stocké en clair, parce que le serveur doit
+le lire à chaque vérification sans intervention humaine — toute clé qui le
+protégerait vivrait sur la même machine. C'est le chiffrement de la base et du
+disque qui répond à cette menace.
+
+### Refus propres au second facteur
+
+| Statut | Cause |
+|---|---|
+| 401 + `mfa_required` | Un jeton d'attente a été présenté à une route ordinaire |
+| 401 | Code faux, ou jeton d'attente expiré (cinq minutes) |
+| 403 + `mfa_enrolment_required` | Compte administrateur sans second facteur inscrit |
+| 409 | Inscription déjà active — retirez-la d'abord pour changer de téléphone |
+| 429 | Trop de codes faux depuis cette adresse |
+
+## Comptes et rôles
+
+Administrateur uniquement. Le rôle est relu dans la base à chaque requête : un
+changement s'applique immédiatement, sans attendre l'expiration d'une session.
+
+| Méthode | Route | Accès | Description |
+|---|---|---|---|
+| GET | `/users` | admin | Liste des comptes |
+| POST | `/users` | admin | Créer un compte. Le mot de passe est **temporaire** : `must_change_password` est posé |
+| PUT | `/users/:id/role` | admin | Changer le rôle (`admin`, `accountant`, `viewer`) |
+| PUT | `/users/:id/active` | admin | Activer ou désactiver. Un compte ne se supprime pas (CO art. 957a al. 2 ch. 5) |
+| POST | `/users/:id/reset-password` | admin | Remplacer le mot de passe par un temporaire, rendu **une seule fois** |
+| DELETE | `/users/:id/mfa` | admin | Retirer le second facteur d'un compte (téléphone perdu) |
+
+Les deux dernières routes sont **délibérément séparées**. Réunies en un geste,
+elles permettraient à un administrateur de se substituer entièrement à n'importe
+quel compte, et le second facteur ne protégerait plus de rien face à lui. Elles
+sont tracées séparément dans les événements de sécurité.
+
+Refus : on ne retire pas le dernier administrateur (rétrogradation ou
+désactivation), on ne change pas son propre rôle, on ne se réinitialise pas
+soi-même, et on ne réinitialise pas un compte désactivé — cela donnerait un mot
+de passe utilisable à quelqu'un qui n'a plus le droit d'entrer.
 
 ## Système
 

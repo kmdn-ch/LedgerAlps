@@ -108,6 +108,79 @@ func (a *Authorizer) RequirePasswordChanged() gin.HandlerFunc {
 	}
 }
 
+// RequireMFAEnrolled exige un second facteur inscrit sur les comptes
+// administrateurs.
+//
+// # Pourquoi seulement les administrateurs
+//
+// Un compte administrateur peut créer des comptes, restaurer une sauvegarde,
+// déverrouiller une période, changer les droits de tout le monde. Son mot de
+// passe est la seule chose qui sépare quelqu'un de l'ensemble de la
+// comptabilité. Un comptable, lui, écrit dans un journal chaîné et tracé, et
+// n'a pas les clés de l'installation : lui imposer un téléphone coûterait plus
+// qu'il ne protège.
+//
+// # Pourquoi le blocage est technique
+//
+// Comme pour le mot de passe temporaire : cacher les écrans ne ferme aucune
+// porte. Un administrateur non inscrit ne peut RIEN faire d'autre que
+// s'inscrire — les routes d'inscription vivent hors de ce groupe, sans quoi
+// elles se bloqueraient elles-mêmes et le compte serait enfermé.
+//
+// # À la première connexion après la mise à jour
+//
+// Les installations existantes ont un administrateur sans second facteur. Il
+// sera conduit à l'inscription avant de pouvoir travailler. C'est voulu : une
+// protection qu'on peut remettre à plus tard n'est jamais activée.
+func (a *Authorizer) RequireMFAEnrolled() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims := GetClaims(c)
+		if claims == nil {
+			c.Next() // route publique : ce filtre ne se prononce pas
+			return
+		}
+		role, ok, _ := a.currentState(claims.UserID)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized,
+				gin.H{"error": "ce compte n'est plus actif"})
+			return
+		}
+		if role != authz.RoleAdmin {
+			c.Next()
+			return
+		}
+		if a.mfaConfirmed(claims.UserID) {
+			c.Next()
+			return
+		}
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+			"error": "un compte administrateur doit être protégé par un second facteur : " +
+				"inscrivez votre application d'authentification pour continuer",
+			"mfa_enrolment_required": true,
+		})
+	}
+}
+
+// mfaConfirmed dit si le compte a une inscription CONFIRMÉE.
+//
+// Confirmée, et pas seulement commencée : un secret créé puis abandonné en cours
+// d'assistant ne doit pas compter, sinon quelqu'un qui ferme l'onglet au milieu
+// se retrouverait à devoir fournir un code qu'aucun téléphone ne calcule.
+func (a *Authorizer) mfaConfirmed(userID string) bool {
+	q := db.Rebind(
+		`SELECT COUNT(*) FROM user_mfa WHERE user_id = ? AND confirmed_at IS NOT NULL`,
+		a.usePostgres)
+	var n int
+	if err := a.db.QueryRow(q, userID).Scan(&n); err != nil {
+		// Table absente (base plus ancienne que la migration) ou lecture en
+		// échec : ne pas enfermer l'administrateur hors de sa propre
+		// installation pour un défaut de lecture. Le mot de passe reste exigé,
+		// et l'écran d'inscription reste accessible.
+		return true
+	}
+	return n > 0
+}
+
 // Require exige une permission. C'est la barrière déclarée par route.
 func (a *Authorizer) Require(p authz.Permission) gin.HandlerFunc {
 	return func(c *gin.Context) {

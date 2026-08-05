@@ -42,6 +42,15 @@ type Claims struct {
 	UserID  string `json:"sub"`
 	IsAdmin bool   `json:"is_admin"`
 	JTI     string `json:"jti"`
+	// MFAPending marque un jeton d'ATTENTE : le mot de passe a été accepté, le
+	// second facteur pas encore. Il ne vaut que pour /auth/mfa/verify, et le
+	// filtre d'authentification le refuse partout ailleurs.
+	//
+	// Le refus est écrit dans authenticate() plutôt que route par route : ainsi
+	// une route ajoutée demain le rejette sans que personne y pense. Un drapeau
+	// qu'il faudrait penser à vérifier serait oublié, et un jeton de moitié de
+	// connexion vaudrait alors une session complète.
+	MFAPending bool `json:"mfa_pending,omitempty"`
 	// NOTE: email is intentionally excluded from the JWT payload (nLPD data minimisation)
 }
 
@@ -73,6 +82,36 @@ func GenerateAccessToken(secret, userID string, isAdmin bool, ttl time.Duration)
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
+}
+
+// GenerateMFAChallengeToken crée le jeton d'attente entre le mot de passe et le
+// second facteur.
+//
+// Il vit cinq minutes : le temps de sortir son téléphone, de le déverrouiller et
+// de recopier six chiffres, pas davantage. Une heure comme un jeton d'accès
+// ordinaire laisserait à quelqu'un qui a volé le mot de passe une heure pour
+// trouver aussi le code.
+//
+// Il ne porte AUCUN droit. Le filtre d'authentification le refuse sur toutes les
+// routes sauf celle qui l'échange contre une vraie session.
+func GenerateMFAChallengeToken(secret, userID string, isAdmin bool) (string, error) {
+	jti, err := newJTI()
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	claims := Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Subject:   userID,
+		},
+		UserID:     userID,
+		IsAdmin:    isAdmin,
+		JTI:        jti,
+		MFAPending: true,
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
 }
 
 // GenerateRefreshToken creates a long-lived refresh JWT.
