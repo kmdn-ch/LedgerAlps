@@ -467,3 +467,18 @@ export interface BankEntry {
     reason: string
   }
 }
+
+// Rôles. Le serveur est l'autorité : il relit le rôle dans la base à chaque
+// requête et refuse quoi qu'affiche le navigateur. Ce type ne sert qu'à
+// éviter de proposer un bouton qui répondra 403.
+export type UserRole = 'admin' | 'accountant' | 'viewer'
+
+export interface AppUser {
+  id: string
+  email: string
+  name: string
+  role: UserRole
+  role_label: string
+  is_active: boolean
+  created_at: string
+}

@@ -76,17 +76,29 @@
 
   /* ─── Table ───────────────────────────────────────────────────────────── */
   .table-wrapper { @apply overflow-x-auto rounded-xl border border-alpine-200; }
-  .table { @apply w-full text-sm border-collapse; }
+  /* text-[13px] plutôt que text-sm : sur une ligne de facture, sept colonnes
+     dont trois montants, le pas de 14 px poussait les nombres contre le bord.
+     Un demi-point de moins rend la marge sans rien coûter à la lecture.
+
+     Les cellules de bord reçoivent une respiration supplémentaire : elles
+     longent un bord arrondi, et le rayon mange visuellement le padding — un
+     chiffre aligné à droite semble y toucher alors qu'il respecte la même
+     mesure que les autres.
+
+     tabular-nums aligne les chiffres en colonne. Sans lui, « 1 » et « 8 » n'ont
+     pas la même largeur et les montants dansent d'une ligne à l'autre, ce qui
+     empêche de comparer deux totaux d'un coup d'œil. */
+  .table { @apply w-full text-[13px] border-collapse tabular-nums; }
   .table thead tr { @apply bg-alpine-900 text-white; }
   .table thead th {
     @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider
-           first:rounded-tl-xl last:rounded-tr-xl;
+           first:pl-5 last:pr-5 first:rounded-tl-xl last:rounded-tr-xl;
   }
   .table tbody tr {
     @apply border-t border-alpine-100 hover:bg-alpine-50/60
            transition-colors duration-100;
   }
-  .table tbody td { @apply px-4 py-3 text-alpine-800; }
+  .table tbody td { @apply px-4 py-3 first:pl-5 last:pr-5 text-alpine-800; }
   .table tbody tr:last-child td { @apply first:rounded-bl-xl last:rounded-br-xl; }
 
   /* ─── Badges ──────────────────────────────────────────────────────────── */

@@ -9,6 +9,31 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Ajouté
 
+- **Point 9 — trois rôles : Administrateur, Comptable, Lecture seule.** Le cas central est celui de la fiduciaire : lui ouvrir les livres sans lui donner les clés. Jusqu'ici il n'y avait qu'un interrupteur — administrateur ou non — si bien que partager l'accès revenait à partager le compte, avec le droit de modifier les livres et d'effacer les sauvegardes.
+
+  **Le rôle est lu dans la base à chaque requête, jamais dans le jeton.** Un jeton d'accès vit une heure ; si le rôle y était inscrit, rétrograder ou désactiver quelqu'un le laisserait agir avec ses anciens droits pendant tout ce temps — une heure durant laquelle on croit avoir coupé l'accès. Vérifié sur un serveur réel : avec le **même** jeton, 403 → 201 → 403 au fil des changements de rôle, sans aucune reconnexion.
+
+  `middleware.RequireAdmin`, qui lisait le drapeau administrateur dans le jeton, a été **supprimé** plutôt que déprécié : laissé disponible, il serait repris par réflexe sur la prochaine route d'administration, et le défaut reviendrait sans que rien ne le signale.
+
+  **Deux barrières indépendantes.** Les permissions par route dépendent de ce qu'on a pensé à déclarer ; un filtre global refuse en plus toute méthode d'écriture à un rôle en lecture seule, quelle que soit la route — y compris celles qui n'existent pas encore. Un test exerce précisément une route d'écriture sans garde déclarée.
+
+  **Trois refus protègent l'installation d'elle-même** : on ne retire pas le dernier administrateur, ni en le rétrogradant ni en le désactivant, et on ne change pas son propre rôle. Un administrateur désactivé ne compte pas comme recours. Un compte se désactive et ne se supprime pas — les écritures portent l'identifiant de leur auteur (CO art. 957a al. 2 ch. 5).
+
+### Corrigé
+
+- **Le premier compte d'une installation neuve n'était pas administrateur.** Le bootstrap posait `is_admin = 1` sans toucher au rôle, qui prenait donc sa valeur par défaut — « comptable ». Les droits étant lus dans le rôle, l'installation naissait **inadministrable** : impossible de créer un compte, de restaurer une sauvegarde, ni de se donner le droit de le faire. La migration traitait bien les lignes existantes ; c'est le chemin d'insertion qui avait été oublié. Trouvé en exerçant un serveur réel, pas en relisant le code.
+
+- **Roadmap : « base en clair » n'était plus vrai.** Le tableau de conformité suisse l'affirmait encore alors que le chiffrement de la base est livré depuis la v1.4.8-rc1. Un tableau de conformité qui se trompe sur son propre produit est exactement ce qui apprend à ne plus le lire.
+
+### Modifié
+
+- **Les tableaux respirent.** Les montants d'une ligne de facture touchaient le bord : le pas passe de 14 à 13 px, les cellules de bord reçoivent une marge supplémentaire — elles longent un bord arrondi, dont le rayon mange visuellement le padding — et les chiffres passent en `tabular-nums`, ce qui les aligne en colonne et permet de comparer deux totaux d'un coup d'œil.
+
+---
+
+
+### Ajouté
+
 - **Point 8 — les factures passent au journal à leur envoi.** Débiteurs au débit du total TTC, produits au crédit du hors-taxe, TVA due au crédit du reste ; la note de crédit contrepasse à l'identique. Jusqu'ici aucun document ne passait d'écriture — seuls les paiements étaient automatisés — si bien qu'une facture n'apparaissait au journal qu'à son encaissement, ce qui décale le produit d'un exercice à l'autre.
 
   **Le réglage est éteint sur les installations existantes**, et c'est délibéré : qui tenait une comptabilité complète saisissait ces écritures à la main, et les automatiser d'office doublerait le produit et la TVA due sur tout un exercice. La migration éteint le réglage pour les fiches déjà présentes et le laisse actif pour les nouvelles. Paramètres → Facturation pour l'allumer après vérification.

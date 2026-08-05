@@ -21,6 +21,7 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/api/handlers"
 	"github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
+	"github.com/kmdn-ch/ledgeralps/internal/core/authz"
 	"github.com/kmdn-ch/ledgeralps/internal/core/tlsutil"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	embeddedFrontend "github.com/kmdn-ch/ledgeralps/internal/frontend"
@@ -221,8 +222,18 @@ func main() {
 	v1.GET("/uid-lookup", handlers.UIDLookup)
 
 	// Protected routes — JWT required
+	authorizer := middleware.NewAuthorizer(database, cfg.UsePostgres(), cfg.JWTSecret)
 	api := v1.Group("")
 	api.Use(middleware.RequireAuth(cfg.JWTSecret))
+
+	// Seconde barrière, indépendante des permissions déclarées par route.
+	//
+	// Les gardes par route dépendent de ce qu'on a pensé à écrire ; oublier une
+	// déclaration sur une nouvelle route est la façon la plus courante d'ouvrir
+	// un trou, parce que rien ne le signale. Ce filtre refuse toute méthode
+	// d'écriture à un rôle en lecture seule, quelle que soit la route — donc y
+	// compris sur celles qui n'existent pas encore.
+	api.Use(authorizer.DenyWritesWithoutPermission())
 
 	// Journal
 	jh := handlers.NewJournalHandler(database, cfg.UsePostgres())
@@ -246,7 +257,7 @@ func main() {
 	api.PATCH("/contacts/:id", ch.UpdateContact)
 	// Anonymisation (nLPD art. 6 al. 4 et 32) : effacer les données d'une
 	// personne est une décision, pas une opération de saisie.
-	api.POST("/contacts/:id/anonymise", middleware.RequireAdmin(cfg.JWTSecret), ch.AnonymiseContact)
+	api.POST("/contacts/:id/anonymise", authorizer.Require(authz.PermAdmin), ch.AnonymiseContact)
 
 	// Invoices
 	ih := handlers.NewInvoicesHandler(database, cfg.UsePostgres(), accountingSvc)
@@ -280,48 +291,48 @@ func main() {
 	// démarrage suivant. Réservé aux administrateurs : une restauration
 	// remplace toute la comptabilité.
 	bh := handlers.NewBackupsHandler(database, cfg)
-	api.GET("/backups", middleware.RequireAdmin(cfg.JWTSecret), bh.ListBackups)
-	api.POST("/backups", middleware.RequireAdmin(cfg.JWTSecret), bh.CreateBackup)
-	api.POST("/backups/restore", middleware.RequireAdmin(cfg.JWTSecret), bh.StageRestore)
-	api.DELETE("/backups/restore", middleware.RequireAdmin(cfg.JWTSecret), bh.CancelRestore)
-	api.GET("/backups/policy", middleware.RequireAdmin(cfg.JWTSecret), bh.GetBackupPolicy)
-	api.PUT("/backups/policy", middleware.RequireAdmin(cfg.JWTSecret), bh.SetBackupPolicy)
-	api.DELETE("/backups/policy", middleware.RequireAdmin(cfg.JWTSecret), bh.ClearBackupPolicy)
-	api.GET("/database/encryption", middleware.RequireAdmin(cfg.JWTSecret), bh.GetDatabaseEncryption)
-	api.POST("/database/encryption", middleware.RequireAdmin(cfg.JWTSecret), bh.EnableDatabaseEncryption)
-	api.DELETE("/database/encryption", middleware.RequireAdmin(cfg.JWTSecret), bh.DisableDatabaseEncryption)
-	api.DELETE("/database/encryption/pending", middleware.RequireAdmin(cfg.JWTSecret), bh.CancelDatabaseEncryption)
-	api.POST("/database/encryption/recover", middleware.RequireAdmin(cfg.JWTSecret), bh.RecoverDatabaseKey)
-	api.PUT("/database/encryption/recovery", middleware.RequireAdmin(cfg.JWTSecret), bh.ChangeRecoveryPassphrase)
+	api.GET("/backups", authorizer.Require(authz.PermAdmin), bh.ListBackups)
+	api.POST("/backups", authorizer.Require(authz.PermAdmin), bh.CreateBackup)
+	api.POST("/backups/restore", authorizer.Require(authz.PermAdmin), bh.StageRestore)
+	api.DELETE("/backups/restore", authorizer.Require(authz.PermAdmin), bh.CancelRestore)
+	api.GET("/backups/policy", authorizer.Require(authz.PermAdmin), bh.GetBackupPolicy)
+	api.PUT("/backups/policy", authorizer.Require(authz.PermAdmin), bh.SetBackupPolicy)
+	api.DELETE("/backups/policy", authorizer.Require(authz.PermAdmin), bh.ClearBackupPolicy)
+	api.GET("/database/encryption", authorizer.Require(authz.PermAdmin), bh.GetDatabaseEncryption)
+	api.POST("/database/encryption", authorizer.Require(authz.PermAdmin), bh.EnableDatabaseEncryption)
+	api.DELETE("/database/encryption", authorizer.Require(authz.PermAdmin), bh.DisableDatabaseEncryption)
+	api.DELETE("/database/encryption/pending", authorizer.Require(authz.PermAdmin), bh.CancelDatabaseEncryption)
+	api.POST("/database/encryption/recover", authorizer.Require(authz.PermAdmin), bh.RecoverDatabaseKey)
+	api.PUT("/database/encryption/recovery", authorizer.Require(authz.PermAdmin), bh.ChangeRecoveryPassphrase)
 
 	// Redémarrage — proposé uniquement pour appliquer une restauration préparée.
 	// Le handler signale, main exécute : un handler ne doit pas démonter le
 	// serveur depuis lequel il répond.
 	restartCh := make(chan struct{}, 1)
 	sysh := handlers.NewSystemHandler(restartCh, cfg, database)
-	api.POST("/system/restart", middleware.RequireAdmin(cfg.JWTSecret), sysh.Restart)
+	api.POST("/system/restart", authorizer.Require(authz.PermAdmin), sysh.Restart)
 	// Réglages réseau. config.json n'est écrit qu'au premier lancement : sans
 	// cet écran, aucune option ajoutée depuis n'est atteignable par un
 	// utilisateur, et éditer du JSON dans %APPDATA% n'est pas une réponse.
-	api.GET("/settings/server", middleware.RequireAdmin(cfg.JWTSecret), sysh.GetServerSettings)
-	api.PUT("/settings/server", middleware.RequireAdmin(cfg.JWTSecret), sysh.PutServerSettings)
-	api.POST("/settings/server/rotate-secret", middleware.RequireAdmin(cfg.JWTSecret), sysh.RotateJWTSecret)
-	api.GET("/settings/security", middleware.RequireAdmin(cfg.JWTSecret), sysh.GetSecuritySettings)
-	api.PUT("/settings/security", middleware.RequireAdmin(cfg.JWTSecret), sysh.UpdateSecuritySettings)
+	api.GET("/settings/server", authorizer.Require(authz.PermAdmin), sysh.GetServerSettings)
+	api.PUT("/settings/server", authorizer.Require(authz.PermAdmin), sysh.PutServerSettings)
+	api.POST("/settings/server/rotate-secret", authorizer.Require(authz.PermAdmin), sysh.RotateJWTSecret)
+	api.GET("/settings/security", authorizer.Require(authz.PermAdmin), sysh.GetSecuritySettings)
+	api.PUT("/settings/security", authorizer.Require(authz.PermAdmin), sysh.UpdateSecuritySettings)
 
 	// Maintenance & Système. Lecture seule et réservé aux administrateurs : ces
 	// vues montrent l'état des données et du poste, elles ne réparent rien —
 	// une comptabilité incohérente se corrige par une écriture, pas par un
 	// bouton (CO art. 957a al. 2 ch. 5).
 	mh := handlers.NewMaintenanceHandler(database, cfg)
-	api.GET("/maintenance/integrity", middleware.RequireAdmin(cfg.JWTSecret), mh.IntegrityCheck)
-	api.GET("/maintenance/health", middleware.RequireAdmin(cfg.JWTSecret), mh.SystemHealth)
+	api.GET("/maintenance/integrity", authorizer.Require(authz.PermAdmin), mh.IntegrityCheck)
+	api.GET("/maintenance/health", authorizer.Require(authz.PermAdmin), mh.SystemHealth)
 
 	// Fiscal years + VAT declaration (admin)
 	fyh := handlers.NewFiscalYearHandler(database, cfg.UsePostgres())
 	api.GET("/fiscal-years", fyh.ListFiscalYears)
-	api.POST("/fiscal-years", middleware.RequireAdmin(cfg.JWTSecret), fyh.CreateFiscalYear)
-	api.POST("/fiscal-years/:id/close", middleware.RequireAdmin(cfg.JWTSecret), fyh.CloseFiscalYear)
+	api.POST("/fiscal-years", authorizer.Require(authz.PermAdmin), fyh.CreateFiscalYear)
+	api.POST("/fiscal-years/:id/close", authorizer.Require(authz.PermAdmin), fyh.CloseFiscalYear)
 	api.POST("/vat/declaration", fyh.GenerateVATDeclaration)
 
 	// VAT rates (static reference data — no DB)
@@ -380,7 +391,7 @@ func main() {
 
 	// Security telemetry — admin only: lockout records expose client IPs (nLPD).
 	seh := handlers.NewSecurityEventHandler(database, cfg.UsePostgres())
-	api.GET("/security-events", middleware.RequireAdmin(cfg.JWTSecret), seh.ListSecurityEvents)
+	api.GET("/security-events", authorizer.Require(authz.PermAdmin), seh.ListSecurityEvents)
 
 	// Compliance advisories — served from the feed embedded in the binary,
 	// so this works with no network access.
@@ -391,8 +402,16 @@ func main() {
 
 	// Company settings
 	sh := handlers.NewSettingsHandler(database, cfg.UsePostgres())
+	// Comptes et rôles. Administrateur seulement : donner ou retirer un droit
+	// est l'action dont l'abus ne se répare pas.
+	uh := handlers.NewUsersHandler(database, cfg.UsePostgres())
+	api.GET("/users", authorizer.Require(authz.PermAdmin), uh.ListUsers)
+	api.POST("/users", authorizer.Require(authz.PermAdmin), uh.CreateUser)
+	api.PUT("/users/:id/role", authorizer.Require(authz.PermAdmin), uh.UpdateUserRole)
+	api.PUT("/users/:id/active", authorizer.Require(authz.PermAdmin), uh.SetUserActive)
+
 	api.GET("/settings/company", sh.GetCompany)
-	api.PUT("/settings/company", middleware.RequireAdmin(cfg.JWTSecret), sh.PutCompany)
+	api.PUT("/settings/company", authorizer.Require(authz.PermAdmin), sh.PutCompany)
 	api.POST("/settings/logo", sh.UploadLogo)
 	api.DELETE("/settings/logo", sh.DeleteLogo)
 

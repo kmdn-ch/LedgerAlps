@@ -18,6 +18,7 @@ import { targetURLAfterRestart, waitForShutdownThenGo } from '@/utils/restart'
 import type { RotateSecretResult } from '@/types'
 import { DatabaseEncryptionPanel } from './DatabaseEncryptionPanel'
 import { SessionSecurityPanel } from './SessionSecurityPanel'
+import { UsersPanel } from './UsersPanel'
 
 export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
   const [confirming, setConfirming] = useState(false)
@@ -138,6 +139,7 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
         )}
       </div>
       <SessionSecurityPanel />
+      <UsersPanel />
     </div>
   )
 }

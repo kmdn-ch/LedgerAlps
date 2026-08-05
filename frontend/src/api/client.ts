@@ -193,6 +193,17 @@ export const exportApi = {
 }
 
 // Rotation du secret de signature (point 6 de la roadmap).
+// Comptes et rôles. Administrateur seulement, et le serveur le revérifie : ces
+// appels ne sont qu'une commodité de l'interface.
+export const usersApi = {
+  list:      ()  => api.get('/users'),
+  create:    (u: { name: string; email: string; password: string; role: string }) =>
+    api.post('/users', u),
+  setRole:   (id: string, role: string)   => api.put(`/users/${id}/role`, { role }),
+  setActive: (id: string, active: boolean) =>
+    api.put(`/users/${id}/active`, { is_active: active }),
+}
+
 export const securityApi = {
   rotateSecret: () => api.post('/settings/server/rotate-secret'),
   // Rotation de la clé de signature et déconnexion sur inactivité. Les deux se

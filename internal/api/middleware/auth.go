@@ -51,20 +51,17 @@ func RequireAuth(jwtSecret string) gin.HandlerFunc {
 	}
 }
 
-// RequireAdmin extends RequireAuth by additionally checking IsAdmin.
-func RequireAdmin(jwtSecret string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if !authenticate(c, jwtSecret) {
-			return
-		}
-		claims := GetClaims(c)
-		if claims == nil || !claims.IsAdmin {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin privileges required"})
-			return
-		}
-		c.Next()
-	}
-}
+// RequireAdmin a été RETIRÉ.
+//
+// Il lisait le drapeau administrateur DANS LE JETON. Un jeton d'accès vivant
+// une heure, rétrograder ou désactiver quelqu'un le laissait administrer
+// pendant tout ce temps — une heure durant laquelle on croit avoir coupé
+// l'accès.
+//
+// Le contrôle vit désormais dans middleware.Authorizer, qui lit le rôle dans la
+// base à chaque requête. La fonction est supprimée et non dépréciée : laissée
+// disponible, elle serait reprise par réflexe sur la prochaine route
+// d'administration, et le défaut reviendrait sans que rien ne le signale.
 
 // GetClaims retrieves the JWT claims stored by RequireAuth.
 func GetClaims(c *gin.Context) *security.Claims {

@@ -53,7 +53,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | Interdiction de mentionner la TVA sans l'être | LTVA art. 27 al. 1 et 2 | ✅ refusé à la source |
 | Correction par note de crédit | LTVA art. 27 al. 4, art. 41 | ✅ liée, bornée, signée en déclaration |
 | QR-facture | SIX IG v2.4 | ✅ conforme · ⏳ validation portail SIX |
-| Sécurité des données | nLPD art. 8, OPDo art. 3 | ✅ HTTPS réseau · ⛔ base en clair |
+| Sécurité des données | nLPD art. 8, OPDo art. 3 | ✅ HTTPS réseau · ✅ sauvegardes chiffrées · ✅ base chiffrable |
 | Effacement et rétention | nLPD art. 6 al. 4, art. 32 | ✅ anonymisation, purge des IP |
 | Portabilité | nLPD art. 25 et 28 | ✅ export par client, archive complète |
 
@@ -72,7 +72,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 6 | Rotation du secret de signature | ✅ | [↓](#6--rotation-du-secret-de-signature) |
 | 7 | Maintenance & Système | ✅ conforme | [↓](#7--maintenance--système) |
 | 8 | Notes de crédit — écriture au journal | 🔎 livré, éteint par défaut | [↓](#8--notes-de-crédit--écriture-au-journal) |
-| 9 | Multi-utilisateurs & permissions | ⏳ | [↓](#9--multi-utilisateurs--permissions) |
+| 9 | Multi-utilisateurs & permissions | 🔎 livré | [↓](#9--multi-utilisateurs--permissions) |
 | 10 | Rapprochement bancaire (interface) | 🔎 livré | [↓](#10--rapprochement-bancaire) |
 | 11 | eBill | ⛔ écarté — réseau fermé | [↓](#11--ebill) |
 | 12 | Validation contre le portail SIX | 🔎 dossier livré | [↓](#12--validation-contre-le-portail-six) |
@@ -269,8 +269,45 @@ sens inverse.
 
 ### 9 — Multi-utilisateurs & permissions
 
-Rôles Admin / Comptable / Lecture seule. Cas d'usage central en Suisse : donner
-un accès **lecture seule à la fiduciaire** sans partager le compte administrateur.
+**Livré.** Trois rôles, et le cas central est celui de la fiduciaire : lui ouvrir
+les livres sans lui donner les clés.
+
+| Rôle | Peut | Ne peut pas |
+|---|---|---|
+| **Administrateur** | tout | — |
+| **Comptable** | tenir les livres, facturer, encaisser | comptes, sauvegardes, sécurité |
+| **Lecture seule** | consulter, exporter | écrire quoi que ce soit |
+
+**Le rôle est lu dans la base à chaque requête, jamais dans le jeton.** C'est la
+décision qui porte tout le reste. Un jeton d'accès vit une heure ; si le rôle y
+était inscrit, rétrograder ou désactiver quelqu'un le laisserait agir avec ses
+anciens droits pendant tout ce temps — une heure durant laquelle on croit avoir
+coupé l'accès. La base est locale, la lecture est un accès par clé primaire : le
+coût est nul, et toute une classe de privilèges périmés disparaît. Vérifié sur
+un serveur réel : avec le **même** jeton, 403 → 201 → 403 au fil des
+changements de rôle, sans aucune reconnexion.
+
+`RequireAdmin`, qui lisait le drapeau dans le jeton, a été **supprimé** plutôt
+que déprécié : laissé disponible, il serait repris par réflexe sur la prochaine
+route d'administration.
+
+**Deux barrières indépendantes.** Les permissions déclarées par route dépendent
+de ce qu'on a pensé à écrire ; oublier une déclaration sur une nouvelle route
+est la façon la plus courante d'ouvrir un trou, parce que rien ne le signale. Un
+filtre global refuse donc toute méthode d'écriture à un rôle en lecture seule,
+quelle que soit la route — y compris celles qui n'existent pas encore.
+
+**Trois refus protègent l'installation d'elle-même** : on ne retire pas le
+dernier administrateur (ni en le rétrogradant, ni en le désactivant), et on ne
+change pas son propre rôle. Sans cela, un clic rend l'installation
+inadministrable, et il n'y a aucun mot de passe de secours derrière.
+
+Un compte se **désactive**, il ne se supprime pas : les écritures portent
+l'identifiant de leur auteur, et l'effacer romprait la traçabilité du
+CO art. 957a al. 2 ch. 5.
+
+**Reste** : rien d'obligatoire. Des permissions plus fines — un comptable sans
+accès à la TVA, par exemple — attendront qu'un besoin réel les demande.
 
 ### 10 — Rapprochement bancaire
 

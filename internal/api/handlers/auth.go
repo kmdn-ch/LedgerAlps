@@ -78,11 +78,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		passwordHash string
 		isAdmin      bool
 		isActive     bool
+		role         string
 	)
 	err := h.db.QueryRowContext(ctx, `
-		SELECT id, password_hash, is_admin, is_active
+		SELECT id, password_hash, is_admin, is_active, COALESCE(role,'accountant')
 		FROM users WHERE email = ?`, req.Email).
-		Scan(&userID, &passwordHash, &isAdmin, &isActive)
+		Scan(&userID, &passwordHash, &isAdmin, &isActive, &role)
 
 	if err == sql.ErrNoRows {
 		// User not found: run bcrypt on dummy hash to equalise timing with the
@@ -142,10 +143,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// absent from the body: anything returned here would be readable by script.
 	setRefreshCookie(c, refreshToken, refreshTTL)
 
+	// Le rôle part avec la réponse pour que l'interface sache quoi masquer.
+	// Ce n'est PAS une autorisation : le serveur ne fait aucune confiance à ce
+	// que le navigateur croit, et chaque requête revérifie dans la base. Mais
+	// afficher un bouton qui répondra 403 use la confiance dans l'interface
+	// aussi sûrement qu'un avertissement périmé.
 	c.JSON(http.StatusOK, gin.H{
 		"access_token": accessToken,
 		"token_type":   "bearer",
 		"expires_in":   int(accessTTL.Seconds()),
+		"role":         role,
 	})
 }
 
@@ -264,8 +271,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	id := db.NewID()
 	now := time.Now().UTC()
 	q := db.Rebind(`
-		INSERT INTO users (id, email, name, password_hash, is_admin, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 0, 1, ?, ?)`, h.cfg.UsePostgres())
+		INSERT INTO users (id, email, name, password_hash, role, is_admin, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, 'accountant', 0, 1, ?, ?)`, h.cfg.UsePostgres())
 	if _, err := h.db.ExecContext(ctx, q, id, req.Email, req.Name, hash, now, now); err != nil {
 		// UNIQUE constraint on email
 		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
@@ -330,8 +337,8 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	id := db.NewID()
 	now := time.Now().UTC()
 	q := db.Rebind(`
-		INSERT INTO users (id, email, name, password_hash, is_admin, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 1, 1, ?, ?)`, h.cfg.UsePostgres())
+		INSERT INTO users (id, email, name, password_hash, role, is_admin, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, 'admin', 1, 1, ?, ?)`, h.cfg.UsePostgres())
 	insCtx, insCancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer insCancel()
 
