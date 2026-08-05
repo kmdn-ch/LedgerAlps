@@ -343,7 +343,17 @@ func (h *AuthHandler) MFAVerify(c *gin.Context) {
 // hachés, et quelqu'un qui lit la base ne doit pas y trouver de quoi contourner
 // le second facteur.
 func (h *AuthHandler) consumeRecoveryCode(ctx context.Context, userID, code string) (bool, error) {
-	normalised := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(code), "-", ""))
+	// La normalisation est délibérément indulgente : ce code se recopie à la
+	// main depuis un papier, souvent des mois plus tard, parfois dicté au
+	// téléphone. Les tirets de lisibilité, les espaces de frappe et la casse ne
+	// portent aucune information — les refuser transformerait la dernière porte
+	// de secours en énigme, au pire moment.
+	normalised := strings.ToUpper(strings.Map(func(r rune) rune {
+		if r == '-' || r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			return -1
+		}
+		return r
+	}, code))
 	if len(normalised) < 8 {
 		return false, nil
 	}

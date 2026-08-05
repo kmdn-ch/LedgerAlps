@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -291,6 +292,46 @@ func TestUnCodeDeSecoursOuvreUneFoisEtUneSeule(t *testing.T) {
 		`SELECT COUNT(*) FROM security_events WHERE event_type='mfa_recovery_code_used'`).Scan(&n)
 	if n != 1 {
 		t.Fatalf("%d trace(s) d'usage d'un code de secours, attendu 1", n)
+	}
+}
+
+// Un code de secours se recopie à la main depuis un papier, parfois dicté au
+// téléphone. La casse, les tirets et les espaces ne portent aucune information :
+// les refuser transformerait la dernière porte de secours en énigme, au moment
+// précis où l'on a le moins envie d'en résoudre une.
+func TestUnCodeDeSecoursEstAccepteMalgreLaCasseEtLesSeparateurs(t *testing.T) {
+	database, r, _ := mfaEnv(t)
+	seedLogin(t, database, "u1", "MotDePasseSolide1", false)
+
+	w := call(r, http.MethodPost, "/auth/login", "",
+		map[string]string{"email": "u1@t.ch", "password": "MotDePasseSolide1"})
+	token, _ := decode(t, w)["access_token"].(string)
+	w = call(r, http.MethodPost, "/auth/mfa/setup", token, nil)
+	secret, _ := decode(t, w)["secret"].(string)
+	code, _ := mfa.Code(secret, time.Now())
+	w = call(r, http.MethodPost, "/auth/mfa/confirm", token, map[string]string{"code": code})
+	codesAny, _ := decode(t, w)["recovery_codes"].([]any)
+	if len(codesAny) < 3 {
+		t.Fatalf("pas assez de codes de secours: %s", w.Body.String())
+	}
+
+	// Le code est rendu sous la forme « ABCDE-FGHIJ ». Chaque variante ci-dessous
+	// est ce qu'une vraie personne tape depuis un papier.
+	variantes := []func(string) string{
+		func(c string) string { return strings.ToLower(c) },
+		func(c string) string { return strings.ReplaceAll(c, "-", "") },
+		func(c string) string { return strings.ReplaceAll(c, "-", " ") },
+		func(c string) string { return "  " + strings.ToLower(strings.ReplaceAll(c, "-", " ")) + " " },
+	}
+	for i, transforme := range variantes {
+		brut, _ := codesAny[i].(string)
+		saisi := transforme(brut)
+
+		challenge := loginChallenge(t, r, "u1@t.ch", "MotDePasseSolide1")
+		if w := call(r, http.MethodPost, "/auth/mfa/verify", challenge,
+			map[string]string{"code": saisi}); w.Code != http.StatusOK {
+			t.Fatalf("la saisie %q est refusée: %d — %s", saisi, w.Code, w.Body.String())
+		}
 	}
 }
 

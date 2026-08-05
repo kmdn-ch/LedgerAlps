@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Mountain, Eye, EyeOff, Smartphone, ArrowLeft } from 'lucide-react'
+import { Mountain, Eye, EyeOff, Smartphone, ArrowLeft, LifeBuoy } from 'lucide-react'
 import { useState } from 'react'
 import { authApi } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
@@ -34,6 +34,27 @@ export function LoginPage() {
   const [challenge, setChallenge] = useState<{ token: string; email: string } | null>(null)
   const [code, setCode] = useState('')
 
+  // Le code de secours a son propre mode, et pas seulement sa propre phrase.
+  //
+  // Le champ acceptait six chiffres — plafonné à sept caractères, clavier
+  // numérique, espacement de chiffres — pendant qu'une ligne de texte invitait à
+  // y saisir un code de secours de onze caractères. Il était donc littéralement
+  // impossible à taper : la moitié se perdait au sixième caractère. Une
+  // consigne qui décrit un mécanisme absent est pire qu'aucune consigne, et
+  // c'est exactement le moment où l'on a le moins envie de chercher.
+  //
+  // Un mode explicite, avec son bouton : le champ change de forme, de clavier et
+  // de longueur, et l'utilisateur voit qu'il est au bon endroit.
+  const [mode, setMode] = useState<'totp' | 'recovery'>('totp')
+  const secours = mode === 'recovery'
+
+  // La saisie est normalisée comme le serveur la normalise : majuscules, sans
+  // tiret ni espace. Le papier se recopie rarement au caractère près.
+  const codeUtile = secours
+    ? code.toUpperCase().replace(/[\s-]/g, '')
+    : code.replace(/\s/g, '')
+  const codeComplet = secours ? codeUtile.length >= 10 : codeUtile.length >= 6
+
   // Poser la session, quel que soit le chemin qui y a mené. Une seule fonction :
   // deux copies auraient divergé, et celle qui aurait oublié une règle serait
   // justement celle empruntée après avoir prouvé son identité deux fois.
@@ -56,13 +77,20 @@ export function LoginPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await authApi.mfaVerify(challenge.token, code.trim())
+      const res = await authApi.mfaVerify(challenge.token, codeUtile)
       enter(challenge.email, res.data)
     } catch (e) {
       const status = (e as { response?: { status?: number } }).response?.status
       if (status === 401) {
-        setError("Code incorrect. Vérifiez l'heure de votre téléphone : un décalage de plus " +
-                 "d'une minute décale tous les codes.")
+        // Le conseil doit correspondre à ce qui a été tenté. Parler d'horloge
+        // de téléphone à quelqu'un qui saisit un code de secours l'envoie
+        // chercher au mauvais endroit.
+        setError(secours
+          ? "Ce code de secours n'est pas reconnu. Chacun ne sert qu'une fois : " +
+            "vérifiez que celui-ci n'a pas déjà été utilisé, et recopiez-le sans " +
+            "confondre les caractères."
+          : "Code incorrect. Vérifiez l'heure de votre téléphone : un décalage de plus " +
+            "d'une minute décale tous les codes.")
       } else if (status === 429) {
         setError('Trop de tentatives. Patientez quelques minutes avant de réessayer.')
       } else {
@@ -137,9 +165,11 @@ export function LoginPage() {
             {challenge ? 'Vérification' : 'Connexion'}
           </h1>
           <p className="text-sm text-alpine-400 mb-6">
-            {challenge
-              ? 'Saisissez le code affiché par votre application d’authentification.'
-              : 'Accédez à votre espace.'}
+            {!challenge
+              ? 'Accédez à votre espace.'
+              : secours
+                ? 'Saisissez l’un des codes de secours notés lors de l’inscription.'
+                : 'Saisissez le code affiché par votre application d’authentification.'}
           </p>
 
           {error && (
@@ -155,38 +185,52 @@ export function LoginPage() {
           {challenge ? (
             <div className="space-y-4">
               <div className="flex items-start gap-2.5 text-sm text-alpine-300">
-                <Smartphone size={16} className="text-accent-500 mt-0.5 shrink-0" />
+                {secours
+                  ? <LifeBuoy size={16} className="text-accent-500 mt-0.5 shrink-0" />
+                  : <Smartphone size={16} className="text-accent-500 mt-0.5 shrink-0" />}
                 <span>
-                  Ouvrez votre application d&rsquo;authentification et recopiez les six
-                  chiffres affichés pour <strong className="text-white">{challenge.email}</strong>.
+                  {secours
+                    ? <>Reprenez la liste notée lors de l&rsquo;inscription et saisissez un code
+                        non utilisé pour <strong className="text-white">{challenge.email}</strong>.</>
+                    : <>Ouvrez votre application d&rsquo;authentification et recopiez les six
+                        chiffres affichés pour <strong className="text-white">{challenge.email}</strong>.</>}
                 </span>
               </div>
 
               <div>
                 <label htmlFor="otp"
                        className="block text-xs font-medium text-alpine-400 mb-1.5 uppercase tracking-wide">
-                  Code à six chiffres
+                  {secours ? 'Code de secours' : 'Code à six chiffres'}
                 </label>
+                {/* Le champ change vraiment de nature selon le mode : longueur,
+                    clavier, casse, espacement. C'est ce qui manquait — la
+                    consigne parlait de codes de secours pendant que le champ
+                    n'acceptait que six chiffres. */}
                 <input
                   id="otp"
+                  key={mode}
                   autoFocus
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={7}
+                  inputMode={secours ? 'text' : 'numeric'}
+                  autoComplete={secours ? 'off' : 'one-time-code'}
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  maxLength={secours ? 13 : 7}
                   value={code}
-                  onChange={e => setCode(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') submitCode() }}
-                  className="w-full px-3 py-2.5 bg-alpine-800/80 border border-alpine-700 rounded-lg
-                             text-center text-xl tracking-[0.4em] text-white
-                             focus:outline-none focus:ring-2 focus:ring-accent-500/50"
-                  placeholder="000000"
+                  onChange={e => setCode(secours ? e.target.value.toUpperCase() : e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && codeComplet) submitCode() }}
+                  className={`w-full px-3 py-2.5 bg-alpine-800/80 border border-alpine-700 rounded-lg
+                              text-center text-white
+                              focus:outline-none focus:ring-2 focus:ring-accent-500/50 ${
+                    secours ? 'text-lg font-mono tracking-[0.2em]' : 'text-xl tracking-[0.4em]'
+                  }`}
+                  placeholder={secours ? 'ABCDE-FGHIJ' : '000000'}
                 />
               </div>
 
               <button
                 type="button"
                 onClick={submitCode}
-                disabled={loading || code.trim().length < 6}
+                disabled={loading || !codeComplet}
                 className="w-full py-2.5 bg-accent-500 hover:bg-accent-600 text-white font-medium
                            rounded-lg text-sm transition-all duration-150 active:scale-[0.98]
                            disabled:opacity-50 disabled:cursor-not-allowed"
@@ -194,16 +238,31 @@ export function LoginPage() {
                 {loading ? 'Vérification…' : 'Valider'}
               </button>
 
-              {/* Le téléphone perdu ne doit pas enfermer dehors : les codes de
-                  secours acceptés ici sont ceux notés à l'inscription. */}
-              <p className="text-xs text-alpine-500">
-                Téléphone perdu ou indisponible ? Saisissez ici l&rsquo;un des codes de secours
-                notés lors de l&rsquo;inscription. Chacun ne sert qu&rsquo;une fois.
-              </p>
+              {/* Le téléphone perdu ne doit pas enfermer dehors. Le passage au
+                  code de secours est un BOUTON, pas une phrase : une consigne
+                  qui décrit un mécanisme absent est pire qu'aucune consigne. */}
+              <div className="border-t border-alpine-700/60 pt-3">
+                <button
+                  type="button"
+                  onClick={() => { setMode(secours ? 'totp' : 'recovery'); setCode(''); setError('') }}
+                  className="text-xs text-accent-400 hover:text-accent-300 flex items-center gap-1.5"
+                >
+                  {secours
+                    ? <><Smartphone size={12} /> Utiliser le code de mon application</>
+                    : <><LifeBuoy size={12} /> Téléphone perdu ? Utiliser un code de secours</>}
+                </button>
+                <p className="text-xs text-alpine-500 mt-1.5">
+                  {secours
+                    ? 'Chacun ne sert qu’une fois. Les tirets et la casse n’ont pas d’importance.'
+                    : 'Les codes de secours sont ceux notés lors de l’inscription.'}
+                </p>
+              </div>
 
               <button
                 type="button"
-                onClick={() => { setChallenge(null); setCode(''); setError('') }}
+                onClick={() => {
+                  setChallenge(null); setCode(''); setError(''); setMode('totp')
+                }}
                 className="text-xs text-alpine-400 hover:text-alpine-200 flex items-center gap-1"
               >
                 <ArrowLeft size={12} /> Revenir à la connexion

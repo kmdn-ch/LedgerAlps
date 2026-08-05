@@ -9,6 +9,12 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Corrigé
 
+- **Un code de secours était impossible à saisir.** L'écran de vérification invitait à en entrer un dans le champ du code à six chiffres — champ plafonné à **sept caractères**, avec clavier numérique et espacement de chiffres. Un code de secours en fait onze : la moitié se perdait à la frappe. La consigne décrivait un mécanisme qui n'existait pas, au moment précis où l'on a le moins envie de chercher.
+
+  Le passage au code de secours est désormais un **bouton** — « Téléphone perdu ? Utiliser un code de secours » — et le champ change réellement de nature : longueur, clavier, casse, espacement, exemple affiché. Le message d'échec correspond à ce qui a été tenté, au lieu de parler de l'horloge d'un téléphone à quelqu'un qui recopie un papier.
+
+  La saisie est acceptée telle qu'on la tape : majuscules ou minuscules, avec ou sans tiret, avec ou sans espaces. Ces caractères ne portent aucune information, et les exiger transformerait la dernière porte de secours en énigme. L'écran qui remet les codes dit maintenant aussi **où** ils se saisissent.
+
 - **Le bilan et le compte de résultat comptaient les brouillons.** Une écriture jamais comptabilisée — donc scellée par rien, et modifiable — apparaissait dans la balance de vérification, au bilan et au compte de résultat. La condition `status = 'posted'` était portée par une jointure **externe**, qui décide si l'écriture est *rattachée* et non si la ligne est *retenue* : les lignes de brouillon survivaient à la jointure et leurs montants entraient dans les totaux.
 
   Vérifié sur un serveur réel avant et après : un brouillon de CHF 100 produisait un actif de CHF 100 au bilan et CHF 100 de produits au compte de résultat, avec un bilan déséquilibré par construction. C'est le défaut le plus grave des trois, parce qu'il ne se voyait pas — les états s'affichaient normalement, simplement faux. Trois tests le tiennent désormais fermé.

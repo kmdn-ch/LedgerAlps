@@ -118,6 +118,14 @@ export function MFAEnrolmentPage() {
                 Rangez-les ailleurs que sur ce PC et hors de votre téléphone : un papier dans un
                 tiroir fermé fait très bien l&rsquo;affaire. Chacun ne sert qu&rsquo;une fois.
               </p>
+              {/* Dire OÙ ils se saisissent, pas seulement de les noter : un code
+                  de secours se ressort des mois plus tard, dans un moment
+                  d'urgence, et chercher le bouton n'est pas le moment. */}
+              <p className="text-xs text-alpine-400 mt-2">
+                Pour vous en servir : à l&rsquo;écran de connexion, après votre mot de passe,
+                choisissez <strong className="text-alpine-200">« Téléphone perdu ? Utiliser un
+                code de secours »</strong>.
+              </p>
 
               <button
                 onClick={() => navigate('/', { replace: true })}

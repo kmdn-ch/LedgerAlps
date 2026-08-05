@@ -98,7 +98,8 @@ export function MFAPanel() {
           </p>
           <p className="text-sm text-alpine-700 mt-1">
             Ils ne seront plus jamais affichés. Sans eux, un téléphone perdu vous ferme
-            définitivement l'accès.
+            définitivement l'accès. Pour vous en servir : à l'écran de connexion, après votre
+            mot de passe, choisissez « Téléphone perdu ? Utiliser un code de secours ».
           </p>
           <ul className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-sm">
             {codes.map(c => (
