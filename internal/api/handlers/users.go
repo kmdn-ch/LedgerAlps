@@ -122,8 +122,9 @@ func (h *UsersHandler) CreateUser(c *gin.Context) {
 	// is_admin reste tenu à jour : une base restaurée dans une version
 	// antérieure aux rôles doit rester administrable.
 	q := db.Rebind(`
-		INSERT INTO users (id, email, name, password_hash, role, is_admin, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`, h.usePostgres)
+		INSERT INTO users (id, email, name, password_hash, role, is_admin, is_active,
+		                   must_change_password, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)`, h.usePostgres)
 	if _, err := h.db.ExecContext(c.Request.Context(), q,
 		id, strings.TrimSpace(body.Email), strings.TrimSpace(body.Name), hash,
 		string(role), boolToSQL(role == authz.RoleAdmin), now, now); err != nil {
@@ -139,6 +140,12 @@ func (h *UsersHandler) CreateUser(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"id": id, "email": body.Email, "name": body.Name,
 		"role": string(role), "role_label": role.Label(), "is_active": true,
+		// L'interface doit le dire clairement : ce mot de passe ne servira
+		// qu'une fois. Le laisser croire permanent ferait qu'on le note quelque
+		// part, alors qu'il est déjà connu de deux personnes.
+		"must_change_password": true,
+		"message": "Compte créé. Ce mot de passe est TEMPORAIRE : la personne devra en " +
+			"choisir un autre à sa première connexion, et ne pourra rien faire avant.",
 	})
 }
 

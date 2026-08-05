@@ -1,12 +1,14 @@
 // LedgerAlps — Modal création de contact
 
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { contactsApi } from '@/api/client'
-import { ErrorBanner } from '@/components/ui'
+import { ErrorBanner, ConfirmDialog } from '@/components/ui'
+import { useBeforeUnload } from '@/hooks/useUnsavedGuard'
 
 // Convert empty strings to undefined so optional fields don't trip validation.
 const opt = <T extends z.ZodTypeAny>(s: T) =>
@@ -38,7 +40,7 @@ export function NewContactModal({ onClose }: Props) {
   const qc = useQueryClient()
   const {
     register, handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -57,12 +59,36 @@ export function NewContactModal({ onClose }: Props) {
     },
   })
 
+  // Le voile ferme au moindre clic. C'est commode pour consulter, destructeur
+  // pour une saisie : LedgerAlps n'enregistre aucun brouillon, et une fiche à
+  // demi remplie disparaît entièrement. La confirmation n'apparaît que si
+  // quelque chose a été saisi — la demander sur un formulaire vide apprendrait
+  // à cliquer « Quitter » sans lire.
+  const [confirmingClose, setConfirmingClose] = useState(false)
+  const requestClose = () => (isDirty ? setConfirmingClose(true) : onClose())
+  useBeforeUnload(isDirty)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Overlay */}
       <div
         className="absolute inset-0 bg-alpine-900/50 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={requestClose}
+      />
+
+      <ConfirmDialog
+        open={confirmingClose}
+        tone="danger"
+        title="Abandonner cette fiche ?"
+        consequences={[
+          <>Ce que vous avez saisi sera <strong>perdu</strong>. LedgerAlps
+          n'enregistre pas de brouillon de contact.</>,
+        ]}
+        reassurance={<>Rien d'autre n'est touché : vos contacts existants restent
+        en place.</>}
+        confirmLabel="Abandonner la saisie"
+        onConfirm={() => { setConfirmingClose(false); onClose() }}
+        onCancel={() => setConfirmingClose(false)}
       />
 
       {/* Modal */}
@@ -70,7 +96,7 @@ export function NewContactModal({ onClose }: Props) {
                       max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-alpine-100">
           <h2 className="font-display font-700 text-lg text-alpine-900">Nouveau contact</h2>
-          <button onClick={onClose} className="btn-ghost p-1.5">
+          <button onClick={requestClose} className="btn-ghost p-1.5">
             <X size={18} />
           </button>
         </div>
@@ -178,7 +204,7 @@ export function NewContactModal({ onClose }: Props) {
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-2 border-t border-alpine-100">
-            <button type="button" onClick={onClose} className="btn-secondary">
+            <button type="button" onClick={requestClose} className="btn-secondary">
               Annuler
             </button>
             <button type="submit" className="btn-primary" disabled={create.isPending}>

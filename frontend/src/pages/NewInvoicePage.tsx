@@ -8,10 +8,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Trash2, ArrowLeft, Save, UserPlus, X, AlertTriangle } from 'lucide-react'
 import { invoicesApi, contactsApi, settingsApi } from '@/api/client'
-import { PageHeader, ErrorBanner } from '@/components/ui'
+import { PageHeader, ErrorBanner, ConfirmDialog } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import { formatCHF } from '@/utils'
 import type { Contact, CompanySettings } from '@/types'
+import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 
 const lineSchema = z.object({
   description:      z.string().min(1, 'Requis'),
@@ -185,7 +186,7 @@ export function NewInvoicePage() {
 
   const {
     register, control, handleSubmit, setValue,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -197,6 +198,12 @@ export function NewInvoicePage() {
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
+
+  // Une facture de quinze lignes disparaît entièrement sur un clic dans le
+  // menu : LedgerAlps n'enregistre aucun brouillon automatique. Le garde bloque
+  // la navigation interne ET la fermeture de l'onglet, et ne demande rien tant
+  // que rien n'a été saisi.
+  const guard = useUnsavedGuard(isDirty)
   const watchedLines     = useWatch({ control, name: 'lines' })
   const watchedContactId = useWatch({ control, name: 'contact_id' })
   const watchedDocType   = useWatch({ control, name: 'document_type' })
@@ -227,6 +234,21 @@ export function NewInvoicePage() {
 
   return (
     <div>
+      <ConfirmDialog
+        open={guard.blocked}
+        tone="danger"
+        title="Quitter cette page ?"
+        consequences={[
+          <>Cette facture n'est pas enregistrée : ce que vous avez saisi sera
+          <strong> perdu</strong>. LedgerAlps ne conserve pas de brouillon
+          automatique.</>,
+        ]}
+        reassurance={<>Restez sur la page et cliquez sur « Créer en brouillon »
+        pour la conserver — un brouillon se modifie ensuite librement.</>}
+        confirmLabel="Quitter sans enregistrer"
+        onConfirm={guard.confirmLeave}
+        onCancel={guard.cancelLeave}
+      />
       {showContactModal && (
         <NewContactModal
           onClose={() => setShowContactModal(false)}

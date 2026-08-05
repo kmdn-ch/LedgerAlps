@@ -25,9 +25,14 @@ interface AuthState {
   // confiance à cette valeur — la modifier dans le navigateur ne donne aucun
   // droit.
   role: UserRole | null
+  // Vrai tant que le mot de passe temporaire n'a pas été remplacé. Sert à
+  // router vers l'écran de changement ; le serveur refuse de toute façon toute
+  // requête d'un tel compte, cette valeur ne donne donc aucun accès.
+  mustChangePassword: boolean
   /** Vrai tant que la tentative de restauration de session est en cours. */
   isRestoring: boolean
-  setAuth: (user: User, accessToken: string, role?: UserRole | null) => void
+  setAuth: (user: User, accessToken: string, role?: UserRole | null, mustChange?: boolean) => void
+  clearMustChange: () => void
   setAccessToken: (token: string) => void
   setRestoring: (v: boolean) => void
   logout: () => void
@@ -40,17 +45,22 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       isAuth: false,
       role: null,
+      mustChangePassword: false,
       isRestoring: false,
 
-      setAuth: (user, accessToken, role = null) =>
-        set({ user, accessToken, isAuth: true, isRestoring: false, role }),
+      setAuth: (user, accessToken, role = null, mustChange = false) =>
+        set({ user, accessToken, isAuth: true, isRestoring: false, role,
+              mustChangePassword: mustChange }),
+
+      clearMustChange: () => set({ mustChangePassword: false }),
 
       setAccessToken: (token) => set({ accessToken: token }),
 
       setRestoring: (v) => set({ isRestoring: v }),
 
       logout: () =>
-        set({ user: null, accessToken: null, isAuth: false, isRestoring: false, role: null }),
+        set({ user: null, accessToken: null, isAuth: false, isRestoring: false,
+              role: null, mustChangePassword: false }),
     }),
     {
       name: 'ledgeralps-auth',
@@ -59,6 +69,7 @@ export const useAuthStore = create<AuthState>()(
         user: s.user,
         isAuth: s.isAuth,
         role: s.role,
+        mustChangePassword: s.mustChangePassword,
       }),
     },
   ),

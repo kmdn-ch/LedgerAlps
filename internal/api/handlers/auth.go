@@ -79,11 +79,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		isAdmin      bool
 		isActive     bool
 		role         string
+		mustChange   int
 	)
 	err := h.db.QueryRowContext(ctx, `
-		SELECT id, password_hash, is_admin, is_active, COALESCE(role,'accountant')
+		SELECT id, password_hash, is_admin, is_active, COALESCE(role,'accountant'),
+		       COALESCE(must_change_password,0)
 		FROM users WHERE email = ?`, req.Email).
-		Scan(&userID, &passwordHash, &isAdmin, &isActive, &role)
+		Scan(&userID, &passwordHash, &isAdmin, &isActive, &role, &mustChange)
 
 	if err == sql.ErrNoRows {
 		// User not found: run bcrypt on dummy hash to equalise timing with the
@@ -153,6 +155,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		"token_type":   "bearer",
 		"expires_in":   int(accessTTL.Seconds()),
 		"role":         role,
+		// L'interface envoie directement à l'écran de changement. Le serveur
+		// n'en dépend pas : chaque route refuse le compte tant que le mot de
+		// passe temporaire vaut encore.
+		"must_change_password": mustChange == 1,
 	})
 }
 

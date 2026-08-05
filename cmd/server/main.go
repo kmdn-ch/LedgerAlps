@@ -215,6 +215,10 @@ func main() {
 	v1.POST("/auth/login", loginLimiter.Middleware(), authHandler.Login)
 	v1.POST("/auth/refresh", loginLimiter.Middleware(), authHandler.Refresh)
 	v1.POST("/auth/logout", authHandler.Logout)
+	// Hors du groupe filtré : c'est la seule action qu'un compte au mot de passe
+	// temporaire puisse faire, et la placer dans le groupe la bloquerait
+	// elle-même — le compte serait alors définitivement enfermé.
+	v1.POST("/auth/change-password", middleware.RequireAuth(cfg.JWTSecret), authHandler.ChangePassword)
 	v1.POST("/auth/register", loginLimiter.Middleware(), authHandler.Register)
 	v1.POST("/auth/bootstrap", loginLimiter.Middleware(), authHandler.Bootstrap) // one-shot: creates first admin user
 
@@ -234,6 +238,12 @@ func main() {
 	// d'écriture à un rôle en lecture seule, quelle que soit la route — donc y
 	// compris sur celles qui n'existent pas encore.
 	api.Use(authorizer.DenyWritesWithoutPermission())
+
+	// Un mot de passe temporaire, créé par un administrateur pour quelqu'un
+	// d'autre, a circulé par un canal qui n'est pas fait pour ça. Tant qu'il n'est
+	// pas remplacé, une action tracée sous ce compte ne prouve pas qui l'a faite.
+	// Le compte ne peut donc RIEN faire, pas même lire.
+	api.Use(authorizer.RequirePasswordChanged())
 
 	// Journal
 	jh := handlers.NewJournalHandler(database, cfg.UsePostgres())

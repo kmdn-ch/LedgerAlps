@@ -10,6 +10,7 @@ import {
 } from '@/components/ui'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
 import type { Invoice, DisplayStatus, Contact } from '@/types'
+import { useNavigate } from 'react-router-dom'
 
 const STATUS_FILTERS: { value: DisplayStatus | ''; label: string }[] = [
   { value: '',          label: 'Toutes'       },
@@ -22,6 +23,10 @@ const STATUS_FILTERS: { value: DisplayStatus | ''; label: string }[] = [
 interface Props { mode?: 'invoice' | 'quote' }
 
 export function InvoicesPage({ mode = 'invoice' }: Props) {
+  // Les deux vues du même registre. Le menu n'en propose plus qu'une entrée :
+  // c'est ici qu'on bascule, là où l'on regarde déjà les documents.
+  const navigate = useNavigate()
+
   const isQuote = mode === 'quote'
   // Le filtre accepte 'overdue' : c'est une question posée au serveur
   // (« envoyée et échue »), pas un statut qu'on écrirait.
@@ -96,7 +101,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
       />
 
       <PageHeader
-        title={isQuote ? 'Offres de prix' : 'Factures'}
+        title="Facturation"
         subtitle={`${invoices.length} document${invoices.length !== 1 ? 's' : ''}`}
         actions={
           <Link to="/invoices/new" className="btn-primary">
@@ -104,6 +109,28 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
           </Link>
         }
       />
+
+      {/* Bascule Factures / Offres.
+          Le menu de gauche ne porte plus qu'une entrée : les deux sont deux
+          vues du même registre, et une offre acceptée devient une facture. */}
+      <div className="inline-flex rounded-md border border-alpine-200 overflow-hidden mb-4">
+        <button
+          onClick={() => navigate('/invoices')}
+          className={`px-3 py-1.5 text-sm ${
+            isQuote ? 'text-alpine-600 hover:bg-alpine-50' : 'bg-alpine-900 text-white'
+          }`}
+        >
+          Factures
+        </button>
+        <button
+          onClick={() => navigate('/quotes')}
+          className={`px-3 py-1.5 text-sm border-l border-alpine-200 ${
+            isQuote ? 'bg-alpine-900 text-white' : 'text-alpine-600 hover:bg-alpine-50'
+          }`}
+        >
+          Offres de prix
+        </button>
+      </div>
 
       {/* Filtres */}
       <div className="flex flex-wrap items-center gap-3 mb-5">

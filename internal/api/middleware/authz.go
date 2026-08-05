@@ -44,23 +44,68 @@ func NewAuthorizer(database *sql.DB, usePostgres bool, jwtSecret string) *Author
 // déconnecte vraiment, au lieu de le laisser travailler jusqu'à l'expiration de
 // son jeton.
 func (a *Authorizer) currentRole(userID string) (authz.Role, bool) {
-	q := db.Rebind(`SELECT role, is_active FROM users WHERE id = ?`, a.usePostgres)
+	role, ok, _ := a.currentState(userID)
+	return role, ok
+}
+
+// currentState rend le rôle, l'activité et l'obligation de changer le mot de
+// passe, en une seule lecture.
+func (a *Authorizer) currentState(userID string) (authz.Role, bool, bool) {
+	q := db.Rebind(
+		`SELECT role, is_active, COALESCE(must_change_password,0) FROM users WHERE id = ?`,
+		a.usePostgres)
 	var role string
-	var active int
-	if err := a.db.QueryRow(q, userID).Scan(&role, &active); err != nil {
-		return "", false
+	var active, mustChange int
+	if err := a.db.QueryRow(q, userID).Scan(&role, &active, &mustChange); err != nil {
+		return "", false, false
 	}
 	if active != 1 {
-		return "", false
+		return "", false, false
 	}
 	r := authz.Role(role)
 	if !r.Valid() {
 		// Rôle inconnu — base bricolée, restaurée d'une version future, ou
 		// migration ratée. Refuser, jamais deviner : deviner ici accorderait
 		// des droits sur la foi d'une chaîne qu'on ne comprend pas.
-		return "", false
+		return "", false, false
 	}
-	return r, true
+	return r, true, mustChange == 1
+}
+
+// RequirePasswordChanged bloque tout compte dont le mot de passe temporaire n'a
+// pas encore été remplacé.
+//
+// Le blocage est technique et non cosmétique : cacher les écrans n'aurait fermé
+// aucune porte — l'adresse reste tapable, l'appel réseau reste faisable. Un
+// compte marqué ne peut donc RIEN faire, pas même lire, tant qu'il n'a pas
+// choisi son propre mot de passe.
+//
+// Ce que cela protège : le mot de passe créé par l'administrateur est connu
+// d'au moins deux personnes et a voyagé par un canal qui n'est pas fait pour
+// ça. Tant qu'il vaut, une action tracée sous ce compte ne prouve pas qui l'a
+// faite — ce qui rend le journal d'audit trompeur, et non simplement incomplet.
+func (a *Authorizer) RequirePasswordChanged() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims := GetClaims(c)
+		if claims == nil {
+			c.Next() // route publique : l'authentification est le problème d'un autre filtre
+			return
+		}
+		_, ok, mustChange := a.currentState(claims.UserID)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized,
+				gin.H{"error": "ce compte n'est plus actif"})
+			return
+		}
+		if mustChange {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error":                "changez d'abord votre mot de passe temporaire",
+				"must_change_password": true,
+			})
+			return
+		}
+		c.Next()
+	}
 }
 
 // Require exige une permission. C'est la barrière déclarée par route.

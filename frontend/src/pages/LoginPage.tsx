@@ -39,8 +39,9 @@ export function LoginPage() {
       const res = await authApi.login(data.email, data.password)
       const user = { id: '', email: data.email, name: data.email.split('@')[0],
                      is_active: true, is_admin: false, created_at: '' }
-      setAuth(user, res.data.access_token, res.data.role ?? null)
-      navigate('/')
+      setAuth(user, res.data.access_token, res.data.role ?? null,
+              res.data.must_change_password === true)
+      navigate(res.data.must_change_password === true ? '/change-password' : '/')
     } catch {
       setError('Identifiants incorrects.')
     } finally {
@@ -77,7 +78,6 @@ export function LoginPage() {
           </div>
           <div>
             <div className="font-display font-700 text-xl text-white">LedgerAlps</div>
-            <div className="text-xs text-alpine-400">Comptabilité suisse</div>
           </div>
         </div>
 
@@ -85,7 +85,7 @@ export function LoginPage() {
         <div className="bg-alpine-900/80 border border-alpine-700/50 rounded-2xl
                         backdrop-blur-sm shadow-modal p-8">
           <h1 className="font-display font-700 text-lg text-white mb-1">Connexion</h1>
-          <p className="text-sm text-alpine-400 mb-6">Accédez à votre espace comptable.</p>
+          <p className="text-sm text-alpine-400 mb-6">Accédez à votre espace.</p>
 
           {error && (
             <div className="bg-danger-500/10 border border-danger-500/30 rounded-lg

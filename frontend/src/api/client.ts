@@ -87,6 +87,10 @@ export const authApi = {
   // et le code n'a aucun moyen de le lire — c'est précisément le but.
   refresh:  () => api.post('/auth/refresh', null),
   logout:   () => api.post('/auth/logout', null),
+  // Seule route qu'un compte au mot de passe temporaire puisse appeler : elle
+  // vit hors du groupe filtré, sans quoi le compte serait enfermé.
+  changePassword: (current: string, next: string) =>
+    api.post('/auth/change-password', { current_password: current, new_password: next }),
 }
 
 // ─── Comptes ──────────────────────────────────────────────────────────────────

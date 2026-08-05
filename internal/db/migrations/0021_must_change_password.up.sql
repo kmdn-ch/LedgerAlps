@@ -1,0 +1,16 @@
+-- Mot de passe temporaire : changement obligatoire à la première connexion.
+--
+-- Un administrateur qui crée un compte choisit forcément un mot de passe pour
+-- quelqu'un d'autre, et le lui transmet — par message, par téléphone, sur un
+-- papier. Ce mot de passe est donc connu d'au moins deux personnes et a voyagé
+-- par un canal qui n'est pas fait pour ça.
+--
+-- Tant qu'il n'a pas été remplacé, l'administrateur peut se connecter au nom de
+-- l'autre. Les actions seraient alors tracées sous un compte qui n'est pas
+-- celui de leur auteur réel — ce qui vide la traçabilité du CO art. 957a
+-- al. 2 ch. 5 de son sens.
+--
+-- Les comptes existants ne sont PAS marqués : leur mot de passe a été choisi
+-- par leur titulaire, personne d'autre ne le connaît, et forcer un changement
+-- au prochain démarrage ressemblerait à une panne.
+ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;

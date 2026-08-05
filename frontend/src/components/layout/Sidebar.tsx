@@ -4,8 +4,7 @@ import { NavLink } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard, FileText, Users, BookOpen,
-  BarChart3, Settings, LogOut, Mountain,
-  Receipt, ArrowLeftRight,
+  BarChart3, Settings, LogOut, Mountain, ArrowLeftRight,
 } from 'lucide-react'
 import { cn } from '@/utils'
 import { useAuthStore } from '@/store/auth'
@@ -14,8 +13,11 @@ import { AccountBanner } from './AccountBanner'
 
 const NAV = [
   { to: '/',          icon: LayoutDashboard, label: 'Tableau de bord' },
-  { to: '/invoices',  icon: FileText,        label: 'Factures'        },
-  { to: '/quotes',    icon: Receipt,         label: 'Offres de prix'  },
+  // Un seul libellé : les deux vivent dans le même écran, qui bascule de l'un
+  // à l'autre. Deux entrées de menu pour deux vues du même objet donnaient
+  // l'impression de deux registres séparés, qu'ils ne sont pas — une offre
+  // acceptée devient une facture, et les deux se citent.
+  { to: '/invoices',  icon: FileText,        label: 'Facturation'     },
   { to: '/contacts',  icon: Users,           label: 'Contacts'        },
   { to: '/journal',   icon: ArrowLeftRight,  label: 'Journal'         },
   { to: '/accounts',  icon: BookOpen,        label: 'Plan comptable'  },
@@ -76,7 +78,6 @@ export function Sidebar() {
         )}
         <div className="min-w-0">
           <div className="font-display font-700 text-sm leading-none truncate">{companyName}</div>
-          <div className="text-[10px] text-alpine-400 mt-0.5 leading-none">Comptabilité CH</div>
         </div>
       </div>
 

@@ -17,6 +17,7 @@ import { ContactDetailPage } from '@/pages/ContactDetailPage'
 import { useEffect, useState } from 'react'
 import { useAuthStore }   from '@/store/auth'
 import { authApi }        from '@/api/client'
+import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 
 /**
  * Protège les routes et restaure la session au chargement.
@@ -27,6 +28,12 @@ import { authApi }        from '@/api/client'
  * F5 renverrait l'utilisateur à l'écran de connexion.
  */
 function RequireAuth({ children }: { children: React.ReactNode }) {
+  // Un mot de passe temporaire n'ouvre rien d'autre que son propre changement.
+  // Le serveur refuse déjà toute autre requête ; ce détour évite d'afficher une
+  // application dont chaque appel échouerait.
+  const mustChange = useAuthStore(s => s.mustChangePassword)
+  if (mustChange) return <Navigate to="/change-password" replace />
+
   const isAuth = useAuthStore(s => s.isAuth)
   // État initial calculé une seule fois : y a-t-il une session à restaurer ?
   const [restoring, setRestoring] = useState(() => {
@@ -77,6 +84,10 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  // Hors de la coquille protégée : un compte au mot de passe temporaire n'a
+  // accès à rien d'autre, et l'inclure dans RequireAuth l'y renverrait en
+  // boucle.
+  { path: '/change-password', element: <ChangePasswordPage /> },
   {
     path: '/',
     element: <RequireAuth><AppLayout /></RequireAuth>,

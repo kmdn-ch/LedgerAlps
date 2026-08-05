@@ -1,0 +1,136 @@
+// Changement du mot de passe temporaire.
+//
+// Le mot de passe créé par un administrateur pour quelqu'un d'autre lui a été
+// transmis par message, par téléphone ou sur un papier. Il est donc connu de
+// deux personnes et a voyagé par un canal qui n'est pas fait pour ça.
+//
+// Tant qu'il n'est pas remplacé, l'administrateur peut se connecter au nom de
+// l'autre — et les actions seraient tracées sous un compte qui n'est pas celui
+// de leur auteur réel. C'est ce que cet écran empêche, et c'est pourquoi il
+// n'offre aucune sortie : le serveur refuse de toute façon toute autre requête.
+
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useMutation } from '@tanstack/react-query'
+import { Mountain, KeyRound, Check, Minus, Loader2 } from 'lucide-react'
+import { authApi } from '@/api/client'
+import { ErrorBanner } from '@/components/ui'
+import { refusalMessage } from '@/utils/refusal'
+import { useAuthStore } from '@/store/auth'
+
+// La même règle que le serveur (internal/api/handlers/password_change.go).
+// Reproduite pour être visible pendant la frappe plutôt que révélée par un
+// refus après coup ; le serveur reste l'autorité.
+const MIN_LEN = 12
+
+function checks(p: string) {
+  return [
+    { label: `${MIN_LEN} caractères ou plus`, met: [...p].length >= MIN_LEN },
+    { label: 'une minuscule',                 met: /\p{Ll}/u.test(p) },
+    { label: 'une majuscule',                 met: /\p{Lu}/u.test(p) },
+    { label: 'un chiffre',                    met: /\p{Nd}/u.test(p) },
+  ]
+}
+
+export function ChangePasswordPage() {
+  const navigate = useNavigate()
+  const clearMustChange = useAuthStore(s => s.clearMustChange)
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const list = checks(next)
+  const strong = list.every(c => c.met)
+  const matches = next !== '' && next === confirm
+  const different = next !== current
+
+  const change = useMutation({
+    mutationFn: () => authApi.changePassword(current, next),
+    onSuccess: () => { clearMustChange(); navigate('/', { replace: true }) },
+    onError: (e) => setError(refusalMessage(e, "Le mot de passe n'a pas pu être changé.")),
+  })
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-alpine-950 p-4">
+      <div className="relative w-full max-w-md">
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <div className="w-10 h-10 rounded-xl bg-accent-500 flex items-center justify-center
+                          shadow-lg shadow-accent-500/40">
+            <Mountain size={20} className="text-white" />
+          </div>
+          <div className="font-display font-700 text-xl text-white">LedgerAlps</div>
+        </div>
+
+        <div className="bg-alpine-900 border border-alpine-700 rounded-2xl p-6">
+          <h1 className="font-display font-700 text-lg text-white flex items-center gap-2">
+            <KeyRound size={18} className="text-accent-500" />
+            Choisissez votre mot de passe
+          </h1>
+          <p className="text-sm text-alpine-400 mt-2">
+            Celui qui vous a été communiqué est <strong className="text-alpine-200">temporaire</strong> :
+            la personne qui a créé votre compte le connaît, et il a circulé par un canal qui
+            n'est pas fait pour ça. Tant qu'il vaut, ce qui serait fait sous votre nom ne
+            prouverait pas que c'est vous.
+          </p>
+
+          <div className="mt-5 space-y-4">
+            <div>
+              <label className="label text-alpine-300" htmlFor="cur">Mot de passe temporaire</label>
+              <input id="cur" type="password" className="input" autoComplete="current-password"
+                     value={current} onChange={e => setCurrent(e.target.value)} autoFocus />
+            </div>
+
+            <div>
+              <label className="label text-alpine-300" htmlFor="new">Nouveau mot de passe</label>
+              <input id="new" type="password" className="input" autoComplete="new-password"
+                     value={next} onChange={e => setNext(e.target.value)} />
+              {next !== '' && (
+                <ul className="mt-2 space-y-0.5">
+                  {list.map(c => (
+                    <li key={c.label} className={`text-xs flex items-center gap-1.5 ${
+                      c.met ? 'text-success-500' : 'text-alpine-500'
+                    }`}>
+                      {c.met ? <Check size={12} /> : <Minus size={12} />}
+                      {c.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <label className="label text-alpine-300" htmlFor="cfm">Confirmer</label>
+              <input id="cfm" type="password" className="input" autoComplete="new-password"
+                     value={confirm} onChange={e => setConfirm(e.target.value)} />
+              {confirm !== '' && !matches && (
+                <p className="text-xs text-danger-500 mt-1">Les deux saisies diffèrent.</p>
+              )}
+              {next !== '' && !different && (
+                <p className="text-xs text-danger-500 mt-1">
+                  Ce doit être un mot de passe différent : celui-là est justement celui que
+                  quelqu'un d'autre connaît.
+                </p>
+              )}
+            </div>
+
+            {error && <ErrorBanner message={error} />}
+
+            <button
+              onClick={() => { setError(null); change.mutate() }}
+              disabled={!strong || !matches || !different || current === '' || change.isPending}
+              className="btn-primary w-full flex items-center justify-center gap-2"
+            >
+              {change.isPending && <Loader2 size={14} className="animate-spin" />}
+              Changer mon mot de passe
+            </button>
+
+            <p className="text-xs text-alpine-500">
+              Les autres sessions ouvertes sur ce compte seront fermées.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

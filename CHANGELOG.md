@@ -9,6 +9,26 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Sécurité
 
+- **Un compte créé par un administrateur doit changer son mot de passe à la première connexion, et ne peut rien faire avant.** Le mot de passe choisi *pour* quelqu'un d'autre lui est transmis par message, par téléphone ou sur un papier : il est connu de deux personnes et a voyagé par un canal qui n'est pas fait pour ça. Tant qu'il vaut, l'administrateur peut se connecter au nom de l'autre — et les actions seraient tracées sous un compte qui n'est pas celui de leur auteur réel, ce qui rend le journal d'audit **trompeur** et non simplement incomplet.
+
+  Le blocage est technique : vérifié sur un serveur réel, un compte marqué reçoit 403 sur `GET /invoices`, `GET /contacts`, `GET /reports/*` comme sur toute écriture. La seule route ouverte est le changement lui-même, montée hors du groupe filtré — l'y inclure aurait enfermé le compte définitivement. Le nouveau mot de passe exige 12 caractères, minuscule, majuscule et chiffre, doit différer de l'ancien, et le mot de passe actuel est vérifié même sur un compte marqué : sans quoi un jeton volé suffirait à s'approprier le compte. Les autres sessions tombent au changement.
+
+  Les comptes existants ne sont pas marqués : leur mot de passe a été choisi par leur titulaire, et forcer un changement au prochain démarrage ressemblerait à une panne.
+
+### Ajouté
+
+- **Une saisie en cours ne se perd plus sur un clic à côté.** Le voile d'une fenêtre modale fermait au moindre contact, et un lien du menu emmenait ailleurs sans un mot — alors que LedgerAlps n'enregistre aucun brouillon automatique et qu'une facture de quinze lignes disparaît entièrement. Trois sorties, trois protections : le voile et la croix d'une modale, la navigation interne, et la fermeture de l'onglet. La confirmation n'apparaît que si quelque chose a été saisi — la demander sur un formulaire vide apprendrait à cliquer « Quitter » sans lire.
+
+### Modifié
+
+- **Factures et offres de prix sous un seul libellé** dans le menu — « Facturation ». Ce sont deux vues du même registre : une offre acceptée devient une facture, et les deux se citent. La bascule vit dans l'écran, là où l'on regarde déjà les documents.
+- Les mentions « Comptabilité CH » et « Comptabilité suisse » sont retirées ; l'écran de connexion dit « Accédez à votre espace ».
+
+---
+
+
+### Sécurité
+
 - **Un compte en lecture seule n'accède plus du tout à Sauvegardes ni à Maintenance — en lecture non plus.** Ces écrans exposent le dossier de sauvegarde, l'état du chiffrement, la santé du système et les événements de sécurité : les consulter est déjà sensible. Vérifié sur un serveur réel, `/backups`, `/backups/policy`, `/database/encryption`, `/maintenance/*`, `/settings/server`, `/settings/security`, `/security-events`, `/users` et `/audit-logs` répondent **403** ; l'import camt.053, la création de contact, de facture, d'offre et d'écriture au journal aussi.
 
   Les onglets correspondants ne sont plus rendus du tout, et une adresse tapée à la main se recale sur un onglet autorisé au lieu d'afficher un panneau vide dont chaque appel échoue. Masquer sans interdire ne protège de rien ; interdire sans masquer use la confiance dans l'interface.
