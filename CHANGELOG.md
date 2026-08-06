@@ -21,6 +21,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 - **Un fournisseur payable était annoncé « sans IBAN ».** Le QR-IBAN se range dans son propre champ — une référence QR n'est acceptée qu'avec lui, et le confondre avec un IBAN ordinaire fait rejeter le virement. Mais la liste des fournisseurs ne regardait que l'IBAN ordinaire : tout fournisseur lu depuis une QR-facture se présentait comme impayable, alors que l'ordre de virement partait très bien. L'écran démentait le produit, ce qui coûte plus cher qu'un bouton cassé : on renonce à s'en servir.
 
+- **Le dialogue de comptabilisation annonçait une TVA déductible sur une facture qui n'en porte pas.** « Charge et TVA déductible au débit », « la TVA payée entre dans votre déclaration (chiffre 400) » : sur une facture à 0 %, il décrivait une écriture qui n'allait pas être passée. Un dialogue de confirmation qui dit autre chose que ce qui va se produire ne protège plus de rien — on le lit une fois, puis on l'ignore. Il suit maintenant le montant de TVA de la pièce.
+
 - **Le QR-IBAN était enregistré sans jamais être montré.** La fiche du contact n'affichait que l'IBAN ordinaire. Le compte sur lequel les paiements allaient partir était donc invisible, et ce qui est invisible ne se corrige pas. La fiche porte maintenant les deux champs, avec ce qui les distingue.
 
 - **Deux lectures de travers, invisibles à l'œil, sur un rappel.**

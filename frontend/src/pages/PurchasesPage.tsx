@@ -699,12 +699,27 @@ export function PurchasesPage() {
       <ConfirmDialog
         open={toBook !== null}
         title={`Comptabiliser la facture ${toBook?.supplier_reference ?? ''} ?`}
-        consequences={[
-          <>L&rsquo;écriture est passée et <strong>scellée</strong> : charge et TVA déductible
-             au débit, créanciers au crédit.</>,
-          <>La TVA payée entre dans votre déclaration (impôt préalable, chiffre 400).</>,
-          <>La facture devient payable et apparaît dans l&rsquo;ordre de paiement.</>,
-        ]}
+        // Sur une facture sans TVA — fournisseur non assujetti, opération
+        // exclue — annoncer une « TVA déductible » et un report au chiffre 400
+        // décrirait une écriture qui ne sera pas passée. Un dialogue de
+        // confirmation qui décrit autre chose que ce qui va se produire ne
+        // protège plus de rien : on le lit une fois, puis on l'ignore.
+        consequences={
+          (toBook?.vat_amount ?? 0) > 0
+            ? [
+                <>L&rsquo;écriture est passée et <strong>scellée</strong> : charge et TVA
+                   déductible au débit, créanciers au crédit.</>,
+                <>La TVA payée entre dans votre déclaration (impôt préalable, chiffre 400).</>,
+                <>La facture devient payable et apparaît dans l&rsquo;ordre de paiement.</>,
+              ]
+            : [
+                <>L&rsquo;écriture est passée et <strong>scellée</strong> : la charge au débit,
+                   créanciers au crédit.</>,
+                <>Cette facture ne porte <strong>aucune TVA</strong> : il n&rsquo;y a pas
+                   d&rsquo;impôt préalable à récupérer, et rien à reporter au chiffre 400.</>,
+                <>La facture devient payable et apparaît dans l&rsquo;ordre de paiement.</>,
+              ]
+        }
         reassurance="Elle ne devient pas « payée » pour autant : c'est le relevé bancaire qui l'établira."
         confirmLabel="Comptabiliser"
         tone="danger"
