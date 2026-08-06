@@ -19,9 +19,10 @@ import type { RotateSecretResult } from '@/types'
 import { DatabaseEncryptionPanel } from './DatabaseEncryptionPanel'
 import { SessionSecurityPanel } from './SessionSecurityPanel'
 import { UsersPanel } from './UsersPanel'
-import { MFAPanel } from './MFAPanel'
+import { useAuthStore } from '@/store/auth'
 
 export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
+  const isAdmin = useAuthStore(st => st.role) === 'admin'
   const [confirming, setConfirming] = useState(false)
   const [restarting, setRestarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -139,9 +140,12 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
           </div>
         )}
       </div>
+      {/* Le second facteur a quitté cet écran : il appartient au COMPTE de
+          celui qui le lit, pas à l'administration du logiciel. Le laisser ici
+          l'aurait rendu inatteignable pour un comptable, qui doit pourtant
+          inscrire le sien — il vit désormais dans l'onglet « Mon compte ». */}
       <SessionSecurityPanel />
-      <MFAPanel />
-      <UsersPanel />
+      {isAdmin && <UsersPanel />}
     </div>
   )
 }

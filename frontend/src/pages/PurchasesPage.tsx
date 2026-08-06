@@ -79,7 +79,7 @@ export function PurchasesPage() {
   const [form, setForm] = useState({
     supplier_id: '', supplier_reference: '',
     issue_date: today(), due_date: '',
-    description: '', amount_ht: '', vat_rate: '8.1',
+    description: '', amount: '', amount_mode: 'ttc' as 'ht' | 'ttc', vat_rate: '8.1',
     expense_account_code: '', payment_reference: '',
   })
 
@@ -119,20 +119,38 @@ export function PurchasesPage() {
     [accounts.data],
   )
 
-  const dirty = creating && (form.supplier_reference !== '' || form.amount_ht !== '' ||
+  const dirty = creating && (form.supplier_reference !== '' || form.amount !== '' ||
     form.description !== '')
   useUnsavedGuard(dirty)
 
-  const reset = () => setForm({
+  // Le mode de saisie survit à l'enregistrement : celui qu'on vient d'utiliser
+  // est presque toujours celui de la facture suivante.
+  const reset = () => setForm(f => ({
     supplier_id: '', supplier_reference: '', issue_date: today(), due_date: '',
-    description: '', amount_ht: '', vat_rate: '8.1',
+    description: '', amount: '', amount_mode: f.amount_mode, vat_rate: '8.1',
     expense_account_code: '', payment_reference: '',
-  })
+  }))
 
-  const ht   = parseFloat(form.amount_ht.replace(',', '.'))
-  const rate = parseFloat(form.vat_rate.replace(',', '.'))
-  const tva  = isFinite(ht) && isFinite(rate) ? Math.round(ht * rate) / 100 : 0
-  const ttc  = isFinite(ht) ? Math.round((ht + tva) * 20) / 20 : 0
+  // Le montant se saisit au choix en hors taxe ou en TTC.
+  //
+  // Une facture reçue annonce ce qu'il faut PAYER — un montant TTC — et c'est
+  // aussi ce que porte le QR. Obliger à saisir du hors taxe revenait à demander
+  // une division à chaque saisie, et le QR ne pouvait rien pré-remplir sans
+  // écrire un TTC dans un champ qui attend autre chose.
+  //
+  // Quand la facture ne porte pas de TVA — fournisseur non assujetti — le taux
+  // est 0 % et les deux montants sont égaux. Rien à déduire, rien à calculer :
+  // c'est le cas le plus simple, et il devient trivial dans les deux modes.
+  const rate    = parseFloat(form.vat_rate.replace(',', '.'))
+  const saisi   = parseFloat(form.amount.replace(',', '.'))
+  const taux    = isFinite(rate) ? rate / 100 : 0
+  const ht = !isFinite(saisi)
+    ? NaN
+    : form.amount_mode === 'ttc'
+      ? Math.round((saisi / (1 + taux)) * 100) / 100
+      : saisi
+  const tva = isFinite(ht) ? Math.round(ht * taux * 100) / 100 : 0
+  const ttc = isFinite(ht) ? Math.round((ht + tva) * 20) / 20 : 0
 
   const create = useMutation({
     mutationFn: () => {
@@ -175,7 +193,8 @@ export function PurchasesPage() {
       issue_date: i.issue_date.slice(0, 10),
       due_date: i.due_date ? i.due_date.slice(0, 10) : '',
       description: '',
-      amount_ht: String(i.subtotal_amount),
+      amount: String(i.subtotal_amount),
+      amount_mode: 'ht' as const,
       vat_rate: i.subtotal_amount > 0
         ? String(Math.round((i.vat_amount / i.subtotal_amount) * 1000) / 10)
         : '8.1',
@@ -188,13 +207,23 @@ export function PurchasesPage() {
   // Le fournisseur créé ici est immédiatement sélectionné : la saisie reprend
   // là où elle s'est arrêtée, sans que l'on ait à rouvrir la liste.
   const createSupplier = useMutation({
-    mutationFn: () => contactsApi.create({
-      name: supplierForm.name.trim(),
-      contact_type: 'supplier',
-      email: supplierForm.email.trim() || undefined,
-      iban: supplierForm.iban.trim() || undefined,
-      country: 'CH',
-    }),
+    mutationFn: () => {
+      // Un QR-IBAN va dans `qr_iban`, un IBAN ordinaire dans `iban`. Les
+      // confondre ferait rejeter le virement : une référence QR n'est acceptée
+      // qu'avec un QR-IBAN (SIX IG v2.4 §4.2.2). La distinction se lit sur
+      // l'identifiant d'institution, positions 5 à 9, plage 30000–31999.
+      const iban = supplierForm.iban.replace(/\s/g, '').toUpperCase()
+      const inst = parseInt(iban.slice(4, 9), 10)
+      const estQR = iban.length >= 9 && inst >= 30000 && inst <= 31999
+      return contactsApi.create({
+        name: supplierForm.name.trim(),
+        contact_type: 'supplier',
+        email: supplierForm.email.trim() || undefined,
+        iban: !estQR && iban ? iban : undefined,
+        qr_iban: estQR ? iban : undefined,
+        country: 'CH',
+      })
+    },
     onSuccess: async (r) => {
       setError(null); setNewSupplier(false)
       setSupplierForm({ name: '', iban: '', email: '' })
@@ -215,7 +244,7 @@ export function PurchasesPage() {
         found: boolean; reason?: string
         bill?: {
           creditor_name: string; creditor_iban: string; amount: number
-          reference: string; reference_type: string; message: string
+          currency: string; reference: string; reference_type: string; message: string
         }
         supplier?: { id: string; name: string }
       }
@@ -226,20 +255,36 @@ export function PurchasesPage() {
       setCreating(true)
       setForm(f => ({
         ...f,
-        supplier_id: d.supplier?.id || f.supplier_id,
+        supplier_id: d.supplier?.id || '',
         payment_reference: d.bill!.reference_type === 'NON' ? '' : d.bill!.reference,
         supplier_reference: d.bill!.message || f.supplier_reference,
-        // Le QR porte le montant À PAYER, donc TTC. Le champ attend du hors
-        // taxe : le laisser vide plutôt que d'y écrire un TTC déguisé.
-        amount_ht: f.amount_ht,
+        // Le QR porte le montant À PAYER, donc TTC. On bascule le champ dans ce
+        // mode plutôt que de le laisser vide : c'est le montant que la facture
+        // annonce, et le hors taxe s'en déduit dès que le taux est choisi.
+        amount: d.bill!.amount > 0 ? String(d.bill!.amount) : '',
+        amount_mode: 'ttc' as const,
       }))
-      const inconnu = d.supplier?.id
-        ? ''
-        : ` Le fournisseur ${d.bill.creditor_name} n'est pas encore enregistré — créez-le, son IBAN est ${d.bill.creditor_iban}.`
+
+      // Fournisseur inconnu : on ouvre sa fiche pré-remplie plutôt que de
+      // renvoyer l'utilisateur la créer ailleurs. Tout ce qu'il faut est dans
+      // le QR — nom, IBAN — et le retaper serait une occasion de se tromper.
+      if (!d.supplier?.id) {
+        setNewSupplier(true)
+        setSupplierForm({
+          name: d.bill.creditor_name,
+          iban: d.bill.creditor_iban,
+          email: '',
+        })
+      }
+
+      const suite = d.supplier?.id
+        ? ' Choisissez le taux de TVA : le montant hors taxe s’en déduit.'
+        : ` Ce fournisseur n’est pas encore enregistré — sa fiche est pré-remplie ci-dessous,` +
+          ` créez-la puis choisissez le taux de TVA.`
       setScan({
         ok: true,
-        message: `QR lu : ${d.bill.creditor_name}, ${d.bill.amount.toFixed(2)} CHF à payer.` +
-          ` Le montant du QR est TTC ; saisissez le hors taxe et le taux de TVA.` + inconnu,
+        message: `QR lu : ${d.bill.creditor_name}, ${d.bill.amount.toFixed(2)} ` +
+          `${d.bill.currency} à payer (montant TTC).` + suite,
       })
     },
     onError: (e) => setScan({
@@ -431,11 +476,31 @@ export function PurchasesPage() {
             </div>
 
             <div>
-              <label className="label" htmlFor="ht">Montant hors taxe *</label>
-              <input id="ht" type="number" step="0.05" min="0" inputMode="decimal"
-                     className="input text-right font-mono tabular-nums"
-                     value={form.amount_ht}
-                     onChange={e => setForm({ ...form, amount_ht: e.target.value })} />
+              <label className="label" htmlFor="amt">
+                Montant *
+              </label>
+              <div className="flex gap-2">
+                <input id="amt" type="number" step="0.05" min="0" inputMode="decimal"
+                       className="input text-right font-mono tabular-nums"
+                       value={form.amount}
+                       onChange={e => setForm({ ...form, amount: e.target.value })} />
+                {/* Une facture reçue annonce ce qu'il faut PAYER, et c'est aussi
+                    ce que porte le QR. Le mode par défaut est donc TTC ; le hors
+                    taxe se déduit du taux. */}
+                <select className="select w-24" aria-label="Le montant saisi est"
+                        value={form.amount_mode}
+                        onChange={e => setForm({
+                          ...form, amount_mode: e.target.value as 'ht' | 'ttc',
+                        })}>
+                  <option value="ttc">TTC</option>
+                  <option value="ht">HT</option>
+                </select>
+              </div>
+              <p className="text-xs text-alpine-500 mt-1">
+                {form.amount_mode === 'ttc'
+                  ? 'Le montant à payer, tel qu’il figure sur la facture.'
+                  : 'Le montant hors taxe.'}
+              </p>
             </div>
 
             <div>
@@ -479,11 +544,24 @@ export function PurchasesPage() {
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t
                           border-alpine-100 pt-3">
-            <p className="text-sm text-alpine-600">
-              Hors taxe <span className="font-mono">{formatCHF(isFinite(ht) ? ht : 0)}</span>
-              {' · '}TVA <span className="font-mono">{formatCHF(tva)}</span>
-              {' · '}<strong>TTC <span className="font-mono">{formatCHF(ttc)}</span></strong>
-            </p>
+            <div className="text-sm text-alpine-600">
+              <p>
+                Hors taxe <span className="font-mono">{formatCHF(isFinite(ht) ? ht : 0)}</span>
+                {' · '}TVA <span className="font-mono">{formatCHF(tva)}</span>
+                {' · '}<strong>TTC <span className="font-mono">{formatCHF(ttc)}</span></strong>
+              </p>
+              {/* Une facture sans TVA — fournisseur non assujetti — se saisit à
+                  0 % : les deux montants sont alors égaux, et il n'y a pas
+                  d'impôt préalable à déduire (LTVA art. 28 al. 1, qui exige une
+                  facture mentionnant la TVA pour la récupérer). C'est conforme,
+                  et le dire évite de chercher un taux qui n'existe pas. */}
+              {rate === 0 && isFinite(ht) && ht > 0 && (
+                <p className="text-xs text-alpine-500 mt-0.5">
+                  Sans TVA : le montant hors taxe est le montant payé, et il n’y a pas
+                  d’impôt préalable à déduire.
+                </p>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <button onClick={() => {
                         setCreating(false); setEditing(null); setScan(null)

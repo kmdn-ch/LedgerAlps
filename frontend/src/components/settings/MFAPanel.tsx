@@ -17,6 +17,7 @@ import {
 import { authApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
+import { useAuthStore } from '@/store/auth'
 
 interface Status {
   enabled: boolean
@@ -26,6 +27,7 @@ interface Status {
 
 export function MFAPanel() {
   const qc = useQueryClient()
+  const role = useAuthStore(st => st.role)
   const [setup, setSetup] = useState<{ secret: string; qr_png: string } | null>(null)
   const [code, setCode] = useState('')
   const [codes, setCodes] = useState<string[] | null>(null)
@@ -76,6 +78,15 @@ export function MFAPanel() {
   }
 
   const st = status.data
+
+  // Le message nommait « administrateur » quel que soit le rôle : un comptable
+  // lisait donc une phrase fausse sur son propre écran, ce qui use la confiance
+  // dans tout ce que le produit affirme par ailleurs.
+  const roleLabel = role === 'admin'
+    ? 'est administrateur'
+    : role === 'accountant'
+      ? 'tient la comptabilité'
+      : 'est en lecture seule'
 
   return (
     <div className="mt-6">
@@ -134,7 +145,7 @@ export function MFAPanel() {
 
           {st.required_for_this_role && !st.enabled && (
             <p className="text-sm text-danger-700 mt-2">
-              Ce compte est administrateur : le second facteur est exigé. Tant qu'il n'est pas
+              Ce compte {roleLabel} : le second facteur est exigé. Tant qu'il n'est pas
               inscrit, aucune autre action n'est possible.
             </p>
           )}
@@ -168,9 +179,9 @@ export function MFAPanel() {
             <div className="mt-3 rounded-md border border-danger-500 bg-danger-500/5 px-3 py-3">
               <p className="text-sm">
                 Confirmez avec votre mot de passe. Le compte reviendra au mot de passe seul.
-                {st.required_for_this_role && ' Étant administrateur, vous devrez en inscrire ' +
-                  'un nouveau avant de pouvoir travailler — c’est le chemin à suivre pour ' +
-                  'changer de téléphone.'}
+                {st.required_for_this_role && ` Ce compte ${roleLabel}, vous devrez donc en ` +
+                  'inscrire un nouveau avant de pouvoir travailler — c’est le chemin à suivre ' +
+                  'pour changer de téléphone.'}
               </p>
               <input type="password" className="input mt-2" autoComplete="current-password"
                      placeholder="Votre mot de passe"

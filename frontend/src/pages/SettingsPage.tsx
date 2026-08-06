@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Building2, CreditCard, FileText, Shield,
-  Upload, Trash2, ImageOff, Loader2, AlertTriangle, Database, Wrench,
+  Upload, Trash2, ImageOff, Loader2, AlertTriangle, Database, Wrench, UserCog,
 } from 'lucide-react'
 import { settingsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
@@ -50,9 +50,14 @@ const TABS = [
   { key: 'legal',     label: 'Légal / CO',   icon: Shield     },
   { key: 'backups',   label: 'Sauvegardes',  icon: Database   },
   { key: 'maintenance', label: 'Maintenance', icon: Wrench   },
+  // Ce que chacun règle pour LUI-MÊME : son second facteur, ses ordinateurs de
+  // confiance. Visible de tous les rôles — y compris en lecture seule, qui peut
+  // protéger son compte même sans y être obligé.
+  { key: 'account',   label: 'Mon compte',  icon: UserCog    },
 ]
 
 import { BackupPanel } from '@/components/settings/BackupPanel'
+import { MFAPanel } from '@/components/settings/MFAPanel'
 import { MaintenancePanel } from '@/components/settings/MaintenancePanel'
 import { ReconciliationPanel } from '@/components/settings/ReconciliationPanel'
 import { useAuthStore } from '@/store/auth'
@@ -179,7 +184,8 @@ export function SettingsPage() {
         subtitle="Configuration de votre société"
         actions={
           // L'onglet Sauvegardes n'a rien à enregistrer : ses actions lui sont propres.
-          effectiveTab === 'backups' || effectiveTab === 'maintenance' ? null : (
+          effectiveTab === 'backups' || effectiveTab === 'maintenance'
+            || effectiveTab === 'account' ? null : (
             <button
               form="settings-form"
               type="submit"
@@ -232,8 +238,14 @@ export function SettingsPage() {
 
         {effectiveTab === 'backups' ? (
           <div className="flex-1"><BackupPanel /></div>
-        ) : tab === 'maintenance' ? (
+        ) : effectiveTab === 'maintenance' ? (
+          /* `tab` et non `effectiveTab` ici : un onglet interdit sélectionné par
+             un lien affichait quand même son panneau, dont chaque appel
+             répondait 403. Le recalage ne servait à rien tant que le rendu
+             lisait la valeur brute. */
           <div className="flex-1"><MaintenancePanel /></div>
+        ) : effectiveTab === 'account' ? (
+          <div className="flex-1"><MFAPanel /></div>
         ) : (
         /* Formulaire */
         <form id="settings-form" onSubmit={handleSubmit(d => save.mutate(d))} className="flex-1 space-y-5">

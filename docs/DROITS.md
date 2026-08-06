@@ -149,6 +149,10 @@ fonction de sécurité : les deux restent à l'administrateur.
 
 ## Son propre compte — tous les rôles
 
+Onglet **Paramètres → Mon compte**, visible quel que soit le rôle. Le second
+facteur appartient au compte de celui qui le lit, pas à l'administration du
+logiciel.
+
 | Action | Lecture seule | Comptable | Admin |
 |---|:---:|:---:|:---:|
 | Changer son mot de passe | ✅ | ✅ | ✅ |

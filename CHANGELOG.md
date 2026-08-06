@@ -9,6 +9,29 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Corrigé
 
+- **Un chargement qui ne finissait jamais, en bas des Paramètres.** Les réglages réseau affichaient un rond qui tourne tant que le formulaire n'était pas chargé — or une requête refusée (403) ne le charge jamais. Sur un compte comptable, l'écran restait donc indéfiniment sur « chargement », soit le pire des états : il annonce que quelque chose arrive.
+
+- **« Comptes et rôles » s'affichait pour le comptable et la lecture seule**, sous un titre qui promettait le contraire de ce que le serveur répondait. La section **Sécurité & réseau** entière est désormais réservée à l'administrateur — clé de signature, adresse d'écoute, réglages de session, comptes.
+
+- **Le second facteur nommait « administrateur » quel que soit le rôle.** Un comptable lisait une phrase fausse sur son propre écran : « Étant administrateur, vous devrez… ». Le message suit maintenant le rôle. Une phrase fausse dans un produit use la confiance dans tout ce qu'il affirme par ailleurs.
+
+- La note « la console de rejeu ISO 20022 et le mode bac à sable arrivent dans une prochaine version » est retirée : elle n'était plus d'actualité.
+
+- **Le rendu des Paramètres lisait `tab` là où le recalage écrivait `effectiveTab`.** Un onglet interdit atteint par un lien affichait donc son panneau malgré tout, dont chaque appel répondait 403.
+
+### Ajouté
+
+- **Onglet « Mon compte »**, visible de tous les rôles : second facteur et ordinateurs de confiance. Il vivait dans la section Sécurité, réservée à l'administrateur — un comptable, à qui le second facteur est pourtant **exigé**, ne pouvait donc pas l'atteindre. Ce qu'on règle pour soi-même n'est pas de l'administration du logiciel.
+
+- **Le montant d'une facture fournisseur se saisit en TTC ou en hors taxe**, au choix, TTC par défaut. Une facture reçue annonce ce qu'il faut **payer**, et c'est aussi ce que porte le QR : exiger du hors taxe demandait une division à chaque saisie, et empêchait le QR de rien pré-remplir.
+
+  **Une facture sans TVA** — fournisseur non assujetti — se saisit à 0 % : les deux montants sont alors égaux, l'écriture ne porte aucune ligne de TVA déductible, et il n'y a rien à récupérer (LTVA art. 28 al. 1 exige une facture mentionnant l'impôt pour le déduire). L'écran le dit, plutôt que de laisser chercher un taux qui n'existe pas.
+
+- **Le QR remplit maintenant le montant et propose le fournisseur.** Le montant TTC part directement dans le champ ; si le créancier n'est pas encore enregistré, sa fiche s'ouvre **pré-remplie** avec son nom et son IBAN — et un QR-IBAN est rangé dans `qr_iban`, un IBAN ordinaire dans `iban`, parce que les confondre fait rejeter le virement.
+
+
+### Corrigé
+
 - **La liste des factures fournisseurs répondait « n'ont pas pu être lues ».** Deux colonnes avaient été ajoutées à la requête sans l'être au balayage des résultats — dix-huit colonnes lues pour seize destinations. L'écran Achats restait donc vide, et le bouton « Comptabiliser », qui n'apparaît que sur un brouillon, avec lui. Le message d'erreur disait « database error », ce qui rend un décalage de colonnes indiscernable d'une base injoignable ; il nomme désormais la cause.
 
 - **L'interface cassait entièrement sur l'écran Paramètres** (React #310, « Rendered more hooks than during the previous render »). Un `useAuthStore` était appelé **après** un `if (isLoading) return null` : au premier rendu la page sortait avant lui, au second elle l'appelait — un hook de plus que la fois précédente, ce que React refuse. La trace minifiée ne désignait rien d'exploitable.

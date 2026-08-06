@@ -21,7 +21,7 @@ import type { ServerSettings } from '@/types'
 const LOOPBACK = ['127.0.0.1', 'localhost', '::1']
 
 export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
-  const { data, isLoading, refetch } = useQuery<{
+  const { data, isLoading, isError, refetch } = useQuery<{
     settings: ServerSettings; restart_required: boolean; config_file: string
   }>({
     queryKey: ['settings', 'server'],
@@ -58,7 +58,16 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
     },
   })
 
-  if (isLoading || !form) return <LoadingSpinner />
+  // `!form` seul tournait indéfiniment : une requête refusée (403) ne charge
+  // jamais le formulaire, et l'écran restait sur un rond qui tourne — le pire
+  // des états, puisqu'il annonce que quelque chose arrive.
+  if (isLoading) return <LoadingSpinner />
+  if (isError || !form) {
+    return <ErrorBanner message={
+      "Les réglages réseau n'ont pas pu être lus. Ils sont réservés à " +
+      "l'administrateur du logiciel."
+    } />
+  }
 
   const loopback = LOOPBACK.includes(form.host)
   const pending = save.isSuccess || data?.restart_required
