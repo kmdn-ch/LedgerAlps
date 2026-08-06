@@ -94,6 +94,35 @@ git tag -a v1.4.0-rc1 -m "RC1" && git push origin v1.4.0-rc1
 lien `/releases/latest` du README. À utiliser quand il faut valider le cycle
 complet de publication, pas seulement les artefacts.
 
+### Quand un tag poussé ne déclenche rien
+
+C'est arrivé : `v1.5.0-rc7` puis `v1.5.0-rc8` étaient bien créés sur le dépôt —
+`git ls-remote --tags origin` les voyait — sans qu'aucun run ne démarre et sans
+`CreateEvent` dans le flux d'événements. Les pushs de branche, eux, déclenchaient
+normalement. Recréer le tag n'y change rien.
+
+Republier à la main, sur le tag existant :
+
+```bash
+gh workflow run Release --ref v1.5.0-rc9
+```
+
+Le workflow exige alors que la référence choisie soit un **tag** : GoReleaser
+refuse de publier depuis une branche, et son message ne dit pas ce qu'il fallait
+sélectionner.
+
+Deux conditions pour que ce soit possible : `workflow_dispatch` doit figurer
+dans `release.yml` **sur `main`** — GitHub ne propose le déclenchement manuel que
+d'après la branche par défaut — et aussi **au commit que le tag désigne**, puisque
+c'est ce fichier-là qui s'exécutera. Un tag antérieur à cet ajout ne peut donc pas
+être republié ainsi ; il faut en poser un nouveau.
+
+Vérifier ensuite :
+
+```bash
+gh run list --workflow Release --limit 1
+```
+
 ### Garde-fou
 
 `release.yml` refuse un tag **final** dont le commit n'est pas atteignable
