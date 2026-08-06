@@ -43,6 +43,28 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 - **Roadmap 13b : lecture automatique des factures fournisseurs.** Trois voies étudiées, toutes locales et libres. Recommandation : décoder le **QR-facture** en premier (`gozxing`, Apache 2.0) — il porte déjà créancier, IBAN, montant et référence, sans aucune reconnaissance de caractères et sans dépendance native. Tout service d'extraction en ligne est écarté : une facture fournisseur contient l'IBAN et l'adresse d'un tiers.
 
+## [Unreleased]
+
+### Ajouté
+
+- **Lire le QR d'une facture fournisseur déposée** (roadmap 13b, voie 1). On dépose le PDF, LedgerAlps décode le QR-facture et pré-remplit le fournisseur, la référence de paiement et le numéro de la pièce.
+
+  **Le QR plutôt que la reconnaissance de caractères** : le code contient déjà, en clair et sans ambiguïté, ce que les Implementation Guidelines SIX définissent champ par champ. Rien n'est deviné — et sur un montant, une décimale devinée de travers entre dans les livres *et* dans la déclaration de TVA. Le contrôle de cohérence référence QR ⇔ QR-IBAN (IG v2.4 §4.2.2, champs 4 et 28) est appliqué à la lecture : un bulletin incohérent est signalé avant de servir à un paiement, plutôt que rejeté par la banque.
+
+  **Rien n'est enregistré.** La route lit et rend ; c'est l'utilisateur qui confirme. Un champ pré-rempli qu'on relit vaut mieux qu'un champ juste qu'on n'a pas vu. Le fournisseur déjà connu est reconnu **par son IBAN** — un nom se saisit de dix façons, un compte non.
+
+  **Rien ne sort de la machine.** Le fichier est lu en mémoire, ses images extraites dans un dossier temporaire effacé aussitôt. Aucun service d'extraction en ligne : une facture fournisseur porte le nom, l'adresse et l'IBAN d'un tiers. Deux dépendances, toutes deux en Go pur, `CGO_ENABLED=0` conservé — `gozxing` (Apache 2.0) et `pdfcpu` (Apache 2.0).
+
+  **Ce qui n'est pas couvert, et le dit** : une facture sans QR, ou dont le QR est tracé en vecteurs plutôt qu'en image, répond « aucun QR trouvé » avec l'explication. Un scan photographié demanderait un rendu de page, donc une dépendance native — ce qui casserait le binaire unique. La saisie manuelle reste le chemin normal, jamais un échec silencieux.
+
+- **Une facture fournisseur au brouillon se modifie.** L'écran permettait de saisir et de comptabiliser, mais pas de corriger : une faute de frappe obligeait à supprimer et à tout ressaisir. Une facture **comptabilisée** reste immuable — son écriture est scellée (CO art. 957a), et la modifier ferait mentir le journal ; le refus le dit et renvoie vers l'écriture de correction. La condition « brouillon » est répétée dans l'écriture elle-même, pour qu'une comptabilisation survenue entre-temps n'écrase pas une pièce déjà scellée.
+
+### Modifié
+
+- **La désactivation manuelle d'un contact est retirée.** L'interrupteur n'apportait rien qu'on ne fasse mieux autrement : un contact qu'on ne veut plus voir s'**anonymise** (nLPD art. 6 al. 4), ce qui l'écarte des listes *et* efface ses données personnelles — un geste qui dit ce qu'il fait. Le serveur refuse aussi la demande, avec le message qui oriente : masquer le bouton sans fermer la route n'aurait rien fermé.
+
+- `PATCH /invoices/:id` et les routes d'achat déclarent désormais leur permission, en plus du filtre global.
+
 ## [1.4.9] — 2026-08-06
 
 ### Corrigé

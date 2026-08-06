@@ -303,7 +303,31 @@ comptent dans la déclaration TVA.
 | GET | `/supplier-invoices` | lecture | Liste paginée |
 | GET | `/supplier-invoices/:id` | lecture | Détail avec lignes |
 | POST | `/supplier-invoices` | écriture documents | Créer (refus si doublon fournisseur + référence) |
+| PUT | `/supplier-invoices/:id` | écriture documents | Modifier — **brouillons uniquement** (409 sinon) |
+| POST | `/supplier-invoices/read-qr` | écriture documents | Lire le QR d'un PDF ou d'une image déposée. **Ne crée rien** |
 | POST | `/supplier-invoices/:id/transition` | écriture comptable | Changer de statut |
+
+### Lire le QR d'une facture
+
+Multipart, champ `file`, 10 Mo au maximum. La réponse ne crée rien :
+
+```json
+{
+  "found": true,
+  "bill": { "creditor_name": "…", "creditor_iban": "CH44…", "amount": 1621.50,
+            "currency": "CHF", "reference_type": "QRR", "reference": "21000…",
+            "message": "Facture FA-118", "is_qr_iban": true },
+  "supplier": { "id": "…", "name": "…" }
+}
+```
+
+Le fournisseur est reconnu **par son IBAN** — un nom se saisit de dix façons, un
+compte non. `id` vide signifie qu'il reste à créer.
+
+Un document sans QR répond **200** avec `found: false` et un `reason` : beaucoup
+de factures n'en portent pas, et la saisie manuelle reste le chemin normal. Un
+bulletin dont la référence contredit l'IBAN (IG v2.4 §4.2.2) répond **422** en
+nommant l'incohérence.
 | DELETE | `/supplier-invoices/:id` | écriture comptable | Supprimer — brouillons uniquement (CO art. 958f) |
 
 ### Comptabiliser écrit au journal

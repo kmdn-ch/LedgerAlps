@@ -144,8 +144,19 @@ export const supplierInvoicesApi = {
     api.get('/supplier-invoices', { params }),
   get:    (id: string)   => api.get(`/supplier-invoices/${id}`),
   create: (data: unknown) => api.post('/supplier-invoices', data),
+  update: (id: string, data: unknown) => api.put(`/supplier-invoices/${id}`, data),
   transition: (id: string, status: string) =>
     api.post(`/supplier-invoices/${id}/transition`, { status }),
+  // Lit le QR d'une facture deposee. N'enregistre RIEN : le serveur rend ce que
+  // le code contient, l'utilisateur confirme.
+  readQR: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/supplier-invoices/read-qr', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60_000,
+    })
+  },
 }
 
 // ─── Paiements fournisseurs (pain.001) ────────────────────────────────────────

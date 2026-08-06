@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ArrowLeft, Save, Building2, User, PowerOff } from 'lucide-react'
+import { ArrowLeft, Save, Building2, User } from 'lucide-react'
 import { contactsApi } from '@/api/client'
 import { ContactDocuments } from '@/components/contacts/ContactDocuments'
 import { PageHeader, LoadingSpinner, ErrorBanner } from '@/components/ui'
@@ -93,14 +93,6 @@ export function ContactDetailPage() {
     },
   })
 
-  const toggleActive = useMutation({
-    mutationFn: () => contactsApi.update(contactId!, { is_active: !contact?.is_active }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['contact', contactId] })
-      qc.invalidateQueries({ queryKey: ['contacts'] })
-    },
-  })
-
   if (isLoading) return <LoadingSpinner />
   if (error || !contact) return <ErrorBanner message="Contact introuvable." />
 
@@ -114,20 +106,13 @@ export function ContactDetailPage() {
         <PageHeader
           title={contact.name}
           subtitle={contact.is_company ? 'Entreprise' : 'Particulier'}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => toggleActive.mutate()}
-                disabled={toggleActive.isPending}
-                className="btn-ghost btn-sm flex items-center gap-1.5 text-alpine-500"
-                title={contact.is_active ? 'Désactiver' : 'Réactiver'}
-              >
-                <PowerOff size={14} />
-                {contact.is_active ? 'Désactiver' : 'Réactiver'}
-              </button>
-            </div>
-          }
+          /* La désactivation manuelle a été retirée : elle n'apportait rien
+             qu'on ne fasse mieux autrement. Un contact qu'on ne veut plus voir
+             s'anonymise (nLPD art. 6 al. 4), ce qui l'écarte des listes ET
+             efface ses données personnelles — un geste qui dit ce qu'il fait,
+             au lieu d'un interrupteur dont l'effet n'était visible nulle part.
+
+             La colonne is_active reste : c'est l'anonymisation qui la pose. */
         />
       </div>
 

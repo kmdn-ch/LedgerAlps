@@ -20,7 +20,9 @@
 
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Loader2, FileText, CheckCircle, UserPlus, X } from 'lucide-react'
+import {
+  Plus, Loader2, FileText, CheckCircle, UserPlus, X, Upload, Pencil, ScanLine,
+} from 'lucide-react'
 import { supplierInvoicesApi, contactsApi, accountsApi } from '@/api/client'
 import {
   PageHeader, LoadingSpinner, EmptyState, ErrorBanner, SectionTitle, ConfirmDialog,
@@ -84,6 +86,12 @@ export function PurchasesPage() {
   const [newSupplier, setNewSupplier] = useState(false)
   const [supplierForm, setSupplierForm] = useState({ name: '', iban: '', email: '' })
 
+  // Facture en cours de modification. Nul = on saisit une nouvelle facture.
+  const [editing, setEditing] = useState<SupplierInvoice | null>(null)
+  // Ce que le QR a donné, affiché tel quel pour que l'utilisateur le vérifie
+  // avant d'enregistrer. Rien n'est écrit tant qu'il n'a pas confirmé.
+  const [scan, setScan] = useState<{ ok: boolean; message: string } | null>(null)
+
   const list = useQuery<{ items: SupplierInvoice[] }>({
     queryKey: ['supplier-invoices'],
     queryFn:  () => supplierInvoicesApi.list().then(r => r.data),
@@ -127,27 +135,55 @@ export function PurchasesPage() {
   const ttc  = isFinite(ht) ? Math.round((ht + tva) * 20) / 20 : 0
 
   const create = useMutation({
-    mutationFn: () => supplierInvoicesApi.create({
+    mutationFn: () => {
+      const payload = {
       supplier_id: form.supplier_id,
       supplier_reference: form.supplier_reference.trim(),
       issue_date: form.issue_date,
       due_date: form.due_date || undefined,
       expense_account_code: form.expense_account_code || undefined,
       payment_reference: form.payment_reference.trim() || undefined,
-      lines: [{
-        description: form.description.trim() || form.supplier_reference.trim(),
-        quantity: 1,
-        unit_price: ht,
-        vat_rate: rate / 100,
-        expense_account_code: form.expense_account_code || undefined,
-      }],
-    }),
+        lines: [{
+          description: form.description.trim() || form.supplier_reference.trim(),
+          quantity: 1,
+          unit_price: ht,
+          vat_rate: rate / 100,
+          expense_account_code: form.expense_account_code || undefined,
+        }],
+      }
+      return editing
+        ? supplierInvoicesApi.update(editing.id, payload)
+        : supplierInvoicesApi.create(payload)
+    },
     onSuccess: () => {
-      setError(null); setCreating(false); reset()
+      setError(null); setCreating(false); setEditing(null); setScan(null); reset()
       qc.invalidateQueries({ queryKey: ['supplier-invoices'] })
+      qc.invalidateQueries({ queryKey: ['payments-payable'] })
     },
     onError: (e) => setError(refusalMessage(e, "La facture n'a pas pu être enregistrée.")),
   })
+
+  // Ouvre le formulaire sur une facture existante. Seul un brouillon est
+  // modifiable : une facture comptabilisée porte une écriture scellée.
+  const openEdit = (i: SupplierInvoice) => {
+    setEditing(i)
+    setScan(null)
+    setError(null)
+    setForm({
+      supplier_id: i.supplier_id,
+      supplier_reference: i.supplier_reference,
+      issue_date: i.issue_date.slice(0, 10),
+      due_date: i.due_date ? i.due_date.slice(0, 10) : '',
+      description: '',
+      amount_ht: String(i.subtotal_amount),
+      vat_rate: i.subtotal_amount > 0
+        ? String(Math.round((i.vat_amount / i.subtotal_amount) * 1000) / 10)
+        : '8.1',
+      expense_account_code: i.expense_account_code ?? '',
+      payment_reference: i.payment_reference ?? '',
+    })
+    setCreating(true)
+  }
 
   // Le fournisseur créé ici est immédiatement sélectionné : la saisie reprend
   // là où elle s'est arrêtée, sans que l'on ait à rouvrir la liste.
@@ -167,6 +203,49 @@ export function PurchasesPage() {
       if (created.id) setForm(f => ({ ...f, supplier_id: created.id as string }))
     },
     onError: (e) => setError(refusalMessage(e, "Le fournisseur n'a pas pu être créé.")),
+  })
+
+  // Le QR ne remplace pas la saisie : il la prépare. Le montant hors taxe, le
+  // taux de TVA et le compte de charge n'y figurent pas — ce sont des décisions
+  // comptables, pas des données du bulletin.
+  const readQR = useMutation({
+    mutationFn: (file: File) => supplierInvoicesApi.readQR(file),
+    onSuccess: (r) => {
+      const d = r.data as {
+        found: boolean; reason?: string
+        bill?: {
+          creditor_name: string; creditor_iban: string; amount: number
+          reference: string; reference_type: string; message: string
+        }
+        supplier?: { id: string; name: string }
+      }
+      if (!d.found || !d.bill) {
+        setScan({ ok: false, message: d.reason ?? 'Aucun QR-facture trouvé.' })
+        return
+      }
+      setCreating(true)
+      setForm(f => ({
+        ...f,
+        supplier_id: d.supplier?.id || f.supplier_id,
+        payment_reference: d.bill!.reference_type === 'NON' ? '' : d.bill!.reference,
+        supplier_reference: d.bill!.message || f.supplier_reference,
+        // Le QR porte le montant À PAYER, donc TTC. Le champ attend du hors
+        // taxe : le laisser vide plutôt que d'y écrire un TTC déguisé.
+        amount_ht: f.amount_ht,
+      }))
+      const inconnu = d.supplier?.id
+        ? ''
+        : ` Le fournisseur ${d.bill.creditor_name} n'est pas encore enregistré — créez-le, son IBAN est ${d.bill.creditor_iban}.`
+      setScan({
+        ok: true,
+        message: `QR lu : ${d.bill.creditor_name}, ${d.bill.amount.toFixed(2)} CHF à payer.` +
+          ` Le montant du QR est TTC ; saisissez le hors taxe et le taux de TVA.` + inconnu,
+      })
+    },
+    onError: (e) => setScan({
+      ok: false,
+      message: refusalMessage(e, "Le document n'a pas pu être lu."),
+    }),
   })
 
   const book = useMutation({
@@ -194,17 +273,62 @@ export function PurchasesPage() {
         title="Achats"
         subtitle="Factures fournisseurs et ordres de paiement"
         actions={
-          <button onClick={() => { setCreating(v => !v); setError(null) }} className="btn-primary">
-            <Plus size={15} /> Saisir une facture
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Déposer d'abord, saisir ensuite : c'est l'ordre réel du geste.
+                Le QR d'une facture suisse porte déjà le créancier, l'IBAN, le
+                montant et la référence — aucune reconnaissance de caractères,
+                donc aucune valeur devinée. */}
+            <label className="btn-secondary flex items-center gap-1.5 cursor-pointer">
+              {readQR.isPending
+                ? <Loader2 size={15} className="animate-spin" />
+                : <ScanLine size={15} />}
+              {readQR.isPending ? 'Lecture…' : 'Lire un PDF'}
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden"
+                     onChange={e => {
+                       const f = e.target.files?.[0]
+                       if (f) { setScan(null); readQR.mutate(f) }
+                       e.target.value = ''
+                     }} />
+            </label>
+            <button onClick={() => {
+                      setEditing(null); setScan(null); setError(null)
+                      setCreating(v => !v)
+                    }}
+                    className="btn-primary">
+              <Plus size={15} /> Saisir une facture
+            </button>
+          </div>
         }
       />
 
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
 
+      {/* Ce que le QR a donné, montré tel quel. Rien n'est enregistré : les
+          champs sont pré-remplis, et c'est l'utilisateur qui valide. Un champ
+          juste qu'on n'a pas vu vaut moins qu'un champ pré-rempli qu'on relit. */}
+      {scan && (
+        <div className={`mb-4 rounded-md border px-4 py-3 text-sm ${
+          scan.ok ? 'border-success-500 bg-success-500/5' : 'border-neutral-300 bg-neutral-50'
+        }`}>
+          <p className="font-medium flex items-center gap-1.5">
+            {scan.ok ? <ScanLine size={15} /> : <Upload size={15} />}
+            {scan.ok ? 'QR-facture lu' : 'Rien à lire dans ce document'}
+          </p>
+          <p className="text-alpine-700 mt-1">{scan.message}</p>
+          <button onClick={() => setScan(null)}
+                  className="text-xs text-alpine-500 hover:text-alpine-700 mt-1.5">
+            Masquer
+          </button>
+        </div>
+      )}
+
       {creating && (
         <div className="card card-pad mb-5">
-          <SectionTitle>Nouvelle facture fournisseur</SectionTitle>
+          <SectionTitle>
+            {editing
+              ? `Modifier la facture ${editing.supplier_reference}`
+              : 'Nouvelle facture fournisseur'}
+          </SectionTitle>
 
           {/* Création à la volée : un fournisseur inconnu ne doit pas obliger à
               quitter la page et perdre la saisie en cours. */}
@@ -361,12 +485,15 @@ export function PurchasesPage() {
               {' · '}<strong>TTC <span className="font-mono">{formatCHF(ttc)}</span></strong>
             </p>
             <div className="flex items-center gap-2">
-              <button onClick={() => { setCreating(false); reset(); setError(null) }}
+              <button onClick={() => {
+                        setCreating(false); setEditing(null); setScan(null)
+                        reset(); setError(null)
+                      }}
                       className="btn-secondary btn-sm">Annuler</button>
               <button onClick={() => { setError(null); create.mutate() }} disabled={!canCreate}
                       className="btn-primary btn-sm flex items-center gap-1.5">
                 {create.isPending && <Loader2 size={13} className="animate-spin" />}
-                Enregistrer le brouillon
+                {editing ? 'Enregistrer les modifications' : 'Enregistrer le brouillon'}
               </button>
             </div>
           </div>
@@ -424,11 +551,19 @@ export function PurchasesPage() {
                   </span>
                 </td>
                 <td className="text-right">
+                  {/* Un brouillon se corrige ; une facture comptabilisée porte
+                      une écriture scellée (CO art. 957a) et ne se retouche pas. */}
                   {i.status === 'draft' && (
-                    <button onClick={() => setToBook(i)} disabled={book.isPending}
-                            className="btn-ghost btn-sm text-success-700 flex items-center gap-1 ml-auto">
-                      <CheckCircle size={13} /> Comptabiliser
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => openEdit(i)}
+                              className="btn-ghost btn-sm flex items-center gap-1">
+                        <Pencil size={13} /> Modifier
+                      </button>
+                      <button onClick={() => setToBook(i)} disabled={book.isPending}
+                              className="btn-ghost btn-sm text-success-700 flex items-center gap-1">
+                        <CheckCircle size={13} /> Comptabiliser
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>

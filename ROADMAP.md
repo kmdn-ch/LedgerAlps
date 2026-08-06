@@ -82,7 +82,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 12b | Exports comptables (journal, grand livre, balance) | 🔎 livré | [↓](#12b--exports-comptables) |
 | 9c | Droits du comptable et second facteur par rôle | 🔎 livré | [↓](#9c--droits-du-comptable-et-second-facteur-par-rôle) |
 | 13 | Veille de conformité automatisée | ✅ | — |
-| 13b | Lecture automatique des factures fournisseurs (PDF) | 💡 à trancher | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
+| 13b | Lecture du QR d'une facture fournisseur | 🔎 livré — voie 1 | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
 ---
@@ -650,7 +650,29 @@ d'un tiers, et l'envoyer chez un prestataire contredit frontalement la promesse
 de souveraineté. Un modèle local (Ollama) reste envisageable, mais pèse plusieurs
 gigaoctets pour un gain incertain face au QR code.
 
-**Ce que je recommande** : la voie 1 seule pour commencer — décoder le QR d'une
+### Ce qui est livré — la voie 1
+
+**Livré.** On dépose le PDF depuis l'écran Achats, LedgerAlps décode le
+QR-facture et pré-remplit le fournisseur (reconnu **par son IBAN**), la référence
+de paiement et le numéro de la pièce. Le contrôle référence QR ⇔ QR-IBAN est
+appliqué à la lecture, donc bien avant qu'un paiement parte.
+
+Vérifié sur un serveur réel avec un PDF portant un vrai QR : créancier, IBAN,
+montant, référence et type de référence tous relus correctement, fournisseur
+connu reconnu, **et aucune facture créée** — la route lit, elle n'écrit pas.
+
+Deux dépendances, toutes deux en Go pur : `gozxing` et `pdfcpu`, Apache 2.0,
+`CGO_ENABLED=0` conservé.
+
+**Ce qui n'est pas couvert, et le dit** : une facture sans QR, ou dont le QR est
+tracé en vecteurs plutôt qu'en image. La réponse est « aucun QR trouvé » avec
+l'explication, jamais un formulaire vide sans raison.
+
+**Reste** : la voie 2 (texte du PDF pour le montant hors taxe et le taux de TVA),
+si le besoin se confirme. Le QR ne les porte pas — ce sont des décisions
+comptables, pas des données du bulletin.
+
+**Recommandation initiale, conservée pour mémoire** : la voie 1 seule pour commencer — décoder le QR d'une
 facture déposée, pré-remplir créancier, IBAN, montant et référence de paiement,
 et laisser l'utilisateur compléter le reste. C'est peu de code, aucune dépendance
 native, aucun risque d'erreur silencieuse, et cela couvre le cas courant. La voie

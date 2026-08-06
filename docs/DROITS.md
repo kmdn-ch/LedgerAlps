@@ -25,8 +25,9 @@ Légende : ✅ autorisé · 👁 lecture seule · ⛔ refusé (403)
 |---|:---:|:---:|:---:|
 | Voir les indicateurs, le chiffre d'affaires, les factures récentes | 👁 | ✅ | ✅ |
 
-Les *clients actifs* ne comptent que les contacts **actifs** : désactiver un
-contact le retire du chiffre.
+Les *clients actifs* ne comptent que les contacts **actifs**. Un contact ne se
+désactive plus à la main : il s'**anonymise**, ce qui l'écarte des listes et
+efface ses données personnelles d'un même geste.
 
 ## Facturation — factures, offres de prix, notes de crédit
 
@@ -45,6 +46,8 @@ contact le retire du chiffre.
 |---|:---:|:---:|:---:|
 | Voir les factures reçues | 👁 | ✅ | ✅ |
 | Saisir une facture fournisseur | ⛔ | ✅ | ✅ |
+| Lire le QR d'une facture déposée | ⛔ | ✅ | ✅ |
+| Modifier une facture au brouillon | ⛔ | ✅ | ✅ |
 | Comptabiliser un achat (écrit au journal) | ⛔ | ✅ | ✅ |
 | Voir ce qu'il y a à payer | 👁 | ✅ | ✅ |
 | **Produire un ordre de paiement pain.001** | ⛔ | ✅ | ✅ |
@@ -56,7 +59,7 @@ contact le retire du chiffre.
 |---|:---:|:---:|:---:|
 | Voir la liste et les fiches | 👁 | ✅ | ✅ |
 | Voir les contacts **désactivés** | ⛔ | ✅ | ✅ |
-| Créer, modifier, désactiver | ⛔ | ✅ | ✅ |
+| Créer et modifier | ⛔ | ✅ | ✅ |
 | **Anonymiser** (nLPD art. 6 al. 4) | ⛔ | ✅ | ✅ |
 
 ## Journal et plan comptable

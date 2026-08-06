@@ -306,11 +306,15 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 		addField("notes", *req.Notes)
 	}
 	if req.IsActive != nil {
-		val := 0
-		if *req.IsActive {
-			val = 1
-		}
-		addField("is_active", val)
+		// Refuse plutot qu'ignore : ignorer laisserait croire la demande prise
+		// en compte. La desactivation manuelle a ete retiree — un contact qu'on
+		// ne veut plus voir s'anonymise, ce qui l'ecarte des listes ET efface
+		// ses donnees personnelles (nLPD art. 6 al. 4). Masquer le bouton sans
+		// fermer la route n'aurait rien ferme du tout.
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "l'activation d'un contact ne se change pas a la main : " +
+				"pour retirer un contact des listes, anonymisez-le"})
+		return
 	}
 
 	args = append(args, id)

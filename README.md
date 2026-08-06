@@ -129,7 +129,12 @@ remplacée.
 </tr>
 </table>
 
-**Achats et paiements.** Saisissez les factures que vous recevez : la TVA payée à
+**Achats et paiements.** Déposez le PDF d'une facture reçue : LedgerAlps lit son
+QR-facture et remplit le fournisseur, la référence de paiement et le numéro de la
+pièce. Rien n'est enregistré sans votre confirmation, et rien ne sort de votre
+machine — le fichier est lu sur place, jamais envoyé.
+
+Saisissez les factures que vous recevez : la TVA payée à
 vos fournisseurs se déduit de celle que vous encaissez, et la charge entre dans
 votre résultat. Une fois comptabilisées, cochez celles à régler — LedgerAlps
 produit le fichier de paiement **ISO 20022 pain.001** que vous déposez dans votre

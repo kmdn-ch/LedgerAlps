@@ -313,6 +313,17 @@ func main() {
 	api.GET("/supplier-invoices", sih.ListSupplierInvoices)
 	api.GET("/supplier-invoices/:id", sih.GetSupplierInvoice)
 	api.POST("/supplier-invoices", authorizer.Require(authz.PermWriteDocuments), sih.CreateSupplierInvoice)
+	// Lire le QR d'une facture deposee. Cette route ne fait que LIRE : elle
+	// n'enregistre rien, ne cree aucun contact. La permission d'ecriture est
+	// exigee malgre tout, parce qu'elle sert a preparer une saisie — et qu'un
+	// compte en lecture seule n'a rien a preparer.
+	qbh := handlers.NewQRBillHandler(database, cfg.UsePostgres())
+	api.POST("/supplier-invoices/read-qr",
+		authorizer.Require(authz.PermWriteDocuments), qbh.ReadSupplierBill)
+
+	// Modifier n'est possible qu'au brouillon : une facture comptabilisee porte
+	// une ecriture scellee, et la changer ferait mentir le journal.
+	api.PUT("/supplier-invoices/:id", authorizer.Require(authz.PermWriteDocuments), sih.UpdateSupplierInvoice)
 	api.POST("/supplier-invoices/:id/transition", authorizer.Require(authz.PermWriteAccounting), sih.TransitionSupplierInvoice)
 	api.DELETE("/supplier-invoices/:id", authorizer.Require(authz.PermWriteAccounting), sih.DeleteSupplierInvoice)
 
@@ -323,7 +334,7 @@ func main() {
 	// Téléchargement groupé : un PDF si un seul document, un ZIP si plusieurs.
 	api.POST("/invoices/bulk-pdf", ih.BulkInvoicePDF)
 	api.POST("/invoices", ih.CreateInvoice)
-	api.PATCH("/invoices/:id", ih.UpdateInvoice)
+	api.PATCH("/invoices/:id", authorizer.Require(authz.PermWriteDocuments), ih.UpdateInvoice)
 	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
 	// Quote lifecycle: an offer becomes an invoice by producing one, not by
 	// mutating into one — both documents are kept and linked.
