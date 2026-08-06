@@ -144,11 +144,28 @@ export function SettingsPage() {
     e.target.value = ''
   }
 
+  // Le rôle se lit AVANT tout retour anticipé.
+  //
+  // React identifie un hook par son rang d'appel. Ce `useAuthStore` était placé
+  // après `if (isLoading) return null` : au premier rendu la page sortait avant
+  // lui, au second elle l'appelait — un hook de plus que la fois précédente,
+  // ce que React refuse (erreur #310, « Rendered more hooks than during the
+  // previous render »). L'écran cassait alors entièrement, avec une trace
+  // minifiée illisible.
+  const role = useAuthStore(st => st.role)
+
   if (isLoading) return null
 
-  const role = useAuthStore(st => st.role)
-  const isAdmin = role === 'admin'
-  const visibleTabs = TABS.filter(t => isAdmin || !ADMIN_ONLY.has(t.key))
+  // La lecture seule ne voit ni Sauvegardes ni Maintenance : ces écrans exposent
+  // le dossier de sauvegarde, l'état du chiffrement et la santé du système —
+  // les consulter est déjà sensible.
+  //
+  // Le comptable les voit : contrôler l'intégrité des livres et en prendre une
+  // copie fait partie de son métier. Ce qui reste réservé à l'administrateur est
+  // à l'intérieur de ces écrans — restauration, chiffrement, réseau, comptes —
+  // et le serveur le refuse indépendamment de ce qui s'affiche.
+  const canManage = role === 'admin' || role === 'accountant'
+  const visibleTabs = TABS.filter(t => canManage || !ADMIN_ONLY.has(t.key))
 
   // Un onglet réservé sélectionné par un lien ou un rechargement ne doit pas
   // rester actif : sans ce recalage, la page afficherait un panneau vide dont

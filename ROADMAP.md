@@ -80,7 +80,9 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 11 | eBill | ⛔ écarté — réseau fermé | [↓](#11--ebill) |
 | 12 | Validation contre le portail SIX | 🔎 dossier livré | [↓](#12--validation-contre-le-portail-six) |
 | 12b | Exports comptables (journal, grand livre, balance) | 🔎 livré | [↓](#12b--exports-comptables) |
+| 9c | Droits du comptable et second facteur par rôle | 🔎 livré | [↓](#9c--droits-du-comptable-et-second-facteur-par-rôle) |
 | 13 | Veille de conformité automatisée | ✅ | — |
+| 13b | Lecture automatique des factures fournisseurs (PDF) | 💡 à trancher | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
 ---
@@ -160,9 +162,11 @@ croire couvert pour les trois.
 
 | | Protège | État |
 |---|---|---|
-| **Chiffrement du disque** (BitLocker, LUKS) | Tout le poste | 🔎 conseil rendu applicable — édition Windows détectée, marche à suivre affichée |
-| **Sauvegardes** (Argon2id + XChaCha20) | La copie qui voyage | 🔎 chiffrées dès qu'une phrase de passe est enregistrée |
-| **Base de données** (VFS adiantum) | Le fichier, même copié ailleurs | 🔎 option, désactivée par défaut |
+| **Chiffrement du disque** (BitLocker, LUKS) | Tout le poste | ✅ conseil rendu applicable — édition Windows détectée, marche à suivre affichée |
+| **Sauvegardes** (Argon2id + XChaCha20) | La copie qui voyage | ✅ chiffrées dès qu'une phrase de passe est enregistrée |
+| **Base de données** (VFS adiantum) | Le fichier, même copié ailleurs | ✅ proposée à l'installation, activable ensuite |
+
+**Validé par l'utilisateur.** Les trois protections sont livrées et vérifiées.
 
 **Le trou réel n'était pas celui du roadmap.** Les sauvegardes automatiques
 n'étaient chiffrées que si la variable d'environnement `BACKUP_PASSPHRASE`
@@ -465,6 +469,42 @@ jamais activée.
 **Reste** : rien d'obligatoire. Une clé matérielle (WebAuthn) attendrait HTTPS
 généralisé et un besoin réel.
 
+### 9c — Droits du comptable et second facteur par rôle
+
+**Livré.** Le rôle comptable ne pouvait pas faire son métier : clôturer un
+exercice, vérifier la chaîne d'empreintes, prendre une sauvegarde, répondre à une
+demande d'effacement, régler la fiche entreprise — tout cela lui était refusé.
+Il devait demander à quelqu'un dont le rôle est de gérer des mots de passe.
+
+La frontière est désormais celle-ci : **PermManage administre la COMPTABILITÉ,
+PermAdmin administre le LOGICIEL et QUI Y ACCÈDE.** Le comptable a la première,
+l'administrateur les deux.
+
+**Neuf gardes internes lisaient le drapeau du JETON**, pas le rôle en base —
+attestation, journal d'audit (trois fois), anonymisation, exercices (trois fois),
+contacts. Le défaut que l'Authorizer avait été construit pour supprimer
+subsistait donc dans les handlers : rétrograder quelqu'un le laissait agir
+jusqu'à l'expiration de son jeton. Elles sont retirées ; la permission est
+déclarée sur la route et lue dans la base à chaque requête. Deux tests vérifient
+que ces routes portent bien leur permission — sans quoi retirer le middleware les
+ouvrirait à tout compte connecté sans que rien ne le signale.
+
+**Le second facteur suit maintenant le pouvoir de modifier.** Exigé de
+l'administrateur *et* du comptable — un mot de passe volé sur l'un ou l'autre
+permet de fabriquer une comptabilité. La lecture seule en est dispensée : elle ne
+peut rien modifier, et c'est le rôle qu'on donne à sa fiduciaire, à qui l'on ne
+dicte pas son équipement.
+
+**« Se souvenir de cet ordinateur », trente jours.** Redemander un code chaque
+jour sur le poste habituel n'ajoute presque rien — quelqu'un qui a déjà la main
+sur la machine n'attend pas la prochaine connexion — et une protection vécue
+comme une brimade finit désactivée. La date est **absolue** : se connecter ne la
+prolonge pas, sans quoi l'exception deviendrait la règle. Le jeton est haché en
+base, le navigateur en garde l'unique copie dans un cookie HttpOnly, et changer
+de mot de passe ou de second facteur oublie tous les postes.
+
+Inventaire complet des droits : [docs/DROITS.md](docs/DROITS.md).
+
 ### 10 — Rapprochement bancaire
 
 **Livré.** L'import camt.053 existait mais ne gardait rien : le relevé était
@@ -575,6 +615,50 @@ les clés.
 
 **Reste** : rien d'obligatoire. Un format destiné à un logiciel fiduciaire précis
 (Abacus, Crésus) attendra qu'un besoin réel le demande.
+
+### 13b — Lecture automatique des factures fournisseurs (PDF)
+
+**À trancher.** Saisir une facture reçue à la main est le geste le plus répétitif
+du produit. Trois voies, toutes réalisables en restant local et libre.
+
+**1. La QR-facture, d'abord.** Une facture suisse conforme porte un QR code qui
+contient déjà, en clair et sans ambiguïté : l'IBAN du créancier, son nom, son
+adresse, le montant, la devise et la référence de paiement. Aucune
+reconnaissance de caractères n'est nécessaire — il suffit de trouver l'image dans
+le PDF et de la décoder. Les bibliothèques existent en Go (`gozxing`,
+licence Apache 2.0). **Fiabilité proche de 100 % quand le code est présent**, ce
+qui est le cas de la grande majorité des factures suisses depuis le
+30 septembre 2022. C'est de loin le meilleur rapport résultat/risque, et cela ne
+lit que ce que la norme SIX définit — donc rien à deviner.
+
+**2. Le texte du PDF, pour le reste.** Numéro de facture, date, montants hors
+taxe et taux de TVA se trouvent dans la couche texte d'un PDF produit par un
+logiciel de facturation. `pdfcpu` (Apache 2.0) ou `ledongthuc/pdf` (BSD)
+extraient ce texte en Go pur, sans dépendance système. Des expressions régulières
+et quelques heuristiques suffisent pour proposer des valeurs — **à confirmer par
+l'utilisateur, jamais à enregistrer d'office.**
+
+**3. L'OCR, seulement pour les scans.** Une facture photographiée n'a pas de
+couche texte. Tesseract (Apache 2.0) sait la lire, mais impose une dépendance
+native — donc `CGO_ENABLED=1`, ce qui casse le binaire unique sans configuration
+qui est la promesse du produit. À réserver à une version ultérieure, en option
+détectée si Tesseract est déjà installé.
+
+**Ce qui est exclu.** Tout service d'extraction en ligne, toute API de modèle de
+langage hébergée : une facture fournisseur contient l'IBAN, le nom et l'adresse
+d'un tiers, et l'envoyer chez un prestataire contredit frontalement la promesse
+de souveraineté. Un modèle local (Ollama) reste envisageable, mais pèse plusieurs
+gigaoctets pour un gain incertain face au QR code.
+
+**Ce que je recommande** : la voie 1 seule pour commencer — décoder le QR d'une
+facture déposée, pré-remplir créancier, IBAN, montant et référence de paiement,
+et laisser l'utilisateur compléter le reste. C'est peu de code, aucune dépendance
+native, aucun risque d'erreur silencieuse, et cela couvre le cas courant. La voie
+2 s'ajoute ensuite si le besoin se confirme.
+
+**Aucune valeur ne doit être enregistrée sans confirmation.** Une facture
+fournisseur mal lue entre dans les livres et dans la déclaration de TVA ; un
+champ pré-rempli qu'on relit vaut mieux qu'un champ juste qu'on n'a pas vu.
 
 ### 14 — Modules métier
 

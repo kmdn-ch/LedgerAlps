@@ -239,6 +239,11 @@ func main() {
 	v1.POST("/auth/mfa/setup", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFASetup)
 	v1.POST("/auth/mfa/confirm", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFAConfirm)
 	v1.DELETE("/auth/mfa", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFADisable)
+	// Ordinateurs de confiance. Hors du groupe filtre pour la meme raison que le
+	// reste du second facteur : ces routes doivent rester joignables pendant
+	// qu'un compte est encore bloque sur l'inscription.
+	v1.GET("/auth/devices", middleware.RequireAuth(cfg.JWTSecret), authHandler.ListTrustedDevices)
+	v1.DELETE("/auth/devices", middleware.RequireAuth(cfg.JWTSecret), authHandler.ForgetTrustedDevices)
 
 	v1.POST("/auth/register", loginLimiter.Middleware(), authHandler.Register)
 	v1.POST("/auth/bootstrap", loginLimiter.Middleware(), authHandler.Bootstrap) // one-shot: creates first admin user
@@ -289,13 +294,13 @@ func main() {
 
 	// Contacts
 	ch := handlers.NewContactsHandler(database, cfg.UsePostgres())
-	api.GET("/contacts", ch.ListContacts)
+	api.GET("/contacts", authorizer.Require(authz.PermRead), ch.ListContacts)
 	api.GET("/contacts/:id", ch.GetContact)
 	api.POST("/contacts", ch.CreateContact)
 	api.PATCH("/contacts/:id", ch.UpdateContact)
 	// Anonymisation (nLPD art. 6 al. 4 et 32) : effacer les données d'une
 	// personne est une décision, pas une opération de saisie.
-	api.POST("/contacts/:id/anonymise", authorizer.Require(authz.PermAdmin), ch.AnonymiseContact)
+	api.POST("/contacts/:id/anonymise", authorizer.Require(authz.PermManage), ch.AnonymiseContact)
 
 	// Invoices
 	ih := handlers.NewInvoicesHandler(database, cfg.UsePostgres(), accountingSvc)
@@ -333,8 +338,13 @@ func main() {
 	// démarrage suivant. Réservé aux administrateurs : une restauration
 	// remplace toute la comptabilité.
 	bh := handlers.NewBackupsHandler(database, cfg)
-	api.GET("/backups", authorizer.Require(authz.PermAdmin), bh.ListBackups)
-	api.POST("/backups", authorizer.Require(authz.PermAdmin), bh.CreateBackup)
+	// Creer une sauvegarde et lister celles qui existent releve de l'hygiene
+	// comptable : le comptable doit pouvoir le faire. RESTAURER, en revanche,
+	// remplace les livres par une autre version d'eux-memes, et la politique de
+	// chiffrement est une fonction de securite — les deux restent a
+	// l'administrateur.
+	api.GET("/backups", authorizer.Require(authz.PermManage), bh.ListBackups)
+	api.POST("/backups", authorizer.Require(authz.PermManage), bh.CreateBackup)
 	api.POST("/backups/restore", authorizer.Require(authz.PermAdmin), bh.StageRestore)
 	api.DELETE("/backups/restore", authorizer.Require(authz.PermAdmin), bh.CancelRestore)
 	api.GET("/backups/policy", authorizer.Require(authz.PermAdmin), bh.GetBackupPolicy)
@@ -367,14 +377,14 @@ func main() {
 	// une comptabilité incohérente se corrige par une écriture, pas par un
 	// bouton (CO art. 957a al. 2 ch. 5).
 	mh := handlers.NewMaintenanceHandler(database, cfg)
-	api.GET("/maintenance/integrity", authorizer.Require(authz.PermAdmin), mh.IntegrityCheck)
-	api.GET("/maintenance/health", authorizer.Require(authz.PermAdmin), mh.SystemHealth)
+	api.GET("/maintenance/integrity", authorizer.Require(authz.PermManage), mh.IntegrityCheck)
+	api.GET("/maintenance/health", authorizer.Require(authz.PermManage), mh.SystemHealth)
 
 	// Fiscal years + VAT declaration (admin)
 	fyh := handlers.NewFiscalYearHandler(database, cfg.UsePostgres())
 	api.GET("/fiscal-years", fyh.ListFiscalYears)
-	api.POST("/fiscal-years", authorizer.Require(authz.PermAdmin), fyh.CreateFiscalYear)
-	api.POST("/fiscal-years/:id/close", authorizer.Require(authz.PermAdmin), fyh.CloseFiscalYear)
+	api.POST("/fiscal-years", authorizer.Require(authz.PermManage), fyh.CreateFiscalYear)
+	api.POST("/fiscal-years/:id/close", authorizer.Require(authz.PermManage), fyh.CloseFiscalYear)
 	api.POST("/vat/declaration", fyh.GenerateVATDeclaration)
 
 	// VAT rates (static reference data — no DB)
@@ -439,12 +449,16 @@ func main() {
 
 	// Audit logs
 	alh := handlers.NewAuditHandler(database, cfg.UsePostgres())
-	api.GET("/audit-logs", alh.ListAuditLogs)
+		// Le journal d'audit et la verification de la chaine sont le CONTROLE des
+	// livres : c'est le metier du comptable, pas de l'administrateur du
+	// logiciel. La lecture seule en est ecartee — ce registre nomme qui a fait
+	// quoi, et le consulter est deja sensible.
+	api.GET("/audit-logs", authorizer.Require(authz.PermManage), alh.ListAuditLogs)
 	// Registered before the :id route: gin resolves the static segment first,
 	// so "verify-chain" is never read as an identifier.
-	api.GET("/audit-logs/verify-chain", alh.VerifyAuditChain)
-	api.GET("/audit-logs/attestation", alh.IntegrityAttestation)
-	api.GET("/audit-logs/:id/verify", alh.VerifyAuditLog)
+	api.GET("/audit-logs/verify-chain", authorizer.Require(authz.PermManage), alh.VerifyAuditChain)
+	api.GET("/audit-logs/attestation", authorizer.Require(authz.PermManage), alh.IntegrityAttestation)
+	api.GET("/audit-logs/:id/verify", authorizer.Require(authz.PermManage), alh.VerifyAuditLog)
 
 	// Security telemetry — admin only: lockout records expose client IPs (nLPD).
 	seh := handlers.NewSecurityEventHandler(database, cfg.UsePostgres())
@@ -473,7 +487,7 @@ func main() {
 	api.DELETE("/users/:id/mfa", authorizer.Require(authz.PermAdmin), uh.RemoveMFA)
 
 	api.GET("/settings/company", sh.GetCompany)
-	api.PUT("/settings/company", authorizer.Require(authz.PermAdmin), sh.PutCompany)
+	api.PUT("/settings/company", authorizer.Require(authz.PermManage), sh.PutCompany)
 	api.POST("/settings/logo", sh.UploadLogo)
 	api.DELETE("/settings/logo", sh.DeleteLogo)
 

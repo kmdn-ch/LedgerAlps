@@ -46,6 +46,9 @@ export function LoginPage() {
   // Un mode explicite, avec son bouton : le champ change de forme, de clavier et
   // de longueur, et l'utilisateur voit qu'il est au bon endroit.
   const [mode, setMode] = useState<'totp' | 'recovery'>('totp')
+  // Décoché par défaut, toujours. Une protection qu'on lève sans le savoir
+  // n'en est plus une : la dispense doit être un geste conscient.
+  const [remember, setRemember] = useState(false)
   const secours = mode === 'recovery'
 
   // La saisie est normalisée comme le serveur la normalise : majuscules, sans
@@ -77,7 +80,7 @@ export function LoginPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await authApi.mfaVerify(challenge.token, codeUtile)
+      const res = await authApi.mfaVerify(challenge.token, codeUtile, remember)
       enter(challenge.email, res.data)
     } catch (e) {
       const status = (e as { response?: { status?: number } }).response?.status
@@ -128,14 +131,6 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-alpine-950 p-4">
-      {/* Background géométrique */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full
-                        bg-accent-500/5 blur-3xl" />
-        <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full
-                        bg-alpine-700/20 blur-3xl" />
-      </div>
-
       <div className="relative w-full max-w-md">
         {idle && (
           <div className="mb-5 rounded-md border border-warning-500 bg-warning-100 px-4 py-3 text-sm">
@@ -226,6 +221,21 @@ export function LoginPage() {
                   placeholder={secours ? 'ABCDE-FGHIJ' : '000000'}
                 />
               </div>
+
+              {/* Trente jours : assez pour couvrir un mois de travail sans
+                  redemander, assez court pour qu'un portable oublié redevienne
+                  protégé avant qu'on ait fini de le chercher. */}
+              <label className="flex items-start gap-2 text-sm text-alpine-300 cursor-pointer">
+                <input type="checkbox" className="mt-0.5" checked={remember}
+                       onChange={e => setRemember(e.target.checked)} />
+                <span>
+                  Se souvenir de cet ordinateur
+                  <span className="block text-xs text-alpine-500">
+                    Aucun code ne sera demandé sur ce poste pendant 30 jours. À éviter sur un
+                    ordinateur partagé ou public.
+                  </span>
+                </span>
+              </label>
 
               <button
                 type="button"

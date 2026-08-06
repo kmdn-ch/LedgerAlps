@@ -64,11 +64,16 @@ type anonymiseResult struct {
 // Accès : administrateur uniquement. Effacer les données d'une personne est une
 // décision, pas une opération de saisie.
 func (h *ContactsHandler) AnonymiseContact(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": "seul un administrateur peut anonymiser un contact"})
-		return
-	}
+	// La garde qui lisait le drapeau administrateur DU JETON a ete retiree.
+	//
+	// Deux defauts en un. Elle lisait un drapeau fige a la connexion : rétrograder
+	// quelqu'un le laissait agir jusqu'a l'expiration de son jeton. Et elle
+	// reservait a l'administrateur l'effacement des donnees personnelles, qui est
+	// le metier du COMPTABLE — il devait demander a quelqu'un dont le role est de
+	// gerer des mots de passe.
+	//
+	// La permission est desormais declaree sur la route (authz.PermManage) et lue
+	// dans la base a chaque requete.
 
 	id := c.Param("id")
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)

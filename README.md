@@ -24,7 +24,8 @@ double-cliquez.
 Au premier lancement, LedgerAlps ouvre votre navigateur et vous demande de créer
 votre compte. **Il n'y a rien d'autre à configurer.**
 
-> Vos données sont enregistrées dans `%APPDATA%\LedgerAlps\` et survivent aux
+> Vos données sont enregistrées dans `C:\Users\<vous>\AppData\Roaming\LedgerAlps\`
+> — ce que Windows appelle `%APPDATA%` — et survivent aux
 > mises à jour comme aux désinstallations.
 
 *Linux : voir le [guide de déploiement](docs/PRODUCTION.md).*
@@ -344,6 +345,7 @@ n'étaient pas testés.
 |---|---|
 | [Roadmap](ROADMAP.md) | ce qui arrive, et ce qui n'arrivera pas |
 | [Déploiement serveur](docs/PRODUCTION.md) | installer sur Linux ou un serveur de bureau |
+| [Droits par rôle](docs/DROITS.md) | qui peut lire, modifier et cliquer quoi |
 | [Architecture](docs/ARCHITECTURE.md) | comprendre comment c'est construit |
 | [Développement](docs/DEVELOPMENT.md) | compiler, tester, contribuer |
 | [Référence API](docs/API.md) | intégrer un autre outil |

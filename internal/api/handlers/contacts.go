@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
+	"github.com/kmdn-ch/ledgeralps/internal/core/authz"
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
@@ -31,7 +33,12 @@ func (h *ContactsHandler) ListContacts(c *gin.Context) {
 	// Data isolation: non-admin users see only active contacts (shared resource — contacts
 	// are company-wide, not per-user, so all authenticated users may list them).
 	// Admins additionally see inactive contacts via ?include_inactive=true.
-	includeInactive := c.Query("include_inactive") == "true" && isAdmin(c)
+	// Voir les contacts desactives suit le ROLE lu en base, pas le drapeau du
+	// jeton : un comptable en a besoin pour retrouver un ancien client sur une
+	// facture de l'annee passee.
+	role, _ := mw.RoleOf(c)
+	includeInactive := c.Query("include_inactive") == "true" &&
+		authz.Can(role, authz.PermManage)
 	where := " WHERE is_active = 1"
 	if includeInactive {
 		where = " WHERE 1=1"

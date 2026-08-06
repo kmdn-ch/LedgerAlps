@@ -5,6 +5,44 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
+## [Unreleased]
+
+### Corrigé
+
+- **La liste des factures fournisseurs répondait « n'ont pas pu être lues ».** Deux colonnes avaient été ajoutées à la requête sans l'être au balayage des résultats — dix-huit colonnes lues pour seize destinations. L'écran Achats restait donc vide, et le bouton « Comptabiliser », qui n'apparaît que sur un brouillon, avec lui. Le message d'erreur disait « database error », ce qui rend un décalage de colonnes indiscernable d'une base injoignable ; il nomme désormais la cause.
+
+- **L'interface cassait entièrement sur l'écran Paramètres** (React #310, « Rendered more hooks than during the previous render »). Un `useAuthStore` était appelé **après** un `if (isLoading) return null` : au premier rendu la page sortait avant lui, au second elle l'appelait — un hook de plus que la fois précédente, ce que React refuse. La trace minifiée ne désignait rien d'exploitable.
+
+- **Les factures n'étaient visibles que par leur auteur.** Un comptable ne voyait aucune facture émise par l'administrateur, et le total du tableau de bord contredisait la liste. C'est le même filtre `created_by_id` que celui retiré du journal en v1.4.8 — troisième fois que ce motif produit un défaut. Les factures sont les pièces de l'entreprise, pas la boîte de réception de qui les a saisies ; ce qui borne l'accès est le rôle.
+
+- **Neuf gardes lisaient le drapeau administrateur DU JETON**, pas le rôle en base : attestation d'intégrité, journal d'audit (trois routes), anonymisation, exercices comptables (trois routes), contacts désactivés. Le défaut que le contrôle des droits avait été construit pour supprimer subsistait dans les handlers — rétrograder quelqu'un le laissait agir jusqu'à l'expiration de son jeton. La permission est désormais déclarée sur la route ; deux tests vérifient qu'elle y est, sans quoi retirer le middleware ouvrirait ces routes à tout compte connecté.
+
+- **`server.log` répétait à chaque démarrage** « If you're reading this, you're unnecessarily importing github.com/ncruces/go-sqlite3/embed ». Le paquet est déprécié et sa seule action est d'écrire cette ligne ; le binaire WebAssembly de SQLite vient maintenant du module dédié. L'import est retiré — pas le message masqué.
+
+- **Le tableau de bord comptait les clients désactivés** parmi les « clients actifs ». Désactiver un contact n'avait donc aucun effet visible sur le chiffre. Un contact à la fois client et fournisseur compte désormais des deux côtés, au lieu de disparaître des deux.
+
+- Les halos décoratifs de l'écran de connexion sont retirés.
+
+- Le chemin des données dans le README nomme le dossier complet — `C:\Users\<vous>\AppData\Roaming\LedgerAlps\` — plutôt que la seule variable `%APPDATA%`.
+
+### Modifié
+
+- **Le rôle comptable fait désormais tout, sauf la sécurité du logiciel et les comptes utilisateurs.** Il ne pouvait ni clôturer un exercice, ni vérifier la chaîne d'empreintes, ni prendre une sauvegarde, ni répondre à une demande d'effacement, ni régler la fiche entreprise — il devait demander à quelqu'un dont le rôle est de gérer des mots de passe.
+
+  La frontière est maintenant explicite : **`manage` administre la comptabilité, `admin` administre le logiciel et qui y accède.** Restaurer une sauvegarde, la politique de chiffrement, le réseau, la clé de signature, le journal de sécurité et les comptes restent à l'administrateur. Inventaire complet dans [docs/DROITS.md](docs/DROITS.md).
+
+- **Le second facteur est exigé du comptable, plus seulement de l'administrateur.** Un mot de passe volé sur un compte qui écrit dans les livres permet de fabriquer une comptabilité. La **lecture seule en est dispensée** : elle ne peut rien modifier, et c'est le rôle qu'on donne à sa fiduciaire — à qui l'on ne dicte pas son équipement.
+
+### Ajouté
+
+- **« Se souvenir de cet ordinateur », trente jours.** Redemander un code chaque jour sur le poste habituel n'ajoute presque rien à la protection — quelqu'un qui a déjà la main sur la machine n'attend pas la prochaine connexion — et une protection vécue comme une brimade finit désactivée.
+
+  La case est **décochée par défaut** : lever une protection doit être un geste conscient. La date d'expiration est **absolue** — se connecter ne la prolonge pas, sans quoi un poste utilisé chaque semaine ne redemanderait plus jamais de code. Le jeton est haché en base, le navigateur en garde l'unique copie dans un cookie HttpOnly `SameSite=Strict`. Changer de mot de passe, retirer ou réinscrire son second facteur oublie tous les postes, et un écran permet de les oublier depuis un autre ordinateur.
+
+- **[docs/DROITS.md](docs/DROITS.md)** — inventaire de tout ce qui est lisible, modifiable et cliquable, par section et par rôle.
+
+- **Roadmap 13b : lecture automatique des factures fournisseurs.** Trois voies étudiées, toutes locales et libres. Recommandation : décoder le **QR-facture** en premier (`gozxing`, Apache 2.0) — il porte déjà créancier, IBAN, montant et référence, sans aucune reconnaissance de caractères et sans dépendance native. Tout service d'extraction en ligne est écarté : une facture fournisseur contient l'IBAN et l'adresse d'un tiers.
+
 ## [1.4.9] — 2026-08-06
 
 ### Corrigé

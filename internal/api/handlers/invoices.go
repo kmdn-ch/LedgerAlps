@@ -76,11 +76,22 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 		args = append(args, v)
 	}
 
-	// Data isolation: non-admin users only see their own invoices (nLPD art. 6)
-	if uid := currentUserID(c); uid != "" && !isAdmin(c) {
-		where += " AND i.created_by_id = ?"
-		args = append(args, uid)
-	}
+	// Les factures NE SE FILTRENT PAS par auteur.
+	//
+	// Ce filtre ne montrait a un non-administrateur que les factures qu'il avait
+	// lui-meme creees, sous couvert de minimisation des donnees. C'est un
+	// contresens : les factures sont les pieces de l'entreprise, pas la boite de
+	// reception de celui qui les a saisies. Un comptable ne voyait aucune des
+	// factures emises par l'administrateur, une fiduciaire en lecture seule ne
+	// voyait rien du tout, et le total du tableau de bord contredisait la liste.
+	//
+	// La minimisation nLPD porte sur les donnees personnelles, pas sur des
+	// pieces que la loi oblige a conserver dix ans (CO art. 958f). Ce qui borne
+	// l'acces ici est le ROLE : lire demande la permission de lecture, ecrire
+	// celle d'ecriture, et un compte en lecture seule ne peut rien modifier.
+	//
+	// Meme correction que pour le journal en v1.4.8 — c'est la troisieme fois
+	// que ce motif produit un defaut.
 
 	// "overdue" is a filter, never a stored state: an invoice becomes late
 	// because the due date passed, not because someone marked it. Translating

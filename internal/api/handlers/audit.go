@@ -33,10 +33,16 @@ func NewAuditHandler(database *sql.DB, usePostgres bool) *AuditHandler {
 //
 // Access: admin only.
 func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to access audit logs"})
-		return
-	}
+	// La garde qui lisait le drapeau administrateur DU JETON a ete retiree.
+	//
+	// Deux defauts en un. Elle lisait un drapeau fige a la connexion : rétrograder
+	// quelqu'un le laissait agir jusqu'a l'expiration de son jeton. Et elle
+	// reservait a l'administrateur le journal d'audit, qui est
+	// le metier du COMPTABLE — il devait demander a quelqu'un dont le role est de
+	// gerer des mots de passe.
+	//
+	// La permission est desormais declaree sur la route (authz.PermManage) et lue
+	// dans la base a chaque requete.
 
 	tableName := c.Query("table_name")
 	recordID := c.Query("record_id")
@@ -167,10 +173,6 @@ func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
 // if it does not (indicating possible tampering or corruption).
 // Access: admin only.
 func (h *AuditHandler) VerifyAuditLog(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to verify audit logs"})
-		return
-	}
 
 	id := c.Param("id")
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
@@ -305,10 +307,6 @@ const maxChainBreaks = 100
 //
 // Accès : administrateur uniquement.
 func (h *AuditHandler) VerifyAuditChain(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to verify audit logs"})
-		return
-	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()

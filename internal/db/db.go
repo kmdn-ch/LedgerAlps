@@ -14,7 +14,15 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	_ "github.com/ncruces/go-sqlite3/driver"
-	_ "github.com/ncruces/go-sqlite3/embed"
+	// L'ancien paquet .../embed n'est plus importe : il est deprecie, sa seule
+	// action est d'ecrire « If you're reading this, you're unnecessarily
+	// importing github.com/ncruces/go-sqlite3/embed » dans la sortie standard a
+	// chaque demarrage. Le binaire WebAssembly de SQLite vient desormais du
+	// module go-sqlite3-wasm, tire automatiquement par le pilote.
+	//
+	// Le message polluait server.log a chaque lancement, ce qui use l'attention
+	// portee a ce fichier — le seul endroit ou l'utilisateur voit ce qui se
+	// passe.
 	_ "github.com/ncruces/go-sqlite3/vfs/adiantum"
 )
 

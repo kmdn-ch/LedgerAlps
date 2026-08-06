@@ -94,10 +94,16 @@ type createFiscalYearRequest struct {
 //
 // Accès : administrateur uniquement.
 func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to create a fiscal year"})
-		return
-	}
+	// La garde qui lisait le drapeau administrateur DU JETON a ete retiree.
+	//
+	// Deux defauts en un. Elle lisait un drapeau fige a la connexion : rétrograder
+	// quelqu'un le laissait agir jusqu'a l'expiration de son jeton. Et elle
+	// reservait a l'administrateur les exercices comptables, qui est
+	// le metier du COMPTABLE — il devait demander a quelqu'un dont le role est de
+	// gerer des mots de passe.
+	//
+	// La permission est desormais declaree sur la route (authz.PermManage) et lue
+	// dans la base a chaque requete.
 
 	var req createFiscalYearRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -171,10 +177,6 @@ func (h *FiscalYearHandler) CloseFiscalYear(c *gin.Context) {
 	}
 
 	userID := currentUserID(c)
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to close a fiscal year"})
-		return
-	}
 
 	if err := h.fySvc.CloseYear(c.Request.Context(), fiscalYearID, userID); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
@@ -195,10 +197,6 @@ type vatDeclarationRequest struct {
 // GenerateVATDeclaration computes the VAT declaration for a given period.
 // Access: admin only.
 func (h *FiscalYearHandler) GenerateVATDeclaration(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to generate VAT declarations"})
-		return
-	}
 
 	var req vatDeclarationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

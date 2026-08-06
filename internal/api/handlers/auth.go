@@ -114,7 +114,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Rien n'est délivré ici qu'un jeton d'attente de cinq minutes, qui ne vaut
 	// que pour /auth/mfa/verify. Ni jeton d'accès, ni cookie de
 	// rafraîchissement : une session ne naît qu'après le code.
-	if h.mfaEnabled(c.Request.Context(), userID) {
+	if h.mfaEnabled(c.Request.Context(), userID) &&
+		!h.deviceIsTrusted(c.Request.Context(), c, userID) {
 		challenge, err := security.GenerateMFAChallengeToken(h.cfg.JWTSecret, userID, isAdmin)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate token"})
@@ -209,7 +210,11 @@ func (h *AuthHandler) issueSession(c *gin.Context, userID string, isAdmin bool, 
 		// Même logique pour l'inscription du second facteur : l'interface
 		// conduit à l'écran, le serveur refuse de toute façon tant que c'est
 		// dû.
-		"mfa_enrolment_required": role == string(authz.RoleAdmin) &&
+		// Administrateur ET comptable : les deux peuvent modifier quelque chose.
+		// Le drapeau suit exactement la règle du filtre serveur — s'il en
+		// divergeait, l'interface enverrait au tableau de bord un compte que
+		// chaque requête refuse ensuite.
+		"mfa_enrolment_required": authz.RequiresSecondFactor(authz.Role(role)) &&
 			!h.mfaEnabled(c.Request.Context(), userID),
 	})
 }

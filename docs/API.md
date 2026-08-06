@@ -33,6 +33,19 @@ Toutes les routes applicatives sont préfixées par `/api/v1`.
 | POST | `/auth/mfa/setup` | auth | Préparer une inscription — rend le secret, l'URI `otpauth://` et le QR |
 | POST | `/auth/mfa/confirm` | auth | Confirmer par un premier code — rend les codes de secours, une seule fois |
 | DELETE | `/auth/mfa` | auth | Retirer le second facteur. Mot de passe redemandé |
+| GET | `/auth/devices` | auth | Ordinateurs de confiance de ce compte, et la durée accordée |
+| DELETE | `/auth/devices` | auth | Les oublier tous — un code sera redemandé partout |
+
+### Ordinateurs de confiance
+
+`POST /auth/mfa/verify` accepte `remember_device: true`. Le serveur pose alors un
+cookie HttpOnly `SameSite=Strict` valable **30 jours**, dont seul le haché est
+conservé en base. La date d'expiration est **absolue** : se connecter ne la
+prolonge pas.
+
+La confiance est liée au **compte**, pas au navigateur : un poste de confiance
+pour l'un ne l'est pas pour l'autre. Elle tombe quand le mot de passe change, et
+quand le second facteur est retiré ou réinscrit.
 
 ### Connexion en deux temps
 
@@ -65,6 +78,12 @@ le fichier de base : le secret y est stocké en clair, parce que le serveur doit
 le lire à chaque vérification sans intervention humaine — toute clé qui le
 protégerait vivrait sur la même machine. C'est le chiffrement de la base et du
 disque qui répond à cette menace.
+
+### Qui doit un second facteur
+
+L'**administrateur** et le **comptable** : les deux peuvent modifier quelque
+chose, et un mot de passe volé sur l'un ou l'autre permet de fabriquer une
+comptabilité. La **lecture seule** en est dispensée — elle ne peut rien modifier.
 
 ### Refus propres au second facteur
 

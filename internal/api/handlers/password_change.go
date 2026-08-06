@@ -154,6 +154,11 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		_ = err // non bloquant : le mot de passe est déjà changé
 	}
 
+	// Les postes de confiance tombent aussi. La dispense de second facteur
+	// reposait sur un mot de passe qui n'est plus le bon — souvent parce qu'on
+	// le croit compromis.
+	forgetDevices(ctx, h.db, h.cfg.UsePostgres(), claims.UserID)
+
 	recordSecurityEvent(ctx, h.db, h.cfg.UsePostgres(),
 		"password_changed", c.ClientIP(), "compte="+claims.UserID)
 

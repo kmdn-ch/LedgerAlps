@@ -108,17 +108,19 @@ func (a *Authorizer) RequirePasswordChanged() gin.HandlerFunc {
 	}
 }
 
-// RequireMFAEnrolled exige un second facteur inscrit sur les comptes
-// administrateurs.
+// RequireMFAEnrolled exige un second facteur inscrit sur les comptes qui
+// peuvent MODIFIER quelque chose.
 //
-// # Pourquoi seulement les administrateurs
+// # Qui est concerné
 //
-// Un compte administrateur peut créer des comptes, restaurer une sauvegarde,
-// déverrouiller une période, changer les droits de tout le monde. Son mot de
-// passe est la seule chose qui sépare quelqu'un de l'ensemble de la
-// comptabilité. Un comptable, lui, écrit dans un journal chaîné et tracé, et
-// n'a pas les clés de l'installation : lui imposer un téléphone coûterait plus
-// qu'il ne protège.
+// L'administrateur et le comptable. Le premier détient les clés de
+// l'installation — créer des comptes, restaurer une sauvegarde, changer les
+// droits. Le second écrit dans les livres : un mot de passe volé sur son compte
+// permet de fabriquer une comptabilité, ce qui est exactement ce que le
+// CO art. 957a cherche à rendre impossible.
+//
+// La lecture seule en est dispensée : ce rôle ne peut rien modifier, et c'est
+// celui qu'on donne à sa fiduciaire — à qui l'on ne dicte pas son équipement.
 //
 // # Pourquoi le blocage est technique
 //
@@ -145,7 +147,7 @@ func (a *Authorizer) RequireMFAEnrolled() gin.HandlerFunc {
 				gin.H{"error": "ce compte n'est plus actif"})
 			return
 		}
-		if role != authz.RoleAdmin {
+		if !authz.RequiresSecondFactor(role) {
 			c.Next()
 			return
 		}

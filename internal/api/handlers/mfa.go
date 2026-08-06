@@ -72,7 +72,8 @@ func (h *AuthHandler) MFAStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"enabled":                enabled,
 		"recovery_codes_left":    remaining,
-		"required_for_this_role": role == string(authz.RoleAdmin),
+		"required_for_this_role": authz.RequiresSecondFactor(authz.Role(role)),
+		"trusted_device_days":    TrustedDeviceDays,
 	})
 }
 
@@ -238,6 +239,8 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 		return
 	}
 
+	forgetDevices(ctx, h.db, h.cfg.UsePostgres(), claims.UserID)
+
 	recordSecurityEvent(ctx, h.db, h.cfg.UsePostgres(),
 		"mfa_enabled", c.ClientIP(), "compte="+claims.UserID)
 
@@ -257,6 +260,10 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 func (h *AuthHandler) MFAVerify(c *gin.Context) {
 	var body struct {
 		Code string `json:"code" binding:"required"`
+		// RememberDevice dispense ce poste de code pendant trente jours. Le
+		// choix appartient à l'utilisateur et n'est jamais coché d'office : une
+		// protection qu'on lève sans le savoir n'en est plus une.
+		RememberDevice bool `json:"remember_device"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
@@ -332,6 +339,10 @@ func (h *AuthHandler) MFAVerify(c *gin.Context) {
 	if isActive != 1 {
 		c.JSON(http.StatusForbidden, gin.H{"error": "account is disabled"})
 		return
+	}
+
+	if body.RememberDevice {
+		h.rememberDevice(c, claims.UserID)
 	}
 
 	h.issueSession(c, claims.UserID, isAdmin, role, mustChange == 1)
@@ -433,6 +444,8 @@ func (h *AuthHandler) MFADisable(c *gin.Context) {
 		claims.UserID); err != nil {
 		_ = err
 	}
+
+	forgetDevices(ctx, h.db, h.cfg.UsePostgres(), claims.UserID)
 
 	recordSecurityEvent(ctx, h.db, h.cfg.UsePostgres(),
 		"mfa_disabled", c.ClientIP(), "compte="+claims.UserID)

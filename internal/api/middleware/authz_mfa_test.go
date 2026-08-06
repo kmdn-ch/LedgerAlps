@@ -88,35 +88,50 @@ func TestUneInscriptionNonConfirmeeNeCompteToujoursPas(t *testing.T) {
 	}
 }
 
-// Les autres rôles ne sont pas concernés : un comptable écrit dans un journal
-// chaîné et tracé, et n'a pas les clés de l'installation. Lui imposer un
-// téléphone coûterait plus qu'il ne protège.
-func TestLesAutresRolesNeSontPasConcernes(t *testing.T) {
+// La LECTURE SEULE est dispensée, le comptable ne l'est pas.
+//
+// Le comptable écrit dans les livres : un mot de passe volé sur son compte
+// permet de fabriquer une comptabilité, ce que le CO art. 957a cherche
+// justement à rendre impossible. La lecture seule ne peut rien modifier — et
+// c'est le rôle qu'on donne à sa fiduciaire, à qui l'on ne dicte pas son
+// équipement.
+func TestLaLectureSeuleEstDispenseeMaisPasLeComptable(t *testing.T) {
 	database, a := authzDB(t)
 	addUser(t, database, "compta", authz.RoleAccountant, true)
 	addUser(t, database, "lecteur", authz.RoleViewer, true)
 
 	r, _ := mfaRouter(a)
-	for _, id := range []string{"compta", "lecteur"} {
-		if w := call(r, http.MethodGet, "/api/v1/quelconque", tokenFor(t, id)); w.Code != http.StatusOK {
-			t.Fatalf("%s: statut = %d", id, w.Code)
-		}
+
+	if w := call(r, http.MethodGet, "/api/v1/quelconque", tokenFor(t, "lecteur")); w.Code != http.StatusOK {
+		t.Fatalf("lecture seule: statut = %d — ce rôle ne modifie rien", w.Code)
+	}
+	if w := call(r, http.MethodGet, "/api/v1/quelconque", tokenFor(t, "compta")); w.Code != http.StatusForbidden {
+		t.Fatalf("comptable: statut = %d — il écrit dans les livres, le second "+
+			"facteur lui est exigé", w.Code)
+	}
+
+	confirmMFA(t, a, "compta")
+	if w := call(r, http.MethodGet, "/api/v1/quelconque", tokenFor(t, "compta")); w.Code != http.StatusOK {
+		t.Fatalf("comptable inscrit: statut = %d", w.Code)
 	}
 }
 
-// La promotion en administrateur s'applique TOUT DE SUITE, y compris pour
-// l'obligation de second facteur : le rôle est relu à chaque requête, jamais
-// pris dans le jeton.
+// La promotion s'applique TOUT DE SUITE, y compris pour l'obligation de second
+// facteur : le rôle est relu à chaque requête, jamais pris dans le jeton.
+//
+// Le cas qui compte est celui de la lecture seule promue comptable : elle
+// travaillait sans code, et doit s'inscrire dès la promotion — pas à
+// l'expiration de son jeton, une heure plus tard.
 func TestUnePromotionImposeLeSecondFacteurImmediatement(t *testing.T) {
 	database, a := authzDB(t)
-	addUser(t, database, "compta", authz.RoleAccountant, true)
+	addUser(t, database, "lecteur", authz.RoleViewer, true)
 
 	r, _ := mfaRouter(a)
-	tok := tokenFor(t, "compta")
+	tok := tokenFor(t, "lecteur")
 	if w := call(r, http.MethodGet, "/api/v1/quelconque", tok); w.Code != http.StatusOK {
 		t.Fatalf("avant promotion: statut %d", w.Code)
 	}
-	if _, err := database.Exec(`UPDATE users SET role='admin', is_admin=1 WHERE id='compta'`); err != nil {
+	if _, err := database.Exec(`UPDATE users SET role='accountant' WHERE id='lecteur'`); err != nil {
 		t.Fatal(err)
 	}
 	if w := call(r, http.MethodGet, "/api/v1/quelconque", tok); w.Code != http.StatusForbidden {

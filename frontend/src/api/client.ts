@@ -101,8 +101,8 @@ export const authApi = {
   // réponse traiterait le 401 d'un code faux comme une session expirée — il
   // tenterait un rafraîchissement, puis déconnecterait et renverrait vers
   // /login. Une faute de frappe sur six chiffres perdrait la connexion en cours.
-  mfaVerify: (mfaToken: string, code: string) =>
-    axios.post(`${BASE_URL}/auth/mfa/verify`, { code }, {
+  mfaVerify: (mfaToken: string, code: string, rememberDevice = false) =>
+    axios.post(`${BASE_URL}/auth/mfa/verify`, { code, remember_device: rememberDevice }, {
       withCredentials: true,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mfaToken}` },
     }),
@@ -110,6 +110,10 @@ export const authApi = {
   mfaSetup:   () => api.post('/auth/mfa/setup', null),
   mfaConfirm: (code: string) => api.post('/auth/mfa/confirm', { code }),
   mfaDisable: (password: string) => api.delete('/auth/mfa', { data: { password } }),
+  // Ordinateurs de confiance : les lister, et les oublier tous depuis un autre
+  // poste quand un ordinateur est perdu ou vendu.
+  devices: () => api.get('/auth/devices'),
+  forgetDevices: () => api.delete('/auth/devices'),
 }
 
 // ─── Comptes ──────────────────────────────────────────────────────────────────

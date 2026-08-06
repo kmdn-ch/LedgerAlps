@@ -185,8 +185,15 @@ func (h *SupplierInvoicesHandler) ListSupplierInvoices(c *gin.Context) {
 		if err := rows.Scan(&s.ID, &s.SupplierID, &s.SupplierName, &s.SupplierReference, &s.Status,
 			&s.IssueDate, &s.DueDate, &s.Currency, &s.SubtotalAmount, &s.VATAmount,
 			&s.TotalAmount, &s.VATRate, &s.AmountPaid, &s.ExpenseAccountCode,
-			&s.Notes, &s.CreatedAt); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			&s.PaymentReference, &s.JournalEntryID, &s.Notes, &s.CreatedAt); err != nil {
+			// Le detail part dans la reponse : un decalage entre les colonnes
+			// lues et les destinations du Scan ne se voit qu'ici, et « database
+			// error » le rend indiscernable d'une base injoignable. C'est
+			// exactement ce qui s'est produit — deux colonnes ajoutees au SELECT
+			// sans l'etre au Scan, et l'ecran ne disait rien de plus que « les
+			// factures n'ont pas pu etre lues ».
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "lecture des factures fournisseurs: " + err.Error()})
 			return
 		}
 		items = append(items, s)
