@@ -47,7 +47,10 @@ build: build-server build-cli ## Build server + CLI for the current OS
 
 build-server: ## Build the API server binary (embeds frontend if built)
 	@mkdir -p $(DIST_DIR) internal/frontend/dist
-	@if [ -d frontend/dist ]; then cp -r frontend/dist/. internal/frontend/dist/; fi
+	@# Vider avant de copier : les noms d'actifs portent une empreinte, si bien
+	@# qu'une simple copie EMPILE les builds successifs dans le binaire au lieu
+	@# de les remplacer. Le .gitkeep survit, c'est lui qui tient le dossier.
+	@if [ -d frontend/dist ]; then 	  find internal/frontend/dist -mindepth 1 ! -name .gitkeep -delete; 	  cp -r frontend/dist/. internal/frontend/dist/; 	fi
 	$(GO_BUILD) -o $(DIST_DIR)/$(BINARY_SERVER) ./cmd/server
 	@echo "  built  $(DIST_DIR)/$(BINARY_SERVER)  [$(VERSION) @ $(COMMIT)]"
 
@@ -68,7 +71,10 @@ build-launcher: ## Build Windows launcher (ledgeralps.exe, no console window)
 
 build-windows: ## Build server + launcher for Windows (amd64), both windowsgui (no console)
 	@mkdir -p $(DIST_DIR) internal/frontend/dist
-	@if [ -d frontend/dist ]; then cp -r frontend/dist/. internal/frontend/dist/; fi
+	@# Vider avant de copier : les noms d'actifs portent une empreinte, si bien
+	@# qu'une simple copie EMPILE les builds successifs dans le binaire au lieu
+	@# de les remplacer. Le .gitkeep survit, c'est lui qui tient le dossier.
+	@if [ -d frontend/dist ]; then 	  find internal/frontend/dist -mindepth 1 ! -name .gitkeep -delete; 	  cp -r frontend/dist/. internal/frontend/dist/; 	fi
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
 	  go build -trimpath -ldflags "$(LDFLAGS) -H=windowsgui" \
 	  -o $(DIST_DIR)/$(BINARY_SERVER).exe ./cmd/server
