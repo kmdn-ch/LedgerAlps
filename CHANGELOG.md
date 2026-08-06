@@ -5,6 +5,28 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
+## [Unreleased]
+
+### Corrigé
+
+- **La liste des fournisseurs de l'écran Achats était toujours vide.** Elle lisait `.items` sur une réponse qui est un **tableau** — `GET /contacts` ne renvoie pas d'enveloppe. Le type TypeScript décrivait fidèlement une réponse qui n'existe pas, donc rien ne pouvait le signaler à la compilation : le défaut ne se voyait qu'à l'écran, sur une liste déroulante qui ne proposait jamais rien.
+
+- **Trois exports des Rapports n'étaient que des maquettes.** « Journal général », « Grand livre » et « Balance de vérification » portaient une pastille « Bientôt disponible », un bouton désactivé et un gestionnaire vide ; l'« Archive annuelle ZIP » annonçait une « fonctionnalité prévue dans une prochaine version » alors que sa route existait et fonctionnait depuis des mois. Une maquette laissée dans une version livrée est pire qu'une absence : elle promet, on planifie autour, et le manque se découvre au moment où l'on en a besoin.
+
+- **Les accents disparaissaient du PDF des factures.** « Bénéficiaire » s'imprimait « B?n?ficiaire », et le même défaut touchait « N° facture », « N° note de crédit » et « Échéance » — quatre libellés, pas un. La conversion vers l'encodage du générateur était appliquée **deux fois** : le premier passage transforme « é » en octet 0xE9, ce qui n'est plus de l'UTF-8 valide ; le second lit cet octet comme un caractère de remplacement, hors de la plage Latin-1, et écrit « ? ». Un test relit désormais le flux PDF produit, et un second interdit le double appel dans le code source.
+
+### Ajouté
+
+- **Journal général, grand livre et balance en CSV.** Séparateur point-virgule et BOM UTF-8 — sans quoi Excel en configuration suisse produit une colonne unique et affiche « GenÃ¨ve ». Chaque fichier porte une ligne de total : un export tronqué se repère à un total qui ne s'équilibre plus. Seules les écritures **comptabilisées** y figurent. Une date mal formée est refusée plutôt qu'ignorée — un export silencieusement non filtré est plus trompeur qu'une erreur, parce qu'il a l'air complet.
+
+  Ces exports sont des **lectures** : un compte en lecture seule peut les produire, c'est même la raison d'être de ce rôle — remettre les livres à sa fiduciaire sans lui donner les clés. Vérifié sur un serveur réel.
+
+- **Création d'un fournisseur depuis l'écran Achats.** Renvoyer vers Contacts au milieu d'une saisie fait perdre ce qui est déjà tapé, et la facture qu'on a sous les yeux vient souvent d'un fournisseur pas encore enregistré. Le fournisseur créé est immédiatement sélectionné.
+
+- **Le taux de TVA se choisit dans une liste** — 8.1 %, 2.6 %, 3.8 %, 0 % — au lieu d'être saisi librement. Ces taux sont fixés par la loi ; un 8.0 au lieu de 8.1 fausse la déclaration et ne se découvre qu'au décompte trimestriel.
+
+- **Le journal dit quand la comptabilisation automatique est éteinte.** Un journal vide après avoir envoyé des factures ressemble à une panne, alors que c'est un réglage — celui, par défaut, des installations créées avant qu'il n'existe. Le message dit où l'activer.
+
 ## [1.4.8] — 2026-08-06
 
 ### Ajouté

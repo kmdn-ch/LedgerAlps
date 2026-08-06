@@ -306,15 +306,15 @@ func renderMeta(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		y += 6
 	}
 
-	metaRow(latin1(documentNumberLabel(inv.DocumentType)), inv.InvoiceNumber)
+	metaRow(documentNumberLabel(inv.DocumentType), inv.InvoiceNumber)
 	metaRow("Date:", inv.IssueDate.Format("02.01.2006"))
 	if inv.DocumentType == "credit_note" {
 		// A credit note has no due date; what matters is what it cancels.
 		if inv.CorrectsInvoiceNumber != "" {
-			metaRow(latin1("Annule la facture:"), inv.CorrectsInvoiceNumber)
+			metaRow("Annule la facture:", inv.CorrectsInvoiceNumber)
 		}
 	} else {
-		metaRow(latin1(dueDateLabel(inv.DocumentType)), inv.DueDate.Format("02.01.2006"))
+		metaRow(dueDateLabel(inv.DocumentType), inv.DueDate.Format("02.01.2006"))
 	}
 	metaRow("Devise:", inv.Currency)
 
@@ -424,7 +424,7 @@ func renderTotals(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		pdf.CellFormat(w2, 6, val, "", 1, "R", false, 0, "")
 	}
 
-	totalRow(latin1("Sous-total:"), fmtMoney(inv.SubtotalAmount, inv.Currency), false)
+	totalRow("Sous-total:", fmtMoney(inv.SubtotalAmount, inv.Currency), false)
 
 	// La ligne de TVA n'apparaît que s'il y a de la TVA. Elle était imprimée
 	// même à 0 %, ce qu'une entreprise non assujettie n'a pas le droit de faire
@@ -482,7 +482,7 @@ func renderBankDetails(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		iban = c.QRIBAN
 	}
 	line("IBAN :", formatIBAN(iban))
-	line(latin1("Bénéficiaire :"), c.Name)
+	line("Bénéficiaire :", c.Name)
 
 	pdf.SetY(pdf.GetY() + 3)
 }
@@ -917,6 +917,16 @@ func extractDigits(s string) string {
 // standard Core fonts (Helvetica, Times, Courier) render accented characters
 // correctly. Unicode code points U+0000–U+00FF map one-to-one to Latin-1 byte
 // values; code points above U+00FF are replaced with '?'.
+// latin1 convertit vers l'encodage attendu par le générateur PDF.
+//
+// Elle N'EST PAS idempotente, et c'est ce qui a produit « B?n?ficiaire » sur les
+// factures. Appliquée deux fois — une fois à l'appel, une fois dans la fonction
+// d'affichage — le premier passage transforme « é » (U+00E9) en octet 0xE9, ce
+// qui n'est plus de l'UTF-8 valide ; le second passage lit cet octet comme un
+// caractère de remplacement, hors de la plage Latin-1, et écrit « ? ».
+//
+// Les fonctions d'affichage encodent déjà leurs arguments. N'appelez donc jamais
+// latin1 sur ce qu'on leur passe : le texte accentué se donne tel quel.
 func latin1(s string) string {
 	b := make([]byte, 0, len(s))
 	for _, r := range s {

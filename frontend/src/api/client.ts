@@ -236,6 +236,18 @@ export const revenueApi = {
     api.get('/reports/revenue', { params }),
 }
 
+// Journal, grand livre et balance en CSV. Ce sont des LECTURES : un rôle en
+// lecture seule doit pouvoir les produire — c'est même la raison d'être de ce
+// rôle, remettre les livres à sa fiduciaire sans lui donner les clés.
+export const accountingExportApi = {
+  journal: (from: string, to: string) =>
+    api.get('/exports/journal.csv', { params: { from, to }, responseType: 'blob' }),
+  ledger: (from: string, to: string) =>
+    api.get('/exports/ledger.csv', { params: { from, to }, responseType: 'blob' }),
+  trialBalance: (from: string, to: string) =>
+    api.get('/exports/trial-balance.csv', { params: { from, to }, responseType: 'blob' }),
+}
+
 // Archive légale et export de réversibilité (CO art. 958f).
 export const exportApi = {
   legalArchive: () =>

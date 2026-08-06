@@ -26,9 +26,9 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Trash2, CheckCircle, ChevronRight, ChevronDown, Shield, Loader2,
+  Plus, Trash2, CheckCircle, ChevronRight, ChevronDown, Shield, Loader2, Info,
 } from 'lucide-react'
-import { journalApi, accountsApi } from '@/api/client'
+import { journalApi, accountsApi, settingsApi } from '@/api/client'
 import {
   PageHeader, LoadingSpinner, EmptyState, ErrorBanner, ConfirmDialog,
 } from '@/components/ui'
@@ -115,6 +115,16 @@ export function JournalPage() {
     return m
   }, [accounts])
 
+  // Le réglage de comptabilisation automatique se lit ICI parce que c'est ici
+  // que son absence se voit : un journal vide après avoir envoyé des factures
+  // ressemble à une panne, alors que c'est un choix — celui des installations
+  // créées avant que ce réglage n'existe.
+  const company = useQuery<{ auto_post_invoices?: boolean }>({
+    queryKey: ['company-settings'],
+    queryFn:  () => settingsApi.getCompany().then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+
   const list = useQuery<{ items: JournalEntry[]; total: number; pages: number }>({
     queryKey: ['journal', page],
     queryFn:  () => journalApi.list({ page, page_size: 25 }).then(r => r.data),
@@ -194,6 +204,22 @@ export function JournalPage() {
       />
 
       {error && !showForm && <div className="mb-4"><ErrorBanner message={error} /></div>}
+
+      {company.data && company.data.auto_post_invoices === false && (
+        <div className="mb-4 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
+          <p className="font-medium flex items-center gap-1.5">
+            <Info size={15} className="text-alpine-500" />
+            Les factures envoyées ne s&rsquo;inscrivent pas ici automatiquement
+          </p>
+          <p className="text-alpine-600 mt-1">
+            La comptabilisation automatique est éteinte sur cette installation : envoyer une
+            facture ne produit aucune écriture, et il faut les saisir soi-même. C&rsquo;est le
+            réglage par défaut des installations créées avant qu&rsquo;il n&rsquo;existe, pour
+            ne pas compter deux fois ce qui était déjà saisi à la main.
+            {' '}Pour l&rsquo;activer : Paramètres → Facturation.
+          </p>
+        </div>
+      )}
 
       {showForm && (
         <div className="card mb-5">

@@ -20,7 +20,7 @@
 
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Loader2, FileText, CheckCircle } from 'lucide-react'
+import { Plus, Loader2, FileText, CheckCircle, UserPlus, X } from 'lucide-react'
 import { supplierInvoicesApi, contactsApi, accountsApi } from '@/api/client'
 import {
   PageHeader, LoadingSpinner, EmptyState, ErrorBanner, SectionTitle, ConfirmDialog,
@@ -56,6 +56,16 @@ const STATUS_CLASS: Record<string, string> = {
   draft: 'badge-draft', booked: 'badge-sent', paid: 'badge-paid', cancelled: 'badge-cancelled',
 }
 
+// Les taux en vigueur depuis le 1er janvier 2024 (LTVA art. 25). Une liste
+// fermée plutôt qu'un champ libre : le taux entre dans la déclaration, et une
+// faute de frappe ne se découvre qu'au décompte trimestriel.
+const VAT_RATES = [
+  { value: '8.1', label: '8.1 % — taux normal' },
+  { value: '2.6', label: '2.6 % — taux réduit (alimentation, livres, médicaments)' },
+  { value: '3.8', label: '3.8 % — hébergement' },
+  { value: '0',   label: '0 % — exonéré ou hors du champ' },
+]
+
 const today = () => new Date().toISOString().slice(0, 10)
 
 export function PurchasesPage() {
@@ -71,15 +81,23 @@ export function PurchasesPage() {
     expense_account_code: '', payment_reference: '',
   })
 
+  const [newSupplier, setNewSupplier] = useState(false)
+  const [supplierForm, setSupplierForm] = useState({ name: '', iban: '', email: '' })
+
   const list = useQuery<{ items: SupplierInvoice[] }>({
     queryKey: ['supplier-invoices'],
     queryFn:  () => supplierInvoicesApi.list().then(r => r.data),
   })
 
-  const suppliers = useQuery<{ items: Contact[] }>({
+  // GET /contacts rend un TABLEAU, pas { items }. La liste déroulante lisait
+  // `.items` : elle était donc vide quel que soit le nombre de fournisseurs.
+  // TypeScript ne pouvait rien dire — le type annoncé décrivait une réponse qui
+  // n'existe pas, et rien ne vérifie une annotation contre la réalité du réseau.
+  const suppliers = useQuery<Contact[]>({
     queryKey: ['contacts', 'suppliers'],
     queryFn:  () => contactsApi.list({ contact_type: 'supplier' }).then(r => r.data),
   })
+  const supplierList = suppliers.data ?? []
 
   const accounts = useQuery<Account[]>({
     queryKey: ['accounts'],
@@ -131,6 +149,26 @@ export function PurchasesPage() {
     onError: (e) => setError(refusalMessage(e, "La facture n'a pas pu être enregistrée.")),
   })
 
+  // Le fournisseur créé ici est immédiatement sélectionné : la saisie reprend
+  // là où elle s'est arrêtée, sans que l'on ait à rouvrir la liste.
+  const createSupplier = useMutation({
+    mutationFn: () => contactsApi.create({
+      name: supplierForm.name.trim(),
+      contact_type: 'supplier',
+      email: supplierForm.email.trim() || undefined,
+      iban: supplierForm.iban.trim() || undefined,
+      country: 'CH',
+    }),
+    onSuccess: async (r) => {
+      setError(null); setNewSupplier(false)
+      setSupplierForm({ name: '', iban: '', email: '' })
+      await qc.invalidateQueries({ queryKey: ['contacts'] })
+      const created = r.data as { id?: string }
+      if (created.id) setForm(f => ({ ...f, supplier_id: created.id as string }))
+    },
+    onError: (e) => setError(refusalMessage(e, "Le fournisseur n'a pas pu être créé.")),
+  })
+
   const book = useMutation({
     mutationFn: (id: string) => supplierInvoicesApi.transition(id, 'booked'),
     onSuccess: () => {
@@ -168,19 +206,75 @@ export function PurchasesPage() {
         <div className="card card-pad mb-5">
           <SectionTitle>Nouvelle facture fournisseur</SectionTitle>
 
+          {/* Création à la volée : un fournisseur inconnu ne doit pas obliger à
+              quitter la page et perdre la saisie en cours. */}
+          {newSupplier && (
+            <div className="mb-4 rounded-md border border-accent-700 bg-accent-100/30 px-4 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium">Nouveau fournisseur</p>
+                <button type="button" onClick={() => setNewSupplier(false)}
+                        className="text-alpine-500 hover:text-alpine-700" aria-label="Fermer">
+                  <X size={15} />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="label" htmlFor="ns-name">Nom *</label>
+                  <input id="ns-name" className="input" value={supplierForm.name}
+                         onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label" htmlFor="ns-iban">IBAN</label>
+                  <input id="ns-iban" className="input font-mono" placeholder="CH.."
+                         value={supplierForm.iban}
+                         onChange={e => setSupplierForm({ ...supplierForm, iban: e.target.value })} />
+                  <p className="text-xs text-alpine-500 mt-1">
+                    Sans lui, ses factures ne pourront pas être payées.
+                  </p>
+                </div>
+                <div>
+                  <label className="label" htmlFor="ns-mail">E-mail</label>
+                  <input id="ns-mail" type="email" className="input" value={supplierForm.email}
+                         onChange={e => setSupplierForm({ ...supplierForm, email: e.target.value })} />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <button type="button" onClick={() => createSupplier.mutate()}
+                        disabled={supplierForm.name.trim() === '' || createSupplier.isPending}
+                        className="btn-primary btn-sm flex items-center gap-1.5">
+                  {createSupplier.isPending && <Loader2 size={13} className="animate-spin" />}
+                  Créer et sélectionner
+                </button>
+                <button type="button" onClick={() => setNewSupplier(false)}
+                        className="btn-ghost btn-sm">Annuler</button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="label" htmlFor="sup">Fournisseur *</label>
               <select id="sup" className="select" value={form.supplier_id}
                       onChange={e => setForm({ ...form, supplier_id: e.target.value })}>
                 <option value="">Choisir…</option>
-                {(suppliers.data?.items ?? []).map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
+                {supplierList.map(sp => (
+                  <option key={sp.id} value={sp.id}>
+                    {sp.name}{sp.iban ? '' : '  (sans IBAN)'}
+                  </option>
                 ))}
               </select>
-              {(suppliers.data?.items ?? []).length === 0 && (
+              {/* Créer sur place. Renvoyer vers Contacts au milieu d'une saisie
+                  fait perdre ce qui est déjà tapé, et la facture qu'on a sous
+                  les yeux vient souvent d'un fournisseur qu'on n'a pas encore
+                  enregistré. */}
+              <button type="button" onClick={() => setNewSupplier(true)}
+                      className="text-xs text-accent-700 hover:text-accent-800 mt-1
+                                 flex items-center gap-1">
+                <UserPlus size={12} /> Nouveau fournisseur
+              </button>
+              {supplierList.length === 0 && (
                 <p className="text-xs text-alpine-500 mt-1">
-                  Aucun fournisseur. Créez-en un dans Contacts, avec son IBAN.
+                  Aucun fournisseur enregistré pour l&rsquo;instant.
                 </p>
               )}
             </div>
@@ -221,14 +315,16 @@ export function PurchasesPage() {
             </div>
 
             <div>
-              <label className="label" htmlFor="rate">Taux de TVA (%)</label>
-              <input id="rate" type="number" step="0.1" min="0"
-                     className="input text-right font-mono tabular-nums"
-                     value={form.vat_rate}
-                     onChange={e => setForm({ ...form, vat_rate: e.target.value })} />
-              <p className="text-xs text-alpine-500 mt-1">
-                8.1 % normal · 2.6 % réduit · 3.8 % hébergement · 0 % exonéré
-              </p>
+              <label className="label" htmlFor="rate">Taux de TVA</label>
+              {/* Les taux suisses sont fixés par la loi : les proposer en liste
+                  supprime la faute de frappe — un 8.0 au lieu de 8.1 fausse la
+                  déclaration et ne se voit qu'au décompte trimestriel. */}
+              <select id="rate" className="select" value={form.vat_rate}
+                      onChange={e => setForm({ ...form, vat_rate: e.target.value })}>
+                {VAT_RATES.map(r => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
             </div>
 
             <div>

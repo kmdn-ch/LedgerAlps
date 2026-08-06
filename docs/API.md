@@ -496,6 +496,9 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/payments` | auth | Liste |
 | GET | `/payments/:id` | auth | Détail |
 | POST | `/payments` | auth | Enregistrer un paiement |
+| GET | `/exports/journal.csv` | lecture | Journal général en CSV. `from`, `to`. Point-virgule + BOM UTF-8, ligne de total |
+| GET | `/exports/ledger.csv` | lecture | Grand livre : mouvements par compte avec solde cumulé |
+| GET | `/exports/trial-balance.csv` | lecture | Balance de vérification, comptes sans mouvement omis |
 | GET | `/payments/payable` | lecture | Factures fournisseurs comptabilisées et non réglées, avec le compte à débiter et, le cas échéant, ce qui empêche le paiement |
 | POST | `/payments/export` | écriture comptable | Ordre de virement `pain.001.001.09` |
 

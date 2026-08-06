@@ -415,19 +415,26 @@ export function SettingsPage() {
                 <h2 className="text-sm font-semibold text-alpine-800">Paramètres de facturation</h2>
               </div>
               <div className="card-body grid grid-cols-2 gap-4">
-                {/* Comptabilisation automatique. Eteinte sur les installations
-                    anterieures a ce reglage : l'allumer d'office y doublerait
-                    les ecritures deja saisies a la main. */}
+                {/* Comptabilisation automatique. Éteinte sur les installations
+                    antérieures à ce réglage : l'allumer d'office y doublerait
+                    les écritures déjà saisies à la main. */}
                 <div className="col-span-2 rounded-md border border-neutral-200 px-3 py-2.5">
                   <label className="flex items-start gap-2 text-sm">
                     <input type="checkbox" className="mt-0.5" {...register('auto_post_invoices')} />
                     <span>
-                      <span className="font-medium">Comptabiliser les factures a l'envoi</span>
+                      <span className="font-medium">Comptabiliser les factures à l&rsquo;envoi</span>
                       <span className="block text-alpine-600 text-xs mt-0.5">
-                        Une ecriture est passee au journal des qu'une facture part : debiteurs au
-                        debit, produits et TVA due au credit. La note de credit contrepasse.
-                        <strong> N'activez ceci que si vous ne saisissez pas deja ces ecritures
-                        vous-meme</strong> — sinon elles seraient comptees deux fois.
+                        Une écriture est passée au journal dès qu&rsquo;une facture part :
+                        débiteurs au débit, produits et TVA due au crédit. La note de crédit
+                        contrepasse.
+                        <strong> N&rsquo;activez ceci que si vous ne saisissez pas déjà ces
+                        écritures vous-même</strong> — sinon elles seraient comptées deux fois.
+                      </span>
+                      <span className="block text-alpine-600 text-xs mt-1">
+                        Éteint, envoyer une facture ne produit <strong>aucune</strong> écriture :
+                        le journal, la balance et le bilan restent vides tant que vous ne saisissez
+                        rien. C&rsquo;est le réglage des installations créées avant qu&rsquo;il
+                        n&rsquo;existe ; les nouvelles l&rsquo;ont allumé.
                       </span>
                     </span>
                   </label>

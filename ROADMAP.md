@@ -79,6 +79,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 10 | Rapprochement bancaire (interface) | ✅ | [↓](#10--rapprochement-bancaire) |
 | 11 | eBill | ⛔ écarté — réseau fermé | [↓](#11--ebill) |
 | 12 | Validation contre le portail SIX | 🔎 dossier livré | [↓](#12--validation-contre-le-portail-six) |
+| 12b | Exports comptables (journal, grand livre, balance) | 🔎 livré | [↓](#12b--exports-comptables) |
 | 13 | Veille de conformité automatisée | ✅ | — |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
@@ -102,6 +103,11 @@ déclaration. Les livres et la déclaration racontaient deux histoires. La
 comptabilisation écrit maintenant charge + TVA déductible au débit, créanciers au
 crédit, et scelle l'écriture. Vérifié sur un serveur réel : trois lignes, comptes
 6500 / 2262 / 2000, empreinte de 64 caractères.
+
+L'écran permet aussi de **créer un fournisseur sur place** — renvoyer vers
+Contacts au milieu d'une saisie fait perdre ce qui est déjà tapé — et propose
+les taux de TVA en liste fermée, parce qu'un 8.0 au lieu de 8.1 ne se découvre
+qu'au décompte trimestriel.
 
 **Reste** : notes de frais et pièces jointes.
 
@@ -547,6 +553,28 @@ un contresens.
 > aucun processus de certification, et sa page redirige aujourd'hui vers une
 > 404. L'afficher reviendrait à adopter la marque d'un concurrent sans
 > validation vérifiable derrière.
+
+### 12b — Exports comptables
+
+**Livré.** Journal général, grand livre et balance de vérification en CSV, plus
+l'archive légale ZIP.
+
+Les trois premiers n'étaient **pas en panne** : c'étaient des maquettes. Boutons
+désactivés, pastille « Bientôt disponible », gestionnaire vide. L'archive, elle,
+annonçait une « fonctionnalité prévue dans une prochaine version » alors que sa
+route existait et fonctionnait depuis des mois — il ne manquait que le bouton.
+
+Format pensé pour l'outil qui ouvrira le fichier : séparateur point-virgule et
+BOM UTF-8, sans quoi Excel en configuration suisse produit une colonne unique et
+casse les accents. Chaque fichier porte une ligne de total, qui est ce qui permet
+de repérer un export tronqué.
+
+Ce sont des **lectures** : un compte en lecture seule peut les produire. C'est la
+raison d'être de ce rôle — remettre les livres à sa fiduciaire sans lui donner
+les clés.
+
+**Reste** : rien d'obligatoire. Un format destiné à un logiciel fiduciaire précis
+(Abacus, Crésus) attendra qu'un besoin réel le demande.
 
 ### 14 — Modules métier
 

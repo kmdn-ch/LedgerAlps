@@ -410,6 +410,14 @@ func main() {
 	expH := handlers.NewExportHandler(database, cfg.UsePostgres())
 	api.GET("/exports/legal-archive", expH.LegalArchive)
 
+	// Journal, grand livre, balance — les trois documents qu'une fiduciaire
+	// reclame. Ce sont des lectures : un role en lecture seule doit pouvoir les
+	// produire, c'est meme la raison d'etre de ce role.
+	aeh := handlers.NewAccountingExportHandler(database, cfg.UsePostgres())
+	api.GET("/exports/journal.csv", aeh.ExportJournalCSV)
+	api.GET("/exports/ledger.csv", aeh.ExportLedgerCSV)
+	api.GET("/exports/trial-balance.csv", aeh.ExportTrialBalanceCSV)
+
 	// Stats dashboard
 	statsH := handlers.NewStatsHandler(database, cfg.UsePostgres())
 	api.GET("/stats", statsH.GetStats)

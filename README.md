@@ -138,6 +138,12 @@ Le fichier est téléchargé sur votre poste, jamais transmis : LedgerAlps ne pa
 à aucune banque. Et générer le fichier ne marque rien comme payé — c'est le
 relevé bancaire, importé au format camt.053, qui l'établit.
 
+**Ce que vous remettez à votre fiduciaire.** Journal général, grand livre et
+balance de vérification s'exportent en CSV depuis l'onglet Rapports — ouvrables
+directement dans Excel, accents compris. L'archive légale ZIP contient dix ans de
+pièces en JSON *et* en CSV. Un compte en lecture seule peut produire tout cela
+sans pouvoir rien modifier.
+
 **Comptes et accès.** Trois rôles — administrateur, comptable, lecture seule —
 pour ouvrir vos livres à votre fiduciaire sans lui donner les clés. Le compte
 administrateur est protégé par un **second facteur** : un code à six chiffres
