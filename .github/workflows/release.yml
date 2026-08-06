@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - "v*"
+  # Rejouer une publication à la main, sur un tag déjà poussé.
+  #
+  # Un tag créé sur le dépôt ne déclenche pas toujours ce workflow : c'est
+  # arrivé deux fois de suite sur v1.5.0-rc7 et rc8, tous deux bien présents
+  # dans `git ls-remote` mais sans aucun `CreateEvent` ni run associé. Sans ce
+  # point d'entrée, la seule issue était d'inventer un numéro de version de
+  # plus — ce qui laisse derrière soi des tags sans publication et rend
+  # l'historique des versions mensonger.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -26,6 +35,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # GoReleaser needs full history for changelog
+
+      # Lancé à la main, il faut avoir choisi un TAG et pas une branche.
+      #
+      # GoReleaser refuse de publier depuis une branche, mais son refus parle de
+      # « git state » sans dire ce qu'il fallait sélectionner. Le dire ici coûte
+      # quatre lignes et évite de chercher dans un journal de build.
+      - name: Une publication part d'un tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "::error title=Ce n'est pas un tag::« ${GITHUB_REF_NAME} » est une ${GITHUB_REF_TYPE}."
+            echo "Relancez ce workflow en choisissant un tag (vXYZ) dans la liste des références."
+            exit 1
+          fi
+          echo "Publication demandée à la main pour le tag ${GITHUB_REF_NAME}."
 
       # A tag is branch-agnostic in git, so `git tag v1.4.0` while sitting on a
       # feature branch would publish unvalidated code as a real release. Final
