@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { settingsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
+import { estQRIBAN } from '@/utils'
 
 const schema = z.object({
   company_name:          z.string().min(1, 'Requis'),
@@ -74,7 +75,7 @@ export function SettingsPage() {
     queryFn:  () => settingsApi.getCompany().then(r => r.data),
   })
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       company_name: '',
@@ -386,9 +387,21 @@ export function SettingsPage() {
                 <div className="col-span-2">
                   <label className="label">IBAN <span className="text-warning-700 font-normal">(requis pour le QR code de paiement)</span></label>
                   <input className="input font-mono" placeholder="CH56 0483 5012 3456 7800 9" {...register('iban')} />
-                  <p className="text-xs text-alpine-400 mt-1">
-                    Requis pour le QR code de paiement SPC 0200 sur les factures PDF. Format : CH + 19 chiffres.
-                  </p>
+                  {/* Un QR-IBAN change ce que porte le bulletin : il impose une
+                      référence QRR, là où un IBAN ordinaire impose SCOR ou NON
+                      (SIX IG v2.4 §4.2.2). LedgerAlps le reconnaît seul, mais le
+                      dire ici évite de se demander pourquoi les références
+                      changent d'aspect d'une installation à l'autre. */}
+                  {estQRIBAN(watch('iban') ?? '') ? (
+                    <p className="text-xs text-alpine-500 mt-1">
+                      Ce compte est un <strong>QR-IBAN</strong> (institution 30000&nbsp;à&nbsp;31999) :
+                      vos factures porteront une référence QR (QRR), en francs uniquement.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-alpine-400 mt-1">
+                      Requis pour le QR code de paiement SPC 0200 sur les factures PDF. Format : CH + 19 chiffres.
+                    </p>
+                  )}
                 </div>
                 <div className="col-span-2">
                   <label className="label">N° TVA AFC</label>

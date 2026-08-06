@@ -27,7 +27,7 @@ import { supplierInvoicesApi, contactsApi, accountsApi } from '@/api/client'
 import {
   PageHeader, LoadingSpinner, EmptyState, ErrorBanner, SectionTitle, ConfirmDialog,
 } from '@/components/ui'
-import { formatCHF, formatDate } from '@/utils'
+import { formatCHF, formatDate, estQRIBAN } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
 import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 import { PaymentRunPanel } from '@/components/payments/PaymentRunPanel'
@@ -85,7 +85,7 @@ export function PurchasesPage() {
 
   const [newSupplier, setNewSupplier] = useState(false)
   const [supplierForm, setSupplierForm] = useState(
-    { name: '', iban: '', email: '', vat_number: '' })
+    { name: '', iban: '', qr_iban: '', email: '', vat_number: '' })
 
   // Facture en cours de modification. Nul = on saisit une nouvelle facture.
   const [editing, setEditing] = useState<SupplierInvoice | null>(null)
@@ -209,26 +209,29 @@ export function PurchasesPage() {
   // là où elle s'est arrêtée, sans que l'on ait à rouvrir la liste.
   const createSupplier = useMutation({
     mutationFn: () => {
-      // Un QR-IBAN va dans `qr_iban`, un IBAN ordinaire dans `iban`. Les
-      // confondre ferait rejeter le virement : une référence QR n'est acceptée
-      // qu'avec un QR-IBAN (SIX IG v2.4 §4.2.2). La distinction se lit sur
-      // l'identifiant d'institution, positions 5 à 9, plage 30000–31999.
-      const iban = supplierForm.iban.replace(/\s/g, '').toUpperCase()
-      const inst = parseInt(iban.slice(4, 9), 10)
-      const estQR = iban.length >= 9 && inst >= 30000 && inst <= 31999
+      // Les deux comptes sont saisis dans deux cases distinctes, et chacun part
+      // dans son champ. Le tri final se fait quand même ici sur l'identifiant
+      // d'institution : c'est la règle objective (positions 5 à 9, plage
+      // 30000–31999), et une valeur mise dans la mauvaise case serait rejetée
+      // par le serveur sans que l'on comprenne pourquoi.
+      const brut = (v: string) => v.replace(/\s/g, '').toUpperCase()
+      const a = brut(supplierForm.iban)
+      const b = brut(supplierForm.qr_iban)
+      const iban   = [a, b].find(v => v && !estQRIBAN(v)) || ''
+      const qrIBAN = [a, b].find(v => v && estQRIBAN(v)) || ''
       return contactsApi.create({
         name: supplierForm.name.trim(),
         contact_type: 'supplier',
         email: supplierForm.email.trim() || undefined,
-        iban: !estQR && iban ? iban : undefined,
-        qr_iban: estQR ? iban : undefined,
+        iban: iban || undefined,
+        qr_iban: qrIBAN || undefined,
         vat_number: supplierForm.vat_number.trim() || undefined,
         country: 'CH',
       })
     },
     onSuccess: async (r) => {
       setError(null); setNewSupplier(false)
-      setSupplierForm({ name: '', iban: '', email: '', vat_number: '' })
+      setSupplierForm({ name: '', iban: '', qr_iban: '', email: '', vat_number: '' })
       await qc.invalidateQueries({ queryKey: ['contacts'] })
       const created = r.data as { id?: string }
       if (created.id) setForm(f => ({ ...f, supplier_id: created.id as string }))
@@ -245,7 +248,8 @@ export function PurchasesPage() {
       const d = r.data as {
         found: boolean; reason?: string
         bill?: {
-          creditor_name: string; creditor_iban: string; amount: number
+          creditor_name: string; creditor_iban: string; is_qr_iban: boolean
+          amount: number
           currency: string; reference: string; reference_type: string; message: string
         }
         hints?: {
@@ -287,12 +291,19 @@ export function PurchasesPage() {
 
       // Fournisseur inconnu : on ouvre sa fiche pré-remplie plutôt que de
       // renvoyer l'utilisateur la créer ailleurs. Tout ce qu'il faut est dans
-      // le QR — nom, IBAN — et le retaper serait une occasion de se tromper.
+      // le QR — nom, compte — et le retaper serait une occasion de se tromper.
       if (!d.supplier?.id) {
+        // Le compte du créancier va dans SA case. Une QR-facture porte un
+        // QR-IBAN, et le ranger comme un IBAN ordinaire ferait rejeter le
+        // virement : la référence QU'ELLE porte n'est acceptée qu'avec lui
+        // (SIX IG v2.4 §4.2.2). C'est le serveur qui a tranché à la lecture,
+        // sur l'identifiant d'institution 30000–31999 ; l'écran s'y range.
+        const estQR = d.bill.is_qr_iban
         setNewSupplier(true)
         setSupplierForm({
           name: d.bill.creditor_name,
-          iban: d.bill.creditor_iban,
+          iban:    estQR ? '' : d.bill.creditor_iban,
+          qr_iban: estQR ? d.bill.creditor_iban : '',
           email: '',
           // Le numéro IDE est sur la facture, pas dans le QR. Le reporter ici
           // évite d'avoir à rouvrir le PDF pour compléter la fiche.
@@ -424,14 +435,40 @@ export function PurchasesPage() {
                   <input id="ns-name" className="input" value={supplierForm.name}
                          onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} />
                 </div>
+                {/* Deux comptes, deux cases. Une QR-facture porte un QR-IBAN et
+                    remplit la seconde ; l'IBAN reste vide, et c'est correct.
+                    Les réunir sous une seule étiquette « IBAN » revenait à
+                    afficher un QR-IBAN sous un nom qui n'est pas le sien. */}
                 <div>
                   <label className="label" htmlFor="ns-iban">IBAN</label>
                   <input id="ns-iban" className="input font-mono" placeholder="CH.."
                          value={supplierForm.iban}
                          onChange={e => setSupplierForm({ ...supplierForm, iban: e.target.value })} />
-                  <p className="text-xs text-alpine-500 mt-1">
-                    Sans lui, ses factures ne pourront pas être payées.
-                  </p>
+                  {estQRIBAN(supplierForm.iban) ? (
+                    <p className="text-xs text-amber-700 mt-1">
+                      Ce compte est un QR-IBAN — il sera enregistré comme tel.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-alpine-500 mt-1">
+                      Pour une facture sans QR, ou avec une référence Creditor Reference.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="label" htmlFor="ns-qriban">QR-IBAN</label>
+                  <input id="ns-qriban" className="input font-mono" placeholder="CH.."
+                         value={supplierForm.qr_iban}
+                         onChange={e => setSupplierForm({
+                           ...supplierForm, qr_iban: e.target.value })} />
+                  {supplierForm.qr_iban && !estQRIBAN(supplierForm.qr_iban) ? (
+                    <p className="text-xs text-amber-700 mt-1">
+                      Ce compte n’est pas un QR-IBAN — il sera enregistré comme IBAN ordinaire.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-alpine-500 mt-1">
+                      Rempli par la lecture du QR. Institution 30000 à 31999.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="label" htmlFor="ns-mail">E-mail</label>

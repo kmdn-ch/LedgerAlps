@@ -74,3 +74,21 @@ export function isOverdue(inv: { status: string; due_date: string | null; docume
   if (!inv.due_date) return false
   return inv.due_date < new Date().toISOString().slice(0, 10)
 }
+
+// estQRIBAN dit si un compte suisse est un QR-IBAN.
+//
+// La marque est l'identifiant d'institution — positions 5 à 9 de l'IBAN, plage
+// 30000–31999 réservée par SIX aux comptes QR. Ce n'est pas un détail de
+// présentation : une référence QR n'est acceptée QU'AVEC un QR-IBAN, et une
+// Creditor Reference qu'avec un IBAN ordinaire (SIX IG v2.4 §4.2.2). Ranger
+// l'un à la place de l'autre fait rejeter le virement par la banque.
+//
+// Le serveur applique la même règle (`compliance.IsQRIBAN`) et c'est lui qui
+// tranche. Ici, elle sert à montrer tout de suite dans quelle case une valeur
+// saisie à la main appartient, plutôt qu'à la faire refuser après coup.
+export function estQRIBAN(valeur: string): boolean {
+  const v = valeur.replace(/\s/g, '').toUpperCase()
+  if (!/^CH\d{7}/.test(v)) return false
+  const iid = parseInt(v.slice(4, 9), 10)
+  return iid >= 30000 && iid <= 31999
+}

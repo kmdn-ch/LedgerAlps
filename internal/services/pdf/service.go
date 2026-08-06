@@ -536,10 +536,24 @@ var errNoIBAN = errors.New("aucun IBAN n'est configuré : le bulletin de verseme
 // impose QRR, un IBAN ordinaire impose SCOR ou NON, et les banques rejettent
 // l'appariement contraire (IG v2.4 §4.2.2, champ 28).
 func qrReferenceFor(inv InvoiceData) (iban, refType, ref string, err error) {
+	// Un QR-IBAN saisi dans le champ « IBAN » reste un QR-IBAN.
+	//
+	// Les réglages de l'entreprise ne proposent qu'une seule case, et le champ
+	// QR-IBAN dédié ne se remplit que par variable d'environnement. Qui possède
+	// un compte QR le saisit donc là où il y a de la place — et sans ce
+	// reclassement, LedgerAlps émettait une référence NON sur un QR-IBAN, ce que
+	// les banques rejettent (IG v2.4 §4.2.2, champ 28). La règle est objective :
+	// identifiant d'institution en positions 5 à 9, plage 30000–31999.
+	company := inv.Company
+	if company.QRIBAN == "" && compliance.IsQRIBAN(company.IBAN) {
+		company.QRIBAN = company.IBAN
+		company.IBAN = ""
+	}
+
 	// ── Determine IBAN and reference type ─────────────────────────────────────
-	iban = inv.Company.IBAN
-	if inv.Company.QRIBAN != "" {
-		iban = inv.Company.QRIBAN
+	iban = company.IBAN
+	if company.QRIBAN != "" {
+		iban = company.QRIBAN
 	}
 	if iban == "" {
 		return "", "", "", errNoIBAN
@@ -549,11 +563,11 @@ func qrReferenceFor(inv InvoiceData) (iban, refType, ref string, err error) {
 	// a QR-IBAN mandates QRR, a regular IBAN mandates SCOR or NON. The QR
 	// reference is also restricted to CHF since IG v2.4.
 	refType = "NON"
-	if inv.Company.QRIBAN != "" {
+	if company.QRIBAN != "" {
 		if inv.Currency != "CHF" {
 			// QRR is CHF-only; a QR-IBAN cannot carry any other reference type,
 			// so fall back to the regular IBAN rather than emit an invalid pairing.
-			iban = inv.Company.IBAN
+			iban = company.IBAN
 			if iban == "" {
 				return "", "", "", fmt.Errorf("QR-IBAN cannot be used for %s invoices (QRR is CHF-only) and no regular IBAN is configured", inv.Currency)
 			}
