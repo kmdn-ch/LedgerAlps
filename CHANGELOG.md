@@ -7,6 +7,25 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Ajouté
+
+- **La lecture d'une facture déposée remplit maintenant tout ce que le document porte** : montant, fournisseur, IBAN et référence depuis le QR ; **numéro de facture, date, échéance, taux de TVA et numéro IDE** depuis la couche texte du PDF. Vérifié sur une facture réelle — un rappel d'ePost Service AG.
+
+  **Chaque valeur est annoncée avec l'étiquette qui l'a produite** — « n° 538690 (« Numéro de facture ») · échéance 2025-12-31 (« Échu ») ». Un champ pré-rempli dont on voit la provenance se corrige ; un champ pré-rempli anonyme se croit. Comme une facture fournisseur entre dans les livres *et* dans la déclaration de TVA, c'est la différence entre une aide et un piège.
+
+  **Sans mention de TVA, le taux est 0 %** et le montant du QR est aussi le montant hors taxe : l'écriture ne porte alors aucune ligne de TVA déductible, et il n'y a rien à récupérer (LTVA art. 28 al. 1 exige une facture mentionnant l'impôt pour le déduire). Le piège évité : le numéro d'assujetti d'un fournisseur contient les lettres « MWST » ou « TVA » — chercher ces mots ferait croire à de la TVA sur une facture qui n'en porte aucune, et gonflerait l'impôt préalable déclaré. On cherche un **taux**, jamais un mot.
+
+  Le **QR-IBAN est rangé dans le bon champ** de la fiche fournisseur : une référence QR n'est acceptée qu'avec lui (SIX IG v2.4 §4.2.2), et les confondre fait rejeter le virement.
+
+### Corrigé
+
+- **Deux lectures de travers, invisibles à l'œil, sur un rappel.**
+
+  *La date du rappel était prise pour celle de la facture.* Le document porte deux dates étiquetées « Date » : celle du rappel en tête de page, celle de la facture dans le tableau. On obtenait une pièce dont le numéro et la date ne se rapportaient pas au même document — un défaut qui ne se voit qu'au rapprochement. La lecture porte maintenant sur la **ligne** : le numéro, sa date et son échéance viennent de la même rangée.
+
+  *Les colonnes de nombres, alignées à droite, décalaient toute la ligne d'un cran.* Leur abscisse tombe sous l'en-tête *précédent* : le montant se rangeait sous « Devise », l'échéance sous « Montant ». Chaque valeur restait juste, chaque étiquette était fausse. L'appariement se fait désormais par rang, et un contrôle de cohérence — un nombre sous « Montant », trois lettres sous « Devise » — refuse l'assignation décalée plutôt que de la livrer.
+
+
 ### Corrigé
 
 - **Un chargement qui ne finissait jamais, en bas des Paramètres.** Les réglages réseau affichaient un rond qui tourne tant que le formulaire n'était pas chargé — or une requête refusée (403) ne le charge jamais. Sur un compte comptable, l'écran restait donc indéfiniment sur « chargement », soit le pire des états : il annonce que quelque chose arrive.

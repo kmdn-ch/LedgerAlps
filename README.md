@@ -130,8 +130,10 @@ remplacée.
 </table>
 
 **Achats et paiements.** Déposez le PDF d'une facture reçue : LedgerAlps lit son
-QR-facture et remplit le fournisseur, la référence de paiement et le numéro de la
-pièce. Rien n'est enregistré sans votre confirmation, et rien ne sort de votre
+QR-facture *et* le texte du document, puis remplit le fournisseur, son IBAN, le
+montant, le numéro de la facture, sa date, son échéance et le taux de TVA.
+Chaque valeur est affichée avec l'étiquette d'où elle vient, pour que vous
+puissiez la vérifier d'un coup d'œil. Rien n'est enregistré sans votre confirmation, et rien ne sort de votre
 machine — le fichier est lu sur place, jamais envoyé.
 
 Saisissez les factures que vous recevez : la TVA payée à

@@ -106,18 +106,28 @@ func (h *QRBillHandler) ReadSupplierBill(c *gin.Context) {
 	// identifie un compte sans ambiguïté — un nom se saisit de dix façons.
 	supplierID, supplierName := h.findSupplierByIBAN(c, bill.CreditorIBAN)
 
+	// La couche texte apporte ce que le QR ne porte pas : numéro de la facture,
+	// sa date, son échéance, le taux de TVA s'il est mentionné. Chaque valeur
+	// voyage avec l'étiquette qui l'a produite, pour que l'écran montre d'où
+	// elle vient — un champ pré-rempli dont on voit la provenance se corrige,
+	// un champ pré-rempli anonyme se croit.
+	//
+	// Un document sans couche texte — un scan — rend des indications vides.
+	// C'est une absence, pas une panne : le QR reste exploitable.
+	hints := qrbill.ExtractHints(data)
+
 	c.JSON(http.StatusOK, gin.H{
 		"found": true,
 		"bill":  bill,
+		"hints": hints,
 		"supplier": gin.H{
 			"id":   supplierID,
 			"name": supplierName,
 		},
-		// Dit clairement ce qui reste à faire. Le QR ne porte ni le montant hors
-		// taxe, ni le taux de TVA, ni le compte de charge : ce sont des
-		// décisions comptables, pas des données du bulletin.
-		"note": "Le QR ne contient ni le montant hors taxe, ni le taux de TVA, ni le " +
-			"compte de charge : complétez-les et vérifiez le reste avant d'enregistrer.",
+		// Ce qui reste à décider. Le compte de charge n'est sur aucune facture :
+		// c'est une décision comptable, pas une donnée du document.
+		"note": "Vérifiez les valeurs lues, puis choisissez le compte de charge — " +
+			"il ne figure sur aucune facture.",
 	})
 }
 

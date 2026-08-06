@@ -82,7 +82,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 12b | Exports comptables (journal, grand livre, balance) | 🔎 livré | [↓](#12b--exports-comptables) |
 | 9c | Droits du comptable et second facteur par rôle | 🔎 livré | [↓](#9c--droits-du-comptable-et-second-facteur-par-rôle) |
 | 13 | Veille de conformité automatisée | ✅ | — |
-| 13b | Lecture du QR d'une facture fournisseur | 🔎 livré — voie 1 | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
+| 13b | Lecture d'une facture fournisseur (QR + texte) | 🔎 livré — voies 1 et 2 | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
 ---
@@ -668,9 +668,35 @@ Deux dépendances, toutes deux en Go pur : `gozxing` et `pdfcpu`, Apache 2.0,
 tracé en vecteurs plutôt qu'en image. La réponse est « aucun QR trouvé » avec
 l'explication, jamais un formulaire vide sans raison.
 
-**Reste** : la voie 2 (texte du PDF pour le montant hors taxe et le taux de TVA),
-si le besoin se confirme. Le QR ne les porte pas — ce sont des décisions
-comptables, pas des données du bulletin.
+### La voie 2 aussi
+
+**Livrée.** La couche texte du PDF apporte ce que le QR ne porte pas : numéro de
+facture, date, échéance, taux de TVA, numéro IDE du fournisseur.
+
+**La lecture est géométrique, pas textuelle.** Un chiffre ne veut rien dire sans
+son étiquette : « 538690 » est un numéro de facture parce qu'il est écrit sous la
+colonne « Numéro de facture ». On lit donc chaque fragment avec ses coordonnées,
+on reconstitue des lignes, et on rattache une valeur à son étiquette par la
+position — comme un humain lit une facture.
+
+**Deux pièges réels, trouvés sur une facture réelle :**
+
+*Deux dates portent l'étiquette « Date »* sur un rappel — celle du rappel et
+celle de la facture rappelée. La lecture porte sur la **ligne** du tableau : le
+numéro, sa date et son échéance viennent de la même rangée.
+
+*Les colonnes de nombres sont alignées à droite*, si bien que leur abscisse tombe
+sous l'en-tête précédent et décale toute la ligne d'un cran. Chaque valeur reste
+juste, chaque étiquette devient fausse — le pire des cas, puisque rien ne cloche
+à l'œil. L'appariement se fait par rang, et un contrôle de cohérence refuse
+l'assignation décalée.
+
+**Chaque valeur voyage avec sa provenance**, affichée à l'écran. Rien n'est
+enregistré sans confirmation.
+
+**Reste** : les factures scannées, sans couche texte. Elles demanderaient un
+rendu de page et une reconnaissance de caractères, donc une dépendance native —
+ce qui casserait le binaire unique. Le refus est explicite.
 
 **Recommandation initiale, conservée pour mémoire** : la voie 1 seule pour commencer — décoder le QR d'une
 facture déposée, pré-remplir créancier, IBAN, montant et référence de paiement,

@@ -321,6 +321,27 @@ Multipart, champ `file`, 10 Mo au maximum. La réponse ne crée rien :
 }
 ```
 
+La réponse porte aussi `hints`, lu dans la **couche texte** du PDF — ce que le QR
+ne contient pas :
+
+```json
+{ "invoice_number": "538690", "invoice_number_label": "numéro de facture",
+  "issue_date": "2025-12-01", "issue_date_label": "date",
+  "due_date": "2025-12-31", "due_date_label": "échu",
+  "vat_rate": 0, "vat_mentioned": false, "vat_label": "",
+  "supplier_uid": "CHE-103.727.240" }
+```
+
+Chaque valeur est accompagnée de **l'étiquette qui l'a produite** : c'est ce qui
+permet de repérer une lecture de travers sans rouvrir le document.
+
+`vat_mentioned: false` signifie qu'aucun **taux** n'a été trouvé — le taux vaut
+alors 0 % et le montant du QR est aussi le montant hors taxe. Le mot « TVA » ou
+« MWST » ne suffit pas : il figure dans le numéro d'assujetti du fournisseur.
+
+Un PDF sans couche texte — un scan — rend des `hints` vides. C'est une absence,
+pas une erreur : le QR reste exploitable.
+
 Le fournisseur est reconnu **par son IBAN** — un nom se saisit de dix façons, un
 compte non. `id` vide signifie qu'il reste à créer.
 

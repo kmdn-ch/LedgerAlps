@@ -84,7 +84,8 @@ export function PurchasesPage() {
   })
 
   const [newSupplier, setNewSupplier] = useState(false)
-  const [supplierForm, setSupplierForm] = useState({ name: '', iban: '', email: '' })
+  const [supplierForm, setSupplierForm] = useState(
+    { name: '', iban: '', email: '', vat_number: '' })
 
   // Facture en cours de modification. Nul = on saisit une nouvelle facture.
   const [editing, setEditing] = useState<SupplierInvoice | null>(null)
@@ -221,12 +222,13 @@ export function PurchasesPage() {
         email: supplierForm.email.trim() || undefined,
         iban: !estQR && iban ? iban : undefined,
         qr_iban: estQR ? iban : undefined,
+        vat_number: supplierForm.vat_number.trim() || undefined,
         country: 'CH',
       })
     },
     onSuccess: async (r) => {
       setError(null); setNewSupplier(false)
-      setSupplierForm({ name: '', iban: '', email: '' })
+      setSupplierForm({ name: '', iban: '', email: '', vat_number: '' })
       await qc.invalidateQueries({ queryKey: ['contacts'] })
       const created = r.data as { id?: string }
       if (created.id) setForm(f => ({ ...f, supplier_id: created.id as string }))
@@ -246,23 +248,41 @@ export function PurchasesPage() {
           creditor_name: string; creditor_iban: string; amount: number
           currency: string; reference: string; reference_type: string; message: string
         }
+        hints?: {
+          invoice_number: string; invoice_number_label: string
+          issue_date: string; issue_date_label: string
+          due_date: string; due_date_label: string
+          vat_rate: number; vat_mentioned: boolean; vat_label: string
+          supplier_uid: string
+        }
         supplier?: { id: string; name: string }
       }
       if (!d.found || !d.bill) {
         setScan({ ok: false, message: d.reason ?? 'Aucun QR-facture trouvé.' })
         return
       }
+      const h = d.hints
       setCreating(true)
       setForm(f => ({
         ...f,
         supplier_id: d.supplier?.id || '',
         payment_reference: d.bill!.reference_type === 'NON' ? '' : d.bill!.reference,
-        supplier_reference: d.bill!.message || f.supplier_reference,
+        // Le numéro lu sur la facture prime sur le message libre du bulletin :
+        // le premier est étiqueté « Numéro de facture », le second est du texte
+        // que le fournisseur y met parfois, parfois pas.
+        supplier_reference: h?.invoice_number || d.bill!.message || f.supplier_reference,
+        issue_date: h?.issue_date || f.issue_date,
+        due_date: h?.due_date || f.due_date,
         // Le QR porte le montant À PAYER, donc TTC. On bascule le champ dans ce
         // mode plutôt que de le laisser vide : c'est le montant que la facture
-        // annonce, et le hors taxe s'en déduit dès que le taux est choisi.
+        // annonce, et le hors taxe s'en déduit du taux.
         amount: d.bill!.amount > 0 ? String(d.bill!.amount) : '',
         amount_mode: 'ttc' as const,
+        // Aucune mention de TVA sur le document : le taux est 0 %, et le
+        // montant du QR est donc aussi le montant hors taxe. C'est le cas d'un
+        // fournisseur non assujetti — il n'y a rien à déduire (LTVA art. 28
+        // al. 1, qui exige une facture mentionnant l'impôt pour le récupérer).
+        vat_rate: h?.vat_mentioned ? String(h.vat_rate) : '0',
       }))
 
       // Fournisseur inconnu : on ouvre sa fiche pré-remplie plutôt que de
@@ -274,17 +294,29 @@ export function PurchasesPage() {
           name: d.bill.creditor_name,
           iban: d.bill.creditor_iban,
           email: '',
+          // Le numéro IDE est sur la facture, pas dans le QR. Le reporter ici
+          // évite d'avoir à rouvrir le PDF pour compléter la fiche.
+          vat_number: h?.supplier_uid ?? '',
         })
       }
 
+      // Chaque valeur est annoncée AVEC l'étiquette qui l'a produite : c'est ce
+      // qui permet de repérer une lecture de travers sans rouvrir le PDF.
+      const lues: string[] = []
+      if (h?.invoice_number) lues.push(`n° ${h.invoice_number} (« ${h.invoice_number_label} »)`)
+      if (h?.issue_date) lues.push(`date ${h.issue_date} (« ${h.issue_date_label} »)`)
+      if (h?.due_date) lues.push(`échéance ${h.due_date} (« ${h.due_date_label} »)`)
+      lues.push(h?.vat_mentioned
+        ? `TVA ${h.vat_rate} % (« ${h.vat_label} »)`
+        : 'aucune TVA mentionnée → 0 %, le montant payé est le montant hors taxe')
+
       const suite = d.supplier?.id
-        ? ' Choisissez le taux de TVA : le montant hors taxe s’en déduit.'
-        : ` Ce fournisseur n’est pas encore enregistré — sa fiche est pré-remplie ci-dessous,` +
-          ` créez-la puis choisissez le taux de TVA.`
+        ? ''
+        : ` Ce fournisseur n’est pas encore enregistré — sa fiche est pré-remplie ci-dessous.`
       setScan({
         ok: true,
-        message: `QR lu : ${d.bill.creditor_name}, ${d.bill.amount.toFixed(2)} ` +
-          `${d.bill.currency} à payer (montant TTC).` + suite,
+        message: `${d.bill.creditor_name}, ${d.bill.amount.toFixed(2)} ` +
+          `${d.bill.currency} à payer (TTC). Lu sur la facture : ${lues.join(' · ')}.` + suite,
       })
     },
     onError: (e) => setScan({
@@ -405,6 +437,13 @@ export function PurchasesPage() {
                   <label className="label" htmlFor="ns-mail">E-mail</label>
                   <input id="ns-mail" type="email" className="input" value={supplierForm.email}
                          onChange={e => setSupplierForm({ ...supplierForm, email: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label" htmlFor="ns-uid">N° IDE</label>
+                  <input id="ns-uid" className="input font-mono" placeholder="CHE-000.000.000"
+                         value={supplierForm.vat_number}
+                         onChange={e => setSupplierForm({
+                           ...supplierForm, vat_number: e.target.value })} />
                 </div>
               </div>
               <div className="mt-3 flex items-center gap-2">
