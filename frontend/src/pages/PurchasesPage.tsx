@@ -465,9 +465,14 @@ export function PurchasesPage() {
               <select id="sup" className="select" value={form.supplier_id}
                       onChange={e => setForm({ ...form, supplier_id: e.target.value })}>
                 <option value="">Choisir…</option>
+                {/* Un QR-IBAN est rangé dans `qr_iban`, jamais dans `iban` :
+                    ne lire que le second faisait annoncer « sans IBAN » un
+                    fournisseur parfaitement payable — et l'ordre de virement
+                    part bien, lui, puisque le serveur lit les deux champs.
+                    L'écran démentait le produit. */}
                 {supplierList.map(sp => (
                   <option key={sp.id} value={sp.id}>
-                    {sp.name}{sp.iban ? '' : '  (sans IBAN)'}
+                    {sp.name}{sp.iban || sp.qr_iban ? '' : '  (sans IBAN)'}
                   </option>
                 ))}
               </select>

@@ -32,6 +32,7 @@ const schema = z.object({
   phone:             opt(z.string()),
   payment_term_days: z.coerce.number().int().min(0).max(365).default(30),
   iban:              opt(z.string()),
+  qr_iban:           opt(z.string()),
   notes:             opt(z.string()),
 })
 
@@ -81,6 +82,7 @@ export function ContactDetailPage() {
       phone:             contact.phone ?? '',
       payment_term_days: contact.payment_term_days,
       iban:              contact.iban ?? '',
+      qr_iban:           contact.qr_iban ?? '',
       notes:             contact.notes ?? '',
     })
   }, [contact, reset])
@@ -239,6 +241,22 @@ export function ContactDetailPage() {
                 <label className="label">IBAN</label>
                 <input className="input font-mono" placeholder="CH…" {...register('iban')} />
               </div>
+            </div>
+            {/* Le QR-IBAN se range à part parce qu'il ne se substitue pas à
+                l'IBAN : une référence QR n'est acceptée qu'avec lui, une
+                référence Creditor Reference qu'avec un IBAN ordinaire
+                (SIX IG v2.4 §4.2.2). Les confondre fait rejeter le virement.
+                Lu sur une facture, il était enregistré ici sans jamais être
+                montré — ce qui est invisible ne se corrige pas. */}
+            <div className="mt-4">
+              <label className="label">QR-IBAN</label>
+              <input className="input font-mono" placeholder="CH…"
+                {...register('qr_iban')} />
+              <p className="text-xs text-alpine-500 mt-1">
+                Rempli automatiquement à la lecture d’une QR-facture. Il porte un
+                numéro d’institution entre 30000 et 31999 et n’accepte qu’une
+                référence QR.
+              </p>
             </div>
           </div>
         </div>

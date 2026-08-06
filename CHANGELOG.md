@@ -19,6 +19,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Corrigé
 
+- **Un fournisseur payable était annoncé « sans IBAN ».** Le QR-IBAN se range dans son propre champ — une référence QR n'est acceptée qu'avec lui, et le confondre avec un IBAN ordinaire fait rejeter le virement. Mais la liste des fournisseurs ne regardait que l'IBAN ordinaire : tout fournisseur lu depuis une QR-facture se présentait comme impayable, alors que l'ordre de virement partait très bien. L'écran démentait le produit, ce qui coûte plus cher qu'un bouton cassé : on renonce à s'en servir.
+
+- **Le QR-IBAN était enregistré sans jamais être montré.** La fiche du contact n'affichait que l'IBAN ordinaire. Le compte sur lequel les paiements allaient partir était donc invisible, et ce qui est invisible ne se corrige pas. La fiche porte maintenant les deux champs, avec ce qui les distingue.
+
 - **Deux lectures de travers, invisibles à l'œil, sur un rappel.**
 
   *La date du rappel était prise pour celle de la facture.* Le document porte deux dates étiquetées « Date » : celle du rappel en tête de page, celle de la facture dans le tableau. On obtenait une pièce dont le numéro et la date ne se rapportaient pas au même document — un défaut qui ne se voit qu'au rapprochement. La lecture porte maintenant sur la **ligne** : le numéro, sa date et son échéance viennent de la même rangée.
@@ -84,8 +88,6 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 - **[docs/DROITS.md](docs/DROITS.md)** — inventaire de tout ce qui est lisible, modifiable et cliquable, par section et par rôle.
 
 - **Roadmap 13b : lecture automatique des factures fournisseurs.** Trois voies étudiées, toutes locales et libres. Recommandation : décoder le **QR-facture** en premier (`gozxing`, Apache 2.0) — il porte déjà créancier, IBAN, montant et référence, sans aucune reconnaissance de caractères et sans dépendance native. Tout service d'extraction en ligne est écarté : une facture fournisseur contient l'IBAN et l'adresse d'un tiers.
-
-## [Unreleased]
 
 ### Ajouté
 

@@ -618,8 +618,10 @@ les clés.
 
 ### 13b — Lecture automatique des factures fournisseurs (PDF)
 
-**À trancher.** Saisir une facture reçue à la main est le geste le plus répétitif
-du produit. Trois voies, toutes réalisables en restant local et libre.
+**Tranché.** Saisir une facture reçue à la main est le geste le plus répétitif du
+produit. Trois voies avaient été étudiées ; **les deux premières sont livrées**,
+la troisième reste écartée pour la raison expliquée plus bas. L'analyse qui a
+mené à ce choix est conservée ci-dessous — elle dit ce que chaque voie coûte.
 
 **1. La QR-facture, d'abord.** Une facture suisse conforme porte un QR code qui
 contient déjà, en clair et sans ambiguïté : l'IBAN du créancier, son nom, son
