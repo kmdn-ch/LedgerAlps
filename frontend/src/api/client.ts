@@ -147,6 +147,11 @@ export const supplierInvoicesApi = {
   update: (id: string, data: unknown) => api.put(`/supplier-invoices/${id}`, data),
   transition: (id: string, status: string) =>
     api.post(`/supplier-invoices/${id}/transition`, { status }),
+  // Vide la liste des paiements sans mentir aux livres : un brouillon est
+  // supprime, une facture comptabilisee est EXTOURNEE puis marquee annulee.
+  // Le serveur rend un verdict PAR facture — un lot partiel est le cas normal.
+  cancel: (ids: string[], reason?: string) =>
+    api.post('/supplier-invoices/cancel', { ids, reason }),
   // Lit le QR d'une facture deposee. N'enregistre RIEN : le serveur rend ce que
   // le code contient, l'utilisateur confirme.
   readQR: (file: File) => {

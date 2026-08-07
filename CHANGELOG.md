@@ -7,6 +7,25 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Ajouté
+
+- **Retirer une facture de la liste des paiements.** La liste accumulait tout ce qui est comptabilisé et non réglé — factures payées hors LedgerAlps, saisies d'essai, doublons — et surtout les **factures bloquées**, celles qui ne peuvent pas être payées faute de QR-IBAN ou de référence valide : rien ne les en faisait jamais sortir. Une liste qu'on ne peut pas vider cesse d'être lue, et le jour où elle porte une vraie facture en retard, personne ne la voit.
+
+  **Supprimer n'était pas la réponse.** Une facture comptabilisée est une charge dans les livres, avec sa dette au compte créanciers ; l'effacer ferait disparaître la charge d'un exercice tenu, et le CO art. 958f impose de conserver la pièce dix ans. Le geste est donc l'**annulation avec extourne** : la facture reste, marquée annulée, et une écriture inverse neutralise la charge et la TVA déductible. Un réviseur voit une correction, pas un trou.
+
+  Par lot ou une par une, **réservé à l'administrateur et au comptable**. Chaque facture reçoit son propre verdict — un brouillon est supprimé, une facture comptabilisée est extournée, une facture déjà réglée est refusée parce que l'argent est parti — et le détail est rendu ligne par ligne.
+
+- **L'attestation d'intégrité s'émet seule**, au démarrage puis chaque jour, dans `attestations/` à côté des sauvegardes. La chaîne d'empreintes rend une modification détectable **à condition d'avoir un point de comparaison** : qui peut écrire dans la base peut recalculer la chaîne entière, qui reste alors cohérente. L'ancrage est l'empreinte de tête conservée ailleurs, à une date connue — et une garantie qui suppose qu'on pense à cliquer chaque mois n'existe pas. Le fichier part avec les sauvegardes vers le NAS ou la clé USB ; c'est ce déplacement qui vaut ancrage. Rien n'est envoyé nulle part.
+
+- **[docs/REVUE-IA.md](docs/REVUE-IA.md)** — le mode d'emploi et le prompt pour faire auditer le code par un réviseur IA depuis une copie locale, avec le format de rapport attendu pour que les constats se corrigent sans allers-retours.
+
+### Corrigé
+
+- **Annuler une facture comptabilisée ne vidait pas les livres.** Le statut passait à « annulée » et rien d'autre : l'écriture restait, la charge et la TVA déductible continuaient d'alimenter le résultat et la déclaration. L'écart ne se serait vu qu'au décompte trimestriel, des mois plus tard, sans rien qui pointe vers sa cause. Neuf tests portent désormais sur les **soldes des comptes**, pas sur le statut — c'est le seul endroit où le défaut se voyait.
+
+- **Le journal d'audit ne couvrait que trois actions.** La chaîne du CO art. 957a existait, avec sa vérification et son attestation ; y entraient la comptabilisation d'une écriture, la clôture d'un exercice et le changement de statut d'une facture. Les constantes prévues pour les contacts, les paiements et les rapprochements étaient déclarées et jamais appelées. Un journal à trous est pire qu'un journal absent : l'absence d'une ligne se lit comme « cela n'a pas eu lieu » alors qu'elle veut dire « cela n'a jamais été écrit ». Les factures fournisseurs — création, modification, comptabilisation, annulation, suppression — et les changements de coordonnées de l'entreprise y entrent maintenant, **refus compris**.
+
+
 ### Sécurité
 
 - **Un compte en lecture seule créait une facture depuis le tableau de bord.** Le bouton « Nouvelle facture » y était un simple lien : aucun appel de mutation dans le fichier, donc absent du recensement qui avait servi à fermer les autres écrans. Chercher les commandes une par une revient à refaire la recherche à chaque écran ajouté, avec la même chance de se tromper.

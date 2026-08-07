@@ -378,6 +378,13 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 		return
 	}
 
+	trace(c, h.db, h.usePostgres, TableSupplierInvoices,
+		ActionSupplierInvoiceCreated, id, map[string]any{
+			"reference": req.SupplierReference,
+			"total":     total,
+			"currency":  req.Currency,
+		})
+
 	c.JSON(http.StatusCreated, gin.H{
 		"id": id, "status": "draft",
 		"subtotal_amount": subtotal, "vat_amount": vat, "total_amount": total,
@@ -447,6 +454,14 @@ func (h *SupplierInvoicesHandler) TransitionSupplierInvoice(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
+	action := ActionSupplierInvoiceBooked
+	if req.Status != "booked" {
+		action = ActionSupplierInvoiceUpdated
+	}
+	trace(c, h.db, h.usePostgres, TableSupplierInvoices, action, id, map[string]any{
+		"from": current, "to": req.Status, "journal_entry_id": entryID,
+	})
+
 	c.JSON(http.StatusOK, gin.H{"id": id, "status": req.Status, "journal_entry_id": entryID})
 }
 
@@ -482,6 +497,10 @@ func (h *SupplierInvoicesHandler) DeleteSupplierInvoice(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
+	// La trace survit à la pièce : c'est même le seul cas où elle est la seule
+	// chose qui reste.
+	trace(c, h.db, h.usePostgres, TableSupplierInvoices,
+		ActionSupplierInvoiceDeleted, id, map[string]any{"status": status})
 	c.Status(http.StatusNoContent)
 }
 

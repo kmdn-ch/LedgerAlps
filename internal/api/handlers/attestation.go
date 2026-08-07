@@ -98,18 +98,6 @@ func (h *AuditHandler) IntegrityAttestation(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
 
-	report, err := h.ComputeChainReport(ctx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-
-	scope, err := h.attestationScope(ctx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-
 	// Le nom plutôt que l'identifiant technique : le document part chez un tiers,
 	// à qui un UUID n'apprend rien.
 	issuedBy := currentUserID(c)
@@ -118,6 +106,35 @@ func (h *AuditHandler) IntegrityAttestation(c *gin.Context) {
 		db.Rebind(`SELECT COALESCE(name, '') FROM users WHERE id = ?`, h.usePostgres), issuedBy,
 	).Scan(&name); err == nil && name != "" {
 		issuedBy = name
+	}
+
+	final, err := h.BuildAttestation(ctx, issuedBy)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	filename := fmt.Sprintf("ledgeralps-attestation-integrite-%s.json", time.Now().UTC().Format("2006-01-02"))
+	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
+	c.Data(http.StatusOK, "application/json; charset=utf-8", final)
+}
+
+// BuildAttestation produit le document scellé, sans passer par HTTP.
+//
+// Extrait du handler parce qu'un SECOND chemin en a besoin : l'émission
+// automatique. Deux implémentations auraient fini par diverger, et c'est
+// précisément le genre de divergence qu'on ne remarque pas — l'attestation
+// téléchargée à la main et celle déposée chaque jour diraient des choses
+// différentes du même état, sans que personne ne compare.
+func (h *AuditHandler) BuildAttestation(ctx context.Context, issuedBy string) ([]byte, error) {
+	report, err := h.ComputeChainReport(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	scope, err := h.attestationScope(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	att := Attestation{
@@ -180,21 +197,17 @@ func (h *AuditHandler) IntegrityAttestation(c *gin.Context) {
 	att.SelfHash = ""
 	body, err := json.MarshalIndent(att, "", "  ")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "encoding error"})
-		return
+		return nil, err
 	}
 	sum := sha256.Sum256(body)
 	att.SelfHash = hex.EncodeToString(sum[:])
 
 	final, err := json.MarshalIndent(att, "", "  ")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "encoding error"})
-		return
+		return nil, err
 	}
 
-	filename := fmt.Sprintf("ledgeralps-attestation-integrite-%s.json", time.Now().UTC().Format("2006-01-02"))
-	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
-	c.Data(http.StatusOK, "application/json; charset=utf-8", final)
+	return final, nil
 }
 
 // attestationScope décrit ce que l'attestation couvre : sans périmètre, un

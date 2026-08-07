@@ -80,9 +80,11 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 11 | eBill | ⛔ écarté — réseau fermé | [↓](#11--ebill) |
 | 12 | Validation contre le portail SIX | 🔎 dossier livré | [↓](#12--validation-contre-le-portail-six) |
 | 12b | Exports comptables (journal, grand livre, balance) | 🔎 livré | [↓](#12b--exports-comptables) |
-| 9c | Droits du comptable et second facteur par rôle | 🔎 livré | [↓](#9c--droits-du-comptable-et-second-facteur-par-rôle) |
+| 9c | Droits du comptable, second facteur par rôle, lecture seule | ✅ | [↓](#9c--droits-du-comptable-et-second-facteur-par-rôle) |
 | 13 | Veille de conformité automatisée | ✅ | — |
-| 13b | Lecture d'une facture fournisseur (QR + texte) | 🔎 livré — voies 1 et 2 | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
+| 13b | Lecture d'une facture fournisseur (QR + texte) | ✅ | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
+| 13c | Traçabilité : couverture du journal et attestation automatique | 🔎 livré | [↓](#13c--traçabilité) |
+| 13d | Retirer une facture de la liste des paiements | 🔎 livré | [↓](#13d--vider-la-liste-des-paiements) |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
 ---
@@ -710,6 +712,76 @@ native, aucun risque d'erreur silencieuse, et cela couvre le cas courant. La voi
 fournisseur mal lue entre dans les livres et dans la déclaration de TVA ; un
 champ pré-rempli qu'on relit vaut mieux qu'un champ juste qu'on n'a pas vu.
 
+### 13c — Traçabilité
+
+**Livré.** La chaîne d'empreintes du CO art. 957a existait, avec sa vérification
+et son attestation. **Trois actions y entraient** : la comptabilisation d'une
+écriture, la clôture d'un exercice, le changement de statut d'une facture. Les
+constantes `ActionContactUpdated`, `ActionPaymentRecorded`,
+`ActionBankEntryMatched` étaient déclarées et jamais appelées.
+
+Un journal à trous est pire qu'un journal absent : on le consulte en croyant
+qu'il dit tout, et l'absence d'une ligne se lit comme « cela n'a pas eu lieu »
+alors qu'elle veut dire « cela n'a jamais été écrit ».
+
+**Ce qui entre désormais dans la chaîne** : création, modification,
+comptabilisation, annulation et suppression d'une facture fournisseur ;
+modification des coordonnées de l'entreprise — c'est l'IBAN qui reçoit les
+virements de tous les clients ; et les refus, pas seulement les succès. Un refus
+non tracé laisse sans réponse la question qui vient après : « on a bien essayé,
+pourquoi est-ce encore là ? »
+
+**L'attestation s'émet seule**, au démarrage puis chaque jour, dans
+`attestations/` à côté des sauvegardes. La chaîne rend une modification
+détectable **à condition d'avoir un point de comparaison** : qui peut écrire
+dans la base peut recalculer la chaîne entière, qui reste alors cohérente.
+L'ancrage est l'empreinte de tête conservée ailleurs, à une date connue — et une
+garantie qui suppose qu'on pense à cliquer chaque mois n'existe pas.
+
+Le fichier part avec les sauvegardes vers le NAS ou la clé USB ; c'est ce
+déplacement, décidé par l'utilisateur, qui vaut ancrage. **Rien n'est envoyé
+nulle part** : un horodatage tiers (RFC 3161) supposerait un appel réseau,
+contraire à la promesse du produit. La limite est écrite dans l'attestation
+elle-même.
+
+**Finalité déclarée** (nLPD art. 6) : traçabilité comptable et sécurité. Ce sont
+des **opérations sur des pièces** qui sont enregistrées, jamais des clics ni du
+temps de présence. L'OLT 3 art. 26 interdit les systèmes destinés à surveiller
+le comportement des travailleurs ; ce journal n'en est pas un, et sa conception
+doit le rester.
+
+**Reste** : le fichier en ajout seul hors de la base (« lot 2 »), qui protégerait
+du cas d'une restauration effaçant l'historique. Écarté pour l'instant — il
+place une seconde écriture dans le chemin critique de chaque action, pour un
+seul scénario.
+
+### 13d — Vider la liste des paiements
+
+**Livré.** La liste accumulait tout ce qui est comptabilisé et non réglé :
+factures payées hors LedgerAlps, saisies d'essai, doublons. Les **factures
+bloquées** — celles qui ne peuvent pas être payées faute de QR-IBAN ou de
+référence valide — y restaient pour toujours, puisque rien ne les en faisait
+sortir. Une liste qu'on ne peut pas vider cesse d'être lue, et le jour où elle
+porte une vraie facture en retard, personne ne la voit.
+
+**Supprimer n'était pas la réponse.** Une facture comptabilisée est une charge
+dans les livres, avec sa dette au compte créanciers ; l'effacer ferait
+disparaître la charge d'un exercice tenu, et le CO art. 958f impose de conserver
+la pièce dix ans. Le geste juste est l'**annulation avec extourne** : la facture
+reste, marquée annulée, et une écriture inverse neutralise la charge et la TVA
+déductible. Un réviseur voit une correction, pas un trou.
+
+**Un défaut corrigé au passage.** Passer une facture comptabilisée à « annulée »
+ne faisait que changer son statut : l'écriture restait dans les livres et
+continuait d'alimenter le résultat et la déclaration pendant que l'écran
+affichait « annulée ». L'écart ne se serait vu qu'au décompte trimestriel.
+
+Par lot ou une par une, **réservé à l'administrateur et au comptable**
+(`PermWriteAccounting`). Chaque facture reçoit son propre verdict : un brouillon
+est supprimé, une facture comptabilisée est extournée, une facture déjà réglée
+est refusée — l'argent est parti. Neuf tests portent sur les **soldes**, pas sur
+le statut : c'est le seul endroit où le défaut se voyait.
+
 ### 14 — Modules métier
 
 **Piste retenue pour l'évolution du produit, non engagée.**
@@ -815,6 +887,10 @@ côté serveur, pack NSIS italien à ajouter.
 
 | Version | Apport principal |
 |---|---|
+| **v1.5.0** *(en préparation)* | Lecture complète d'une facture fournisseur (QR + couche texte), lecture seule réellement en lecture seule, QR-IBAN distingué de l'IBAN, traçabilité étendue et attestation d'intégrité automatique, retrait d'une facture de la liste des paiements par extourne |
+| **v1.4.9** | Exports comptables réels (journal, grand livre, balance), création de fournisseur à la volée, accents du PDF |
+| **v1.4.8** | Rôles et permissions, second facteur TOTP, ordinateurs de confiance, écriture au journal des factures fournisseurs |
+| **v1.4.7** | Correctifs et documentation |
 | **v1.4.6** | Clôture d'exercice réellement effectuée, verrouillage de période, piste d'audit vérifiable, attestation Olico art. 9, anonymisation nLPD, export CSV, rotation du secret, validation IBAN ISO 13616, factures multi-pages, garde-fous note de crédit et TVA |
 | **v1.4.5** | HTTPS natif, écoute sur `127.0.0.1` par défaut, Maintenance & Système (1ʳᵉ tranche), garde-fou mécanique des avis de conformité, détection BitLocker |
 | **v1.4.4** | Sauvegardes chiffrées (Argon2id + XChaCha20-Poly1305), interface de sauvegarde/restauration, notes de crédit liées et bornées |

@@ -326,6 +326,11 @@ func main() {
 	api.PUT("/supplier-invoices/:id", authorizer.Require(authz.PermWriteDocuments), sih.UpdateSupplierInvoice)
 	api.POST("/supplier-invoices/:id/transition", authorizer.Require(authz.PermWriteAccounting), sih.TransitionSupplierInvoice)
 	api.DELETE("/supplier-invoices/:id", authorizer.Require(authz.PermWriteAccounting), sih.DeleteSupplierInvoice)
+	// Vider la liste des paiements sans mentir aux livres : un brouillon est
+	// supprimé, une facture comptabilisée est EXTOURNÉE puis marquée annulée.
+	// Tenir les livres est le métier du comptable autant que de l'administrateur.
+	api.POST("/supplier-invoices/cancel",
+		authorizer.Require(authz.PermWriteAccounting), sih.CancelSupplierInvoices)
 
 	api.GET("/invoices", ih.ListInvoices)
 	api.GET("/invoices/:id", ih.GetInvoice)
@@ -540,6 +545,20 @@ func main() {
 		}
 		serveEmbedded(c, "index.html", "text/html; charset=utf-8")
 	})
+
+	// L'attestation d'intégrité s'émet seule, au démarrage puis chaque jour.
+	//
+	// La chaîne d'empreintes rend une modification détectable À CONDITION d'avoir
+	// un point de comparaison : qui peut écrire dans la base peut recalculer la
+	// chaîne entière, qui reste alors cohérente. L'ancrage est l'empreinte de
+	// tête conservée ailleurs, à une date connue — et une garantie qui suppose
+	// qu'on pense à cliquer chaque mois n'existe pas.
+	//
+	// Le fichier est déposé à côté des sauvegardes : il part donc avec elles
+	// vers le NAS ou la clé USB, et c'est ce déplacement qui vaut ancrage.
+	attestationCtx, arreterAttestation := context.WithCancel(context.Background())
+	defer arreterAttestation()
+	alh.StartAttestationScheduler(attestationCtx, config.AppDataDir())
 
 	// ── 9. Start ──────────────────────────────────────────────────────────────
 	addr := net.JoinHostPort(cfg.Host, cfg.Port)

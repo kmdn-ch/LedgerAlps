@@ -235,6 +235,14 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	}
 	s.AutoPostInvoices = autoPostOut == 1
 
+	// Qui a changé l'IBAN de l'entreprise, et quand : c'est ce compte qui
+	// recevra les virements de tous les clients. Un changement non tracé y
+	// serait indétectable.
+	trace(c, h.db, h.usePostgres, TableCompanySettings,
+		ActionCompanySettingsUpdated, "company", map[string]any{
+			"iban_modifie": true,
+		})
+
 	c.JSON(http.StatusOK, s)
 }
 

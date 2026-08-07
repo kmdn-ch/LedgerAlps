@@ -21,9 +21,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import {
-  Download, AlertTriangle, Loader2, Building2, CalendarClock, Info,
+  Download, AlertTriangle, Loader2, Building2, CalendarClock, Info, Trash2,
 } from 'lucide-react'
-import { paymentsApi } from '@/api/client'
+import { useQueryClient } from '@tanstack/react-query'
+import { paymentsApi, supplierInvoicesApi } from '@/api/client'
+import { ConfirmDialog } from '@/components/ui'
+import { useCanWrite } from '@/hooks/usePermissions'
 import { LoadingSpinner, EmptyState, ErrorBanner, SectionTitle } from '@/components/ui'
 import { formatCHF, formatDate } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
@@ -49,7 +52,13 @@ interface PayableResponse {
 }
 
 export function PaymentRunPanel() {
+  const qc = useQueryClient()
+  // Tenir les livres : administrateur et comptable. La lecture seule n'a ni la
+  // case à cocher ni le bouton, et le serveur la refuserait deux fois.
+  const peutEcrire = useCanWrite()
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [aRetirer, setARetirer] = useState(false)
+  const [retrait, setRetrait] = useState<string | null>(null)
   const [execDate, setExecDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{ count: number; total: number } | null>(null)
@@ -97,6 +106,35 @@ export function PaymentRunPanel() {
     onError: (e) => {
       setDone(null)
       setError(refusalMessage(e, "Le fichier de paiement n'a pas pu être produit."))
+    },
+  })
+
+  // Retirer de la liste — un brouillon disparaît, une facture comptabilisée est
+  // EXTOURNÉE puis marquée annulée. La charge quitte donc réellement les livres,
+  // au lieu d'un statut qui dit « annulée » pendant que le résultat et la
+  // déclaration continuent d'en tenir compte.
+  const retirer = useMutation({
+    mutationFn: () => supplierInvoicesApi.cancel([...selected], 'retrait de la liste des paiements'),
+    onSuccess: async (r) => {
+      const d = r.data as {
+        processed: number; total: number
+        results: Array<{ id: string; outcome: string; detail?: string }>
+      }
+      const refus = d.results.filter(x => x.outcome === 'refused')
+      // Le verdict est rendu PAR facture : un lot partiel est le cas normal, et
+      // annoncer un succès global masquerait les lignes qui n'ont pas bougé.
+      setRetrait(
+        `${d.processed} facture(s) retirée(s) sur ${d.total}.` +
+        (refus.length ? ' Non traitée(s) : ' +
+          refus.map(x => x.detail).join(' · ') : ''))
+      setError(null); setARetirer(false); setSelected(new Set())
+      await qc.invalidateQueries({ queryKey: ['payments-payable'] })
+      await qc.invalidateQueries({ queryKey: ['supplier-invoices'] })
+      await qc.invalidateQueries({ queryKey: ['journal'] })
+    },
+    onError: (e) => {
+      setARetirer(false)
+      setError(refusalMessage(e, "Les factures n'ont pas pu être retirées."))
     },
   })
 
@@ -208,14 +246,50 @@ export function PaymentRunPanel() {
             {blocked.length} facture{blocked.length > 1 ? 's' : ''} ne peu
             {blocked.length > 1 ? 'vent' : 't'} pas être payée{blocked.length > 1 ? 's' : ''}
           </p>
+          {/* Cochables, elles aussi. Ce sont même celles qui restent le plus
+              longtemps : elles ne peuvent PAS être payées, donc rien ne les
+              fait jamais sortir de la liste. Une liste qui ne se vide pas
+              cesse d'être lue, et le jour où elle porte une vraie facture en
+              retard, personne ne la voit. */}
           <ul className="mt-2 space-y-1 text-sm text-alpine-700">
             {blocked.map(i => (
-              <li key={i.id}>
-                <span className="font-mono text-xs">{i.reference}</span> — {i.supplier_name} :
-                {' '}{i.blocked_reason}
+              <li key={i.id} className="flex items-start gap-2">
+                {peutEcrire && (
+                  <input type="checkbox" className="mt-1" checked={selected.has(i.id)}
+                         aria-label={`Sélectionner ${i.reference}`}
+                         onChange={() => toggle(i.id)} />
+                )}
+                <span>
+                  <span className="font-mono text-xs">{i.reference}</span> — {i.supplier_name} :
+                  {' '}{i.blocked_reason}
+                </span>
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Retirer de la liste — HORS du bloc de paiement, délibérément.
+          Une facture bloquée ne peut pas être payée : rien ne la fera jamais
+          sortir de la liste, et c'est justement celle qu'on veut écarter. Si
+          ce bouton vivait dans le pied de page des paiements, il disparaîtrait
+          dans le seul cas où il sert le plus. */}
+      {peutEcrire && selected.size > 0 && (
+        <div className="mt-4 flex items-center justify-end">
+          <button onClick={() => { setError(null); setARetirer(true) }}
+                  disabled={retirer.isPending}
+                  className="btn-ghost text-danger-700 flex items-center gap-1.5">
+            {retirer.isPending
+              ? <Loader2 size={14} className="animate-spin" />
+              : <Trash2 size={14} />}
+            Retirer {selected.size} facture{selected.size > 1 ? 's' : ''} de la liste
+          </button>
+        </div>
+      )}
+
+      {retrait && (
+        <div className="mt-4 rounded-md border border-alpine-200 bg-alpine-50 px-4 py-3 text-sm">
+          {retrait}
         </div>
       )}
 
@@ -270,6 +344,27 @@ export function PaymentRunPanel() {
           </p>
         </div>
       )}
-    </div>
+    
+      {/* Une annulation PASSE UNE ÉCRITURE : elle ne part pas sur un clic.
+          Le dialogue dit ce qui va se produire dans les livres, pas seulement
+          « êtes-vous sûr ». */}
+      <ConfirmDialog
+        open={aRetirer}
+        title={`Retirer ${selected.size} facture${selected.size > 1 ? 's' : ''} de la liste ?`}
+        consequences={[
+          <>Un <strong>brouillon</strong> est supprimé : rien n&rsquo;était entré dans les livres.</>,
+          <>Une facture <strong>comptabilisée</strong> est <strong>extournée</strong> — une écriture
+             inverse neutralise la charge et la TVA déductible — puis marquée annulée. La pièce et
+             les deux écritures restent lisibles (CO art. 958f).</>,
+          <>Une facture <strong>déjà réglée</strong> est refusée : l&rsquo;argent est parti.</>,
+        ]}
+        reassurance="Chaque facture reçoit son propre verdict : un lot partiel est normal, et le détail vous est rendu."
+        confirmLabel="Retirer de la liste"
+        tone="danger"
+        busy={retirer.isPending}
+        onConfirm={() => retirer.mutate()}
+        onCancel={() => setARetirer(false)}
+      />
+</div>
   )
 }
