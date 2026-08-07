@@ -71,6 +71,15 @@ jobs:
               lines.append(f"- **Now:** `{c['current']}`")
               lines.append(f"- **Source:** {c['url']}")
               lines.append("")
+              # Nommer les articles concernés : « la nLPD a changé » n'oriente
+              # personne vers ce qu'il faut relire.
+              if c.get("watched_articles"):
+                  lines.append("**Ce dont LedgerAlps dépend dans cet acte :**")
+                  lines.append("")
+                  for a in c["watched_articles"]:
+                      lines.append(f"- **{a['article']}** — {a['titre']}")
+                      lines.append(f"  - _Concerne :_ {a['ce_qui_en_depend']}")
+                  lines.append("")
           for f in data["failures"]:
               lines.append(f"### ⚠️ Could not check: {f.get('name', f['id'])}")
               lines.append("")

@@ -29,6 +29,16 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
   Vérifié dans un navigateur avec un vrai compte en lecture seule : aucun champ de fichier dans les pages Achats, Rapports et Paramètres, aucun champ modifiable, et **quatre dépôts forgés à la main — en contournant l'interface avec le jeton de la session — tous refusés en 403**.
 
+### Modifié
+
+- **La veille de conformité nomme les articles dont LedgerAlps dépend.** Elle surveillait la nLPD comme un tout : quand la date de consolidation bouge, l'alerte disait « la nLPD a changé » — ce qui n'oriente personne vers ce qu'il faut relire dans un acte qui compte des dizaines d'articles.
+
+  Le registre porte maintenant, pour la nLPD, les **articles 6, 8, 25, 28 et 32** — relevés dans le code et la documentation, pas choisis de mémoire — chacun avec ce qui en dépend concrètement. L'alerte les affiche.
+
+  **L'art. 6** (licéité, proportionnalité, finalité, exactitude ; al. 4 destruction ou anonymisation dès que les données ne sont plus nécessaires) couvre l'anonymisation des contacts, la purge des adresses IP, la minimisation des états du journal d'audit — et la finalité de toute trace d'activité : traçabilité comptable et sécurité, jamais mesure du comportement des personnes.
+
+  Aucun avis n'est ajouté à l'écran : ces obligations sont satisfaites, et un bandeau toujours faux use la confiance dans ceux qui ne le sont pas.
+
 ### Écarté
 
 - **Le Gestionnaire d'identification de Windows pour le coffre à secrets.** Le réflexe d'administration est d'y ranger les secrets d'une application ; la question méritait d'être posée, la réponse est non. Il est lui-même protégé par DPAPI et scellé au même compte : aucun gain de protection, la frontière ne bouge pas. Il introduit en revanche un mode de défaillance nouveau et irréversible — une entrée visible dans un panneau du système se supprime par mégarde, et la clé d'une base chiffrée n'existe qu'à un seul endroit. Enfin elle ne suivrait pas les données lors d'une copie du dossier. LedgerAlps garde donc le fichier scellé par DPAPI, posé à côté de la base. La raison est écrite en tête de `internal/core/secretstore`.

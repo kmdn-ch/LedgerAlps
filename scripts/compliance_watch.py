@@ -153,6 +153,10 @@ def check_all(registry: dict) -> tuple[list[dict], list[dict]]:
                 "previous": source.get("last_seen"),
                 "current": current,
                 "url": source.get("human_url") or source.get("url"),
+                # Les articles dont LedgerAlps dépend, pour que l'alerte dise QUOI
+                # relire. « La nLPD a changé » n'oriente personne : l'acte compte
+                # des dizaines d'articles et un seul a bougé.
+                "watched_articles": source.get("watched_articles", []),
             })
         source["_current"] = current
     return changes, failures
