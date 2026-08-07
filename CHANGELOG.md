@@ -9,6 +9,14 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Sécurité
 
+- **Un compte en lecture seule créait une facture depuis le tableau de bord.** Le bouton « Nouvelle facture » y était un simple lien : aucun appel de mutation dans le fichier, donc absent du recensement qui avait servi à fermer les autres écrans. Chercher les commandes une par une revient à refaire la recherche à chaque écran ajouté, avec la même chance de se tromper.
+
+  **La barrière porte désormais sur l'ADRESSE.** `/invoices/new` et `/invoices/:id/edit` n'existent que pour écrire : elles sont enfermées dans une garde de route qui renvoie au tableau de bord, quel que soit le chemin emprunté — bouton oublié, lien collé, favori, bouton « précédent ».
+
+  **Et trois tests parcourent les sources** pour que l'oubli suivant échoue en intégration continue, pas chez vous : les routes d'écriture sont bien gardées, tout écran qui mène vers l'une d'elles consulte les permissions, et le miroir des rôles existe encore. Le premier test a été vérifié en réintroduisant le défaut : il l'attrape et nomme le fichier.
+
+  Balayage complet des neuf écrans avec un compte en lecture seule : **aucun lien vers une route d'écriture, aucun champ de fichier, aucun champ modifiable** hors recherche, filtres et sélection de documents à télécharger.
+
 - **La lecture seule est désormais une lecture seule à l'écran aussi.** Le serveur refusait déjà toute écriture à ce rôle — un filtre global rejette toute méthode autre que GET, HEAD et OPTIONS, quelle que soit la route. Mais les commandes restaient affichées et cliquables : on remplissait un formulaire entier avant d'apprendre qu'il ne servirait à rien, et la barrière passait pour cosmétique alors qu'elle ne l'est pas.
 
   **Ce qui disparaît de la page** — pas grisé, pas caché par du style : absent du document, donc rien à réactiver depuis la console. Dépôt d'une facture fournisseur (PDF ou image), import d'un relevé bancaire camt.053, production d'un ordre de paiement pain.001, dépôt et suppression du logo de société, création de facture, d'offre, de contact et d'écriture au journal, modification et comptabilisation d'une facture reçue, rapprochement bancaire.
@@ -20,6 +28,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
   **Trois tests nomment les routes une par une** et vérifient les trois faces de la règle : un lecteur reçoit 403 sans que le gestionnaire tourne, un comptable les atteint toutes, et un lecteur télécharge bien ses exports et son archive. Le filtre global les couvrait déjà par construction ; les nommer dit lesquelles ne pourront jamais faire l'objet d'une exemption.
 
   Vérifié dans un navigateur avec un vrai compte en lecture seule : aucun champ de fichier dans les pages Achats, Rapports et Paramètres, aucun champ modifiable, et **quatre dépôts forgés à la main — en contournant l'interface avec le jeton de la session — tous refusés en 403**.
+
+### Écarté
+
+- **Le Gestionnaire d'identification de Windows pour le coffre à secrets.** Le réflexe d'administration est d'y ranger les secrets d'une application ; la question méritait d'être posée, la réponse est non. Il est lui-même protégé par DPAPI et scellé au même compte : aucun gain de protection, la frontière ne bouge pas. Il introduit en revanche un mode de défaillance nouveau et irréversible — une entrée visible dans un panneau du système se supprime par mégarde, et la clé d'une base chiffrée n'existe qu'à un seul endroit. Enfin elle ne suivrait pas les données lors d'une copie du dossier. LedgerAlps garde donc le fichier scellé par DPAPI, posé à côté de la base. La raison est écrite en tête de `internal/core/secretstore`.
 
 ### Modifié
 

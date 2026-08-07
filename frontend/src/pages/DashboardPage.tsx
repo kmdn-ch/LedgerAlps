@@ -13,6 +13,7 @@ import {
 import { invoicesApi, statsApi } from '@/api/client'
 import { PageHeader, StatCard, StatusBadge, LoadingSpinner } from '@/components/ui'
 import { RevenuePanel } from '@/components/dashboard/RevenuePanel'
+import { useCanWrite } from '@/hooks/usePermissions'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
 import type { Invoice } from '@/types'
 
@@ -26,6 +27,7 @@ function shortMonth(yyyyMM: string): string {
 }
 
 export function DashboardPage() {
+  const peutEcrire = useCanWrite()
   const { data: invoices = [], isLoading: invLoading } = useQuery<Invoice[]>({
     queryKey: ['invoices', 'all'],
     queryFn:  () => invoicesApi.list().then(r => r.data.items as Invoice[]),
@@ -64,12 +66,12 @@ export function DashboardPage() {
       <PageHeader
         title="Tableau de bord"
         subtitle={`Aujourd'hui — ${formatDate(new Date().toISOString())}`}
-        actions={
+        actions={peutEcrire ? (
           <Link to="/invoices/new" className="btn-primary">
             <Plus size={15} />
             Nouvelle facture
           </Link>
-        }
+        ) : undefined}
       />
 
       {/* Stats */}

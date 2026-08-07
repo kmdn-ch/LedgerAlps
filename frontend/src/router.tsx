@@ -17,6 +17,7 @@ import { EditInvoicePage }    from '@/pages/EditInvoicePage'
 import { ContactDetailPage } from '@/pages/ContactDetailPage'
 import { useEffect, useState } from 'react'
 import { useAuthStore }   from '@/store/auth'
+import { useCanWrite } from '@/hooks/usePermissions'
 import { authApi }        from '@/api/client'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { MFAEnrolmentPage } from '@/pages/MFAEnrolmentPage'
@@ -94,6 +95,27 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+/**
+ * RequireWrite protège les écrans qui n'existent QUE pour écrire.
+ *
+ * Masquer les boutons ne suffit pas, et l'oubli est arrivé : le tableau de bord
+ * portait « Nouvelle facture » sous forme de lien, hors de toute liste de
+ * mutations — un compte en lecture seule y accédait. Chercher les commandes une
+ * par une, c'est refaire la recherche à chaque écran ajouté.
+ *
+ * Ici la barrière porte sur l'ADRESSE. `/invoices/new` et `/invoices/:id/edit`
+ * n'ont aucune raison d'être atteintes par quelqu'un qui ne peut rien
+ * enregistrer, quel que soit le chemin emprunté pour y arriver — bouton oublié,
+ * lien collé, favori, bouton « précédent ». Le serveur refuserait de toute
+ * façon l'enregistrement ; ceci évite de laisser remplir un formulaire entier
+ * avant de le dire.
+ */
+function RequireWrite({ children }: { children: React.ReactNode }) {
+  const peutEcrire = useCanWrite()
+  if (!peutEcrire) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   // Hors de la coquille protégée : un compte au mot de passe temporaire n'a
@@ -109,9 +131,9 @@ export const router = createBrowserRouter([
     children: [
       { index: true,          element: <DashboardPage  /> },
       { path: 'invoices',     element: <InvoicesPage   /> },
-      { path: 'invoices/new',              element: <NewInvoicePage    /> },
+      { path: 'invoices/new',              element: <RequireWrite><NewInvoicePage /></RequireWrite> },
       { path: 'invoices/:invoiceId',      element: <InvoiceDetailPage /> },
-      { path: 'invoices/:invoiceId/edit', element: <EditInvoicePage   /> },
+      { path: 'invoices/:invoiceId/edit', element: <RequireWrite><EditInvoicePage /></RequireWrite> },
       { path: 'quotes',       element: <InvoicesPage mode="quote" /> },
       { path: 'purchases',    element: <PurchasesPage  /> },
       { path: 'contacts',                element: <ContactsPage      /> },

@@ -27,6 +27,31 @@
 // DPAPI to unseal exactly as LedgerAlps does. The threat this addresses is the
 // file being read from somewhere else — another account, a copied profile, a
 // disk pulled out of the machine — not malware already inside the session.
+//
+// # Pourquoi pas le Gestionnaire d'identification de Windows
+//
+// La question est légitime : c'est le coffre que Windows expose, et le réflexe
+// d'administration est d'y ranger les secrets d'une application. Écarté ici,
+// pour trois raisons dont une est décisive.
+//
+// **Aucun gain de protection.** Le Gestionnaire d'identification est LUI-MÊME
+// protégé par DPAPI, scellé au même compte. Passer par lui ajoute une couche
+// d'API sans déplacer la frontière : ce qui peut lire l'un peut lire l'autre.
+//
+// **Un mode de défaillance nouveau, et irréversible.** Une entrée du
+// Gestionnaire est visible et supprimable depuis un panneau du système. La clé
+// d'une base chiffrée n'existe qu'à un seul endroit : la supprimer par mégarde
+// — ou par un outil de « nettoyage » — rend la comptabilité définitivement
+// illisible. Un fichier scellé, posé dans le dossier de données, ne s'efface
+// pas en rangeant ses mots de passe Wi-Fi.
+//
+// **Il ne suit pas les données.** Le fichier vit à côté de la base et part avec
+// elle quand on copie le dossier ; une entrée du Gestionnaire reste sur la
+// machine. La sauvegarde et la restauration deviendraient plus fragiles, pas
+// moins.
+//
+// La taille n'entre pas en compte : les deux secrets tiennent largement dans la
+// limite d'une entrée générique. Ce n'est pas ce qui tranche.
 package secretstore
 
 import (
