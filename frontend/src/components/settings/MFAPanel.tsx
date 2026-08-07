@@ -92,8 +92,9 @@ export function MFAPanel() {
     <div className="mt-6">
       <SectionTitle>Second facteur (code à usage unique)</SectionTitle>
       <p className="text-sm text-alpine-600 mb-3">
-        Un code de six chiffres, calculé par votre téléphone, en plus du mot de passe. Il protège
-        du cas où votre mot de passe fuiterait. Il ne protège pas d'un accès direct au fichier de
+        Un code à usage unique (OTP) de six chiffres, calculé par une application
+        d’authentification, en plus du mot de passe. Il protège du cas où votre mot de passe
+        fuiterait. Il ne protège pas d'un accès direct au fichier de
         base : c'est le rôle du chiffrement de la base et du disque.
       </p>
 
@@ -108,9 +109,9 @@ export function MFAPanel() {
             <AlertTriangle size={15} /> Notez ces codes de secours maintenant
           </p>
           <p className="text-sm text-alpine-700 mt-1">
-            Ils ne seront plus jamais affichés. Sans eux, un téléphone perdu vous ferme
+            Ils ne seront plus jamais affichés. Sans eux, la perte de votre application vous ferme
             définitivement l'accès. Pour vous en servir : à l'écran de connexion, après votre
-            mot de passe, choisissez « Téléphone perdu ? Utiliser un code de secours ».
+            mot de passe, choisissez « Application indisponible ? Utiliser un code de secours ».
           </p>
           <ul className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-sm">
             {codes.map(c => (
@@ -162,7 +163,7 @@ export function MFAPanel() {
               <button onClick={() => start.mutate()} disabled={start.isPending}
                       className="btn-primary btn-sm flex items-center gap-1.5">
                 {start.isPending && <Loader2 size={13} className="animate-spin" />}
-                <Smartphone size={13} /> Inscrire mon téléphone
+                <Smartphone size={13} /> Activer le 2FA
               </button>
             )}
             {st.enabled && !removing && (
@@ -180,8 +181,8 @@ export function MFAPanel() {
               <p className="text-sm">
                 Confirmez avec votre mot de passe. Le compte reviendra au mot de passe seul.
                 {st.required_for_this_role && ` Ce compte ${roleLabel}, vous devrez donc en ` +
-                  'inscrire un nouveau avant de pouvoir travailler — c’est le chemin à suivre ' +
-                  'pour changer de téléphone.'}
+                  'en activer un nouveau avant de pouvoir travailler — c’est le chemin à suivre ' +
+                  'pour changer d’application ou d’appareil.'}
               </p>
               <input type="password" className="input mt-2" autoComplete="current-password"
                      placeholder="Votre mot de passe"
@@ -206,7 +207,7 @@ export function MFAPanel() {
       {setup && (
         <div className="rounded-md border border-neutral-200 px-4 py-4">
           <p className="text-sm text-alpine-700">
-            Scannez ce code avec votre application d'authentification, puis saisissez celui
+            Scannez ce code avec votre application d'authentification 2FA/OTP, puis saisissez celui
             qu'elle affiche. Aegis, KeePassXC et FreeOTP sont libres et fonctionnent hors ligne.
           </p>
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-start">

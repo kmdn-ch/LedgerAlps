@@ -173,7 +173,39 @@ logiciel.
    pas encore. C'est ce qui couvre la route qu'on oubliera d'annoter.
 
 Un troisième filtre existe pour l'état des comptes : mot de passe temporaire à
-remplacer, second facteur à inscrire. Tant que c'est dû, le compte ne peut
+remplacer, second facteur à activer. Tant que c'est dû, le compte ne peut
 **rien** faire d'autre — pas même lire.
 
 Aucune de ces barrières ne lit le jeton : toutes interrogent la base.
+
+### Et une troisième, qui n'en est pas une : l'écran
+
+Les commandes d'écriture sont **absentes de la page** pour un compte en lecture
+seule — retirées du document, pas grisées ni masquées par du style. Les
+formulaires qu'il peut ouvrir sont enfermés dans un `fieldset` désactivé, ce qui
+neutralise nativement chaque champ, liste et bouton qu'ils contiennent, y compris
+ceux qu'on y ajoutera plus tard.
+
+**Ce n'est pas une mesure de sécurité, et il ne faut pas la compter comme
+telle.** Rien de ce qui vit dans un navigateur n'en est une : le code est
+lisible, modifiable, et une requête se forge sans lui. C'est le reflet fidèle de
+ce que le serveur applique, et sa raison d'être est ailleurs — un bouton qu'on
+peut cliquer promet une action, et le laisser en place pour répondre 403 au clic
+fait remplir un formulaire entier avant d'annoncer qu'il ne servira à rien.
+
+Le miroir doit rester fidèle : `frontend/src/hooks/usePermissions.ts` porte la
+même frontière que `authz.RoleViewer`. Deux modèles qui divergent produisent soit
+un bouton qui échoue, soit une fonction cachée à qui y avait droit.
+
+### Ce qu'un compte en lecture seule ne peut pas faire, nommément
+
+Dépôt d'une facture fournisseur (PDF ou image), import d'un relevé bancaire
+camt.053, production d'un ordre de paiement pain.001, dépôt et suppression du
+logo de société, modification des coordonnées de l'entreprise, création de
+facture, d'offre, de contact et d'écriture au journal, modification et
+comptabilisation d'une facture reçue, rapprochement bancaire.
+
+`internal/api/middleware/authz_lecture_seule_test.go` les nomme une par une et
+vérifie les trois faces de la règle : le lecteur est refusé **sans que le
+gestionnaire tourne**, le comptable les atteint toutes, et le lecteur télécharge
+bien ses exports et son archive légale.

@@ -259,7 +259,7 @@ export function LoginPage() {
                 >
                   {secours
                     ? <><Smartphone size={12} /> Utiliser le code de mon application</>
-                    : <><LifeBuoy size={12} /> Téléphone perdu ? Utiliser un code de secours</>}
+                    : <><LifeBuoy size={12} /> Application indisponible ? Utiliser un code de secours</>}
                 </button>
                 <p className="text-xs text-alpine-500 mt-1.5">
                   {secours

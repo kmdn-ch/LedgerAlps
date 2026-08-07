@@ -12,14 +12,16 @@
 
 import { useState } from 'react'
 import {
-  Archive, Upload, FileSpreadsheet, BookOpen, BarChart3, Calendar, Download,
+  Archive, Upload, FileSpreadsheet, BookOpen, BarChart3, Calendar, Download, Lock,
 } from 'lucide-react'
 import { isoApi, exportApi, accountingExportApi } from '@/api/client'
 import { PaymentRunPanel } from '@/components/payments/PaymentRunPanel'
 import { PageHeader, SectionTitle, ErrorBanner } from '@/components/ui'
+import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 import { refusalMessage } from '@/utils/refusal'
 
 export function ReportsPage() {
+  const peutEcrire = useCanWrite()
   const [startDate, setStartDate] = useState(() =>
     new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)
   )
@@ -135,7 +137,12 @@ export function ReportsPage() {
         />
       </div>
 
-      {/* Import camt.053 */}
+      {/* Import camt.053 — déposer un fichier est une écriture.
+          Les EXPORTS ci-dessus restent ouverts à tous : consulter et sortir ses
+          propres livres n'est pas une modification, et c'est précisément ce
+          qu'on attend d'un accès de fiduciaire. */}
+      {peutEcrire && (
+      <>
       <SectionTitle>Import bancaire — ISO 20022 camt.053</SectionTitle>
       <div className="card mb-8">
         <div className="card-body">
@@ -193,10 +200,26 @@ export function ReportsPage() {
         </div>
       </div>
 
-      {/* pain.001 — sélection de factures fournisseurs */}
+      {/* pain.001 — produire un ordre de virement engage la trésorerie. */}
       <div className="card card-pad mb-8">
         <PaymentRunPanel />
       </div>
+      </>
+      )}
+
+      {!peutEcrire && (
+        <div className="card mb-8">
+          <div className="card-body flex items-start gap-3">
+            <Lock size={18} className="text-alpine-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-alpine-600">
+              {RAISON_LECTURE_SEULE} L&rsquo;import d&rsquo;un relevé bancaire et
+              la production d&rsquo;un ordre de paiement demandent un compte
+              autorisé à écrire. <strong>Les exports et l&rsquo;archive légale
+              ci-dessous vous restent ouverts.</strong>
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Archivage légal */}
       <SectionTitle>Archivage légal — CO art. 958f (10 ans)</SectionTitle>

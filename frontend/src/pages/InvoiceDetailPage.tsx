@@ -12,6 +12,7 @@ import {
   PageHeader, StatusBadge, LoadingSpinner, ErrorBanner,
   SectionTitle, PDFPreview, ConfirmDialog,
 } from '@/components/ui'
+import { useCanWrite } from '@/hooks/usePermissions'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
 import type { DocumentStatus, Invoice, QuoteOutcome } from '@/types'
 
@@ -188,6 +189,7 @@ const OUTCOME_COPY: Record<'refused' | 'expired', (n: string) => ActionCopy> = {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function InvoiceDetailPage() {
+  const peutEcrire = useCanWrite()
   const { invoiceId } = useParams<{ invoiceId: string }>()
   const navigate      = useNavigate()
   const qc            = useQueryClient()
@@ -321,8 +323,12 @@ export function InvoiceDetailPage() {
           title={invoice.invoice_number}
           subtitle={`${invoice.document_type === 'quote' ? 'Offre de prix' : 'Facture'} · émise le ${formatDate(invoice.issue_date)}`}
           actions={
+            // Modifier, convertir, envoyer, annuler, créer une note de crédit :
+            // toutes ces commandes changent une pièce comptable. L'aperçu et le
+            // téléchargement du PDF, plus bas, restent ouverts à tous — c'est
+            // exactement ce qu'une fiduciaire vient chercher.
             <div className="flex items-center gap-2">
-              {invoice.amount_paid === 0 && (
+              {peutEcrire && invoice.amount_paid === 0 && (
                 <Link
                   to={`/invoices/${invoiceId}/edit`}
                   className="btn-secondary btn-sm flex items-center gap-1.5"
@@ -331,7 +337,7 @@ export function InvoiceDetailPage() {
                   Modifier
                 </Link>
               )}
-              {quoteOpen && (
+              {peutEcrire && quoteOpen && (
                 <>
                   <button
                     onClick={() => ask(CONVERT_COPY(invoice.invoice_number), () => convert.mutate())}
@@ -360,7 +366,7 @@ export function InvoiceDetailPage() {
                   </button>
                 </>
               )}
-              {creditable && (
+              {peutEcrire && creditable && (
                 <button
                   onClick={() => ask(CREDIT_NOTE_COPY(invoice.invoice_number), () => creditNote.mutate())}
                   disabled={creditNote.isPending || fullyCredited}
@@ -373,7 +379,7 @@ export function InvoiceDetailPage() {
                   {creditNote.isPending ? 'Création…' : 'Note de crédit'}
                 </button>
               )}
-              {actions.map(t => (
+              {peutEcrire && actions.map(t => (
                 <button
                   key={t.status}
                   onClick={() => handleTransition(t.status)}

@@ -19,6 +19,7 @@ import { bankEntriesApi, isoApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner, EmptyState } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import { formatDate } from '@/utils'
+import { useCanWrite } from '@/hooks/usePermissions'
 import type { BankEntry } from '@/types'
 
 const CONFIDENCE: Record<string, string> = {
@@ -28,6 +29,7 @@ const CONFIDENCE: Record<string, string> = {
 }
 
 export function ReconciliationPanel() {
+  const peutEcrire = useCanWrite()
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [showAll, setShowAll] = useState(false)
@@ -85,25 +87,33 @@ export function ReconciliationPanel() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".xml,text/xml,application/xml"
-          className="hidden"
-          onChange={e => {
-            const f = e.target.files?.[0]
-            if (f) importStatement.mutate(f)
-            e.target.value = ''
-          }}
-        />
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={importStatement.isPending}
-          className="btn-primary btn-sm flex items-center gap-1.5"
-        >
-          {importStatement.isPending ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-          Importer un relevé
-        </button>
+        {/* Déposer un relevé écrit des écritures bancaires en base. Ni le champ
+            de fichier ni le bouton n'existent dans la page pour un compte en
+            lecture seule — le filtre de consultation, lui, reste : regarder ce
+            qui a déjà été rapproché n'est pas une modification. */}
+        {peutEcrire && (
+          <>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xml,text/xml,application/xml"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0]
+                if (f) importStatement.mutate(f)
+                e.target.value = ''
+              }}
+            />
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={importStatement.isPending}
+              className="btn-primary btn-sm flex items-center gap-1.5"
+            >
+              {importStatement.isPending ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+              Importer un relevé
+            </button>
+          </>
+        )}
         <label className="flex items-center gap-1.5 text-sm text-alpine-700">
           <input type="checkbox" checked={showAll} onChange={e => setShowAll(e.target.checked)} />
           Voir aussi les écritures déjà traitées
@@ -175,7 +185,9 @@ export function ReconciliationPanel() {
                     )}
                   </td>
                   <td className="whitespace-nowrap text-right">
-                    {e.invoice_id ? (
+                    {/* Rapprocher, défaire et écarter modifient les livres :
+                        un lecteur voit la colonne, sans commande dedans. */}
+                    {!peutEcrire ? null : e.invoice_id ? (
                       <button
                         onClick={() => unmatch.mutate(e.id)}
                         className="btn-ghost btn-sm flex items-center gap-1"

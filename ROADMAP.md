@@ -446,8 +446,8 @@ pour `/auth/mfa/verify`, et le filtre d'authentification le refuse partout
 ailleurs — donc aussi sur les routes qui n'existent pas encore. Un code ne sert
 qu'une fois. La vérification est derrière la limitation de tentatives existante.
 
-**Dix codes de secours, montrés une fois, hachés en base.** Sans eux, un
-téléphone perdu enfermerait définitivement le dernier administrateur : le second
+**Dix codes de secours, montrés une fois, hachés en base.** Sans eux, la perte
+de l'application d'authentification enfermerait définitivement le dernier administrateur : le second
 facteur créerait la panne qu'il est censé prévenir.
 
 **Réinitialisation d'accès par l'administrateur.** « Réinitialiser » remplace le
@@ -462,8 +462,8 @@ compte, et le second facteur ne protégerait plus de rien face à lui. Le retrai
 est une action séparée, confirmée et tracée à part.
 
 **À la première connexion après la mise à jour**, l'administrateur d'une
-installation existante sera conduit à inscrire son téléphone avant de pouvoir
-travailler. C'est voulu : une protection qu'on peut remettre à plus tard n'est
+installation existante devra activer le 2FA avec une application
+d'authentification OTP avant de pouvoir travailler. C'est voulu : une protection qu'on peut remettre à plus tard n'est
 jamais activée.
 
 **Reste** : rien d'obligatoire. Une clé matérielle (WebAuthn) attendrait HTTPS

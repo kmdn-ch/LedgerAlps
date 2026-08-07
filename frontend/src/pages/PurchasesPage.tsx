@@ -30,6 +30,7 @@ import {
 import { formatCHF, formatDate, estQRIBAN } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
 import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
+import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 import { PaymentRunPanel } from '@/components/payments/PaymentRunPanel'
 import type { Account, Contact } from '@/types'
 
@@ -72,6 +73,7 @@ const today = () => new Date().toISOString().slice(0, 10)
 
 export function PurchasesPage() {
   const qc = useQueryClient()
+  const peutEcrire = useCanWrite()
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toBook, setToBook] = useState<SupplierInvoice | null>(null)
@@ -361,6 +363,12 @@ export function PurchasesPage() {
         title="Achats"
         subtitle="Factures fournisseurs et ordres de paiement"
         actions={
+          // Déposer un fichier EST une écriture : le document est transmis au
+          // serveur, lu, et il en sort une facture. Un compte en lecture seule
+          // n'a donc ni le champ, ni le bouton — pas un bouton grisé, pas un
+          // champ caché derrière un libellé : l'élément n'existe pas dans la
+          // page, et il n'y a rien à réactiver depuis la console.
+          peutEcrire ? (
           <div className="flex items-center gap-2">
             {/* Déposer d'abord, saisir ensuite : c'est l'ordre réel du geste.
                 Le QR d'une facture suisse porte déjà le créancier, l'IBAN, le
@@ -386,6 +394,9 @@ export function PurchasesPage() {
               <Plus size={15} /> Saisir une facture
             </button>
           </div>
+          ) : (
+            <span className="text-xs text-alpine-500">{RAISON_LECTURE_SEULE}</span>
+          )
         }
       />
 
@@ -712,7 +723,7 @@ export function PurchasesPage() {
                 <td className="text-right">
                   {/* Un brouillon se corrige ; une facture comptabilisée porte
                       une écriture scellée (CO art. 957a) et ne se retouche pas. */}
-                  {i.status === 'draft' && (
+                  {i.status === 'draft' && peutEcrire && (
                     <div className="flex items-center justify-end gap-1">
                       <button onClick={() => openEdit(i)}
                               className="btn-ghost btn-sm flex items-center gap-1">

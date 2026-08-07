@@ -162,7 +162,7 @@ export function UsersPanel() {
                       <button
                         onClick={() => { setError(null); setConfirmMfa(u) }}
                         disabled={removeMfa.isPending}
-                        title="Retirer le second facteur (téléphone perdu)"
+                        title="Retirer le second facteur (application 2FA/OTP perdue)"
                         className="btn-ghost btn-sm flex items-center gap-1"
                       >
                         <Smartphone size={13} /> Second facteur

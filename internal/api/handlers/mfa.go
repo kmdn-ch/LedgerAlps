@@ -192,7 +192,7 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 	window, ok := mfa.Verify(secret, body.Code, time.Now(), 0)
 	if !ok {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
-			"error": "ce code ne correspond pas. Vérifiez l'heure de votre téléphone : " +
+			"error": "ce code ne correspond pas. Vérifiez l'heure de l'appareil qui porte votre application : " +
 				"un décalage de plus d'une minute suffit à décaler tous les codes."})
 		return
 	}
@@ -247,9 +247,9 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"enabled":        true,
 		"recovery_codes": codes,
-		"warning": "Notez ces codes maintenant, ailleurs que sur ce PC et hors de votre " +
-			"téléphone. Ils ne seront plus jamais affichés. Sans eux, un téléphone perdu " +
-			"vous ferme définitivement l'accès.",
+		"warning": "Notez ces codes maintenant, ailleurs que sur ce PC et hors de l'appareil " +
+			"qui porte votre application. Ils ne seront plus jamais affichés. Sans eux, la " +
+			"perte de cette application vous ferme définitivement l'accès.",
 	})
 }
 

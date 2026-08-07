@@ -12,6 +12,7 @@ import {
 import { settingsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
 import { estQRIBAN } from '@/utils'
+import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 
 const schema = z.object({
   company_name:          z.string().min(1, 'Requis'),
@@ -64,6 +65,7 @@ import { ReconciliationPanel } from '@/components/settings/ReconciliationPanel'
 import { useAuthStore } from '@/store/auth'
 
 export function SettingsPage() {
+  const peutEcrire = useCanWrite()
   const [tab,   setTab]   = useState('identity')
   const [saved, setSaved] = useState(false)
   const qc = useQueryClient()
@@ -185,7 +187,10 @@ export function SettingsPage() {
         subtitle="Configuration de votre société"
         actions={
           // L'onglet Sauvegardes n'a rien à enregistrer : ses actions lui sont propres.
-          effectiveTab === 'backups' || effectiveTab === 'maintenance'
+          // Un compte en lecture seule n'a rien à enregistrer : le bouton
+          // partirait vers un 403, après avoir laissé croire que la saisie
+          // comptait.
+          !peutEcrire || effectiveTab === 'backups' || effectiveTab === 'maintenance'
             || effectiveTab === 'account' ? null : (
             <button
               form="settings-form"
@@ -250,6 +255,12 @@ export function SettingsPage() {
         ) : (
         /* Formulaire */
         <form id="settings-form" onSubmit={handleSubmit(d => save.mutate(d))} className="flex-1 space-y-5">
+        {/* Un `fieldset` désactivé neutralise NATIVEMENT chaque champ, liste et
+            bouton qu'il contient — y compris ceux qu'on y ajoutera plus tard.
+            Désactiver champ par champ marche le jour où on l'écrit, puis se
+            périme au premier champ ajouté sans y penser : c'est exactement le
+            motif qui a déjà laissé passer des fonctions non gardées. */}
+        <fieldset disabled={!peutEcrire} className="contents">
 
           {/* ─── Identité ─────────────────────────────────────────────── */}
           {effectiveTab === 'identity' && (
@@ -275,11 +286,18 @@ export function SettingsPage() {
                       )}
                     </div>
 
-                    {/* Actions */}
+                    {/* Actions — déposer ou retirer un logo modifie ce que
+                        portent toutes les factures PDF émises ensuite. Un compte
+                        en lecture seule voit donc le logo et rien pour y
+                        toucher : ni bouton, ni champ de fichier dans la page. */}
                     <div className="space-y-2">
                       <p className="text-xs text-alpine-500">
                         Format PNG ou JPEG, max 2 Mo. Affiché dans la barre de navigation et sur les factures PDF.
                       </p>
+                      {!peutEcrire && (
+                        <p className="text-xs text-alpine-500">{RAISON_LECTURE_SEULE}</p>
+                      )}
+                      {peutEcrire && (
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -308,6 +326,7 @@ export function SettingsPage() {
                           </button>
                         )}
                       </div>
+                      )}
                       {uploadLogo.isError && (
                         <p className="text-xs text-danger-700">
                           {(uploadLogo.error as any)?.response?.data?.error ?? 'Erreur lors du téléchargement.'}
@@ -315,14 +334,17 @@ export function SettingsPage() {
                       )}
                     </div>
 
-                    {/* Hidden file input */}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg"
-                      className="hidden"
-                      onChange={handleLogoFile}
-                    />
+                    {/* Le champ de fichier n'est pas seulement caché : il est
+                        absent du document quand le compte ne peut pas écrire. */}
+                    {peutEcrire && (
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        className="hidden"
+                        onChange={handleLogoFile}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -535,6 +557,7 @@ export function SettingsPage() {
               </div>
             </div>
           )}
+        </fieldset>
         </form>
         )}
       </div>

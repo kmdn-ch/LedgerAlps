@@ -5,11 +5,13 @@ import { useQuery } from '@tanstack/react-query'
 import { Plus, Building2, User, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { contactsApi } from '@/api/client'
+import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 import { PageHeader, LoadingSpinner, EmptyState } from '@/components/ui'
 import type { Contact } from '@/types'
 import { NewContactModal } from '@/components/contact/NewContactModal'
 
 export function ContactsPage() {
+  const peutEcrire = useCanWrite()
   const [search,     setSearch]     = useState('')
   const [showModal,  setShowModal]  = useState(false)
   const [typeFilter, setTypeFilter] = useState<'customer' | 'supplier' | ''>('')
@@ -30,9 +32,13 @@ export function ContactsPage() {
         title="Contacts"
         subtitle={`${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`}
         actions={
+          peutEcrire ? (
           <button className="btn-primary" onClick={() => setShowModal(true)}>
             <Plus size={15} /> Nouveau contact
           </button>
+          ) : (
+            <span className="text-xs text-alpine-500">{RAISON_LECTURE_SEULE}</span>
+          )
         }
       />
 
@@ -68,11 +74,11 @@ export function ContactsPage() {
         <EmptyState
           title="Aucun contact"
           description="Ajoutez vos clients et fournisseurs."
-          action={
+          action={peutEcrire ? (
             <button className="btn-primary btn-sm" onClick={() => setShowModal(true)}>
               <Plus size={13} /> Ajouter
             </button>
-          }
+          ) : undefined}
         />
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -109,7 +115,11 @@ export function ContactsPage() {
         ))}
       </div>
 
-      {showModal && <NewContactModal onClose={() => setShowModal(false)} />}
+      {/* Le `peutEcrire` est répété ici : plus aucun bouton n'ouvre la modale,
+          mais un état laissé accessible finit par être atteint autrement — un
+          lien, un rechargement, une refonte de l'écran. La condition vit donc au
+          plus près de ce qu'elle protège. */}
+      {showModal && peutEcrire && <NewContactModal onClose={() => setShowModal(false)} />}
     </div>
   )
 }

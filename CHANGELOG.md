@@ -7,6 +7,25 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Sécurité
+
+- **La lecture seule est désormais une lecture seule à l'écran aussi.** Le serveur refusait déjà toute écriture à ce rôle — un filtre global rejette toute méthode autre que GET, HEAD et OPTIONS, quelle que soit la route. Mais les commandes restaient affichées et cliquables : on remplissait un formulaire entier avant d'apprendre qu'il ne servirait à rien, et la barrière passait pour cosmétique alors qu'elle ne l'est pas.
+
+  **Ce qui disparaît de la page** — pas grisé, pas caché par du style : absent du document, donc rien à réactiver depuis la console. Dépôt d'une facture fournisseur (PDF ou image), import d'un relevé bancaire camt.053, production d'un ordre de paiement pain.001, dépôt et suppression du logo de société, création de facture, d'offre, de contact et d'écriture au journal, modification et comptabilisation d'une facture reçue, rapprochement bancaire.
+
+  **Ce qui reste ouvert** : tout ce qui se consulte et tout ce qui s'exporte — journal, grand livre, balance de vérification, PDF des factures, et **l'archive légale des dix ans** (CO art. 958f). C'est exactement ce qu'une fiduciaire vient chercher : lui fermer ces portes viderait le rôle de son sens.
+
+  **Les formulaires sont neutralisés par `fieldset`**, ce qui désactive nativement chaque champ, liste et bouton qu'ils contiennent — y compris ceux qu'on y ajoutera plus tard. Désactiver champ par champ fonctionne le jour où on l'écrit, puis se périme au premier champ ajouté sans y penser.
+
+  **Trois tests nomment les routes une par une** et vérifient les trois faces de la règle : un lecteur reçoit 403 sans que le gestionnaire tourne, un comptable les atteint toutes, et un lecteur télécharge bien ses exports et son archive. Le filtre global les couvrait déjà par construction ; les nommer dit lesquelles ne pourront jamais faire l'objet d'une exemption.
+
+  Vérifié dans un navigateur avec un vrai compte en lecture seule : aucun champ de fichier dans les pages Achats, Rapports et Paramètres, aucun champ modifiable, et **quatre dépôts forgés à la main — en contournant l'interface avec le jeton de la session — tous refusés en 403**.
+
+### Modifié
+
+- **Le vocabulaire du second facteur parle d'OTP, plus de téléphone.** « Inscrire mon téléphone » devient « Activer le 2FA » ; l'écran d'activation demande une « application d'authentification 2FA/OTP — sur téléphone ou sur ordinateur » ; le secours à la connexion s'appelle « Application indisponible ? » et non « Téléphone perdu ? ». Le code se calcule aussi bien dans KeePassXC sur un poste fixe, et nommer l'appareil plutôt que la fonction laissait croire qu'un téléphone était nécessaire.
+
+
 ### Ajouté
 
 - **La lecture d'une facture déposée remplit maintenant tout ce que le document porte** : montant, fournisseur, IBAN et référence depuis le QR ; **numéro de facture, date, échéance, taux de TVA et numéro IDE** depuis la couche texte du PDF. Vérifié sur une facture réelle — un rappel d'ePost Service AG.
@@ -174,7 +193,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 - **Un code de secours était impossible à saisir.** L'écran de vérification invitait à en entrer un dans le champ du code à six chiffres — champ plafonné à **sept caractères**, avec clavier numérique et espacement de chiffres. Un code de secours en fait onze : la moitié se perdait à la frappe. La consigne décrivait un mécanisme qui n'existait pas, au moment précis où l'on a le moins envie de chercher.
 
-  Le passage au code de secours est désormais un **bouton** — « Téléphone perdu ? Utiliser un code de secours » — et le champ change réellement de nature : longueur, clavier, casse, espacement, exemple affiché. Le message d'échec correspond à ce qui a été tenté, au lieu de parler de l'horloge d'un téléphone à quelqu'un qui recopie un papier.
+  Le passage au code de secours est désormais un **bouton** — « Application indisponible ? Utiliser un code de secours » — et le champ change réellement de nature : longueur, clavier, casse, espacement, exemple affiché. Le message d'échec correspond à ce qui a été tenté, au lieu de parler de l'horloge d'un appareil à quelqu'un qui recopie un papier.
 
   La saisie est acceptée telle qu'on la tape : majuscules ou minuscules, avec ou sans tiret, avec ou sans espaces. Ces caractères ne portent aucune information, et les exiger transformerait la dernière porte de secours en énigme. L'écran qui remet les codes dit maintenant aussi **où** ils se saisissent.
 
@@ -222,9 +241,9 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
   **Le jeton d'attente ne vaut rien ailleurs.** Après un mot de passe accepté, la connexion ne délivre ni jeton d'accès ni cookie : seulement un jeton d'attente de cinq minutes, refusé par le filtre d'authentification sur **toute** autre route — donc aussi sur celles qui n'existent pas encore. La vérification est derrière la limitation de tentatives existante : cinq échecs et la porte se ferme quinze minutes.
 
-  **Dix codes de secours, montrés une seule fois, hachés en base.** Sans eux, un téléphone perdu enfermerait définitivement le dernier administrateur — plus personne ne pourrait créer de compte, restaurer une sauvegarde ni rendre le droit de le faire : le second facteur créerait la panne qu'il est censé prévenir. Ils sont hachés comme des mots de passe, ne servent qu'une fois, et leur usage est tracé.
+  **Dix codes de secours, montrés une seule fois, hachés en base.** Sans eux, la perte de l'application d'authentification enfermerait définitivement le dernier administrateur — plus personne ne pourrait créer de compte, restaurer une sauvegarde ni rendre le droit de le faire : le second facteur créerait la panne qu'il est censé prévenir. Ils sont hachés comme des mots de passe, ne servent qu'une fois, et leur usage est tracé.
 
-  *À la première connexion après cette mise à jour, l'administrateur sera conduit à inscrire son téléphone avant de pouvoir travailler.* C'est voulu : une protection qu'on peut remettre à plus tard n'est jamais activée. Les autres rôles peuvent l'activer s'ils le souhaitent, sans y être contraints — un comptable écrit dans un journal chaîné et tracé, et n'a pas les clés de l'installation.
+  *À la première connexion après cette mise à jour, l'administrateur devra activer le 2FA avec une application d'authentification OTP avant de pouvoir travailler.* C'est voulu : une protection qu'on peut remettre à plus tard n'est jamais activée. Les autres rôles peuvent l'activer s'ils le souhaitent, sans y être contraints — un comptable écrit dans un journal chaîné et tracé, et n'a pas les clés de l'installation.
 
 - **L'administrateur peut réinitialiser l'accès d'un compte.** Un mot de passe oublié n'avait aucune issue : le produit refuse de supprimer un compte, parce que les écritures portent l'identifiant de leur auteur et que l'effacer casserait la traçabilité du CO art. 957a al. 2 ch. 5.
 

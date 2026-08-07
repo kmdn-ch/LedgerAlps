@@ -11,6 +11,7 @@ import { contactsApi } from '@/api/client'
 import { ContactDocuments } from '@/components/contacts/ContactDocuments'
 import { PageHeader, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import type { Contact } from '@/types'
+import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ type FormData = z.infer<typeof schema>
 
 export function ContactDetailPage() {
   const { contactId } = useParams<{ contactId: string }>()
+  const peutEcrire    = useCanWrite()
   const navigate      = useNavigate()
   const qc            = useQueryClient()
 
@@ -130,7 +132,20 @@ export function ContactDetailPage() {
         </div>
       )}
 
+      {!peutEcrire && (
+        <div className="mb-4 px-4 py-2.5 rounded-lg bg-alpine-50 border border-alpine-200
+                        text-sm text-alpine-600">
+          {RAISON_LECTURE_SEULE}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit(d => save.mutate(d))} className="space-y-5">
+      {/* Un `fieldset` désactivé neutralise NATIVEMENT chaque champ et bouton
+          qu'il contient, y compris ceux qu'on y ajoutera plus tard. Désactiver
+          champ par champ marche le jour où on l'écrit, puis se périme au
+          premier champ ajouté sans y penser — c'est le motif qui a déjà laissé
+          passer des fonctions non gardées dans ce produit. */}
+      <fieldset disabled={!peutEcrire} className="contents">
         {/* Identité */}
         <div className="card">
           <div className="card-header">
@@ -271,19 +286,24 @@ export function ContactDetailPage() {
           </div>
         </div>
 
-        {/* Actions */}
+        </fieldset>
+
+        {/* « Retour » vit hors du fieldset : naviguer n'écrit rien, et un
+            lecteur doit pouvoir repartir. */}
         <div className="flex justify-end gap-3 pb-6">
           <button type="button" onClick={() => navigate('/contacts')} className="btn-secondary">
             Retour
           </button>
-          <button
-            type="submit"
-            className="btn-primary"
-            disabled={save.isPending || !isDirty}
-          >
-            <Save size={15} />
-            {save.isPending ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
+          {peutEcrire && (
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={save.isPending || !isDirty}
+            >
+              <Save size={15} />
+              {save.isPending ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          )}
         </div>
       </form>
 

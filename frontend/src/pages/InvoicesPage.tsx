@@ -8,6 +8,7 @@ import { invoicesApi, contactsApi, downloadBlob } from '@/api/client'
 import {
   PageHeader, StatusBadge, LoadingSpinner, EmptyState, ConfirmDialog,
 } from '@/components/ui'
+import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
 import type { Invoice, DisplayStatus, Contact } from '@/types'
 import { useNavigate } from 'react-router-dom'
@@ -23,6 +24,7 @@ const STATUS_FILTERS: { value: DisplayStatus | ''; label: string }[] = [
 interface Props { mode?: 'invoice' | 'quote' }
 
 export function InvoicesPage({ mode = 'invoice' }: Props) {
+  const peutEcrire = useCanWrite()
   // Les deux vues du même registre. Le menu n'en propose plus qu'une entrée :
   // c'est ici qu'on bascule, là où l'on regarde déjà les documents.
   const navigate = useNavigate()
@@ -104,9 +106,13 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
         title="Facturation"
         subtitle={`${invoices.length} document${invoices.length !== 1 ? 's' : ''}`}
         actions={
-          <Link to="/invoices/new" className="btn-primary">
-            <Plus size={15} /> {isQuote ? 'Nouvelle offre' : 'Nouvelle facture'}
-          </Link>
+          peutEcrire ? (
+            <Link to="/invoices/new" className="btn-primary">
+              <Plus size={15} /> {isQuote ? 'Nouvelle offre' : 'Nouvelle facture'}
+            </Link>
+          ) : (
+            <span className="text-xs text-alpine-500">{RAISON_LECTURE_SEULE}</span>
+          )
         }
       />
 
@@ -199,11 +205,11 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
                     description={isQuote
                       ? 'Créez votre première offre de prix.'
                       : 'Créez votre première facture pour démarrer.'}
-                    action={
+                    action={peutEcrire ? (
                       <Link to="/invoices/new" className="btn-primary btn-sm">
                         <Plus size={13} /> Créer
                       </Link>
-                    }
+                    ) : undefined}
                   />
                 </td>
               </tr>

@@ -34,6 +34,7 @@ import {
 } from '@/components/ui'
 import { formatDate, formatCHF } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
+import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 import type {
   Account, JournalEntry, JournalEntryDetail, JournalLineCreate,
@@ -90,6 +91,7 @@ function toLines(rows: Row[]): JournalLineCreate[] {
 }
 
 export function JournalPage() {
+  const peutEcrire = useCanWrite()
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [page, setPage] = useState(1)
@@ -197,9 +199,13 @@ export function JournalPage() {
         title="Journal"
         subtitle="Écritures comptables — CO art. 957a"
         actions={
+          peutEcrire ? (
           <button onClick={() => { setShowForm(v => !v); setError(null) }} className="btn-primary">
             <Plus size={15} /> Nouvelle écriture
           </button>
+          ) : (
+            <span className="text-xs text-alpine-500">{RAISON_LECTURE_SEULE}</span>
+          )
         }
       />
 

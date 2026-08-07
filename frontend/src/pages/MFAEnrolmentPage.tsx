@@ -92,7 +92,7 @@ export function MFAEnrolmentPage() {
                   <AlertTriangle size={16} className="shrink-0 mt-0.5" />
                   <span>
                     <strong>Notez ces codes maintenant.</strong> Ils ne seront plus jamais
-                    affichés. Sans eux, un téléphone perdu vous ferme définitivement l&rsquo;accès —
+                    affichés. Sans eux, la perte de votre application vous ferme définitivement l&rsquo;accès —
                     et personne d&rsquo;autre ne peut vous le rendre.
                   </span>
                 </p>
@@ -115,7 +115,7 @@ export function MFAEnrolmentPage() {
               </div>
 
               <p className="text-xs text-alpine-500 mt-3">
-                Rangez-les ailleurs que sur ce PC et hors de votre téléphone : un papier dans un
+                Rangez-les ailleurs que sur ce PC et hors de l&rsquo;appareil qui porte l&rsquo;application : un papier dans un
                 tiroir fermé fait très bien l&rsquo;affaire. Chacun ne sert qu&rsquo;une fois.
               </p>
               {/* Dire OÙ ils se saisissent, pas seulement de les noter : un code
@@ -123,7 +123,7 @@ export function MFAEnrolmentPage() {
                   d'urgence, et chercher le bouton n'est pas le moment. */}
               <p className="text-xs text-alpine-400 mt-2">
                 Pour vous en servir : à l&rsquo;écran de connexion, après votre mot de passe,
-                choisissez <strong className="text-alpine-200">« Téléphone perdu ? Utiliser un
+                choisissez <strong className="text-alpine-200">« Application indisponible ? Utiliser un
                 code de secours »</strong>.
               </p>
 
@@ -139,7 +139,7 @@ export function MFAEnrolmentPage() {
             <>
               <h1 className="font-display font-700 text-lg text-white flex items-center gap-2">
                 <Smartphone size={18} className="text-accent-500" />
-                Enregistrez votre application
+                Activez le second facteur (2FA/OTP)
               </h1>
               <p className="text-sm text-alpine-400 mt-2">
                 Scannez ce code avec votre application d&rsquo;authentification, puis saisissez
@@ -202,7 +202,7 @@ export function MFAEnrolmentPage() {
 
               <div className="mt-4 rounded-lg border border-alpine-700 bg-alpine-800/50 p-4">
                 <p className="text-sm text-alpine-300">
-                  Il vous faut une application d&rsquo;authentification sur votre téléphone.
+                  Il vous faut une application d&rsquo;authentification 2FA/OTP — sur téléphone ou sur ordinateur.
                   Toutes conviennent ; les suivantes sont libres et fonctionnent hors ligne :
                 </p>
                 <ul className="mt-2 text-sm text-alpine-400 list-disc list-inside space-y-0.5">

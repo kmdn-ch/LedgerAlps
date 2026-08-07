@@ -107,7 +107,7 @@ changement s'applique immédiatement, sans attendre l'expiration d'une session.
 | PUT | `/users/:id/role` | admin | Changer le rôle (`admin`, `accountant`, `viewer`) |
 | PUT | `/users/:id/active` | admin | Activer ou désactiver. Un compte ne se supprime pas (CO art. 957a al. 2 ch. 5) |
 | POST | `/users/:id/reset-password` | admin | Remplacer le mot de passe par un temporaire, rendu **une seule fois** |
-| DELETE | `/users/:id/mfa` | admin | Retirer le second facteur d'un compte (téléphone perdu) |
+| DELETE | `/users/:id/mfa` | admin | Retirer le second facteur d'un compte (application 2FA/OTP perdue) |
 
 Les deux dernières routes sont **délibérément séparées**. Réunies en un geste,
 elles permettraient à un administrateur de se substituer entièrement à n'importe

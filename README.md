@@ -157,7 +157,7 @@ pour ouvrir vos livres à votre fiduciaire sans lui donner les clés. Le compte
 administrateur est protégé par un **second facteur** : un code à six chiffres
 calculé par votre téléphone, hors ligne, avec l'application de votre choix
 (Aegis, KeePassXC, FreeOTP conviennent et sont libres). Dix codes de secours sont
-remis à l'inscription — notez-les : sans eux, un téléphone perdu ferme la porte
+remis à l'activation — notez-les : sans eux, la perte de l'application ferme la porte
 définitivement.
 
 Un mot de passe oublié se règle depuis Paramètres → Sécurité : l'administrateur
