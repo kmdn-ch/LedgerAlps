@@ -10,24 +10,26 @@ import { cn } from '@/utils'
 import { useAuthStore } from '@/store/auth'
 import { settingsApi, healthApi, authApi } from '@/api/client'
 import { AccountBanner } from './AccountBanner'
+import { useT } from '@/i18n/useT'
 
 const NAV = [
-  { to: '/',          icon: LayoutDashboard, label: 'Tableau de bord' },
+  { to: '/',          icon: LayoutDashboard, cle: 'nav.tableauDeBord' },
   // Un seul libellé : les deux vivent dans le même écran, qui bascule de l'un
   // à l'autre. Deux entrées de menu pour deux vues du même objet donnaient
   // l'impression de deux registres séparés, qu'ils ne sont pas — une offre
   // acceptée devient une facture, et les deux se citent.
-  { to: '/invoices',  icon: FileText,        label: 'Facturation'     },
+  { to: '/invoices',  icon: FileText,        cle: 'nav.facturation'   },
   // Les achats vivent à côté de la facturation : ce sont les deux sens du
   // même flux, et payer un fournisseur commence par saisir sa facture.
-  { to: '/purchases', icon: ShoppingCart,    label: 'Achats'          },
-  { to: '/contacts',  icon: Users,           label: 'Contacts'        },
-  { to: '/journal',   icon: ArrowLeftRight,  label: 'Journal'         },
-  { to: '/accounts',  icon: BookOpen,        label: 'Plan comptable'  },
-  { to: '/reports',   icon: BarChart3,       label: 'Rapports'        },
-]
+  { to: '/purchases', icon: ShoppingCart,    cle: 'nav.achats'        },
+  { to: '/contacts',  icon: Users,           cle: 'nav.contacts'      },
+  { to: '/journal',   icon: ArrowLeftRight,  cle: 'nav.journal'       },
+  { to: '/accounts',  icon: BookOpen,        cle: 'nav.planComptable' },
+  { to: '/reports',   icon: BarChart3,       cle: 'nav.rapports'      },
+] as const
 
 export function Sidebar() {
+  const t = useT()
   const { user, logout } = useAuthStore()
 
   // Se déconnecter doit révoquer la session côté serveur, pas seulement effacer
@@ -86,7 +88,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ to, icon: Icon, label }) => (
+        {NAV.map(({ to, icon: Icon, cle }) => (
           <NavLink
             key={to}
             to={to}
@@ -99,7 +101,7 @@ export function Sidebar() {
             )}
           >
             <Icon size={16} className="flex-shrink-0" />
-            <span>{label}</span>
+            <span>{t(cle)}</span>
           </NavLink>
         ))}
       </nav>
@@ -118,7 +120,7 @@ export function Sidebar() {
                      text-alpine-300 hover:bg-alpine-800 hover:text-white transition-all"
         >
           <Settings size={16} />
-          <span>Paramètres</span>
+          <span>{t('nav.parametres')}</span>
         </NavLink>
 
         <button
@@ -127,7 +129,7 @@ export function Sidebar() {
                      text-alpine-400 hover:bg-danger-500/10 hover:text-danger-500 transition-all"
         >
           <LogOut size={16} />
-          <span>Déconnexion</span>
+          <span>{t('nav.deconnexion')}</span>
         </button>
 
         {user && (

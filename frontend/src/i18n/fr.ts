@@ -42,10 +42,8 @@ export const fr = {
   'role.comptable':  'Comptable',
   'role.lecture':    'Lecture seule',
   'role.lectureSeuleTitre':   'Compte en lecture seule',
-  'role.lectureSeuleDetail':
-    'Vous n’êtes pas autorisé à faire des modifications. Consultation et exports uniquement.',
-  'role.lectureSeuleRaison':
-    'Votre compte est en lecture seule : vous pouvez tout consulter et tout exporter, mais rien modifier.',
+  'role.lectureSeuleDetail': 'Vous n’êtes pas autorisé à faire des modifications. Consultation et exports uniquement.',
+  'role.lectureSeuleRaison': 'Votre compte est en lecture seule : vous pouvez tout consulter et tout exporter, mais rien modifier.',
 
   // ─── Statuts ───────────────────────────────────────────────────────────────
   'statut.brouillon':      'Brouillon',
@@ -143,7 +141,25 @@ export const fr = {
   'connexion.identifiantsIncorrects': 'Identifiants incorrects.',
   'connexion.piedDePage':   'LedgerAlps — Données locales · CO · nLPD',
 
+  'connexion.sessionFermee': 'Session fermée après inactivité',
+  'connexion.aideCodeSecours': 'Reprenez la liste notée lors de l’activation et saisissez un code non encore utilisé.',
+  'connexion.aideCodeApp': 'Ouvrez votre application d’authentification et recopiez le code affiché.',
+  'connexion.utiliserApp': 'Utiliser le code de mon application',
+  'connexion.utiliserSecours': 'Application indisponible ? Utiliser un code de secours',
+  'connexion.revenir': 'Revenir à la connexion',
+  'connexion.verification': 'Vérification',
+  'connexion.enCours': 'Connexion…',
+  'connexion.saisirCodeSecours': 'Saisissez l’un des codes de secours notés lors de l’activation.',
+  'connexion.saisirCodeApp': 'Saisissez le code affiché par votre application d’authentification.',
+  // ─── Bandeau de compte (barre latérale) ────────────────────────────────────
+  'banniere.adminTitre':   'Compte ADMINISTRATEUR',
+  'banniere.adminDetail': 'Ne pas utiliser pour le travail courant. Ce compte peut effacer les sauvegardes, changer les rôles et déchiffrer la base.',
+  'banniere.comptableTitre':  'Compte comptable',
+  'banniere.comptableDetail': 'Vous tenez les livres. Les sauvegardes, la sécurité et les comptes utilisateurs restent réservés à un administrateur.',
+
   // ─── Langue ────────────────────────────────────────────────────────────────
+  'langue.encoursTitre': 'Traduction en cours',
+  'langue.encoursDetail': 'La navigation, la connexion et le vocabulaire comptable sont traduits. Les écrans restent en français ; ils suivent, écran par écran.',
   'langue.titre':       'Langue',
   'langue.description': 'La langue de l’interface. Le changement est immédiat.',
 } as const

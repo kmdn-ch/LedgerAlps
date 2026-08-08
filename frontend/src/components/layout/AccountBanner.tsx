@@ -16,8 +16,10 @@
 
 import { ShieldAlert, Eye, Calculator } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
+import { useT } from '@/i18n/useT'
 
 export function AccountBanner() {
+  const t = useT()
   const role = useAuthStore(s => s.role)
   const name = useAuthStore(s => s.user?.name)
 
@@ -29,10 +31,9 @@ export function AccountBanner() {
         <p className="flex items-start gap-1.5 text-[11px] font-semibold text-warning-700 leading-snug">
           <ShieldAlert size={13} className="mt-0.5 flex-shrink-0" />
           <span>
-            Compte ADMINISTRATEUR
+            {t('banniere.adminTitre')}
             <span className="block font-normal text-alpine-700 mt-0.5">
-              Ne pas utiliser pour le travail courant. Ce compte peut effacer les sauvegardes,
-              changer les rôles et déchiffrer la base.
+              {t('banniere.adminDetail')}
             </span>
           </span>
         </p>
@@ -46,10 +47,9 @@ export function AccountBanner() {
         <p className="flex items-start gap-1.5 text-[11px] font-semibold text-alpine-100 leading-snug">
           <Eye size={13} className="mt-0.5 flex-shrink-0" />
           <span>
-            Compte en lecture seule
+            {t('role.lectureSeuleTitre')}
             <span className="block font-normal text-alpine-300 mt-0.5">
-              Vous n'êtes pas autorisé à faire des modifications. Consultation et exports
-              uniquement.
+              {t('role.lectureSeuleDetail')}
             </span>
           </span>
         </p>
@@ -62,10 +62,9 @@ export function AccountBanner() {
       <p className="flex items-start gap-1.5 text-[11px] font-semibold text-alpine-100 leading-snug">
         <Calculator size={13} className="mt-0.5 flex-shrink-0" />
         <span>
-          Compte comptable{name ? ` — ${name}` : ''}
+          {t('banniere.comptableTitre')}{name ? ` — ${name}` : ''}
           <span className="block font-normal text-alpine-300 mt-0.5">
-            Vous tenez les livres. Les sauvegardes, la sécurité et les comptes utilisateurs
-            restent réservés à un administrateur.
+            {t('banniere.comptableDetail')}
           </span>
         </span>
       </p>

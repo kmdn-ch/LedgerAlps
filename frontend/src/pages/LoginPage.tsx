@@ -8,6 +8,7 @@ import { Mountain, Eye, EyeOff, Smartphone, ArrowLeft, LifeBuoy } from 'lucide-r
 import { useState } from 'react'
 import { authApi } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
+import { useT } from '@/i18n/useT'
 
 const schema = z.object({
   email:    z.string().email('E-mail invalide'),
@@ -16,6 +17,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 export function LoginPage() {
+  const t = useT()
   // Une déconnexion automatique doit se dire. Renvoyer quelqu'un sur l'écran de
   // connexion sans explication ressemble à une panne, et c'est la première
   // chose qu'on signale au support.
@@ -123,7 +125,7 @@ export function LoginPage() {
       }
       enter(data.email, res.data)
     } catch {
-      setError('Identifiants incorrects.')
+      setError(t('connexion.identifiantsIncorrects'))
     } finally {
       setLoading(false)
     }
@@ -134,7 +136,7 @@ export function LoginPage() {
       <div className="relative w-full max-w-md">
         {idle && (
           <div className="mb-5 rounded-md border border-warning-500 bg-warning-100 px-4 py-3 text-sm">
-            <p className="font-medium">Session fermée après inactivité</p>
+            <p className="font-medium">{t('connexion.sessionFermee')}</p>
             <p className="mt-1 text-alpine-700">
               Vous avez été déconnecté automatiquement. Le délai se règle dans
               Paramètres → Maintenance → Sécurité.
@@ -157,14 +159,14 @@ export function LoginPage() {
         <div className="bg-alpine-900/80 border border-alpine-700/50 rounded-2xl
                         backdrop-blur-sm shadow-modal p-8">
           <h1 className="font-display font-700 text-lg text-white mb-1">
-            {challenge ? 'Vérification' : 'Connexion'}
+            {challenge ? t('connexion.verification') : t('connexion.titre')}
           </h1>
           <p className="text-sm text-alpine-400 mb-6">
             {!challenge
-              ? 'Accédez à votre espace.'
+              ? t('connexion.sousTitre')
               : secours
-                ? 'Saisissez l’un des codes de secours notés lors de l’inscription.'
-                : 'Saisissez le code affiché par votre application d’authentification.'}
+                ? t('connexion.saisirCodeSecours')
+                : t('connexion.saisirCodeApp')}
           </p>
 
           {error && (
@@ -185,10 +187,8 @@ export function LoginPage() {
                   : <Smartphone size={16} className="text-accent-500 mt-0.5 shrink-0" />}
                 <span>
                   {secours
-                    ? <>Reprenez la liste notée lors de l&rsquo;inscription et saisissez un code
-                        non utilisé pour <strong className="text-white">{challenge.email}</strong>.</>
-                    : <>Ouvrez votre application d&rsquo;authentification et recopiez les six
-                        chiffres affichés pour <strong className="text-white">{challenge.email}</strong>.</>}
+                    ? <>{t('connexion.aideCodeSecours')}<strong className="text-white">{challenge.email}</strong>.</>
+                    : <>{t('connexion.aideCodeApp')}<strong className="text-white">{challenge.email}</strong>.</>}
                 </span>
               </div>
 
@@ -258,8 +258,8 @@ export function LoginPage() {
                   className="text-xs text-accent-400 hover:text-accent-300 flex items-center gap-1.5"
                 >
                   {secours
-                    ? <><Smartphone size={12} /> Utiliser le code de mon application</>
-                    : <><LifeBuoy size={12} /> Application indisponible ? Utiliser un code de secours</>}
+                    ? <><Smartphone size={12} /> {t('connexion.utiliserApp')}</>
+                    : <><LifeBuoy size={12} /> {t('connexion.utiliserSecours')}</>}
                 </button>
                 <p className="text-xs text-alpine-500 mt-1.5">
                   {secours
@@ -275,14 +275,14 @@ export function LoginPage() {
                 }}
                 className="text-xs text-alpine-400 hover:text-alpine-200 flex items-center gap-1"
               >
-                <ArrowLeft size={12} /> Revenir à la connexion
+                <ArrowLeft size={12} /> {t('connexion.revenir')}
               </button>
             </div>
           ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-alpine-400 mb-1.5 uppercase tracking-wide">
-                Adresse e-mail
+                {t('connexion.email')}
               </label>
               <input
                 type="email"
@@ -299,7 +299,7 @@ export function LoginPage() {
 
             <div>
               <label className="block text-xs font-medium text-alpine-400 mb-1.5 uppercase tracking-wide">
-                Mot de passe
+                {t('connexion.motDePasse')}
               </label>
               <div className="relative">
                 <input
@@ -330,14 +330,14 @@ export function LoginPage() {
                          rounded-lg text-sm transition-all duration-150 active:scale-[0.98]
                          disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
-              {loading ? 'Connexion…' : 'Se connecter'}
+              {loading ? t('connexion.enCours') : t('connexion.seConnecter')}
             </button>
           </form>
           )}
         </div>
 
         <p className="text-center text-xs text-alpine-600 mt-6">
-          LedgerAlps — Données locales · CO · nLPD
+          {t('connexion.piedDePage')}
         </p>
       </div>
     </div>

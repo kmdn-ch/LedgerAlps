@@ -60,6 +60,7 @@ const TABS = [
 
 import { BackupPanel } from '@/components/settings/BackupPanel'
 import { MFAPanel } from '@/components/settings/MFAPanel'
+import { LanguagePanel } from '@/components/settings/LanguagePanel'
 import { MaintenancePanel } from '@/components/settings/MaintenancePanel'
 import { ReconciliationPanel } from '@/components/settings/ReconciliationPanel'
 import { useAuthStore } from '@/store/auth'
@@ -251,7 +252,7 @@ export function SettingsPage() {
              lisait la valeur brute. */
           <div className="flex-1"><MaintenancePanel /></div>
         ) : effectiveTab === 'account' ? (
-          <div className="flex-1"><MFAPanel /></div>
+          <div className="flex-1"><LanguagePanel /><MFAPanel /></div>
         ) : (
         /* Formulaire */
         <form id="settings-form" onSubmit={handleSubmit(d => save.mutate(d))} className="flex-1 space-y-5">

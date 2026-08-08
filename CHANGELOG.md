@@ -7,6 +7,19 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Ajouté
+
+- **Le sélecteur de langue est livré — FR / DE / IT / EN**, dans Paramètres → Mon compte, **visible pour tous les rôles**. La langue n'est pas un réglage d'administration : une fiduciaire tessinoise à qui l'on ouvre les livres en lecture seule doit pouvoir lire en italien sans demander la permission à personne.
+
+  **Pas besoin de se reconnecter** : le catalogue est embarqué, le changement est immédiat. La préférence survit à la déconnexion — sinon il faudrait se connecter en français pour pouvoir choisir l'italien.
+
+  **Ce qui est traduit** : la navigation, les bandeaux de rôle, l'écran de connexion en entier, le second facteur, les statuts et le vocabulaire comptable — soit 111 clés dans les quatre langues. **Environ 10 % des chaînes de l'interface** ; les écrans eux-mêmes suivent, un par un.
+
+  **Le panneau le dit lui-même** plutôt que de laisser découvrir : un avertissement « Traduction en cours » y explique où en est la couverture. Il disparaîtra quand elle sera complète.
+
+  **Les abréviations légales basculent aussi** : le pied de page passe de « CO · nLPD » à « OR · DSG » en allemand, « CO · LPD » en italien, « CO · FADP » en anglais. Vérifié dans les quatre langues sur un serveur réel.
+
+
 ### Corrigé
 
 - **Les messages du serveur parlent français.** « fiscal year "2025" is closed: no entry can be created or posted at 2025-12-01 » devient « l'exercice « 2025 » est clôturé : aucune écriture ne peut y être créée ni comptabilisée au 2025-12-01. Passez la correction dans l'exercice ouvert (CO art. 958f) ».
