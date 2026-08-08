@@ -12,6 +12,7 @@ import { ContactDocuments } from '@/components/contacts/ContactDocuments'
 import { PageHeader, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import type { Contact } from '@/types'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
+import { useT } from '@/i18n/useT'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ type FormData = z.infer<typeof schema>
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function ContactDetailPage() {
+  const t = useT()
   const { contactId } = useParams<{ contactId: string }>()
   const peutEcrire    = useCanWrite()
   const navigate      = useNavigate()
@@ -135,7 +137,7 @@ export function ContactDetailPage() {
       {!peutEcrire && (
         <div className="mb-4 px-4 py-2.5 rounded-lg bg-alpine-50 border border-alpine-200
                         text-sm text-alpine-600">
-          {RAISON_LECTURE_SEULE}
+          {t(RAISON_LECTURE_SEULE)}
         </div>
       )}
 

@@ -18,9 +18,11 @@ import { isoApi, exportApi, accountingExportApi } from '@/api/client'
 import { PaymentRunPanel } from '@/components/payments/PaymentRunPanel'
 import { PageHeader, SectionTitle, ErrorBanner } from '@/components/ui'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
+import { useT } from '@/i18n/useT'
 import { refusalMessage } from '@/utils/refusal'
 
 export function ReportsPage() {
+  const t = useT()
   const peutEcrire = useCanWrite()
   const [startDate, setStartDate] = useState(() =>
     new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)
@@ -212,7 +214,7 @@ export function ReportsPage() {
           <div className="card-body flex items-start gap-3">
             <Lock size={18} className="text-alpine-500 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-alpine-600">
-              {RAISON_LECTURE_SEULE} L&rsquo;import d&rsquo;un relevé bancaire et
+              {t(RAISON_LECTURE_SEULE)} L&rsquo;import d&rsquo;un relevé bancaire et
               la production d&rsquo;un ordre de paiement demandent un compte
               autorisé à écrire. <strong>Les exports et l&rsquo;archive légale
               ci-dessous vous restent ouverts.</strong>

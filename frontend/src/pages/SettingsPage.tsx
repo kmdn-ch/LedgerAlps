@@ -13,6 +13,7 @@ import { settingsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
 import { estQRIBAN } from '@/utils'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
+import { useT } from '@/i18n/useT'
 
 const schema = z.object({
   company_name:          z.string().min(1, 'Requis'),
@@ -66,6 +67,7 @@ import { ReconciliationPanel } from '@/components/settings/ReconciliationPanel'
 import { useAuthStore } from '@/store/auth'
 
 export function SettingsPage() {
+  const t = useT()
   const peutEcrire = useCanWrite()
   const [tab,   setTab]   = useState('identity')
   const [saved, setSaved] = useState(false)
@@ -296,7 +298,7 @@ export function SettingsPage() {
                         Format PNG ou JPEG, max 2 Mo. Affiché dans la barre de navigation et sur les factures PDF.
                       </p>
                       {!peutEcrire && (
-                        <p className="text-xs text-alpine-500">{RAISON_LECTURE_SEULE}</p>
+                        <p className="text-xs text-alpine-500">{t(RAISON_LECTURE_SEULE)}</p>
                       )}
                       {peutEcrire && (
                       <div className="flex items-center gap-2">

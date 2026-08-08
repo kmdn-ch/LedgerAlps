@@ -35,6 +35,7 @@ import {
 import { formatDate, formatCHF } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
+import { useT } from '@/i18n/useT'
 import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 import type {
   Account, JournalEntry, JournalEntryDetail, JournalLineCreate,
@@ -91,6 +92,7 @@ function toLines(rows: Row[]): JournalLineCreate[] {
 }
 
 export function JournalPage() {
+  const t = useT()
   const peutEcrire = useCanWrite()
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
@@ -204,7 +206,7 @@ export function JournalPage() {
             <Plus size={15} /> Nouvelle écriture
           </button>
           ) : (
-            <span className="text-xs text-alpine-500">{RAISON_LECTURE_SEULE}</span>
+            <span className="text-xs text-alpine-500">{t(RAISON_LECTURE_SEULE)}</span>
           )
         }
       />

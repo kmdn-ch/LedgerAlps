@@ -31,6 +31,7 @@ import { formatCHF, formatDate, estQRIBAN } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
 import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
+import { useT } from '@/i18n/useT'
 import { PaymentRunPanel } from '@/components/payments/PaymentRunPanel'
 import type { Account, Contact } from '@/types'
 
@@ -72,6 +73,7 @@ const VAT_RATES = [
 const today = () => new Date().toISOString().slice(0, 10)
 
 export function PurchasesPage() {
+  const t = useT()
   const qc = useQueryClient()
   const peutEcrire = useCanWrite()
   const [creating, setCreating] = useState(false)
@@ -395,7 +397,7 @@ export function PurchasesPage() {
             </button>
           </div>
           ) : (
-            <span className="text-xs text-alpine-500">{RAISON_LECTURE_SEULE}</span>
+            <span className="text-xs text-alpine-500">{t(RAISON_LECTURE_SEULE)}</span>
           )
         }
       />

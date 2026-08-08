@@ -84,6 +84,9 @@ func TestRienNEstResteEnFrancais(t *testing.T) {
 			"nav.journal": true, "paiement.iban": true, "paiement.qrIban": true,
 			"compta.solde": true, "securite.phraseDePasse": true,
 			"role.admin": true, "statut.archivee": false,
+			// « Total CHF » est un en-tête de colonne : le sigle de la monnaie
+			// ne se traduit pas, et « Total » est le même mot.
+			"fact.colTotal": true,
 		},
 		"it": {
 			"paiement.iban": true, "paiement.qrIban": true, "compta.solde": true,
@@ -94,6 +97,11 @@ func TestRienNEstResteEnFrancais(t *testing.T) {
 			"paiement.iban": true, "paiement.qrIban": true,
 			"securite.phraseDePasse": true, "nav.contacts": true,
 			"nav.journal": true,
+			// Mots identiques en français et en anglais.
+			"fact.colDate": true, "fact.colContact": true, "fact.colTotal": true,
+			"compta.credit": true, "securite.motDePasse": false,
+			// « document » s'écrit pareil dans les deux langues.
+			"fact.unDocument": true, "fact.desDocuments": true,
 		},
 	}
 

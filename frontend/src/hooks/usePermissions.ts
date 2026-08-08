@@ -70,12 +70,13 @@ export function useCanAdmin(): boolean {
 }
 
 /**
- * La phrase à afficher là où une action est retirée.
+ * La CLÉ de la phrase à afficher là où une action est retirée.
  *
  * Un bouton qui disparaît sans explication passe pour une fonction manquante.
  * Dire le rôle transforme une absence en règle — et c'est vérifiable par la
  * personne concernée, qui sait alors quoi demander à qui.
+ *
+ * Une clé et non la phrase : figée en français, elle serait restée en français
+ * sur sept écrans par ailleurs traduits. S'emploie avec `t(...)`.
  */
-export const RAISON_LECTURE_SEULE =
-  'Votre compte est en lecture seule : vous pouvez tout consulter et tout ' +
-  'exporter, mais rien modifier.'
+export const RAISON_LECTURE_SEULE = 'role.lectureSeuleRaison' as const

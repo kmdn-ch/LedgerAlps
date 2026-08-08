@@ -9,6 +9,12 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Ajouté
 
+- **Facturation et Contacts sont traduits** dans les quatre langues — listes, onglets, filtres, en-têtes de colonnes, états vides. La couverture passe de 10 à **13 %** (148 clés).
+
+  **La phrase de lecture seule était une constante figée en français.** Elle s'affichait sur sept écrans par ailleurs traduits : c'est devenu une clé. Le motif est instructif — une chaîne sortie d'un composant pour être partagée échappe à la traduction précisément parce qu'elle n'est plus dans un écran.
+
+  Les **pluriels comptés** passent par le catalogue : « 3 documents » se dit « 3 Dokumente », et le zéro suit la règle de chaque langue — le français le met au singulier, les trois autres au pluriel.
+
 - **Le sélecteur de langue est livré — FR / DE / IT / EN**, dans Paramètres → Mon compte, **visible pour tous les rôles**. La langue n'est pas un réglage d'administration : une fiduciaire tessinoise à qui l'on ouvre les livres en lecture seule doit pouvoir lire en italien sans demander la permission à personne.
 
   **Pas besoin de se reconnecter** : le catalogue est embarqué, le changement est immédiat. La préférence survit à la déconnexion — sinon il faudrait se connecter en français pour pouvoir choisir l'italien.
