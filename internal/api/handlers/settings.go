@@ -93,7 +93,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	s.AutoPostInvoices = autoPost == 1
@@ -152,12 +152,12 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 			req.FiscalYearStartMonth, req.Currency,
 			now, now,
 		); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 		existingID = newID
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	} else {
 		// Row exists — UPDATE (do NOT touch logo_data).
@@ -190,7 +190,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 			now,
 			existingID,
 		); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	}
@@ -203,7 +203,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	if req.AutoPostInvoices != nil {
 		autoQ := db.Rebind(`UPDATE company_settings SET auto_post_invoices = ?, updated_at = ?`, h.usePostgres)
 		if _, err := h.db.ExecContext(ctx, autoQ, boolToSQL(*req.AutoPostInvoices), now); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	}
@@ -230,7 +230,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
 		&s.CreatedAt, &s.UpdatedAt,
 	); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	s.AutoPostInvoices = autoPostOut == 1
@@ -256,14 +256,14 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 		LogoData string `json:"logo_data" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "logo_data (base64 data URL) required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "logo_data est requis (adresse de données base64)"})
 		return
 	}
 
 	// Validate data URL format: "data:<mime>;base64,<data>"
 	dataURL := req.LogoData
 	if len(dataURL) < 22 {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid logo data URL"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "l'adresse de données du logo est invalide"})
 		return
 	}
 	// Split header from base64 payload
@@ -275,7 +275,7 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 		}
 	}
 	if commaIdx < 0 {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid logo data URL"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "l'adresse de données du logo est invalide"})
 		return
 	}
 	header := dataURL[:commaIdx] // e.g. "data:image/png;base64"
@@ -283,7 +283,7 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 
 	// Validate MIME type from header
 	if !strings.Contains(header, "image/png") && !strings.Contains(header, "image/jpeg") {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "logo must be PNG or JPEG"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "le logo doit être au format PNG ou JPEG"})
 		return
 	}
 
@@ -293,13 +293,13 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 		// Try without padding
 		decoded, err = base64.RawStdEncoding.DecodeString(b64Data)
 		if err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid base64 data"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "données base64 invalides"})
 			return
 		}
 	}
 	const maxSize = 2 << 20 // 2 MB
 	if len(decoded) > maxSize {
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "logo too large (max 2 MB)"})
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "logo trop volumineux (2 Mo au maximum)"})
 		return
 	}
 
@@ -324,16 +324,16 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 			     created_at, updated_at)
 			VALUES (?, '', '', '', '', '', 'CH', '', '', '', 1, 'CHF', ?, ?, ?)`, h.usePostgres)
 		if _, err := h.db.ExecContext(ctx, insertQ, newID, dataURL, now, now); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	} else {
 		updateQ := db.Rebind(`UPDATE company_settings SET logo_data = ?, updated_at = ? WHERE id = ?`, h.usePostgres)
 		if _, err := h.db.ExecContext(ctx, updateQ, dataURL, now, existingID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	}
@@ -350,7 +350,7 @@ func (h *SettingsHandler) DeleteLogo(c *gin.Context) {
 
 	q := db.Rebind(`UPDATE company_settings SET logo_data = NULL, updated_at = ?`, h.usePostgres)
 	if _, err := h.db.ExecContext(ctx, q, time.Now().UTC()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})

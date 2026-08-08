@@ -60,13 +60,13 @@ func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
 
 	if fromStr != "" {
 		if _, err := time.Parse("2006-01-02", fromStr); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "from must be YYYY-MM-DD"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "« from » doit être au format AAAA-MM-JJ"})
 			return
 		}
 	}
 	if toStr != "" {
 		if _, err := time.Parse("2006-01-02", toStr); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "to must be YYYY-MM-DD"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "« to » doit être au format AAAA-MM-JJ"})
 			return
 		}
 	}
@@ -100,7 +100,7 @@ func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
 	countQ := db.Rebind("SELECT COUNT(*) FROM audit_logs a"+where, h.usePostgres)
 	var total int
 	if err := h.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -128,7 +128,7 @@ func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, listQ, append(args, limit, offset)...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -205,11 +205,11 @@ func (h *AuditHandler) VerifyAuditLog(c *gin.Context) {
 		&storedHash, &createdAt, &hashVersion,
 	)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "audit log entry not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "maillon d'audit introuvable"})
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -249,7 +249,7 @@ func (h *AuditHandler) VerifyAuditLog(c *gin.Context) {
 		"verified":        false,
 		"stored_hash":     storedHash,
 		"recomputed_hash": recomputed,
-		"error":           "integrity check failed: stored hash does not match recomputed hash (CO art. 957a)",
+		"error":           "contrôle d'intégrité en échec : l'empreinte enregistrée ne correspond pas à celle recalculée (CO art. 957a)",
 	})
 }
 
@@ -313,7 +313,7 @@ func (h *AuditHandler) VerifyAuditChain(c *gin.Context) {
 
 	report, err := h.ComputeChainReport(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

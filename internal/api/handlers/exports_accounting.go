@@ -157,7 +157,7 @@ func (h *AccountingExportHandler) ExportJournalCSV(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, db.Rebind(q, h.usePostgres), args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -220,7 +220,7 @@ func (h *AccountingExportHandler) ExportLedgerCSV(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, db.Rebind(q, h.usePostgres), args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -293,7 +293,7 @@ func (h *AccountingExportHandler) ExportTrialBalanceCSV(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, db.Rebind(q, h.usePostgres), args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()

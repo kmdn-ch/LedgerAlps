@@ -35,7 +35,7 @@ type ErrPeriodClosed struct {
 
 func (e ErrPeriodClosed) Error() string {
 	return fmt.Sprintf(
-		"fiscal year %q is closed: no entry can be created or posted at %s — book the correction in the open period instead (CO art. 958f)",
+		"l'exercice %q est clôturé : aucune écriture ne peut y être créée ni comptabilisée au %s. Passez la correction dans l'exercice ouvert (CO art. 958f)",
 		e.FiscalYear, e.Date.Format("2006-01-02"))
 }
 

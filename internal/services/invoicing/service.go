@@ -14,7 +14,7 @@ import (
 	accsvc "github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
-var ErrInvoiceNotFound = fmt.Errorf("invoice not found")
+var ErrInvoiceNotFound = fmt.Errorf("facture introuvable")
 var ErrInvalidTransition = fmt.Errorf("invalid status transition")
 
 // Conversion errors (quote → invoice).

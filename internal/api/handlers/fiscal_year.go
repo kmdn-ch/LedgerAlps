@@ -49,7 +49,7 @@ func (h *FiscalYearHandler) ListFiscalYears(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, q)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -113,16 +113,16 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 
 	start, err := time.Parse("2006-01-02", req.StartDate)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "start_date must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "start_la date doit être au format AAAA-MM-JJ"})
 		return
 	}
 	end, err := time.Parse("2006-01-02", req.EndDate)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "end_date must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "end_la date doit être au format AAAA-MM-JJ"})
 		return
 	}
 	if !end.After(start) {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "end_date must be after start_date"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la date de fin doit suivre la date de début"})
 		return
 	}
 
@@ -145,7 +145,7 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 		return
 	}
 	if err != sql.ErrNoRows {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -172,7 +172,7 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 func (h *FiscalYearHandler) CloseFiscalYear(c *gin.Context) {
 	fiscalYearID := c.Param("id")
 	if fiscalYearID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "fiscal year id is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "l'identifiant de l'exercice est requis"})
 		return
 	}
 
@@ -206,16 +206,16 @@ func (h *FiscalYearHandler) GenerateVATDeclaration(c *gin.Context) {
 
 	periodStart, err := time.Parse("2006-01-02", req.PeriodStart)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "period_start must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "le début de période doit être au format AAAA-MM-JJ"})
 		return
 	}
 	periodEnd, err := time.Parse("2006-01-02", req.PeriodEnd)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "period_end must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la fin de période doit être au format AAAA-MM-JJ"})
 		return
 	}
 	if periodEnd.Before(periodStart) {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "period_end must be on or after period_start"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la fin de période doit être égale ou postérieure à son début"})
 		return
 	}
 

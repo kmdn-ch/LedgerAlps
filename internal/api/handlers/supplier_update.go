@@ -64,7 +64,7 @@ func (h *SupplierInvoicesHandler) UpdateSupplierInvoice(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "facture fournisseur introuvable"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if status != "draft" {
@@ -80,7 +80,7 @@ func (h *SupplierInvoicesHandler) UpdateSupplierInvoice(c *gin.Context) {
 
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
@@ -103,7 +103,7 @@ func (h *SupplierInvoicesHandler) UpdateSupplierInvoice(c *gin.Context) {
 				"error": "ce fournisseur a déjà une facture portant cette référence"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	// La condition `status = 'draft'` est REPÉTÉE dans le UPDATE : entre la
@@ -121,7 +121,7 @@ func (h *SupplierInvoicesHandler) UpdateSupplierInvoice(c *gin.Context) {
 	if _, err := tx.ExecContext(ctx,
 		db.Rebind(`DELETE FROM supplier_invoice_lines WHERE supplier_invoice_id = ?`, h.usePostgres),
 		id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	insLine := db.Rebind(`
@@ -133,13 +133,13 @@ func (h *SupplierInvoicesHandler) UpdateSupplierInvoice(c *gin.Context) {
 		if _, err := tx.ExecContext(ctx, insLine, db.NewID(), id, l.Description,
 			l.Quantity, l.UnitPrice, l.VATRate, l.LineTotal,
 			nullIfEmpty(l.ExpenseAccountCode), i); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

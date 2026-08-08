@@ -88,7 +88,7 @@ func (h *ContactsHandler) AnonymiseContact(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "contact introuvable"})
 		return
 	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if already.Valid {
@@ -105,7 +105,7 @@ func (h *ContactsHandler) AnonymiseContact(c *gin.Context) {
 	if err := h.db.QueryRowContext(ctx, db.Rebind(
 		`SELECT COUNT(*) FROM invoices WHERE contact_id = ?`, h.usePostgres), id,
 	).Scan(&invoices); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -118,7 +118,7 @@ func (h *ContactsHandler) AnonymiseContact(c *gin.Context) {
 		SELECT COUNT(*) FROM invoices
 		WHERE contact_id = ? AND (recipient_name IS NULL OR recipient_name = '')`,
 		h.usePostgres), id).Scan(&unfrozen); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if unfrozen > 0 {
@@ -146,7 +146,7 @@ func (h *ContactsHandler) AnonymiseContact(c *gin.Context) {
 			anonymised_at = ?, updated_at = ?
 		WHERE id = ?`, h.usePostgres)
 	if _, err := h.db.ExecContext(ctx, updQ, label, now, now, id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

@@ -129,17 +129,17 @@ func (h *InvoicesHandler) BulkInvoicePDF(c *gin.Context) {
 
 		w, err := zw.Create(filename)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "zip write failed"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture dans l'archive impossible"})
 			return
 		}
 		if _, err := w.Write(pdfBytes); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "zip write failed"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture dans l'archive impossible"})
 			return
 		}
 	}
 
 	if err := zw.Close(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "zip finalise failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "l'archive ZIP n'a pas pu être finalisée"})
 		return
 	}
 	if len(names) == 0 {

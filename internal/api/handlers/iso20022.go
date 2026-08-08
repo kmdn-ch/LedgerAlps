@@ -88,7 +88,7 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 	execDate, err := time.Parse("2006-01-02", req.ExecutionDate)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
-			"error": "la date d'execution doit etre au format AAAA-MM-JJ"})
+			"error": "la date d'exécution doit être au format AAAA-MM-JJ"})
 		return
 	}
 
@@ -97,7 +97,7 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 	switch {
 	case len(req.SupplierInvoiceIDs) > 0:
 		if h.run == nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "payment run unavailable"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "l'ordre de paiement est indisponible"})
 			return
 		}
 		built, err := h.run.buildRunTransactions(c.Request.Context(), req.SupplierInvoiceIDs)
@@ -140,7 +140,7 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 
 	default:
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
-			"error": "aucune facture selectionnee"})
+			"error": "aucune facture sélectionnée"})
 		return
 	}
 
@@ -149,7 +149,7 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 	// dans Parametres -> Entreprise.
 	if strings.TrimSpace(req.DebtorIBAN) == "" {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
-			"error": "l'IBAN de votre entreprise n'est pas renseigne (Parametres -> Entreprise) : " +
+			"error": "l'IBAN de votre entreprise n'est pas renseigné (Paramètres → Entreprise) : " +
 				"aucun ordre de paiement ne peut etre produit sans compte a debiter"})
 		return
 	}
@@ -193,7 +193,7 @@ func (h *ISO20022Handler) ImportCamt053(c *gin.Context) {
 		var err error
 		xmlData, err = io.ReadAll(io.LimitReader(c.Request.Body, 10<<20)) // 10 MB max
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot read request body"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "le corps de la requête n'a pas pu être lu"})
 			return
 		}
 	} else {
@@ -201,14 +201,14 @@ func (h *ISO20022Handler) ImportCamt053(c *gin.Context) {
 		file, _, err := c.Request.FormFile("file")
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "send XML as raw body (Content-Type: application/xml) or multipart field 'file'",
+				"error": "envoyez le XML dans le corps de la requête (Content-Type: application/xml) ou dans le champ « file » d'un formulaire",
 			})
 			return
 		}
 		defer file.Close()
 		xmlData, err = io.ReadAll(io.LimitReader(file, 10<<20))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot read uploaded file"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "le fichier déposé n'a pas pu être lu"})
 			return
 		}
 	}

@@ -110,7 +110,7 @@ func (h *AuditHandler) IntegrityAttestation(c *gin.Context) {
 
 	final, err := h.BuildAttestation(ctx, issuedBy)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

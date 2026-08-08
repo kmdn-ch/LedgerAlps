@@ -138,7 +138,7 @@ func (h *SupplierInvoicesHandler) ListSupplierInvoices(c *gin.Context) {
 	args := []any{}
 	if status := c.Query("status"); status != "" {
 		if !supplierInvoiceStatuses[status] {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "unknown status " + status})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "statut inconnu " + status})
 			return
 		}
 		where += " AND si.status = ?"
@@ -155,7 +155,7 @@ func (h *SupplierInvoicesHandler) ListSupplierInvoices(c *gin.Context) {
 	var total int
 	countQ := db.Rebind("SELECT COUNT(*) FROM supplier_invoices si"+where, h.usePostgres)
 	if err := h.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -174,7 +174,7 @@ func (h *SupplierInvoicesHandler) ListSupplierInvoices(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, listQ, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -199,7 +199,7 @@ func (h *SupplierInvoicesHandler) ListSupplierInvoices(c *gin.Context) {
 		items = append(items, s)
 	}
 	if err := rows.Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -232,17 +232,17 @@ func (h *SupplierInvoicesHandler) GetSupplierInvoice(c *gin.Context) {
 		&s.ExpenseAccountCode, &s.PaymentReference, &s.JournalEntryID,
 		&s.Notes, &s.CreatedAt)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "supplier invoice not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "facture fournisseur introuvable"})
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
 	lines, err := h.loadLines(ctx, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	s.Lines = lines
@@ -282,12 +282,12 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 		return
 	}
 	if _, err := time.Parse("2006-01-02", req.IssueDate); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_date must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_la date doit être au format AAAA-MM-JJ"})
 		return
 	}
 	if req.DueDate != "" {
 		if _, err := time.Parse("2006-01-02", req.DueDate); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "due_date must be YYYY-MM-DD"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "due_la date doit être au format AAAA-MM-JJ"})
 			return
 		}
 	}
@@ -304,10 +304,10 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 	supQ := db.Rebind("SELECT contact_type FROM contacts WHERE id = ?", h.usePostgres)
 	switch err := h.db.QueryRowContext(ctx, supQ, req.SupplierID).Scan(&contactType); {
 	case err == sql.ErrNoRows:
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "supplier not found"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "fournisseur introuvable"})
 		return
 	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if contactType != "supplier" && contactType != "both" {
@@ -321,7 +321,7 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer tx.Rollback()
@@ -351,11 +351,11 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 		// duplicate-payment guard; report it as a conflict, not a 500.
 		if isUniqueViolation(err) {
 			c.JSON(http.StatusConflict, gin.H{
-				"error": "this supplier invoice has already been recorded (same supplier and reference)",
+				"error": "cette facture fournisseur est déjà enregistrée (même fournisseur, même référence)",
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -368,13 +368,13 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 		if _, err := tx.ExecContext(ctx, lineQ, db.NewID(), id, l.Description,
 			l.Quantity, l.UnitPrice, l.VATRate, l.LineTotal,
 			nullIfEmpty(l.ExpenseAccountCode), i); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -407,7 +407,7 @@ func (h *SupplierInvoicesHandler) TransitionSupplierInvoice(c *gin.Context) {
 		return
 	}
 	if !supplierInvoiceStatuses[req.Status] {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "unknown status " + req.Status})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "statut inconnu " + req.Status})
 		return
 	}
 
@@ -418,14 +418,14 @@ func (h *SupplierInvoicesHandler) TransitionSupplierInvoice(c *gin.Context) {
 	getQ := db.Rebind("SELECT status FROM supplier_invoices WHERE id = ?", h.usePostgres)
 	switch err := h.db.QueryRowContext(ctx, getQ, id).Scan(&current); {
 	case err == sql.ErrNoRows:
-		c.JSON(http.StatusNotFound, gin.H{"error": "supplier invoice not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "facture fournisseur introuvable"})
 		return
 	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if current == "cancelled" {
-		c.JSON(http.StatusConflict, gin.H{"error": "a cancelled supplier invoice cannot change status"})
+		c.JSON(http.StatusConflict, gin.H{"error": "une facture fournisseur annulée ne change plus de statut"})
 		return
 	}
 
@@ -451,7 +451,7 @@ func (h *SupplierInvoicesHandler) TransitionSupplierInvoice(c *gin.Context) {
 
 	updQ := db.Rebind("UPDATE supplier_invoices SET status = ?, updated_at = ? WHERE id = ?", h.usePostgres)
 	if _, err := h.db.ExecContext(ctx, updQ, req.Status, time.Now().UTC(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	action := ActionSupplierInvoiceBooked
@@ -479,22 +479,22 @@ func (h *SupplierInvoicesHandler) DeleteSupplierInvoice(c *gin.Context) {
 	getQ := db.Rebind("SELECT status FROM supplier_invoices WHERE id = ?", h.usePostgres)
 	switch err := h.db.QueryRowContext(ctx, getQ, id).Scan(&status); {
 	case err == sql.ErrNoRows:
-		c.JSON(http.StatusNotFound, gin.H{"error": "supplier invoice not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "facture fournisseur introuvable"})
 		return
 	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if status != "draft" {
 		c.JSON(http.StatusConflict, gin.H{
-			"error": "only a draft supplier invoice can be deleted; cancel it instead to preserve the accounting record (CO art. 958f)",
+			"error": "seule une facture fournisseur au brouillon peut être supprimée. Annulez-la plutôt : la pièce doit être conservée (CO art. 958f)",
 		})
 		return
 	}
 
 	delQ := db.Rebind("DELETE FROM supplier_invoices WHERE id = ?", h.usePostgres)
 	if _, err := h.db.ExecContext(ctx, delQ, id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	// La trace survit à la pièce : c'est même le seul cas où elle est la seule

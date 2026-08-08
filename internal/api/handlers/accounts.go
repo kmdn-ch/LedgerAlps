@@ -56,7 +56,7 @@ func (h *AccountsHandler) ListAccounts(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, q)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -100,7 +100,7 @@ func (h *AccountsHandler) CreateAccount(c *gin.Context) {
 		INSERT INTO accounts (id, code, name, account_type, description, parent_id, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, h.usePostgres)
 	if _, err := h.db.ExecContext(ctx, q, id, req.Code, req.Name, req.AccountType, req.Description, req.ParentID, now, now); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -123,7 +123,7 @@ func (h *AccountsHandler) TrialBalance(c *gin.Context) {
 	asOf := c.Query("as_of")
 	if asOf != "" {
 		if _, err := time.Parse("2006-01-02", asOf); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "as_of must be YYYY-MM-DD"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "as_of doit être au format AAAA-MM-JJ"})
 			return
 		}
 	}
@@ -167,7 +167,7 @@ func (h *AccountsHandler) TrialBalance(c *gin.Context) {
 	q := db.Rebind(baseQuery, h.usePostgres)
 	rows, err := h.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -198,7 +198,7 @@ func (h *AccountsHandler) AccountBalance(c *gin.Context) {
 	asOf := c.Query("as_of")
 	if asOf != "" {
 		if _, err := time.Parse("2006-01-02", asOf); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "as_of must be YYYY-MM-DD"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "as_of doit être au format AAAA-MM-JJ"})
 			return
 		}
 	}
@@ -221,11 +221,11 @@ func (h *AccountsHandler) AccountBalance(c *gin.Context) {
 		&acct.ID, &acct.Code, &acct.Name, &acct.AccountType,
 	)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "compte introuvable"})
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -248,7 +248,7 @@ func (h *AccountsHandler) AccountBalance(c *gin.Context) {
 	var debitTotal, creditTotal float64
 	sumQ := db.Rebind(sumQuery, h.usePostgres)
 	if err := h.db.QueryRowContext(ctx, sumQ, args...).Scan(&debitTotal, &creditTotal); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

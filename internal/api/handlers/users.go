@@ -62,7 +62,7 @@ func (h *UsersHandler) ListUsers(c *gin.Context) {
 	                FROM users ORDER BY created_at`, h.usePostgres)
 	rows, err := h.db.QueryContext(c.Request.Context(), q)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -72,7 +72,7 @@ func (h *UsersHandler) ListUsers(c *gin.Context) {
 		var u userView
 		var active int
 		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &active, &u.CreatedAt); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 		u.IsActive = active == 1
@@ -80,7 +80,7 @@ func (h *UsersHandler) ListUsers(c *gin.Context) {
 		items = append(items, u)
 	}
 	if err := rows.Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": len(items)})
@@ -113,7 +113,7 @@ func (h *UsersHandler) CreateUser(c *gin.Context) {
 
 	hash, err := security.HashPassword(body.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le mot de passe n'a pas pu être haché"})
 		return
 	}
 
@@ -132,7 +132,7 @@ func (h *UsersHandler) CreateUser(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "cette adresse e-mail est déjà utilisée"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -185,7 +185,7 @@ func (h *UsersHandler) UpdateUserRole(c *gin.Context) {
 	if role != authz.RoleAdmin {
 		last, err := h.isLastAdmin(c, targetID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 		if last {
@@ -198,7 +198,7 @@ func (h *UsersHandler) UpdateUserRole(c *gin.Context) {
 	res, err := h.db.ExecContext(c.Request.Context(), q,
 		string(role), boolToSQL(role == authz.RoleAdmin), time.Now().UTC(), targetID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -238,7 +238,7 @@ func (h *UsersHandler) SetUserActive(c *gin.Context) {
 	if !body.IsActive {
 		last, err := h.isLastAdmin(c, targetID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 		if last {
@@ -251,7 +251,7 @@ func (h *UsersHandler) SetUserActive(c *gin.Context) {
 	res, err := h.db.ExecContext(c.Request.Context(), q,
 		boolToSQL(body.IsActive), time.Now().UTC(), targetID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {

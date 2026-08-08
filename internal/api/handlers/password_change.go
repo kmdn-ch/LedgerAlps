@@ -111,7 +111,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "ce compte n'est plus actif"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -135,7 +135,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 	newHash, err := security.HashPassword(body.NewPassword)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le mot de passe n'a pas pu être haché"})
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ?
 		WHERE id = ?`, h.cfg.UsePostgres())
 	if _, err := h.db.ExecContext(ctx, upd, newHash, time.Now().UTC(), claims.UserID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

@@ -7,6 +7,27 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Corrigé
+
+- **Les messages du serveur parlent français.** « fiscal year "2025" is closed: no entry can be created or posted at 2025-12-01 » devient « l'exercice « 2025 » est clôturé : aucune écriture ne peut y être créée ni comptabilisée au 2025-12-01. Passez la correction dans l'exercice ouvert (CO art. 958f) ».
+
+  **82 messages** traduits : l'anglais qui atteignait l'utilisateur — « invalid credentials », « supplier invoice not found », les quinze variantes de « must be YYYY-MM-DD », les pannes internes qui remontaient telles quelles — **et le français sans accents** trouvé au passage : « aucune facture selectionnee », « la date d'execution doit etre au format », « l'IBAN de votre entreprise n'est pas renseigne (Parametres -> Entreprise) ».
+
+  Les erreurs **internes** restent en anglais — « begin transaction », « applying migration ». Elles vont au journal du serveur et servent au diagnostic ; les traduire n'aiderait personne et empêcherait de retrouver un message dans les sources.
+
+### Ajouté
+
+- **Les fondations de la traduction en allemand, italien et anglais.** Le sélecteur de langue **n'est pas encore visible** : un sélecteur qui traduit un tiers de l'écran est une maquette, et sur un logiciel comptable une étiquette non traduite à côté d'un champ de TVA est pire qu'une interface unilingue.
+
+  **[docs/GLOSSAIRE.md](docs/GLOSSAIRE.md)** fixe d'abord le vocabulaire — à valider avant toute traduction d'écran. Une partie du texte n'est pas de l'habillage : « extourne », « impôt préalable », « exercice clôturé » désignent des notions définies par une loi qui existe dans les trois langues officielles. Deux pièges y sont documentés : une facture annulée se dit *storniert* et non *annulliert* — *annullieren* voudrait dire effacer, ce que le CO art. 958f interdit — et *Soll/Haben* n'est pas *Belastung/Gutschrift*, qui désigne des mouvements bancaires. Les abréviations légales basculent aussi : CO devient OR, LTVA devient MWSTG, nLPD devient DSG.
+
+  **Pas de bibliothèque d'internationalisation.** Quatre langues connues à la compilation, un catalogue embarqué, des phrases simples : cent lignes suffisent, et une dépendance se paie en mises à jour et en surface d'attaque. Le revers est assumé et écrit — pas de pluriels slaves ni de formats ICU.
+
+  **Quatre tests refusent une traduction bâclée** : clés identiques d'un catalogue à l'autre, aucune valeur vide, aucune valeur restée en français — avec la liste explicite des termes identiques par nature, comme IBAN ou Saldo — et les repères d'interpolation conservés. Vérifiés en introduisant les trois fautes classiques : ils les attrapent et les nomment.
+
+  Les **formats** suivent la langue : `de-CH` et `fr-CH` séparent les milliers par une apostrophe là où `en-GB` met une virgule, et la position du symbole monétaire change.
+
+
 ### Ajouté
 
 - **Retirer une facture de la liste des paiements.** La liste accumulait tout ce qui est comptabilisé et non réglé — factures payées hors LedgerAlps, saisies d'essai, doublons — et surtout les **factures bloquées**, celles qui ne peuvent pas être payées faute de QR-IBAN ou de référence valide : rien ne les en faisait jamais sortir. Une liste qu'on ne peut pas vider cesse d'être lue, et le jour où elle porte une vraie facture en retard, personne ne la voit.

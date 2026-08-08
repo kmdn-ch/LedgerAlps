@@ -125,7 +125,7 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 			WHERE document_type = 'invoice' AND status = 'sent' AND due_date < ?`, h.usesPG)
 		var overdue int
 		if err := h.db.QueryRowContext(ctx, q, time.Now().Format("2006-01-02")).Scan(&overdue); err != nil {
-			log.Printf("stats: overdue invoices query failed: %v", err)
+			log.Printf("stats: overdue les factures n'ont pas pu être lues : %v", err)
 		} else {
 			resp.Invoices.Overdue = overdue
 			resp.Invoices.Sent -= overdue

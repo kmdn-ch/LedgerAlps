@@ -185,7 +185,7 @@ func (h *AuthHandler) ListTrustedDevices(c *gin.Context) {
 		FROM trusted_devices WHERE user_id = ? ORDER BY created_at DESC`, h.cfg.UsePostgres())
 	rows, err := h.db.QueryContext(c.Request.Context(), q, claims.UserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -203,7 +203,7 @@ func (h *AuthHandler) ListTrustedDevices(c *gin.Context) {
 		var v view
 		var last sql.NullTime
 		if err := rows.Scan(&v.ID, &v.Label, &v.LastIP, &v.ExpiresAt, &v.CreatedAt, &last); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 		if last.Valid {

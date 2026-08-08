@@ -87,7 +87,7 @@ func (h *PaymentRunHandler) ListPayable(c *gin.Context) {
 
 	items, err := h.loadPayable(ctx, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

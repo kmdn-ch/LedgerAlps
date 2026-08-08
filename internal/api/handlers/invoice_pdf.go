@@ -26,7 +26,7 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 	pdfBytes, filename, err := h.buildInvoicePDF(ctx, c.Param("id"))
 	switch {
 	case err == errInvoiceNotFound:
-		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "facture introuvable"})
 		return
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -37,7 +37,7 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 	c.Data(http.StatusOK, "application/pdf", pdfBytes)
 }
 
-var errInvoiceNotFound = errors.New("invoice not found")
+var errInvoiceNotFound = errors.New("facture introuvable")
 
 // buildInvoicePDF produit le PDF d'un document et le nom de fichier qui lui
 // convient.
@@ -96,7 +96,7 @@ func (h *InvoicesHandler) invoiceDataFor2(ctx context.Context, id string) (pdfsv
 		return pdfsvc.InvoiceData{}, "", errInvoiceNotFound
 	}
 	if err != nil {
-		return pdfsvc.InvoiceData{}, "", errors.New("database error")
+		return pdfsvc.InvoiceData{}, "", errors.New("erreur de base de données")
 	}
 
 	// Load invoice lines
@@ -105,7 +105,7 @@ func (h *InvoicesHandler) invoiceDataFor2(ctx context.Context, id string) (pdfsv
 		FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence`, h.usePostgres)
 	rows, err := h.db.QueryContext(ctx, linesQ, id)
 	if err != nil {
-		return pdfsvc.InvoiceData{}, "", errors.New("database error")
+		return pdfsvc.InvoiceData{}, "", errors.New("erreur de base de données")
 	}
 	defer rows.Close()
 	var pdfLines []pdfsvc.InvoiceLine
@@ -130,7 +130,7 @@ func (h *InvoicesHandler) invoiceDataFor2(ctx context.Context, id string) (pdfsv
 		&ct.IBAN, &ct.QRIBAN, &ct.VATNumber, &ct.PaymentTermDays, &isActive,
 		&ct.CreatedAt, &ct.UpdatedAt)
 	if err != nil && err != sql.ErrNoRows {
-		return pdfsvc.InvoiceData{}, "", errors.New("database error")
+		return pdfsvc.InvoiceData{}, "", errors.New("erreur de base de données")
 	}
 	ct.IsActive = isActive == 1
 
