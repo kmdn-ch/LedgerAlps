@@ -92,6 +92,8 @@ func TestRienNEstResteEnFrancais(t *testing.T) {
 			"paiement.iban": true, "paiement.qrIban": true, "compta.solde": true,
 			"securite.phraseDePasse": true, "securite.motDePasse": true,
 			"nav.contacts": true,
+			// « E-mail » s'écrit pareil dans les quatre langues.
+			"ach.email": true,
 		},
 		"en": {
 			"paiement.iban": true, "paiement.qrIban": true,
@@ -100,8 +102,8 @@ func TestRienNEstResteEnFrancais(t *testing.T) {
 			// Mots identiques en français et en anglais.
 			"fact.colDate": true, "fact.colContact": true, "fact.colTotal": true,
 			"compta.credit": true, "securite.motDePasse": false,
-			// « document » s'écrit pareil dans les deux langues.
-			"fact.unDocument": true, "fact.desDocuments": true,
+			// « document » et « e-mail » s'écrivent pareil dans les deux langues.
+			"fact.unDocument": true, "fact.desDocuments": true, "ach.email": true,
 		},
 	}
 

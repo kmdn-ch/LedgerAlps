@@ -27,6 +27,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { paymentsApi, supplierInvoicesApi } from '@/api/client'
 import { ConfirmDialog } from '@/components/ui'
 import { useCanWrite } from '@/hooks/usePermissions'
+import { useT, useFormats } from '@/i18n/useT'
 import { LoadingSpinner, EmptyState, ErrorBanner, SectionTitle } from '@/components/ui'
 import { formatCHF, formatDate } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
@@ -52,6 +53,8 @@ interface PayableResponse {
 }
 
 export function PaymentRunPanel() {
+  const t = useT()
+  const { pluriel } = useFormats()
   const qc = useQueryClient()
   // Tenir les livres : administrateur et comptable. La lecture seule n'a ni la
   // case à cocher ni le bouton, et le serveur la refuserait deux fois.
@@ -124,9 +127,11 @@ export function PaymentRunPanel() {
       // Le verdict est rendu PAR facture : un lot partiel est le cas normal, et
       // annoncer un succès global masquerait les lignes qui n'ont pas bougé.
       setRetrait(
-        `${d.processed} facture(s) retirée(s) sur ${d.total}.` +
-        (refus.length ? ' Non traitée(s) : ' +
-          refus.map(x => x.detail).join(' · ') : ''))
+        t('pay.retraitBilan', { n: d.processed, total: d.total }) +
+        (refus.length
+          ? ' ' + t('pay.retraitNonTraitees',
+              { details: refus.map(x => x.detail).join(' · ') })
+          : ''))
       setError(null); setARetirer(false); setSelected(new Set())
       await qc.invalidateQueries({ queryKey: ['payments-payable'] })
       await qc.invalidateQueries({ queryKey: ['supplier-invoices'] })
@@ -143,10 +148,9 @@ export function PaymentRunPanel() {
 
   return (
     <div>
-      <SectionTitle>Paiements fournisseurs — ISO 20022 pain.001</SectionTitle>
+      <SectionTitle>{t('pay.titre')}</SectionTitle>
       <p className="text-sm text-alpine-600 mb-4">
-        Sélectionnez les factures à régler : LedgerAlps produit un fichier XML que vous déposez
-        dans votre e-banking. Compatible UBS, PostFinance, Raiffeisen et Banques cantonales.
+        {t('pay.intro')}
       </p>
 
       {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
@@ -157,7 +161,7 @@ export function PaymentRunPanel() {
           bloque ? 'border-danger-500 bg-danger-500/5' : 'border-neutral-200 bg-neutral-50'
         }`}>
           <p className="flex items-center gap-2 font-medium">
-            <Building2 size={15} /> Compte à débiter
+            <Building2 size={15} /> {t('pay.compteADebiter')}
           </p>
           {bloque
             ? <p className="text-danger-700 mt-1">{bloque}</p>
@@ -172,8 +176,8 @@ export function PaymentRunPanel() {
 
       {!payable.isLoading && items.length === 0 && (
         <EmptyState
-          title="Aucune facture à payer"
-          description="Seules les factures fournisseurs comptabilisées apparaissent ici. Une facture encore au brouillon doit d'abord être comptabilisée : la charge doit exister dans les livres avant que la trésorerie bouge."
+          title={t('pay.aucuneAPayer')}
+          description={t('pay.aucuneAPayerAide')}
         />
       )}
 
@@ -185,17 +189,17 @@ export function PaymentRunPanel() {
                 <th style={{ width: '38px' }}>
                   <input
                     type="checkbox"
-                    aria-label="Tout sélectionner"
+                    aria-label={t('pay.toutSelectionner')}
                     checked={chosen.length === payables.length && payables.length > 0}
                     onChange={e => setSelected(
                       e.target.checked ? new Set(payables.map(i => i.id)) : new Set())}
                   />
                 </th>
-                <th>Fournisseur</th>
-                <th>Facture</th>
-                <th>Échéance</th>
-                <th>Référence</th>
-                <th className="text-right">Montant</th>
+                <th>{t('doc.fournisseur')}</th>
+                <th>{t('pay.colFacture')}</th>
+                <th>{t('doc.echeance')}</th>
+                <th>{t('pay.colReference')}</th>
+                <th className="text-right">{t('doc.montant')}</th>
               </tr>
             </thead>
             <tbody>
@@ -215,7 +219,7 @@ export function PaymentRunPanel() {
                     {i.due_date ? formatDate(i.due_date) : '—'}
                     {i.days_late > 0 && (
                       <span className="block text-xs text-danger-700">
-                        {i.days_late} jour{i.days_late > 1 ? 's' : ''} de retard
+                        {t('pay.joursRetard', { n: i.days_late })}
                       </span>
                     )}
                   </td>
@@ -225,7 +229,7 @@ export function PaymentRunPanel() {
                           <span className="block font-mono text-alpine-500 mt-0.5">
                             {i.payment_reference}
                           </span></>
-                      : <span className="text-alpine-400">motif en texte libre</span>}
+                      : <span className="text-alpine-400">{t('pay.motifLibre')}</span>}
                   </td>
                   <td className="text-right font-mono tabular-nums">
                     {formatCHF(i.amount)}
@@ -243,8 +247,9 @@ export function PaymentRunPanel() {
         <div className="mt-4 rounded-md border border-warning-500 bg-warning-100 px-4 py-3">
           <p className="text-sm font-medium flex items-center gap-1.5">
             <AlertTriangle size={15} />
-            {blocked.length} facture{blocked.length > 1 ? 's' : ''} ne peu
-            {blocked.length > 1 ? 'vent' : 't'} pas être payée{blocked.length > 1 ? 's' : ''}
+            {pluriel(blocked.length,
+              t('pay.uneBloquee', { n: blocked.length }),
+              t('pay.desBloquees', { n: blocked.length }))}
           </p>
           {/* Cochables, elles aussi. Ce sont même celles qui restent le plus
               longtemps : elles ne peuvent PAS être payées, donc rien ne les
@@ -282,7 +287,9 @@ export function PaymentRunPanel() {
             {retirer.isPending
               ? <Loader2 size={14} className="animate-spin" />
               : <Trash2 size={14} />}
-            Retirer {selected.size} facture{selected.size > 1 ? 's' : ''} de la liste
+            {pluriel(selected.size,
+              t('pay.retirerUne', { n: selected.size }),
+              t('pay.retirerPlusieurs', { n: selected.size }))}
           </button>
         </div>
       )}
@@ -298,19 +305,20 @@ export function PaymentRunPanel() {
           <div>
             <label className="label" htmlFor="exec-date">
               <CalendarClock size={13} className="inline mr-1" />
-              Date d&rsquo;exécution souhaitée
+              {t('pay.dateExecution')}
             </label>
             <input id="exec-date" type="date" className="input w-52"
                    value={execDate} onChange={e => setExecDate(e.target.value)} />
             <p className="text-xs text-alpine-500 mt-1">
-              La banque exécute à cette date, ou au premier jour ouvrable suivant.
+              {t('pay.dateExecutionAide')}
             </p>
           </div>
 
           <div className="text-right">
             <p className="text-sm text-alpine-600">
-              {chosen.length} facture{chosen.length > 1 ? 's' : ''} sélectionnée
-              {chosen.length > 1 ? 's' : ''}
+              {pluriel(chosen.length,
+                t('pay.uneSelectionnee', { n: chosen.length }),
+                t('pay.desSelectionnees', { n: chosen.length }))}
             </p>
             <p className="text-xl font-semibold font-mono tabular-nums text-alpine-900">
               {formatCHF(total)}
@@ -321,7 +329,7 @@ export function PaymentRunPanel() {
               {generate.isPending
                 ? <Loader2 size={14} className="animate-spin" />
                 : <Download size={15} />}
-              Générer le fichier
+              {t('pay.genererFichier')}
             </button>
           </div>
         </div>
@@ -330,16 +338,14 @@ export function PaymentRunPanel() {
       {done && (
         <div className="mt-4 rounded-md border border-success-500 bg-success-500/5 px-4 py-3 text-sm">
           <p className="font-medium">
-            Fichier produit — {done.count} virement{done.count > 1 ? 's' : ''},
-            {' '}{formatCHF(done.total)}
+            {pluriel(done.count,
+              t('pay.fichierProduitUn', { n: done.count, montant: formatCHF(done.total) }),
+              t('pay.fichierProduitPlusieurs', { n: done.count, montant: formatCHF(done.total) }))}
           </p>
           <p className="text-alpine-700 mt-1 flex items-start gap-1.5">
             <Info size={14} className="mt-0.5 shrink-0" />
             <span>
-              Déposez-le dans votre e-banking pour que les virements partent. Les factures restent
-              <strong> comptabilisées</strong> et non « payées » : c&rsquo;est le relevé bancaire
-              qui l&rsquo;établira, à l&rsquo;import camt.053. Rien n&rsquo;a été envoyé
-              nulle part — LedgerAlps ne parle à aucun service extérieur.
+              {t('pay.deposerEbanking')}
             </span>
           </p>
         </div>
@@ -350,16 +356,18 @@ export function PaymentRunPanel() {
           « êtes-vous sûr ». */}
       <ConfirmDialog
         open={aRetirer}
-        title={`Retirer ${selected.size} facture${selected.size > 1 ? 's' : ''} de la liste ?`}
+        title={pluriel(selected.size,
+          t('pay.confirmRetirerUne', { n: selected.size }),
+          t('pay.confirmRetirerPlusieurs', { n: selected.size }))}
         consequences={[
-          <>Un <strong>brouillon</strong> est supprimé : rien n&rsquo;était entré dans les livres.</>,
-          <>Une facture <strong>comptabilisée</strong> est <strong>extournée</strong> — une écriture
-             inverse neutralise la charge et la TVA déductible — puis marquée annulée. La pièce et
-             les deux écritures restent lisibles (CO art. 958f).</>,
-          <>Une facture <strong>déjà réglée</strong> est refusée : l&rsquo;argent est parti.</>,
+          t('pay.confirmBrouillon'),
+          t('pay.confirmExtourne'),
+          t('pay.confirmPayee'),
         ]}
-        reassurance="Chaque facture reçoit son propre verdict : un lot partiel est normal, et le détail vous est rendu."
-        confirmLabel="Retirer de la liste"
+        reassurance={t('pay.confirmVerdict')}
+        confirmLabel={pluriel(selected.size,
+          t('pay.retirerUne', { n: selected.size }),
+          t('pay.retirerPlusieurs', { n: selected.size }))}
         tone="danger"
         busy={retirer.isPending}
         onConfirm={() => retirer.mutate()}

@@ -32,6 +32,7 @@ import { refusalMessage } from '@/utils/refusal'
 import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 import { useT } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
 import { PaymentRunPanel } from '@/components/payments/PaymentRunPanel'
 import type { Account, Contact } from '@/types'
 
@@ -53,8 +54,9 @@ interface SupplierInvoice {
   journal_entry_id?: string
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  draft: 'Brouillon', booked: 'Comptabilisée', paid: 'Payée', cancelled: 'Annulée',
+const STATUS_CLE: Record<string, Cle> = {
+  draft: 'statut.brouillon', booked: 'statut.comptabilisee',
+  paid: 'statut.payee', cancelled: 'statut.annulee',
 }
 const STATUS_CLASS: Record<string, string> = {
   draft: 'badge-draft', booked: 'badge-sent', paid: 'badge-paid', cancelled: 'badge-cancelled',
@@ -63,11 +65,11 @@ const STATUS_CLASS: Record<string, string> = {
 // Les taux en vigueur depuis le 1er janvier 2024 (LTVA art. 25). Une liste
 // fermée plutôt qu'un champ libre : le taux entre dans la déclaration, et une
 // faute de frappe ne se découvre qu'au décompte trimestriel.
-const VAT_RATES = [
-  { value: '8.1', label: '8.1 % — taux normal' },
-  { value: '2.6', label: '2.6 % — taux réduit (alimentation, livres, médicaments)' },
-  { value: '3.8', label: '3.8 % — hébergement' },
-  { value: '0',   label: '0 % — exonéré ou hors du champ' },
+const VAT_RATES: { value: string; cle: Cle }[] = [
+  { value: '8.1', cle: 'tva.tauxNormal' },
+  { value: '2.6', cle: 'tva.tauxReduit' },
+  { value: '3.8', cle: 'tva.tauxHebergement' },
+  { value: '0',   cle: 'tva.tauxZero' },
 ]
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -362,8 +364,8 @@ export function PurchasesPage() {
   return (
     <div>
       <PageHeader
-        title="Achats"
-        subtitle="Factures fournisseurs et ordres de paiement"
+        title={t('nav.achats')}
+        subtitle={t('ach.sousTitre')}
         actions={
           // Déposer un fichier EST une écriture : le document est transmis au
           // serveur, lu, et il en sort une facture. Un compte en lecture seule
@@ -380,7 +382,7 @@ export function PurchasesPage() {
               {readQR.isPending
                 ? <Loader2 size={15} className="animate-spin" />
                 : <ScanLine size={15} />}
-              {readQR.isPending ? 'Lecture…' : 'Lire un PDF'}
+              {readQR.isPending ? t('ach.lecture') : t('ach.lirePDF')}
               <input type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden"
                      onChange={e => {
                        const f = e.target.files?.[0]
@@ -393,7 +395,7 @@ export function PurchasesPage() {
                       setCreating(v => !v)
                     }}
                     className="btn-primary">
-              <Plus size={15} /> Saisir une facture
+              <Plus size={15} /> {t('ach.saisirFacture')}
             </button>
           </div>
           ) : (
@@ -418,7 +420,7 @@ export function PurchasesPage() {
           <p className="text-alpine-700 mt-1">{scan.message}</p>
           <button onClick={() => setScan(null)}
                   className="text-xs text-alpine-500 hover:text-alpine-700 mt-1.5">
-            Masquer
+            {t('ach.masquer')}
           </button>
         </div>
       )}
@@ -427,8 +429,8 @@ export function PurchasesPage() {
         <div className="card card-pad mb-5">
           <SectionTitle>
             {editing
-              ? `Modifier la facture ${editing.supplier_reference}`
-              : 'Nouvelle facture fournisseur'}
+              ? t('ach.titreModifier', { ref: editing.supplier_reference })
+              : t('ach.titreNouvelle')}
           </SectionTitle>
 
           {/* Création à la volée : un fournisseur inconnu ne doit pas obliger à
@@ -436,15 +438,15 @@ export function PurchasesPage() {
           {newSupplier && (
             <div className="mb-4 rounded-md border border-accent-700 bg-accent-100/30 px-4 py-3">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium">Nouveau fournisseur</p>
+                <p className="text-sm font-medium">{t('ach.nouveauFournisseur')}</p>
                 <button type="button" onClick={() => setNewSupplier(false)}
-                        className="text-alpine-500 hover:text-alpine-700" aria-label="Fermer">
+                        className="text-alpine-500 hover:text-alpine-700" aria-label={t('action.fermer')}>
                   <X size={15} />
                 </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="label" htmlFor="ns-name">Nom *</label>
+                  <label className="label" htmlFor="ns-name">{t('ach.nom')}</label>
                   <input id="ns-name" className="input" value={supplierForm.name}
                          onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} />
                 </div>
@@ -453,43 +455,43 @@ export function PurchasesPage() {
                     Les réunir sous une seule étiquette « IBAN » revenait à
                     afficher un QR-IBAN sous un nom qui n'est pas le sien. */}
                 <div>
-                  <label className="label" htmlFor="ns-iban">IBAN</label>
+                  <label className="label" htmlFor="ns-iban">{t('paiement.iban')}</label>
                   <input id="ns-iban" className="input font-mono" placeholder="CH.."
                          value={supplierForm.iban}
                          onChange={e => setSupplierForm({ ...supplierForm, iban: e.target.value })} />
                   {estQRIBAN(supplierForm.iban) ? (
                     <p className="text-xs text-amber-700 mt-1">
-                      Ce compte est un QR-IBAN — il sera enregistré comme tel.
+                      {t('ach.ibanEstQR')}
                     </p>
                   ) : (
                     <p className="text-xs text-alpine-500 mt-1">
-                      Pour une facture sans QR, ou avec une référence Creditor Reference.
+                      {t('ach.ibanAide')}
                     </p>
                   )}
                 </div>
                 <div>
-                  <label className="label" htmlFor="ns-qriban">QR-IBAN</label>
+                  <label className="label" htmlFor="ns-qriban">{t('paiement.qrIban')}</label>
                   <input id="ns-qriban" className="input font-mono" placeholder="CH.."
                          value={supplierForm.qr_iban}
                          onChange={e => setSupplierForm({
                            ...supplierForm, qr_iban: e.target.value })} />
                   {supplierForm.qr_iban && !estQRIBAN(supplierForm.qr_iban) ? (
                     <p className="text-xs text-amber-700 mt-1">
-                      Ce compte n’est pas un QR-IBAN — il sera enregistré comme IBAN ordinaire.
+                      {t('ach.qrIbanPasQR')}
                     </p>
                   ) : (
                     <p className="text-xs text-alpine-500 mt-1">
-                      Rempli par la lecture du QR. Institution 30000 à 31999.
+                      {t('ach.qrIbanAide')}
                     </p>
                   )}
                 </div>
                 <div>
-                  <label className="label" htmlFor="ns-mail">E-mail</label>
+                  <label className="label" htmlFor="ns-mail">{t('ach.email')}</label>
                   <input id="ns-mail" type="email" className="input" value={supplierForm.email}
                          onChange={e => setSupplierForm({ ...supplierForm, email: e.target.value })} />
                 </div>
                 <div>
-                  <label className="label" htmlFor="ns-uid">N° IDE</label>
+                  <label className="label" htmlFor="ns-uid">{t('ach.ide')}</label>
                   <input id="ns-uid" className="input font-mono" placeholder="CHE-000.000.000"
                          value={supplierForm.vat_number}
                          onChange={e => setSupplierForm({
@@ -501,20 +503,20 @@ export function PurchasesPage() {
                         disabled={supplierForm.name.trim() === '' || createSupplier.isPending}
                         className="btn-primary btn-sm flex items-center gap-1.5">
                   {createSupplier.isPending && <Loader2 size={13} className="animate-spin" />}
-                  Créer et sélectionner
+                  {t('ach.creerSelectionner')}
                 </button>
                 <button type="button" onClick={() => setNewSupplier(false)}
-                        className="btn-ghost btn-sm">Annuler</button>
+                        className="btn-ghost btn-sm">{t('action.annuler')}</button>
               </div>
             </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="label" htmlFor="sup">Fournisseur *</label>
+              <label className="label" htmlFor="sup">{t('ach.fournisseurObl')}</label>
               <select id="sup" className="select" value={form.supplier_id}
                       onChange={e => setForm({ ...form, supplier_id: e.target.value })}>
-                <option value="">Choisir…</option>
+                <option value="">{t('ach.choisir')}</option>
                 {/* Un QR-IBAN est rangé dans `qr_iban`, jamais dans `iban` :
                     ne lire que le second faisait annoncer « sans IBAN » un
                     fournisseur parfaitement payable — et l'ordre de virement
@@ -522,7 +524,7 @@ export function PurchasesPage() {
                     L'écran démentait le produit. */}
                 {supplierList.map(sp => (
                   <option key={sp.id} value={sp.id}>
-                    {sp.name}{sp.iban || sp.qr_iban ? '' : '  (sans IBAN)'}
+                    {sp.name}{sp.iban || sp.qr_iban ? '' : ` ${t('ach.sansIban')}`}
                   </option>
                 ))}
               </select>
@@ -533,45 +535,45 @@ export function PurchasesPage() {
               <button type="button" onClick={() => setNewSupplier(true)}
                       className="text-xs text-accent-700 hover:text-accent-800 mt-1
                                  flex items-center gap-1">
-                <UserPlus size={12} /> Nouveau fournisseur
+                <UserPlus size={12} /> {t('ach.nouveauFournisseur')}
               </button>
               {supplierList.length === 0 && (
                 <p className="text-xs text-alpine-500 mt-1">
-                  Aucun fournisseur enregistré pour l&rsquo;instant.
+                  {t('ach.aucunFournisseur')}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="label" htmlFor="ref">N° de la facture *</label>
-              <input id="ref" className="input" placeholder="FA-2026-118"
+              <label className="label" htmlFor="ref">{t('ach.numeroObl')}</label>
+              <input id="ref" className="input" placeholder={t('fact.colNumero')}
                      value={form.supplier_reference}
                      onChange={e => setForm({ ...form, supplier_reference: e.target.value })} />
-              <p className="text-xs text-alpine-500 mt-1">Tel qu&rsquo;imprimé par le fournisseur.</p>
+              <p className="text-xs text-alpine-500 mt-1">{t('ach.numeroAide')}</p>
             </div>
 
             <div>
-              <label className="label" htmlFor="issue">Date de la facture *</label>
+              <label className="label" htmlFor="issue">{t('ach.dateObl')}</label>
               <input id="issue" type="date" className="input" value={form.issue_date}
                      onChange={e => setForm({ ...form, issue_date: e.target.value })} />
             </div>
 
             <div>
-              <label className="label" htmlFor="due">Échéance</label>
+              <label className="label" htmlFor="due">{t('doc.echeance')}</label>
               <input id="due" type="date" className="input" value={form.due_date}
                      onChange={e => setForm({ ...form, due_date: e.target.value })} />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="label" htmlFor="desc">Objet</label>
-              <input id="desc" className="input" placeholder="Fournitures, abonnement, sous-traitance…"
+              <label className="label" htmlFor="desc">{t('ach.objet')}</label>
+              <input id="desc" className="input" placeholder={t('ach.objetExemple')}
                      value={form.description}
                      onChange={e => setForm({ ...form, description: e.target.value })} />
             </div>
 
             <div>
               <label className="label" htmlFor="amt">
-                Montant *
+                {t('ach.montantObl')}
               </label>
               <div className="flex gap-2">
                 <input id="amt" type="number" step="0.05" min="0" inputMode="decimal"
@@ -586,35 +588,33 @@ export function PurchasesPage() {
                         onChange={e => setForm({
                           ...form, amount_mode: e.target.value as 'ht' | 'ttc',
                         })}>
-                  <option value="ttc">TTC</option>
-                  <option value="ht">HT</option>
+                  <option value="ttc">{t('tva.toutesTaxes')}</option>
+                  <option value="ht">{t('tva.horsTaxe')}</option>
                 </select>
               </div>
               <p className="text-xs text-alpine-500 mt-1">
-                {form.amount_mode === 'ttc'
-                  ? 'Le montant à payer, tel qu’il figure sur la facture.'
-                  : 'Le montant hors taxe.'}
+                {form.amount_mode === 'ttc' ? t('ach.montantTTCAide') : t('ach.montantHTAide')}
               </p>
             </div>
 
             <div>
-              <label className="label" htmlFor="rate">Taux de TVA</label>
+              <label className="label" htmlFor="rate">{t('tva.taux')}</label>
               {/* Les taux suisses sont fixés par la loi : les proposer en liste
                   supprime la faute de frappe — un 8.0 au lieu de 8.1 fausse la
                   déclaration et ne se voit qu'au décompte trimestriel. */}
               <select id="rate" className="select" value={form.vat_rate}
                       onChange={e => setForm({ ...form, vat_rate: e.target.value })}>
                 {VAT_RATES.map(r => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
+                  <option key={r.value} value={r.value}>{t(r.cle, { taux: r.value })}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="label" htmlFor="acct">Compte de charge</label>
+              <label className="label" htmlFor="acct">{t('ach.compteCharge')}</label>
               <select id="acct" className="select" value={form.expense_account_code}
                       onChange={e => setForm({ ...form, expense_account_code: e.target.value })}>
-                <option value="">6500 — Charges d&rsquo;administration (par défaut)</option>
+                <option value="">{t('ach.compteParDefaut')}</option>
                 {expenseAccounts.map(a => (
                   <option key={a.id} value={a.code}>{a.code} — {a.name}</option>
                 ))}
@@ -622,8 +622,8 @@ export function PurchasesPage() {
             </div>
 
             <div className="sm:col-span-2">
-              <label className="label" htmlFor="payref">Référence de paiement</label>
-              <input id="payref" className="input font-mono" placeholder="27 chiffres, ou RF…"
+              <label className="label" htmlFor="payref">{t('paiement.reference')}</label>
+              <input id="payref" className="input font-mono" placeholder={t('ach.refExemple')}
                      value={form.payment_reference}
                      onChange={e => setForm({ ...form, payment_reference: e.target.value })} />
               {/* Cette référence est ce qui permet au fournisseur de rapprocher
@@ -640,7 +640,7 @@ export function PurchasesPage() {
                           border-alpine-100 pt-3">
             <div className="text-sm text-alpine-600">
               <p>
-                Hors taxe <span className="font-mono">{formatCHF(isFinite(ht) ? ht : 0)}</span>
+                {t('tva.horsTaxe')} <span className="font-mono">{formatCHF(isFinite(ht) ? ht : 0)}</span>
                 {' · '}TVA <span className="font-mono">{formatCHF(tva)}</span>
                 {' · '}<strong>TTC <span className="font-mono">{formatCHF(ttc)}</span></strong>
               </p>
@@ -651,8 +651,7 @@ export function PurchasesPage() {
                   et le dire évite de chercher un taux qui n'existe pas. */}
               {rate === 0 && isFinite(ht) && ht > 0 && (
                 <p className="text-xs text-alpine-500 mt-0.5">
-                  Sans TVA : le montant hors taxe est le montant payé, et il n’y a pas
-                  d’impôt préalable à déduire.
+                  {t('ach.sansTVA')}
                 </p>
               )}
             </div>
@@ -661,30 +660,30 @@ export function PurchasesPage() {
                         setCreating(false); setEditing(null); setScan(null)
                         reset(); setError(null)
                       }}
-                      className="btn-secondary btn-sm">Annuler</button>
+                      className="btn-secondary btn-sm">{t('action.annuler')}</button>
               <button onClick={() => { setError(null); create.mutate() }} disabled={!canCreate}
                       className="btn-primary btn-sm flex items-center gap-1.5">
                 {create.isPending && <Loader2 size={13} className="animate-spin" />}
-                {editing ? 'Enregistrer les modifications' : 'Enregistrer le brouillon'}
+                {editing ? t('ach.enregistrerModifs') : t('ach.enregistrerBrouillon')}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <SectionTitle>Factures reçues</SectionTitle>
+      <SectionTitle>{t('ach.facturesRecues')}</SectionTitle>
       <div className="table-wrapper mb-8">
         <table className="table">
           <thead>
             <tr>
-              <th>Fournisseur</th>
-              <th>N° facture</th>
-              <th>Date</th>
-              <th>Échéance</th>
-              <th className="text-right">HT</th>
-              <th className="text-right">TVA</th>
-              <th className="text-right">TTC</th>
-              <th>Statut</th>
+              <th>{t('doc.fournisseur')}</th>
+              <th>{t('ach.numeroCol')}</th>
+              <th>{t('fact.colDate')}</th>
+              <th>{t('doc.echeance')}</th>
+              <th className="text-right">{t('tva.horsTaxe')}</th>
+              <th className="text-right">{t('tva.tva')}</th>
+              <th className="text-right">{t('tva.toutesTaxes')}</th>
+              <th>{t('fact.colStatut')}</th>
               <th />
             </tr>
           </thead>
@@ -699,8 +698,8 @@ export function PurchasesPage() {
               <tr><td colSpan={9}>
                 <EmptyState
                   icon={<FileText size={28} />}
-                  title="Aucune facture fournisseur"
-                  description="Saisissez ce que vous devez : la TVA payée à vos fournisseurs se déduit de celle que vous encaissez, et la charge entre dans votre résultat."
+                  title={t('ach.aucuneFacture')}
+                  description={t('ach.aucuneFactureAide')}
                 />
               </td></tr>
             )}
@@ -719,7 +718,7 @@ export function PurchasesPage() {
                 </td>
                 <td>
                   <span className={`badge ${STATUS_CLASS[i.status] ?? 'badge-draft'}`}>
-                    {STATUS_LABEL[i.status] ?? i.status}
+                    {t(STATUS_CLE[i.status] ?? 'statut.brouillon')}
                   </span>
                 </td>
                 <td className="text-right">
@@ -729,11 +728,11 @@ export function PurchasesPage() {
                     <div className="flex items-center justify-end gap-1">
                       <button onClick={() => openEdit(i)}
                               className="btn-ghost btn-sm flex items-center gap-1">
-                        <Pencil size={13} /> Modifier
+                        <Pencil size={13} /> {t('action.modifier')}
                       </button>
                       <button onClick={() => setToBook(i)} disabled={book.isPending}
                               className="btn-ghost btn-sm text-success-700 flex items-center gap-1">
-                        <CheckCircle size={13} /> Comptabiliser
+                        <CheckCircle size={13} /> {t('ach.comptabiliser')}
                       </button>
                     </div>
                   )}
@@ -748,7 +747,7 @@ export function PurchasesPage() {
 
       <ConfirmDialog
         open={toBook !== null}
-        title={`Comptabiliser la facture ${toBook?.supplier_reference ?? ''} ?`}
+        title={t('ach.confirmTitre', { ref: toBook?.supplier_reference ?? '' })}
         // Sur une facture sans TVA — fournisseur non assujetti, opération
         // exclue — annoncer une « TVA déductible » et un report au chiffre 400
         // décrirait une écriture qui ne sera pas passée. Un dialogue de
@@ -757,21 +756,18 @@ export function PurchasesPage() {
         consequences={
           (toBook?.vat_amount ?? 0) > 0
             ? [
-                <>L&rsquo;écriture est passée et <strong>scellée</strong> : charge et TVA
-                   déductible au débit, créanciers au crédit.</>,
-                <>La TVA payée entre dans votre déclaration (impôt préalable, chiffre 400).</>,
-                <>La facture devient payable et apparaît dans l&rsquo;ordre de paiement.</>,
+                t('ach.confirmScellee'),
+                t('ach.confirmDeclaration'),
+                t('ach.confirmPayable'),
               ]
             : [
-                <>L&rsquo;écriture est passée et <strong>scellée</strong> : la charge au débit,
-                   créanciers au crédit.</>,
-                <>Cette facture ne porte <strong>aucune TVA</strong> : il n&rsquo;y a pas
-                   d&rsquo;impôt préalable à récupérer, et rien à reporter au chiffre 400.</>,
-                <>La facture devient payable et apparaît dans l&rsquo;ordre de paiement.</>,
+                t('ach.confirmScelleeSansTVA'),
+                t('ach.confirmSansTVA'),
+                t('ach.confirmPayable'),
               ]
         }
-        reassurance="Elle ne devient pas « payée » pour autant : c'est le relevé bancaire qui l'établira."
-        confirmLabel="Comptabiliser"
+        reassurance={t('ach.confirmPasPayee')}
+        confirmLabel={t('ach.comptabiliser')}
         tone="danger"
         busy={book.isPending}
         onConfirm={() => toBook && book.mutate(toBook.id)}
