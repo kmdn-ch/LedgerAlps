@@ -18,11 +18,12 @@ import { isoApi, exportApi, accountingExportApi } from '@/api/client'
 import { PaymentRunPanel } from '@/components/payments/PaymentRunPanel'
 import { PageHeader, SectionTitle, ErrorBanner } from '@/components/ui'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
-import { useT } from '@/i18n/useT'
+import { useT, useFormats } from '@/i18n/useT'
 import { refusalMessage } from '@/utils/refusal'
 
 export function ReportsPage() {
   const t = useT()
+  const { pluriel } = useFormats()
   const peutEcrire = useCanWrite()
   const [startDate, setStartDate] = useState(() =>
     new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)
@@ -76,8 +77,8 @@ export function ReportsPage() {
   return (
     <div>
       <PageHeader
-        title="Rapports"
-        subtitle="Exports comptables et import bancaire ISO 20022"
+        title={t('nav.rapports')}
+        subtitle={t('rp.sousTitre')}
       />
 
       {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
@@ -87,33 +88,31 @@ export function ReportsPage() {
         <div className="card-body flex items-center gap-4 flex-wrap">
           <Calendar size={16} className="text-alpine-400" />
           <div className="flex items-center gap-2">
-            <label className="text-sm text-alpine-600" htmlFor="du">Du</label>
+            <label className="text-sm text-alpine-600" htmlFor="du">{t('rp.du')}</label>
             <input id="du" type="date" className="input w-40"
                    value={startDate} onChange={e => setStartDate(e.target.value)} />
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-sm text-alpine-600" htmlFor="au">Au</label>
+            <label className="text-sm text-alpine-600" htmlFor="au">{t('rp.au')}</label>
             <input id="au" type="date" className="input w-40"
                    value={endDate} onChange={e => setEndDate(e.target.value)} />
           </div>
           <p className="text-xs text-alpine-400">
-            La période s&rsquo;applique aux trois exports ci-dessous.
+            {t('rp.periodeAide')}
           </p>
         </div>
       </div>
 
-      <SectionTitle>Documents comptables</SectionTitle>
+      <SectionTitle>{t('rp.documentsComptables')}</SectionTitle>
       <p className="text-sm text-alpine-600 mb-3">
-        Fichiers CSV séparés par des point-virgules, lisibles directement dans Excel.
-        Seules les écritures <strong>comptabilisées</strong> y figurent : un brouillon
-        n&rsquo;est scellé par rien et pourrait encore changer.
+        {t('rp.csvAide')}
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <ExportCard
           icon={<BookOpen size={20} />}
-          title="Journal général"
-          description="Toutes les écritures dans l'ordre chronologique, avec leur auteur et leur empreinte (CO art. 957a)."
+          title={t('rp.journalGeneral')}
+          description={t('rp.journalGeneralAide')}
           loading={loading === 'journal'}
           onClick={() => download('journal',
             () => accountingExportApi.journal(startDate, endDate),
@@ -121,8 +120,8 @@ export function ReportsPage() {
         />
         <ExportCard
           icon={<FileSpreadsheet size={20} />}
-          title="Grand livre"
-          description="Les mêmes mouvements rangés par compte, avec le solde cumulé après chaque ligne."
+          title={t('compta.grandLivre')}
+          description={t('rp.grandLivreAide')}
           loading={loading === 'ledger'}
           onClick={() => download('ledger',
             () => accountingExportApi.ledger(startDate, endDate),
@@ -130,8 +129,8 @@ export function ReportsPage() {
         />
         <ExportCard
           icon={<BarChart3 size={20} />}
-          title="Balance de vérification"
-          description="Totaux par compte et contrôle d'équilibre. Le premier document que demande une fiduciaire."
+          title={t('compta.balance')}
+          description={t('rp.balanceAide')}
           loading={loading === 'balance'}
           onClick={() => download('balance',
             () => accountingExportApi.trialBalance(startDate, endDate),
@@ -145,7 +144,7 @@ export function ReportsPage() {
           qu'on attend d'un accès de fiduciaire. */}
       {peutEcrire && (
       <>
-      <SectionTitle>Import bancaire — ISO 20022 camt.053</SectionTitle>
+      <SectionTitle>{t('rp.importBancaire')}</SectionTitle>
       <div className="card mb-8">
         <div className="card-body">
           <div className="flex items-start gap-4">
@@ -154,14 +153,13 @@ export function ReportsPage() {
               <Upload size={18} className="text-alpine-600" />
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold text-alpine-900 mb-1">Relevé bancaire camt.053</h3>
+              <h3 className="font-semibold text-alpine-900 mb-1">{t('rp.releveCamt')}</h3>
               <p className="text-sm text-alpine-600 mb-3">
-                Déposez le fichier XML téléchargé depuis votre e-banking : LedgerAlps y
-                reconnaît vos encaissements et propose les rapprochements.
+                {t('rp.releveCamtAide')}
               </p>
               <label className="btn-secondary btn-sm inline-flex items-center gap-1.5 cursor-pointer">
                 <Upload size={14} />
-                {loading === 'camt' ? 'Lecture…' : 'Choisir un fichier XML'}
+                {loading === 'camt' ? t('ach.lecture') : t('rp.choisirXML')}
                 <input type="file" accept=".xml,text/xml,application/xml" className="hidden"
                        onChange={e => {
                          const f = e.target.files?.[0]
@@ -175,9 +173,9 @@ export function ReportsPage() {
           {camtResult && (
             <div className="mt-4 p-4 bg-success-100 border border-success-100 rounded-lg">
               <p className="text-sm font-medium text-success-700 mb-2">
-                {camtResult.count} transaction{camtResult.count !== 1 ? 's' : ''} lue
-                {camtResult.count !== 1 ? 's' : ''} — rapprochez-les dans
-                Paramètres&nbsp;→&nbsp;Banque
+                {pluriel(camtResult.count,
+                  t('rp.uneTransactionLue', { n: camtResult.count }),
+                  t('rp.desTransactionsLues', { n: camtResult.count }))}
               </p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {(camtResult.entries as Array<{
@@ -214,17 +212,14 @@ export function ReportsPage() {
           <div className="card-body flex items-start gap-3">
             <Lock size={18} className="text-alpine-500 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-alpine-600">
-              {t(RAISON_LECTURE_SEULE)} L&rsquo;import d&rsquo;un relevé bancaire et
-              la production d&rsquo;un ordre de paiement demandent un compte
-              autorisé à écrire. <strong>Les exports et l&rsquo;archive légale
-              ci-dessous vous restent ouverts.</strong>
+              {t(RAISON_LECTURE_SEULE)} {t('rp.exportsOuverts')}
             </p>
           </div>
         </div>
       )}
 
       {/* Archivage légal */}
-      <SectionTitle>Archivage légal — CO art. 958f (10 ans)</SectionTitle>
+      <SectionTitle>{t('rp.archivage')}</SectionTitle>
       <div className="card border-alpine-200">
         <div className="card-body">
           <div className="flex items-start gap-4">
@@ -233,12 +228,9 @@ export function ReportsPage() {
               <Archive size={18} className="text-white" />
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold text-alpine-900 mb-1">Archive légale ZIP</h3>
+              <h3 className="font-semibold text-alpine-900 mb-1">{t('rp.archiveZIP')}</h3>
               <p className="text-sm text-alpine-600 mb-3">
-                Toute la comptabilité en JSON <em>et</em> en CSV — écritures, factures,
-                contacts, exercices — avec un manifeste SHA-256. Le format est ce qui rend
-                la sortie réelle : une archive qu&rsquo;on ne peut pas relire ailleurs
-                n&rsquo;est pas une archive.
+                {t('rp.archiveZIPAide')}
               </p>
               <button
                 onClick={() => download('archive',
@@ -248,11 +240,10 @@ export function ReportsPage() {
                 className="btn-primary btn-sm flex items-center gap-1.5"
               >
                 <Download size={14} />
-                {loading === 'archive' ? 'Préparation…' : "Télécharger l'archive"}
+                {loading === 'archive' ? t('rp.preparation') : t('rp.telechargerArchive')}
               </button>
               <p className="text-xs text-alpine-500 mt-2">
-                L&rsquo;archive couvre l&rsquo;ensemble des données, sans filtre de période :
-                c&rsquo;est ce que la conservation légale demande.
+                {t('rp.archiveAide')}
               </p>
             </div>
           </div>
@@ -271,6 +262,7 @@ function ExportCard({
   loading: boolean
   onClick: () => void
 }) {
+  const t = useT()
   return (
     <div className="card">
       <div className="card-body flex flex-col h-full">
@@ -283,7 +275,7 @@ function ExportCard({
         <button onClick={onClick} disabled={loading}
                 className="btn-secondary btn-sm flex items-center gap-1.5 w-fit">
           <Download size={14} />
-          {loading ? 'Préparation…' : 'Télécharger le CSV'}
+          {loading ? t('rp.preparation') : t('rp.telechargerCSV')}
         </button>
       </div>
     </div>

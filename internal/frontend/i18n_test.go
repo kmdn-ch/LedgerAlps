@@ -102,8 +102,9 @@ func TestRienNEstResteEnFrancais(t *testing.T) {
 			// Mots identiques en français et en anglais.
 			"fact.colDate": true, "fact.colContact": true, "fact.colTotal": true,
 			"compta.credit": true, "securite.motDePasse": false,
-			// « document » et « e-mail » s'écrivent pareil dans les deux langues.
+			// Mots identiques en français et en anglais.
 			"fact.unDocument": true, "fact.desDocuments": true, "ach.email": true,
+			"jr.date": true, "jr.description": true, "jr.colDescription": true,
 		},
 	}
 
