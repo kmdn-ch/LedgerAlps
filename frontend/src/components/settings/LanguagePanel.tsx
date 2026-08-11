@@ -14,14 +14,15 @@
 // croire qu'il se passe quelque chose de plus lourd, et perdrait la saisie en
 // cours.
 //
-// # L'avertissement n'est pas de la modestie
+// # L'avertissement a été retiré, et c'est un fait, pas une opinion
 //
-// La traduction est en cours. Le dire là où l'on choisit la langue évite qu'un
-// utilisateur croie à une panne en voyant les écrans rester en français, et
-// évite de lui faire perdre du temps à chercher un réglage qui n'existe pas.
-// Il disparaîtra quand la couverture sera complète — le CHANGELOG le dira.
+// Ce panneau a porté un « Traduction en cours » tant que les écrans restaient
+// en français. La couverture est désormais complète, vérifiée par
+// `internal/frontend/i18n_test.go` : aucune valeur d'un catalogue ne vaut plus
+// le français, et aucune clé ne manque. Un avertissement qu'on laisse après
+// coup est pire que pas d'avertissement — il apprend à ne plus les lire.
 
-import { Languages, Info } from 'lucide-react'
+import { Languages } from 'lucide-react'
 import { SectionTitle } from '@/components/ui'
 import { LANGUES, type Langue } from '@/i18n'
 import { useT, useLangueStore } from '@/i18n/useT'
@@ -52,15 +53,6 @@ export function LanguagePanel() {
             {l.nom}
           </button>
         ))}
-      </div>
-
-      {/* Dire où en est la traduction, plutôt que de laisser découvrir. */}
-      <div className="mt-3 flex items-start gap-2 rounded-md border border-alpine-200
-                      bg-alpine-50 px-3 py-2">
-        <Info size={14} className="text-alpine-500 flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-alpine-600">
-          <strong>{t('langue.encoursTitre')}</strong> — {t('langue.encoursDetail')}
-        </p>
       </div>
     </div>
   )

@@ -15,6 +15,9 @@ import { CalendarRange, Users, Calendar, Info } from 'lucide-react'
 import { revenueApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { formatCHF } from '@/utils'
+import { useT, useLangue } from '@/i18n/useT'
+import { localeIntl } from '@/i18n'
+import type { Cle } from '@/i18n'
 
 type GroupBy = 'year' | 'month' | 'contact'
 
@@ -34,23 +37,30 @@ interface RevenueResponse {
   basis: string
 }
 
-const GROUPS: { key: GroupBy; label: string; icon: typeof Calendar }[] = [
-  { key: 'year',    label: 'Par année',  icon: CalendarRange },
-  { key: 'month',   label: 'Par mois',   icon: Calendar },
-  { key: 'contact', label: 'Par client', icon: Users },
+const GROUPS: { key: GroupBy; cle: Cle; icon: typeof Calendar }[] = [
+  { key: 'year',    cle: 'ca.parAnnee',  icon: CalendarRange },
+  { key: 'month',   cle: 'ca.parMois',   icon: Calendar },
+  { key: 'contact', cle: 'ca.parClient', icon: Users },
 ]
 
 // Un libellé « 2026-03 » se lit mal dans un tableau qu'on parcourt.
-function prettyLabel(groupBy: GroupBy, label: string): string {
+//
+// Le nom du mois vient d'Intl et non d'une liste écrite ici : une liste
+// française en dur affichait « mars 2026 » sur une interface allemande, et
+// aurait demandé quatre listes à tenir à jour.
+function prettyLabel(groupBy: GroupBy, label: string, loc: string): string {
   if (groupBy !== 'month') return label
   const [y, m] = label.split('-')
-  const months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-                  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
   const idx = Number(m) - 1
-  return months[idx] ? `${months[idx]} ${y}` : label
+  if (isNaN(idx) || idx < 0 || idx > 11) return label
+  const nom = new Intl.DateTimeFormat(loc, { month: 'long' })
+    .format(new Date(Date.UTC(2000, idx, 1)))
+  return `${nom} ${y}`
 }
 
 export function RevenuePanel() {
+  const t = useT()
+  const loc = localeIntl(useLangue())
   const [groupBy, setGroupBy] = useState<GroupBy>('year')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -70,7 +80,7 @@ export function RevenuePanel() {
   return (
     <div className="card p-5">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <SectionTitle>Chiffre d'affaires</SectionTitle>
+        <SectionTitle>{t('ca.titre')}</SectionTitle>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1">
             {GROUPS.map(g => (
@@ -84,29 +94,29 @@ export function RevenuePanel() {
                 }`}
               >
                 <g.icon size={12} />
-                {g.label}
+                {t(g.cle)}
               </button>
             ))}
           </div>
           <input type="date" className="input text-xs py-1" value={from}
-                 onChange={e => setFrom(e.target.value)} aria-label="Depuis" />
+                 onChange={e => setFrom(e.target.value)} aria-label={t('ca.ariaDepuis')} />
           <input type="date" className="input text-xs py-1" value={to}
-                 onChange={e => setTo(e.target.value)} aria-label="Jusqu'au" />
+                 onChange={e => setTo(e.target.value)} aria-label={t('ca.ariaJusquAu')} />
           {(from || to) && (
             <button onClick={() => { setFrom(''); setTo('') }}
                     className="btn-ghost btn-sm text-xs">
-              Toute la période
+              {t('ca.toutePeriode')}
             </button>
           )}
         </div>
       </div>
 
       {revenue.isLoading && <LoadingSpinner />}
-      {revenue.isError && <ErrorBanner message="Le chiffre d'affaires n'a pas pu être calculé." />}
+      {revenue.isError && <ErrorBanner message={t('ca.echecCalcul')} />}
 
       {revenue.data && rows.length === 0 && (
         <p className="text-sm text-alpine-500 py-4">
-          Aucune facture émise sur cette période.
+          {t('ca.aucuneFacture')}
         </p>
       )}
 
@@ -117,18 +127,18 @@ export function RevenuePanel() {
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wider text-alpine-500">
                   <th className="py-2 pr-3 font-medium">
-                    {groupBy === 'contact' ? 'Client' : 'Période'}
+                    {t(groupBy === 'contact' ? 'co.client' : 'ca.colPeriode')}
                   </th>
-                  <th className="py-2 pr-3 font-medium text-right">Facturé</th>
-                  <th className="py-2 pr-3 font-medium text-right">Encaissé</th>
-                  <th className="py-2 pr-3 font-medium text-right">Pièces</th>
-                  <th className="py-2 font-medium w-1/4">Part</th>
+                  <th className="py-2 pr-3 font-medium text-right">{t('ca.colFacture')}</th>
+                  <th className="py-2 pr-3 font-medium text-right">{t('ca.colEncaisse')}</th>
+                  <th className="py-2 pr-3 font-medium text-right">{t('ca.colPieces')}</th>
+                  <th className="py-2 font-medium w-1/4">{t('ca.colPart')}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map(r => (
                   <tr key={r.key} className="border-b border-neutral-100">
-                    <td className="py-2 pr-3">{prettyLabel(groupBy, r.label)}</td>
+                    <td className="py-2 pr-3">{prettyLabel(groupBy, r.label, loc)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums font-medium">
                       {formatCHF(r.invoiced)}
                     </td>
@@ -152,7 +162,7 @@ export function RevenuePanel() {
               </tbody>
               <tfoot>
                 <tr className="font-medium">
-                  <td className="py-2 pr-3">Total</td>
+                  <td className="py-2 pr-3">{t('ca.total')}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">
                     {formatCHF(revenue.data.total_invoiced)}
                   </td>

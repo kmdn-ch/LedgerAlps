@@ -9,6 +9,21 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Ajouté
 
+- **L'interface est traduite à 100 % en allemand, italien et anglais (UK).** Les 36 écrans, du tableau de bord au chiffrement de la base : 998 clés dans les quatre langues. L'avertissement « Traduction en cours » a disparu du sélecteur — il n'a plus d'objet.
+
+  **Ce qui suit la langue en plus des mots.** Un texte traduit posé sur des formats suisses reste à moitié étranger :
+
+  - **Les dates** — `11.08.2026` en Suisse, `11/08/2026` pour un Britannique.
+  - **Les montants** — `1'500.00 CHF` avec l'apostrophe suisse, `1,500.00 CHF` en anglais.
+  - **Les noms de mois** du tableau de chiffre d'affaires viennent d'`Intl`, non d'une liste française en dur : « mars 2026 » devient « März 2026 » sans qu'il y ait quatre listes à tenir.
+  - **Les badges de statut** — `Brouillon` / `Entwurf` / `Bozza` / `Draft`. Ils étaient une table figée dans les utilitaires, donc invisible aux relectures d'écran, et s'affichaient en français sur chaque ligne de chaque liste.
+
+  **Les avis de conformité aussi.** Ils viennent du serveur, qui ne les rendait qu'en français et en anglais, et l'interface demandait toujours le français : un bandeau francophone barrait le haut de chaque écran allemand. Les quatre avis portent désormais les quatre langues, et l'écran demande la sienne. Un test refuse un avis auquel il manque une langue — le repli sur le français masquait l'oubli en donnant un affichage parfait.
+
+  **Ce qui garantit que ça tienne.** `internal/frontend/i18n_test.go` relit les quatre catalogues et échoue si une clé manque, si une valeur est vide, si un repère d'interpolation a disparu, ou **si une valeur vaut encore le français**. Ce dernier point est celui qui compte : copier `fr.ts` en `de.ts` compile parfaitement et produit une interface allemande entièrement en français.
+
+  **Ce qui n'est PAS traduit, et pourquoi.** Les messages de refus du serveur — « aucun numéro de TVA n'est enregistré : vous ne pouvez pas facturer de TVA » — restent en français, ainsi que les factures PDF, les exports CSV et l'attestation d'intégrité. Ce sont **97 messages et quatre familles de documents**, un lot distinct : la langue d'une facture PDF doit suivre le CLIENT, pas l'interface de celui qui l'émet.
+
 - **Facturation et Contacts sont traduits** dans les quatre langues — listes, onglets, filtres, en-têtes de colonnes, états vides. La couverture passe de 10 à **13 %** (148 clés).
 
   **La phrase de lecture seule était une constante figée en français.** Elle s'affichait sur sept écrans par ailleurs traduits : c'est devenu une clé. Le motif est instructif — une chaîne sortie d'un composant pour être partagée échappe à la traduction précisément parce qu'elle n'est plus dans un écran.

@@ -17,6 +17,7 @@ import { authApi } from '@/api/client'
 import { ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import { useAuthStore } from '@/store/auth'
+import { useT } from '@/i18n/useT'
 
 // La même règle que le serveur (internal/api/handlers/password_change.go).
 // Reproduite pour être visible pendant la frappe plutôt que révélée par un
@@ -33,6 +34,7 @@ function checks(p: string) {
 }
 
 export function ChangePasswordPage() {
+  const t = useT()
   const navigate = useNavigate()
   const clearMustChange = useAuthStore(s => s.clearMustChange)
   const [current, setCurrent] = useState('')
@@ -65,24 +67,21 @@ export function ChangePasswordPage() {
         <div className="bg-alpine-900 border border-alpine-700 rounded-2xl p-6">
           <h1 className="font-display font-700 text-lg text-white flex items-center gap-2">
             <KeyRound size={18} className="text-accent-500" />
-            Choisissez votre mot de passe
+            {t('mdp.titre')}
           </h1>
           <p className="text-sm text-alpine-400 mt-2">
-            Celui qui vous a été communiqué est <strong className="text-alpine-200">temporaire</strong> :
-            la personne qui a créé votre compte le connaît, et il a circulé par un canal qui
-            n'est pas fait pour ça. Tant qu'il vaut, ce qui serait fait sous votre nom ne
-            prouverait pas que c'est vous.
+            {t('mdp.introduction')}
           </p>
 
           <div className="mt-5 space-y-4">
             <div>
-              <label className="label text-alpine-300" htmlFor="cur">Mot de passe temporaire</label>
+              <label className="label text-alpine-300" htmlFor="cur">{t('mdp.champTemporaire')}</label>
               <input id="cur" type="password" className="input" autoComplete="current-password"
                      value={current} onChange={e => setCurrent(e.target.value)} autoFocus />
             </div>
 
             <div>
-              <label className="label text-alpine-300" htmlFor="new">Nouveau mot de passe</label>
+              <label className="label text-alpine-300" htmlFor="new">{t('mdp.champNouveau')}</label>
               <input id="new" type="password" className="input" autoComplete="new-password"
                      value={next} onChange={e => setNext(e.target.value)} />
               {next !== '' && (
@@ -100,16 +99,15 @@ export function ChangePasswordPage() {
             </div>
 
             <div>
-              <label className="label text-alpine-300" htmlFor="cfm">Confirmer</label>
+              <label className="label text-alpine-300" htmlFor="cfm">{t('mdp.champConfirmer')}</label>
               <input id="cfm" type="password" className="input" autoComplete="new-password"
                      value={confirm} onChange={e => setConfirm(e.target.value)} />
               {confirm !== '' && !matches && (
-                <p className="text-xs text-danger-500 mt-1">Les deux saisies diffèrent.</p>
+                <p className="text-xs text-danger-500 mt-1">{t('mdp.saisiesDifferent')}</p>
               )}
               {next !== '' && !different && (
                 <p className="text-xs text-danger-500 mt-1">
-                  Ce doit être un mot de passe différent : celui-là est justement celui que
-                  quelqu'un d'autre connaît.
+                  {t('mdp.doitEtreDifferent')}
                 </p>
               )}
             </div>
@@ -122,11 +120,11 @@ export function ChangePasswordPage() {
               className="btn-primary w-full flex items-center justify-center gap-2"
             >
               {change.isPending && <Loader2 size={14} className="animate-spin" />}
-              Changer mon mot de passe
+              {t('mdp.changerBouton')}
             </button>
 
             <p className="text-xs text-alpine-500">
-              Les autres sessions ouvertes sur ce compte seront fermées.
+              {t('mdp.autresSessions')}
             </p>
           </div>
         </div>

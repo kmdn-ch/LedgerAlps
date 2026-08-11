@@ -18,8 +18,11 @@ import { authApi, securityApi } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
 import { useIdleLogout } from '@/hooks/useIdleLogout'
 import type { SecuritySettings } from '@/types'
+import { useT, useFormats } from '@/i18n/useT'
 
 export function IdleGuard() {
+  const t = useT()
+  const { pluriel } = useFormats()
   const navigate = useNavigate()
   const logout   = useAuthStore(s => s.logout)
   const isAuth   = useAuthStore(s => s.isAuth)
@@ -67,22 +70,22 @@ export function IdleGuard() {
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5">
         <h2 id="idle-title" className="text-base font-semibold flex items-center gap-2">
           <Clock size={18} className="text-warning-700" />
-          Toujours là ?
+          {t('ig.toujoursLa')}
         </h2>
         <p id="idle-body" className="text-sm text-alpine-700 mt-2">
-          Vous serez déconnecté dans <strong>{remaining} seconde{remaining > 1 ? 's' : ''}</strong>,
-          faute d'activité depuis {minutes} minutes.
+          {pluriel(remaining,
+            t('ig.deconnexionDansUne', { n: remaining }),
+            t('ig.deconnexionDans', { n: remaining }))}
         </p>
         <p className="text-xs text-alpine-600 mt-2">
-          Une saisie en cours et non enregistrée serait perdue : LedgerAlps ne conserve pas de
-          brouillon automatique.
+          {t('ig.saisiePerdue')}
         </p>
         <div className="flex items-center gap-2 mt-4">
           <button onClick={stay} className="btn-primary btn-sm" autoFocus>
-            Rester connecté
+            {t('ig.resterConnecte')}
           </button>
           <button onClick={doLogout} className="btn-ghost btn-sm">
-            Se déconnecter maintenant
+            {t('ig.deconnecterMaintenant')}
           </button>
         </div>
       </div>

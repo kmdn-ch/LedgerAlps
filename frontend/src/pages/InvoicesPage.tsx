@@ -99,8 +99,8 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
           t('fact.paiementAuJournal'),
           t('fact.plusModifiable'),
         ]}
-        reassurance="Si le montant reçu diffère, ouvrez la facture et enregistrez un paiement partiel."
-        confirmLabel="Marquer payée"
+        reassurance={t('iv.paiementPartiel')}
+        confirmLabel={t('iv.marquerPayee')}
         busy={markPaid.isPending}
         onConfirm={() => pendingPaid && markPaid.mutate(pendingPaid.id)}
         onCancel={() => setPendingPaid(null)}

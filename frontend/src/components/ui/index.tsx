@@ -85,15 +85,18 @@ export function ErrorBanner({ message }: { message: string }) {
 }
 
 // ─── Badge status ─────────────────────────────────────────────────────────────
-import { statusClass, statusLabel } from '@/utils'
+import { statusClass, statusCle } from '@/utils'
+import { useT } from '@/i18n/useT'
 import type { DocumentStatus, DisplayStatus } from '@/types'
 
 // `overdue` n'est pas un statut stocké — c'est ce que la date d'échéance fait
 // d'une facture envoyée. L'appelant le déduit (voir isOverdue) et le passe ici
 // pour l'affichage seulement ; il n'est jamais renvoyé à l'API.
 export function StatusBadge({ status, overdue }: { status: DocumentStatus; overdue?: boolean }) {
+  const t = useT()
   const shown: DisplayStatus = overdue ? 'overdue' : status
-  return <span className={statusClass(shown)}>{statusLabel(shown)}</span>
+  const cle = statusCle(shown)
+  return <span className={statusClass(shown)}>{cle ? t(cle) : shown}</span>
 }
 
 // ─── Section titre ────────────────────────────────────────────────────────────

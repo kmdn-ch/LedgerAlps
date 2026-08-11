@@ -8,16 +8,17 @@ import { Mountain, Eye, EyeOff, Smartphone, ArrowLeft, LifeBuoy } from 'lucide-r
 import { useState } from 'react'
 import { authApi } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
-import { useT } from '@/i18n/useT'
+import { useT, useTv } from '@/i18n/useT'
 
 const schema = z.object({
-  email:    z.string().email('E-mail invalide'),
-  password: z.string().min(8, 'Minimum 8 caractères'),
+  email:    z.string().email('val.emailInvalide'),
+  password: z.string().min(8, 'cx.motDePasseCourt'),
 })
 type FormData = z.infer<typeof schema>
 
 export function LoginPage() {
   const t = useT()
+  const tv = useTv()
   // Une déconnexion automatique doit se dire. Renvoyer quelqu'un sur l'écran de
   // connexion sans explication ressemble à une panne, et c'est la première
   // chose qu'on signale au support.
@@ -90,16 +91,11 @@ export function LoginPage() {
         // Le conseil doit correspondre à ce qui a été tenté. Parler d'horloge
         // de téléphone à quelqu'un qui saisit un code de secours l'envoie
         // chercher au mauvais endroit.
-        setError(secours
-          ? "Ce code de secours n'est pas reconnu. Chacun ne sert qu'une fois : " +
-            "vérifiez que celui-ci n'a pas déjà été utilisé, et recopiez-le sans " +
-            "confondre les caractères."
-          : "Code incorrect. Vérifiez l'heure de votre téléphone : un décalage de plus " +
-            "d'une minute décale tous les codes.")
+        setError(t(secours ? 'cx.secoursRefuse' : 'cx.codeIncorrect'))
       } else if (status === 429) {
-        setError('Trop de tentatives. Patientez quelques minutes avant de réessayer.')
+        setError(t('cx.tropDeTentatives'))
       } else {
-        setError("La vérification a échoué. Recommencez la connexion.")
+        setError(t('cx.verificationEchouee'))
         setChallenge(null)
       }
       setCode('')
@@ -138,8 +134,7 @@ export function LoginPage() {
           <div className="mb-5 rounded-md border border-warning-500 bg-warning-100 px-4 py-3 text-sm">
             <p className="font-medium">{t('connexion.sessionFermee')}</p>
             <p className="mt-1 text-alpine-700">
-              Vous avez été déconnecté automatiquement. Le délai se règle dans
-              Paramètres → Maintenance → Sécurité.
+              {t('cx.deconnexionAuto')}
             </p>
           </div>
         )}
@@ -195,7 +190,7 @@ export function LoginPage() {
               <div>
                 <label htmlFor="otp"
                        className="block text-xs font-medium text-alpine-400 mb-1.5 uppercase tracking-wide">
-                  {secours ? 'Code de secours' : 'Code à six chiffres'}
+                  {t(secours ? 'cx.champCodeSecours' : 'cx.champCodeSixChiffres')}
                 </label>
                 {/* Le champ change vraiment de nature selon le mode : longueur,
                     clavier, casse, espacement. C'est ce qui manquait — la
@@ -229,10 +224,9 @@ export function LoginPage() {
                 <input type="checkbox" className="mt-0.5" checked={remember}
                        onChange={e => setRemember(e.target.checked)} />
                 <span>
-                  Se souvenir de cet ordinateur
+                  {t('cx.seSouvenir')}
                   <span className="block text-xs text-alpine-500">
-                    Aucun code ne sera demandé sur ce poste pendant 30 jours. À éviter sur un
-                    ordinateur partagé ou public.
+                    {t('cx.seSouvenirAide')}
                   </span>
                 </span>
               </label>
@@ -245,7 +239,7 @@ export function LoginPage() {
                            rounded-lg text-sm transition-all duration-150 active:scale-[0.98]
                            disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Vérification…' : 'Valider'}
+                {loading ? t('at.verificationEnCours') : t('cx.valider')}
               </button>
 
               {/* Le téléphone perdu ne doit pas enfermer dehors. Le passage au
@@ -262,9 +256,7 @@ export function LoginPage() {
                     : <><LifeBuoy size={12} /> {t('connexion.utiliserSecours')}</>}
                 </button>
                 <p className="text-xs text-alpine-500 mt-1.5">
-                  {secours
-                    ? 'Chacun ne sert qu’une fois. Les tirets et la casse n’ont pas d’importance.'
-                    : 'Les codes de secours sont ceux notés lors de l’inscription.'}
+                  {t(secours ? 'cx.secoursUneFois' : 'cx.secoursNotes')}
                 </p>
               </div>
 
@@ -294,7 +286,7 @@ export function LoginPage() {
                 placeholder="vous@exemple.ch"
                 {...register('email')}
               />
-              {errors.email && <p className="text-xs text-danger-500 mt-1">{errors.email.message}</p>}
+              {errors.email && <p className="text-xs text-danger-500 mt-1">{tv(errors.email.message)}</p>}
             </div>
 
             <div>
@@ -320,7 +312,7 @@ export function LoginPage() {
                   {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
-              {errors.password && <p className="text-xs text-danger-500 mt-1">{errors.password.message}</p>}
+              {errors.password && <p className="text-xs text-danger-500 mt-1">{tv(errors.password.message)}</p>}
             </div>
 
             <button

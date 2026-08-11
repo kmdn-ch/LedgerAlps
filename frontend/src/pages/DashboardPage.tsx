@@ -15,6 +15,7 @@ import { PageHeader, StatCard, StatusBadge, LoadingSpinner } from '@/components/
 import { RevenuePanel } from '@/components/dashboard/RevenuePanel'
 import { useCanWrite } from '@/hooks/usePermissions'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
+import { useT } from '@/i18n/useT'
 import type { Invoice } from '@/types'
 
 // Format "YYYY-MM" → short French month label
@@ -27,6 +28,7 @@ function shortMonth(yyyyMM: string): string {
 }
 
 export function DashboardPage() {
+  const t = useT()
   const peutEcrire = useCanWrite()
   const { data: invoices = [], isLoading: invLoading } = useQuery<Invoice[]>({
     queryKey: ['invoices', 'all'],
@@ -64,12 +66,12 @@ export function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title="Tableau de bord"
-        subtitle={`Aujourd'hui — ${formatDate(new Date().toISOString())}`}
+        title={t('nav.tableauDeBord')}
+        subtitle={t('tb.aujourdhui', { date: formatDate(new Date().toISOString()) })}
         actions={peutEcrire ? (
           <Link to="/invoices/new" className="btn-primary">
             <Plus size={15} />
-            Nouvelle facture
+            {t('fact.nouvelleFacture')}
           </Link>
         ) : undefined}
       />
@@ -77,25 +79,25 @@ export function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
-          label="Créances ouvertes"
+          label={t('tb.creancesOuvertes')}
           value={formatCHF(totalDue)}
           icon={<TrendingUp size={18} />}
           accent={totalDue > 0}
         />
         <StatCard
-          label="En retard"
+          label={t('tb.enRetard')}
           value={formatCHF(totalOverdue)}
           icon={<AlertCircle size={18} />}
         />
         <StatCard
-          label="Factures ce mois"
+          label={t('tb.facturesCeMois')}
           value={String(invoices.filter(i =>
             i.issue_date.startsWith(new Date().toISOString().slice(0, 7))
           ).length)}
           icon={<FileText size={18} />}
         />
         <StatCard
-          label="Clients actifs"
+          label={t('tb.clientsActifs')}
           value={String(stats?.contacts?.customers ?? '—')}
           icon={<Users size={18} />}
         />
@@ -113,7 +115,7 @@ export function DashboardPage() {
         <div className="lg:col-span-2 card">
           <div className="card-header">
             <h2 className="text-sm font-semibold text-alpine-800">
-              Chiffre d'affaires — 6 mois
+              {t('tb.caSixMois')}
             </h2>
           </div>
           <div className="card-body">
@@ -137,7 +139,7 @@ export function DashboardPage() {
                   <Tooltip
                     contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #d9e2ec' }}
                     formatter={(v: number, name: string) => [
-                      formatCHF(v), name === 'ca' ? 'Facturé' : 'Encaissé'
+                      formatCHF(v), t(name === 'ca' ? 'ca.colFacture' : 'ca.colEncaisse')
                     ]}
                   />
                   <Area type="monotone" dataKey="ca"   stroke="#334e68" strokeWidth={2}
@@ -149,8 +151,8 @@ export function DashboardPage() {
             ) : (
               <div className="h-[220px] flex flex-col items-center justify-center text-alpine-400">
                 <TrendingUp size={32} className="mb-2 opacity-30" />
-                <p className="text-sm">Aucune donnée de facturation sur les 6 derniers mois.</p>
-                <p className="text-xs mt-1">Le graphique s'affichera dès la première facture émise.</p>
+                <p className="text-sm">{t('tb.aucuneDonnee')}</p>
+                <p className="text-xs mt-1">{t('tb.graphiqueApres')}</p>
               </div>
             )}
           </div>
@@ -159,10 +161,10 @@ export function DashboardPage() {
         {/* Factures récentes */}
         <div className="card">
           <div className="card-header">
-            <h2 className="text-sm font-semibold text-alpine-800">Factures récentes</h2>
+            <h2 className="text-sm font-semibold text-alpine-800">{t('tb.facturesRecentes')}</h2>
             <Link to="/invoices" className="text-xs text-accent-600 hover:text-accent-700
                                             flex items-center gap-1">
-              Voir tout <ArrowRight size={12} />
+              {t('tb.voirTout')} <ArrowRight size={12} />
             </Link>
           </div>
           <div className="divide-y divide-alpine-100">
@@ -189,7 +191,7 @@ export function DashboardPage() {
               </Link>
             ))}
             {!invLoading && recentInvoices.length === 0 && (
-              <p className="text-sm text-alpine-400 text-center py-8">Aucune facture</p>
+              <p className="text-sm text-alpine-400 text-center py-8">{t('fact.aucuneFacture')}</p>
             )}
           </div>
         </div>

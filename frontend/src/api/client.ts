@@ -2,6 +2,7 @@
 
 import axios, { type AxiosInstance } from 'axios'
 import { useAuthStore } from '@/store/auth'
+import { traduire } from '@/i18n/useT'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1'
 
@@ -434,7 +435,7 @@ export const settingsApi = {
         const logoData = e.target?.result as string
         api.post('/settings/logo', { logo_data: logoData }).then(resolve).catch(reject)
       }
-      reader.onerror = () => reject(new Error('Impossible de lire le fichier'))
+      reader.onerror = () => reject(new Error(traduire('ui.fichierIllisible')))
       reader.readAsDataURL(file)
     }),
   deleteLogo: () => api.delete('/settings/logo'),

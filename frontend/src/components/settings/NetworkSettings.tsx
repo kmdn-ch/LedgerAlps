@@ -17,10 +17,12 @@ import { maintenanceApi, backupsApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { targetURLAfterRestart, waitForShutdownThenGo } from '@/utils/restart'
 import type { ServerSettings } from '@/types'
+import { useT } from '@/i18n/useT'
 
 const LOOPBACK = ['127.0.0.1', 'localhost', '::1']
 
 export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
+  const t = useT()
   const { data, isLoading, isError, refetch } = useQuery<{
     settings: ServerSettings; restart_required: boolean; config_file: string
   }>({
@@ -63,10 +65,7 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
   // des états, puisqu'il annonce que quelque chose arrive.
   if (isLoading) return <LoadingSpinner />
   if (isError || !form) {
-    return <ErrorBanner message={
-      "Les réglages réseau n'ont pas pu être lus. Ils sont réservés à " +
-      "l'administrateur du logiciel."
-    } />
+    return <ErrorBanner message={t('rs.erreurLecture')} />
   }
 
   const loopback = LOOPBACK.includes(form.host)
@@ -76,28 +75,26 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
 
   return (
     <div>
-      <SectionTitle>Réseau &amp; chiffrement</SectionTitle>
+      <SectionTitle>{t('rs.titre')}</SectionTitle>
 
-      <label className="label" htmlFor="net-host">Interface d'écoute</label>
+      <label className="label" htmlFor="net-host">{t('rs.interfaceEcoute')}</label>
       <select
         id="net-host"
         className="input w-full max-w-md"
         value={loopback ? '127.0.0.1' : '0.0.0.0'}
         onChange={e => setForm({ ...form, host: e.target.value })}
       >
-        <option value="127.0.0.1">Cette machine uniquement (recommandé)</option>
-        <option value="0.0.0.0">Accessible depuis le réseau</option>
+        <option value="127.0.0.1">{t('rs.machineUniquement')}</option>
+        <option value="0.0.0.0">{t('rs.accessibleReseau')}</option>
       </select>
       <p className="text-xs text-alpine-500 mt-1.5 max-w-md">
-        {loopback
-          ? 'Le trafic ne quitte jamais cet ordinateur : rien sur le réseau ne peut le lire.'
-          : "D'autres postes pourront se connecter. LedgerAlps servira alors en HTTPS, avec un certificat auto-signé si vous n'en fournissez pas — votre navigateur avertira à la première visite."}
+        {t(loopback ? 'rs.loopbackAide' : 'rs.reseauAide')}
       </p>
 
       <div className="mt-4 max-w-md space-y-2">
         <div>
           <label className="label" htmlFor="net-cert">
-            Certificat TLS <span className="text-alpine-400">(facultatif)</span>
+            {t('rs.certificatTLS')} <span className="text-alpine-400">{t('pr.facultatif')}</span>
           </label>
           <input
             id="net-cert"
@@ -108,7 +105,7 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
           />
         </div>
         <div>
-          <label className="label" htmlFor="net-key">Clé privée</label>
+          <label className="label" htmlFor="net-key">{t('rs.clePrivee')}</label>
           <input
             id="net-key"
             className="input w-full"
@@ -118,14 +115,13 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
           />
         </div>
         <p className="text-xs text-alpine-500">
-          Laissez-les vides pour un certificat auto-signé. Les fournir évite l'avertissement du
-          navigateur, si le certificat vient d'une autorité que vos postes reconnaissent.
+          {t('rs.certificatAide')}
         </p>
       </div>
 
       {save.isError && (
         <div className="mt-3 max-w-md">
-          <ErrorBanner message="Réglages refusés. Vérifiez les chemins de certificat — rien n'a été modifié." />
+          <ErrorBanner message={t('rs.reglagesRefuses')} />
         </div>
       )}
 
@@ -136,7 +132,7 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
           className="btn-primary btn-sm flex items-center gap-1.5"
         >
           {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-          Enregistrer
+          {t('action.enregistrer')}
         </button>
         {pending && (
           <button
@@ -145,33 +141,27 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
             className="btn-secondary btn-sm flex items-center gap-1.5"
           >
             {restart.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            {restart.isPending ? 'Redémarrage…' : 'Redémarrer maintenant'}
+            {restart.isPending ? t('sv.redemarrage') : t('rs.redemarrerMaintenant')}
           </button>
         )}
       </div>
 
       {pending && (
         <div className="mt-3 max-w-xl rounded-md border border-warning-500 bg-warning-100 px-4 py-3 text-sm">
-          Réglages enregistrés mais <strong>pas encore appliqués</strong> : l'adresse d'écoute et le
-          chiffrement sont choisis une seule fois, au démarrage. Redémarrez LedgerAlps pour qu'ils
-          prennent effet.
-          {!LOOPBACK.includes((saved ?? form).host) && (
-            <> L'application sera servie en <code className="font-mono">https</code>, et votre
-            navigateur affichera un avertissement de certificat à la première visite.</>
-          )}
+          {t('rs.pasAppliques')}
+          {!LOOPBACK.includes((saved ?? form).host) && <> {t('rs.serviEnHttps')}</>}
         </div>
       )}
 
       {restart.isPending && (
         <p className="text-xs text-alpine-600 mt-2">
-          Redémarrage en cours… la page va s'ouvrir sur la nouvelle adresse.
-          {!LOOPBACK.includes((saved ?? data!.settings).host) &&
-            " Votre navigateur affichera un avertissement de certificat : c'est attendu avec un certificat auto-signé."}
+          {t('rs.redemarrageEnCours')}
+          {!LOOPBACK.includes((saved ?? data!.settings).host) && ' ' + t('rs.avertissementAttendu')}
         </p>
       )}
       {restart.isError && (
         <p className="text-xs text-danger-700 mt-2">
-          Le redémarrage n'a pas abouti. Fermez puis rouvrez l'application manuellement.
+          {t('rs.redemarrageEchoue')}
         </p>
       )}
 

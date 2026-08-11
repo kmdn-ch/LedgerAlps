@@ -218,7 +218,7 @@ export function JournalPage() {
         <div className="mb-4 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
           <p className="font-medium flex items-center gap-1.5">
             <Info size={15} className="text-alpine-500" />
-            Les factures envoyées ne s&rsquo;inscrivent pas ici automatiquement
+            {t('jn.pasAutomatique')}
           </p>
           <p className="text-alpine-600 mt-1">
             La comptabilisation automatique est éteinte sur cette installation : envoyer une
@@ -233,7 +233,7 @@ export function JournalPage() {
       {showForm && (
         <div className="card mb-5">
           <div className="card-header">
-            <h2 className="text-sm font-semibold text-alpine-800">Écriture manuelle</h2>
+            <h2 className="text-sm font-semibold text-alpine-800">{t('jn.ecritureManuelle')}</h2>
             <span className="text-xs text-alpine-400">
               Le serveur vérifie la partie double : total débit = total crédit
             </span>
@@ -258,7 +258,7 @@ export function JournalPage() {
               <span className="label mb-0">{t('jr.lignes')}</span>
               <button type="button" className="btn-ghost btn-sm"
                       onClick={() => setRows(rs => [...rs, emptyRow()])}>
-                <Plus size={13} /> Ligne
+                <Plus size={13} /> {t('jn.ajouterLigne')}
               </button>
             </div>
 
@@ -326,7 +326,7 @@ export function JournalPage() {
                     </td>
                     <td className="px-3 py-2 text-xs" colSpan={2}>
                       {equilibree
-                        ? <span className="text-success-700">Équilibrée</span>
+                        ? <span className="text-success-700">{t('jn.equilibree')}</span>
                         : lines.length === 0
                           ? <span className="text-alpine-500">{t('jr.renseignez')}</span>
                           : <span className="text-warning-700">
@@ -339,9 +339,7 @@ export function JournalPage() {
             </div>
 
             <p className="text-xs text-alpine-500 mt-2">
-              Un débit et un crédit sur la même ligne forment une écriture simple. Pour une
-              ventilation, laissez un côté vide et ajoutez une ligne : les totaux doivent
-              s&rsquo;équilibrer.
+              {t('jn.ventilationAide')}
             </p>
 
             {inconnus.length > 0 && (
@@ -357,7 +355,7 @@ export function JournalPage() {
           <div className="card-footer flex justify-end gap-3">
             <button type="button" className="btn-secondary"
                     onClick={() => { setShowForm(false); resetForm() }}>
-              Annuler
+              {t('action.annuler')}
             </button>
             <button type="button" className="btn-primary flex items-center gap-1.5"
                     disabled={!peutEnregistrer} onClick={() => { setError(null); create.mutate() }}>
@@ -540,8 +538,7 @@ function EntryRow({ entry, open, detail, loadingDetail, onToggle, onPost }: Entr
                         <span className="font-mono break-all">{detail.integrity_hash}</span>
                       </span>
                     : <span>
-                        Brouillon : aucune empreinte. Rien ne la scelle et elle ne compte ni à la
-                        balance, ni au bilan, ni au compte de résultat.
+                        {t('jn.brouillonSansEmpreinte')}
                       </span>}
                 </p>
               </>

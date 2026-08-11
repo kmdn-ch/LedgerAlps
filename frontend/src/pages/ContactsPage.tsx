@@ -109,7 +109,7 @@ export function ContactsPage() {
             )}
             <div className="mt-3 flex items-center justify-between">
               <span className={`badge ${c.contact_type === 'customer' ? 'badge-sent' : 'badge-draft'}`}>
-                {c.contact_type === 'customer' ? 'Client' : 'Fournisseur'}
+                {t(c.contact_type === 'customer' ? 'co.client' : 'co.fournisseur')}
               </span>
               <span className="text-xs text-alpine-400">
                 {c.payment_term_days}j

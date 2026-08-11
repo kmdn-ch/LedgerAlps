@@ -862,21 +862,40 @@ Une plateforme sera réintégrée le jour où elle sera testée en CI, pas avant
 
 ---
 
-## En cours — interface multilingue
+## Interface multilingue
 
 La Suisse compte quatre langues officielles.
 
-| Langue | Code | État |
-|---|---|---|
-| Français | `fr` | ✅ défaut actuel |
-| Deutsch | `de` | ⏳ |
-| Italiano | `it` | ⏳ |
-| English | `en` | 🔎 partiel (chaînes UI) |
+| Langue | Code | Interface | Messages du serveur | Documents (PDF, CSV) |
+|---|---|---|---|---|
+| Français | `fr` | ✅ | ✅ | ✅ |
+| Deutsch | `de` | 🔎 complète | ⏳ | ⏳ |
+| Italiano | `it` | 🔎 complète | ⏳ | ⏳ |
+| English | `en` | 🔎 complète | ⏳ | ⏳ |
 
-**Périmètre** : menus, formulaires, messages d'erreur, gabarits de facture,
-libellés créancier/débiteur du bulletin QR, langue de la facture liée au
-paramètre société. `react-i18next` en frontend, génération PDF *language-aware*
-côté serveur, pack NSIS italien à ajouter.
+**L'interface est faite** : les 36 écrans, 998 clés, avec les formats qui
+suivent la langue — dates, séparateurs de milliers, noms de mois, badges de
+statut — et les avis de conformité rendus par le serveur dans la langue
+demandée. Le sélecteur vit dans Paramètres → Mon compte et est visible pour
+tous les rôles, y compris un accès en lecture seule : une fiduciaire tessinoise
+doit pouvoir lire en italien sans demander la permission.
+
+Aucune bibliothèque : un catalogue typé, `useT()`, et un test Go qui refuse une
+clé manquante, une valeur vide, un repère d'interpolation perdu **ou une valeur
+restée en français**. C'est ce dernier contrôle qui compte — copier `fr.ts` en
+`de.ts` compile parfaitement.
+
+**Ce qui reste** — deux lots distincts, à décider séparément :
+
+1. **Les messages de refus du serveur** (97 chaînes). Ils atteignent
+   l'utilisateur : « aucun numéro de TVA n'est enregistré ». Ils demandent une
+   négociation de langue par requête, ou un catalogue côté serveur.
+2. **Les documents** : facture PDF, bulletin QR, exports CSV, attestation
+   d'intégrité. La question n'est pas technique — **la langue d'une facture
+   doit suivre le CLIENT**, pas l'interface de celui qui l'émet. Elle relève du
+   paramètre société et de la fiche contact, pas du sélecteur de langue.
+
+Le pack NSIS italien reste à ajouter.
 
 ---
 

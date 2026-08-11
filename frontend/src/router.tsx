@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react'
 import { useAuthStore }   from '@/store/auth'
 import { useCanWrite } from '@/hooks/usePermissions'
 import { authApi }        from '@/api/client'
+import { useT }           from '@/i18n/useT'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { MFAEnrolmentPage } from '@/pages/MFAEnrolmentPage'
 
@@ -31,6 +32,7 @@ import { MFAEnrolmentPage } from '@/pages/MFAEnrolmentPage'
  * F5 renverrait l'utilisateur à l'écran de connexion.
  */
 function RequireAuth({ children }: { children: React.ReactNode }) {
+  const t = useT()
   // Tous les hooks AVANT le moindre retour anticipé.
   //
   // React identifie un hook par son rang d'appel : un `return` placé au milieu
@@ -87,7 +89,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   if (restoring) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-alpine-500">
-        Restauration de la session…
+        {t('rt.restauration')}
       </div>
     )
   }

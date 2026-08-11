@@ -13,10 +13,11 @@ import { settingsApi } from '@/api/client'
 import { PageHeader, ErrorBanner } from '@/components/ui'
 import { estQRIBAN } from '@/utils'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
-import { useT } from '@/i18n/useT'
+import { useT, useTv } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
 
 const schema = z.object({
-  company_name:          z.string().min(1, 'Requis'),
+  company_name:          z.string().min(1, 'val.requis'),
   legal_form:            z.string().default(''),
   che_number:            z.string().default(''),
   vat_number:            z.string().default(''),
@@ -47,16 +48,16 @@ type FormData = z.infer<typeof schema>
 const ADMIN_ONLY = new Set(['backups', 'maintenance'])
 
 const TABS = [
-  { key: 'identity',  label: 'Identité',    icon: Building2  },
-  { key: 'banking',   label: 'Banque',       icon: CreditCard },
-  { key: 'invoicing', label: 'Facturation',  icon: FileText   },
-  { key: 'legal',     label: 'Légal / CO',   icon: Shield     },
-  { key: 'backups',   label: 'Sauvegardes',  icon: Database   },
-  { key: 'maintenance', label: 'Maintenance', icon: Wrench   },
+  { key: 'identity',  cle: 'pr.ongletIdentite'    as Cle, icon: Building2  },
+  { key: 'banking',   cle: 'pr.ongletBanque'      as Cle, icon: CreditCard },
+  { key: 'invoicing', cle: 'pr.ongletFacturation' as Cle, icon: FileText   },
+  { key: 'legal',     cle: 'pr.ongletLegal'       as Cle, icon: Shield     },
+  { key: 'backups',   cle: 'pr.ongletSauvegardes' as Cle, icon: Database   },
+  { key: 'maintenance', cle: 'pr.ongletMaintenance' as Cle, icon: Wrench   },
   // Ce que chacun règle pour LUI-MÊME : son second facteur, ses ordinateurs de
   // confiance. Visible de tous les rôles — y compris en lecture seule, qui peut
   // protéger son compte même sans y être obligé.
-  { key: 'account',   label: 'Mon compte',  icon: UserCog    },
+  { key: 'account',   cle: 'pr.ongletMonCompte'   as Cle, icon: UserCog    },
 ]
 
 import { BackupPanel } from '@/components/settings/BackupPanel'
@@ -68,6 +69,7 @@ import { useAuthStore } from '@/store/auth'
 
 export function SettingsPage() {
   const t = useT()
+  const tv = useTv()
   const peutEcrire = useCanWrite()
   const [tab,   setTab]   = useState('identity')
   const [saved, setSaved] = useState(false)
@@ -186,8 +188,8 @@ export function SettingsPage() {
   return (
     <div>
       <PageHeader
-        title="Paramètres"
-        subtitle="Configuration de votre société"
+        title={t('nav.parametres')}
+        subtitle={t('pr.sousTitre')}
         actions={
           // L'onglet Sauvegardes n'a rien à enregistrer : ses actions lui sont propres.
           // Un compte en lecture seule n'a rien à enregistrer : le bouton
@@ -202,14 +204,14 @@ export function SettingsPage() {
               disabled={save.isPending}
             >
               {save.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              {saved ? 'Sauvegardé ✓' : 'Enregistrer'}
+              {saved ? t('pr.sauvegarde') : t('action.enregistrer')}
             </button>
           )
         }
       />
 
       {save.isError && (
-        <ErrorBanner message={(save.error as any)?.response?.data?.error ?? 'Erreur lors de la sauvegarde.'} />
+        <ErrorBanner message={(save.error as any)?.response?.data?.error ?? t('pr.erreurSauvegarde')} />
       )}
 
       {/* IBAN missing warning — shown until an IBAN is saved */}
@@ -217,8 +219,7 @@ export function SettingsPage() {
         <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-warning-100 bg-warning-100 px-4 py-3 text-sm text-warning-700">
           <AlertTriangle size={15} className="mt-0.5 flex-shrink-0 text-warning-500" />
           <span>
-            Aucun IBAN configuré. Sans IBAN, les factures PDF ne contiendront pas de QR code de paiement suisse.
-            Configurez-le dans l'onglet <strong>Banque</strong>.
+            {t('pr.aucunIban')}
           </span>
         </div>
       )}
@@ -227,19 +228,19 @@ export function SettingsPage() {
         {/* Nav latérale */}
         <nav className="w-44 flex-shrink-0">
           <div className="space-y-0.5">
-            {visibleTabs.map(t => (
+            {visibleTabs.map(onglet => (
               <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
+                key={onglet.key}
+                onClick={() => setTab(onglet.key)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg
                             text-sm text-left transition-all ${
-                  effectiveTab === t.key
+                  effectiveTab === onglet.key
                     ? 'bg-alpine-800 text-white font-medium'
                     : 'text-alpine-600 hover:bg-alpine-100 hover:text-alpine-900'
                 }`}
               >
-                <t.icon size={15} className="flex-shrink-0" />
-                {t.label}
+                <onglet.icon size={15} className="flex-shrink-0" />
+                {t(onglet.cle)}
               </button>
             ))}
           </div>
@@ -271,7 +272,7 @@ export function SettingsPage() {
               {/* Logo */}
               <div className="card">
                 <div className="card-header">
-                  <h2 className="text-sm font-semibold text-alpine-800">Logo de la société</h2>
+                  <h2 className="text-sm font-semibold text-alpine-800">{t('pr.logoSociete')}</h2>
                 </div>
                 <div className="card-body">
                   <div className="flex items-center gap-5">
@@ -295,7 +296,7 @@ export function SettingsPage() {
                         toucher : ni bouton, ni champ de fichier dans la page. */}
                     <div className="space-y-2">
                       <p className="text-xs text-alpine-500">
-                        Format PNG ou JPEG, max 2 Mo. Affiché dans la barre de navigation et sur les factures PDF.
+                        {t('pr.logoAide')}
                       </p>
                       {!peutEcrire && (
                         <p className="text-xs text-alpine-500">{t(RAISON_LECTURE_SEULE)}</p>
@@ -312,7 +313,7 @@ export function SettingsPage() {
                             ? <Loader2 size={13} className="animate-spin" />
                             : <Upload size={13} />
                           }
-                          {company?.logo_data ? 'Remplacer' : 'Télécharger'}
+                          {company?.logo_data ? t('pr.remplacer') : t('action.telecharger')}
                         </button>
                         {company?.logo_data && (
                           <button
@@ -332,7 +333,7 @@ export function SettingsPage() {
                       )}
                       {uploadLogo.isError && (
                         <p className="text-xs text-danger-700">
-                          {(uploadLogo.error as any)?.response?.data?.error ?? 'Erreur lors du téléchargement.'}
+                          {(uploadLogo.error as any)?.response?.data?.error ?? t('pr.erreurTelechargement')}
                         </p>
                       )}
                     </div>
@@ -355,45 +356,45 @@ export function SettingsPage() {
               {/* Identity fields */}
               <div className="card">
                 <div className="card-header">
-                  <h2 className="text-sm font-semibold text-alpine-800">Identité de la société</h2>
+                  <h2 className="text-sm font-semibold text-alpine-800">{t('pr.identiteSociete')}</h2>
                 </div>
                 <div className="card-body grid grid-cols-2 gap-4">
                   <div className="col-span-2">
-                    <label className="label">Nom commercial *</label>
+                    <label className="label">{t('pr.nomCommercial')}</label>
                     <input
                       className={`input ${errors.company_name ? 'input-error' : ''}`}
-                      placeholder="Acme SA"
+                      placeholder={t('pr.nomExemple')}
                       {...register('company_name')}
                     />
                     {errors.company_name && (
-                      <p className="text-xs text-danger-700 mt-1">{errors.company_name.message}</p>
+                      <p className="text-xs text-danger-700 mt-1">{tv(errors.company_name.message)}</p>
                     )}
                   </div>
                   <div>
-                    <label className="label">Forme juridique</label>
-                    <input className="input" placeholder="SA, Sàrl, raison individuelle…" {...register('legal_form')} />
+                    <label className="label">{t('pr.formeJuridique')}</label>
+                    <input className="input" placeholder={t('pr.formeExemple')} {...register('legal_form')} />
                   </div>
                   <div>
-                    <label className="label">N° IDE suisse (CHE-…)</label>
+                    <label className="label">{t('pr.ideSuisse')}</label>
                     <input className="input font-mono" placeholder="CHE-123.456.789" {...register('che_number')} />
                   </div>
                   <div>
-                    <label className="label">Téléphone</label>
-                    <input className="input" placeholder="+41 24 000 00 00" {...register('phone')} />
+                    <label className="label">{t('pr.telephone')}</label>
+                    <input className="input" placeholder={t('pr.telExemple')} {...register('phone')} />
                   </div>
                   <div>
-                    <label className="label">Courriel</label>
-                    <input className="input" type="email" placeholder="contact@exemple.ch" {...register('email')} />
+                    <label className="label">{t('pr.courriel')}</label>
+                    <input className="input" type="email" placeholder={t('pr.mailExemple')} {...register('email')} />
                   </div>
                   {/* Téléphone et courriel apparaissent sur la facture. La LTVA
                       art. 26 ne les exige pas ; une facture qu'on ne peut pas
                       contester facilement se paie tard, ou pas. */}
                   <div className="col-span-2">
-                    <label className="label">Adresse</label>
-                    <input className="input mb-2" placeholder="Rue et numéro" {...register('address_street')} />
+                    <label className="label">{t('pr.adresse')}</label>
+                    <input className="input mb-2" placeholder={t('pr.rueNumero')} {...register('address_street')} />
                     <div className="grid grid-cols-4 gap-3">
-                      <input className="input" placeholder="NPA"      {...register('address_postal_code')} />
-                      <input className="input col-span-2" placeholder="Localité" {...register('address_city')} />
+                      <input className="input" placeholder={t('pr.npa')}      {...register('address_postal_code')} />
+                      <input className="input col-span-2" placeholder={t('pr.localite')} {...register('address_city')} />
                       <input className="input uppercase" placeholder="CH" maxLength={2} {...register('address_country')} />
                     </div>
                   </div>
@@ -406,11 +407,11 @@ export function SettingsPage() {
           {effectiveTab === 'banking' && (
             <div className="card">
               <div className="card-header">
-                <h2 className="text-sm font-semibold text-alpine-800">Coordonnées bancaires et TVA</h2>
+                <h2 className="text-sm font-semibold text-alpine-800">{t('pr.coordonneesBancaires')}</h2>
               </div>
               <div className="card-body grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="label">IBAN <span className="text-warning-700 font-normal">(requis pour le QR code de paiement)</span></label>
+                  <label className="label">{t('paiement.iban')} <span className="text-warning-700 font-normal">{t('pr.ibanRequis')}</span></label>
                   <input className="input font-mono" placeholder="CH56 0483 5012 3456 7800 9" {...register('iban')} />
                   {/* Un QR-IBAN change ce que porte le bulletin : il impose une
                       référence QRR, là où un IBAN ordinaire impose SCOR ou NON
@@ -419,17 +420,16 @@ export function SettingsPage() {
                       changent d'aspect d'une installation à l'autre. */}
                   {estQRIBAN(watch('iban') ?? '') ? (
                     <p className="text-xs text-alpine-500 mt-1">
-                      Ce compte est un <strong>QR-IBAN</strong> (institution 30000&nbsp;à&nbsp;31999) :
-                      vos factures porteront une référence QR (QRR), en francs uniquement.
+                      {t('pr.ibanEstQR')}
                     </p>
                   ) : (
                     <p className="text-xs text-alpine-400 mt-1">
-                      Requis pour le QR code de paiement SPC 0200 sur les factures PDF. Format : CH + 19 chiffres.
+                      {t('pr.ibanAide')}
                     </p>
                   )}
                 </div>
                 <div className="col-span-2">
-                  <label className="label">N° TVA AFC</label>
+                  <label className="label">{t('pr.tvaAFC')}</label>
                   <input className="input font-mono" placeholder="CHE-123.456.789 MWST" {...register('vat_number')} />
                   <p className="text-xs text-alpine-400 mt-1">
                     Sans ce numéro, LedgerAlps refuse d'établir une facture portant de la TVA :
@@ -443,7 +443,7 @@ export function SettingsPage() {
                     la banque et le BIC. Facultatif, donc présenté comme tel. */}
                 <div className="col-span-2 pt-2 border-t border-neutral-200">
                   <h3 className="text-sm font-medium text-alpine-800 mb-1">
-                    Paiement par virement <span className="font-normal text-alpine-400">(facultatif)</span>
+                    {t('pr.paiementVirement')} <span className="font-normal text-alpine-400">{t('pr.facultatif')}</span>
                   </h3>
                   <p className="text-xs text-alpine-400 mb-3">
                     Ces informations s'ajoutent à la facture pour un client qui paie par virement
@@ -452,16 +452,16 @@ export function SettingsPage() {
                   </p>
                 </div>
                 <div>
-                  <label className="label">Nom de la banque</label>
-                  <input className="input" placeholder="Banque Cantonale Vaudoise" {...register('bank_name')} />
+                  <label className="label">{t('pr.nomBanque')}</label>
+                  <input className="input" placeholder={t('pr.banqueExemple')} {...register('bank_name')} />
                 </div>
                 <div>
-                  <label className="label">BIC / SWIFT</label>
+                  <label className="label">{t('pr.bic')}</label>
                   <input className="input font-mono uppercase" placeholder="BCVLCH2LXXX" {...register('bank_bic')} />
                 </div>
                 <div className="col-span-2">
-                  <label className="label">Adresse de la banque</label>
-                  <input className="input" placeholder="Place Saint-François 14, 1003 Lausanne" {...register('bank_address')} />
+                  <label className="label">{t('pr.adresseBanque')}</label>
+                  <input className="input" placeholder={t('pr.adresseBanqueExemple')} {...register('bank_address')} />
                 </div>
               </div>
             </div>
@@ -479,7 +479,7 @@ export function SettingsPage() {
           {effectiveTab === 'invoicing' && (
             <div className="card">
               <div className="card-header">
-                <h2 className="text-sm font-semibold text-alpine-800">Paramètres de facturation</h2>
+                <h2 className="text-sm font-semibold text-alpine-800">{t('pr.parametresFacturation')}</h2>
               </div>
               <div className="card-body grid grid-cols-2 gap-4">
                 {/* Comptabilisation automatique. Éteinte sur les installations
@@ -489,40 +489,29 @@ export function SettingsPage() {
                   <label className="flex items-start gap-2 text-sm">
                     <input type="checkbox" className="mt-0.5" {...register('auto_post_invoices')} />
                     <span>
-                      <span className="font-medium">Comptabiliser les factures à l&rsquo;envoi</span>
+                      <span className="font-medium">{t('pr.comptabiliserEnvoi')}</span>
                       <span className="block text-alpine-600 text-xs mt-0.5">
-                        Une écriture est passée au journal dès qu&rsquo;une facture part :
-                        débiteurs au débit, produits et TVA due au crédit. La note de crédit
-                        contrepasse.
-                        <strong> N&rsquo;activez ceci que si vous ne saisissez pas déjà ces
-                        écritures vous-même</strong> — sinon elles seraient comptées deux fois.
+                        {t('pr.comptabiliserAide')}
                       </span>
                       <span className="block text-alpine-600 text-xs mt-1">
-                        Éteint, envoyer une facture ne produit <strong>aucune</strong> écriture :
-                        le journal, la balance et le bilan restent vides tant que vous ne saisissez
-                        rien. C&rsquo;est le réglage des installations créées avant qu&rsquo;il
-                        n&rsquo;existe ; les nouvelles l&rsquo;ont allumé.
+                        {t('pr.comptabiliserEteint')}
                       </span>
                     </span>
                   </label>
                 </div>
 
                 <div>
-                  <label className="label">Devise principale</label>
+                  <label className="label">{t('pr.devise')}</label>
                   <select className="select" {...register('currency')}>
-                    <option value="CHF">CHF — Franc suisse</option>
-                    <option value="EUR">EUR — Euro</option>
+                    <option value="CHF">{t('pr.deviseCHF')}</option>
+                    <option value="EUR">{t('pr.deviseEUR')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="label">Début d'exercice (mois)</label>
+                  <label className="label">{t('pr.debutExercice')}</label>
                   <select className="select" {...register('fiscal_year_start_month')}>
-                    {[
-                      [1,'Janvier'],[2,'Février'],[3,'Mars'],[4,'Avril'],
-                      [5,'Mai'],[6,'Juin'],[7,'Juillet'],[8,'Août'],
-                      [9,'Septembre'],[10,'Octobre'],[11,'Novembre'],[12,'Décembre'],
-                    ].map(([v, l]) => (
-                      <option key={v} value={v}>{l}</option>
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                      <option key={m} value={m}>{t(`pr.mois${m}` as Cle)}</option>
                     ))}
                   </select>
                 </div>
@@ -536,24 +525,24 @@ export function SettingsPage() {
               <div className="card border-warning-100 bg-warning-100/30">
                 <div className="card-body">
                   <h3 className="text-sm font-semibold text-warning-700 mb-2">
-                    Obligations légales
+                    {t('pr.obligationsLegales')}
                   </h3>
                   <ul className="text-sm text-alpine-700 space-y-1.5">
                     <li className="flex items-start gap-2">
                       <span className="text-success-700 mt-0.5">✓</span>
-                      <span><strong>CO art. 958f</strong> — Conservation des documents : 10 ans.</span>
+                      <span>{t('pr.obligationConservation')}</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-success-700 mt-0.5">✓</span>
-                      <span><strong>nLPD</strong> — Données stockées localement, chiffrement pgcrypto.</span>
+                      <span>{t('pr.obligationDonnees')}</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-success-700 mt-0.5">✓</span>
-                      <span><strong>TVA CH</strong> — Déclaration AFC : trimestrielle ou semestrielle.</span>
+                      <span>{t('pr.obligationDeclaration')}</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-warning-700 mt-0.5">⚠</span>
-                      <span>Ce logiciel ne remplace pas un expert fiduciaire agréé.</span>
+                      <span>{t('pr.pasExpert')}</span>
                     </li>
                   </ul>
                 </div>

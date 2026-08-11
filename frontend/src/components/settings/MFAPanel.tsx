@@ -18,6 +18,7 @@ import { authApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import { useAuthStore } from '@/store/auth'
+import { useT } from '@/i18n/useT'
 
 interface Status {
   enabled: boolean
@@ -26,6 +27,7 @@ interface Status {
 }
 
 export function MFAPanel() {
+  const t = useT()
   const qc = useQueryClient()
   const role = useAuthStore(st => st.role)
   const [setup, setSetup] = useState<{ secret: string; qr_png: string } | null>(null)
@@ -47,7 +49,7 @@ export function MFAPanel() {
   const start = useMutation({
     mutationFn: () => authApi.mfaSetup(),
     onSuccess: (r) => { setError(null); setSetup(r.data); setCodes(null) },
-    onError: fail("L'inscription n'a pas pu démarrer."),
+    onError: fail(t('mf.echecDemarrage')),
   })
 
   const confirm = useMutation({
@@ -57,13 +59,13 @@ export function MFAPanel() {
       setCodes((r.data.recovery_codes ?? []) as string[])
       invalidate()
     },
-    onError: (e) => { setCode(''); fail("Le code n'a pas été accepté.")(e) },
+    onError: (e) => { setCode(''); fail(t('mf.codeRefuse'))(e) },
   })
 
   const disable = useMutation({
     mutationFn: () => authApi.mfaDisable(password),
     onSuccess: () => { setError(null); setRemoving(false); setPassword(''); invalidate() },
-    onError: fail('Le second facteur n’a pas pu être retiré.'),
+    onError: fail(t('us.echecMfa')),
   })
 
   const copyCodes = async () => {
@@ -73,7 +75,7 @@ export function MFAPanel() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2500)
     } catch {
-      setError('La copie a échoué. Notez les codes à la main.')
+      setError(t('mf.echecCopie'))
     }
   }
 
@@ -82,36 +84,29 @@ export function MFAPanel() {
   // Le message nommait « administrateur » quel que soit le rôle : un comptable
   // lisait donc une phrase fausse sur son propre écran, ce qui use la confiance
   // dans tout ce que le produit affirme par ailleurs.
-  const roleLabel = role === 'admin'
-    ? 'est administrateur'
-    : role === 'accountant'
-      ? 'tient la comptabilité'
-      : 'est en lecture seule'
+  const roleLabel = t(role === 'admin' ? 'mp.roleAdmin'
+    : role === 'accountant' ? 'mp.roleComptable'
+    : 'mp.roleLecture')
 
   return (
     <div className="mt-6">
-      <SectionTitle>Second facteur (code à usage unique)</SectionTitle>
+      <SectionTitle>{t('mp.titre')}</SectionTitle>
       <p className="text-sm text-alpine-600 mb-3">
-        Un code à usage unique (OTP) de six chiffres, calculé par une application
-        d’authentification, en plus du mot de passe. Il protège du cas où votre mot de passe
-        fuiterait. Il ne protège pas d'un accès direct au fichier de
-        base : c'est le rôle du chiffrement de la base et du disque.
+        {t('mp.introduction')}
       </p>
 
       {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
       {status.isLoading && <LoadingSpinner />}
-      {status.isError && <ErrorBanner message="L'état du second facteur n'a pas pu être lu." />}
+      {status.isError && <ErrorBanner message={t('mp.erreurEtat')} />}
 
       {/* Les codes de secours, montrés une seule fois. */}
       {codes && (
         <div className="mb-4 rounded-md border border-warning-500 bg-warning-100 px-4 py-3">
           <p className="text-sm font-medium flex items-center gap-1.5">
-            <AlertTriangle size={15} /> Notez ces codes de secours maintenant
+            <AlertTriangle size={15} /> {t('mp.notezCodes')}
           </p>
           <p className="text-sm text-alpine-700 mt-1">
-            Ils ne seront plus jamais affichés. Sans eux, la perte de votre application vous ferme
-            définitivement l'accès. Pour vous en servir : à l'écran de connexion, après votre
-            mot de passe, choisissez « Application indisponible ? Utiliser un code de secours ».
+            {t('mp.notezCodesAide')}
           </p>
           <ul className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-sm">
             {codes.map(c => (
@@ -124,10 +119,10 @@ export function MFAPanel() {
           <div className="mt-3 flex items-center gap-2">
             <button onClick={copyCodes} className="btn-secondary btn-sm flex items-center gap-1.5">
               {copied ? <Check size={13} /> : <Copy size={13} />}
-              {copied ? 'Copié' : 'Copier les codes'}
+              {copied ? t('us.copie') : t('mf.copierCodes')}
             </button>
             <button onClick={() => setCodes(null)} className="btn-ghost btn-sm">
-              Je les ai notés
+              {t('mp.jeLesAiNotes')}
             </button>
           </div>
         </div>
@@ -138,23 +133,20 @@ export function MFAPanel() {
           <p className="text-sm flex items-center gap-2">
             {st.enabled
               ? <><ShieldCheck size={16} className="text-success-700" />
-                  <span><strong>Actif</strong> sur ce compte.
-                    {' '}{st.recovery_codes_left} code(s) de secours encore utilisable(s).</span></>
+                  <span>{t('mp.actif', { n: st.recovery_codes_left })}</span></>
               : <><ShieldOff size={16} className="text-alpine-500" />
-                  <span><strong>Inactif</strong> : seul votre mot de passe protège ce compte.</span></>}
+                  <span>{t('mp.inactif')}</span></>}
           </p>
 
           {st.required_for_this_role && !st.enabled && (
             <p className="text-sm text-danger-700 mt-2">
-              Ce compte {roleLabel} : le second facteur est exigé. Tant qu'il n'est pas
-              inscrit, aucune autre action n'est possible.
+              {t('mp.exigePourRole', { role: roleLabel })}
             </p>
           )}
 
           {st.enabled && st.recovery_codes_left <= 2 && (
             <p className="text-sm text-warning-700 mt-2">
-              Il vous reste peu de codes de secours. Réinscrivez votre application pour en obtenir
-              une nouvelle série.
+              {t('mp.peuDeCodes')}
             </p>
           )}
 
@@ -163,13 +155,13 @@ export function MFAPanel() {
               <button onClick={() => start.mutate()} disabled={start.isPending}
                       className="btn-primary btn-sm flex items-center gap-1.5">
                 {start.isPending && <Loader2 size={13} className="animate-spin" />}
-                <Smartphone size={13} /> Activer le 2FA
+                <Smartphone size={13} /> {t('mp.activer2FA')}
               </button>
             )}
             {st.enabled && !removing && (
               <button onClick={() => { setError(null); setRemoving(true) }}
                       className="btn-ghost btn-sm flex items-center gap-1.5">
-                <ShieldOff size={13} /> Retirer le second facteur
+                <ShieldOff size={13} /> {t('mp.retirer')}
               </button>
             )}
           </div>
@@ -179,23 +171,22 @@ export function MFAPanel() {
           {removing && (
             <div className="mt-3 rounded-md border border-danger-500 bg-danger-500/5 px-3 py-3">
               <p className="text-sm">
-                Confirmez avec votre mot de passe. Le compte reviendra au mot de passe seul.
-                {st.required_for_this_role && ` Ce compte ${roleLabel}, vous devrez donc en ` +
-                  'en activer un nouveau avant de pouvoir travailler — c’est le chemin à suivre ' +
-                  'pour changer d’application ou d’appareil.'}
+                {t('mp.confirmezMotDePasse')}
+                {st.required_for_this_role
+                  && ' ' + t('mp.devrezReactiver', { role: roleLabel })}
               </p>
               <input type="password" className="input mt-2" autoComplete="current-password"
-                     placeholder="Votre mot de passe"
+                     placeholder={t('mp.placeholderMotDePasse')}
                      value={password} onChange={e => setPassword(e.target.value)} />
               <div className="mt-2 flex items-center gap-2">
                 <button onClick={() => disable.mutate()}
                         disabled={password === '' || disable.isPending}
                         className="btn-danger btn-sm flex items-center gap-1.5">
                   {disable.isPending && <Loader2 size={13} className="animate-spin" />}
-                  Retirer
+                  {t('mp.retirerBouton')}
                 </button>
                 <button onClick={() => { setRemoving(false); setPassword('') }}
-                        className="btn-ghost btn-sm">Annuler</button>
+                        className="btn-ghost btn-sm">{t('action.annuler')}</button>
               </div>
             </div>
           )}
@@ -207,16 +198,15 @@ export function MFAPanel() {
       {setup && (
         <div className="rounded-md border border-neutral-200 px-4 py-4">
           <p className="text-sm text-alpine-700">
-            Scannez ce code avec votre application d'authentification 2FA/OTP, puis saisissez celui
-            qu'elle affiche. Aegis, KeePassXC et FreeOTP sont libres et fonctionnent hors ligne.
+            {t('mp.scannezAide')}
           </p>
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-start">
-            <img src={setup.qr_png} alt="Code à scanner"
+            <img src={setup.qr_png} alt={t('mf.altCodeAScanner')}
                  className="rounded border border-neutral-200 bg-white p-2" width={200} height={200} />
             <div className="flex-1 w-full">
               <details>
                 <summary className="text-xs text-alpine-600 cursor-pointer">
-                  Impossible de scanner ? Saisir la clé à la main
+                  {t('mf.impossibleScanner')}
                 </summary>
                 <p className="mt-1.5 font-mono text-xs break-all rounded border border-neutral-200
                               bg-neutral-50 px-2 py-1.5 select-all">
@@ -224,7 +214,7 @@ export function MFAPanel() {
                 </p>
               </details>
 
-              <label className="label mt-3" htmlFor="mfa-code">Code affiché</label>
+              <label className="label mt-3" htmlFor="mfa-code">{t('mp.codeAffiche')}</label>
               <input id="mfa-code" inputMode="numeric" maxLength={7}
                      className="input text-center text-lg tracking-[0.35em]"
                      placeholder="000000"
@@ -236,10 +226,10 @@ export function MFAPanel() {
                         disabled={code.trim().length < 6 || confirm.isPending}
                         className="btn-primary btn-sm flex items-center gap-1.5">
                   {confirm.isPending && <Loader2 size={13} className="animate-spin" />}
-                  Activer
+                  {t('mp.activer')}
                 </button>
                 <button onClick={() => { setSetup(null); setCode(''); setError(null) }}
-                        className="btn-ghost btn-sm">Annuler</button>
+                        className="btn-ghost btn-sm">{t('action.annuler')}</button>
               </div>
             </div>
           </div>

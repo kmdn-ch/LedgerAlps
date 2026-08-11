@@ -18,6 +18,8 @@ import {
 } from 'lucide-react'
 import { complianceApi, updateApi } from '@/api/client'
 import { cn } from '@/utils'
+import { useT, useLangue } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
 
 export interface Advisory {
   id: string
@@ -56,17 +58,17 @@ const STYLES = {
   critical: {
     wrap: 'border-danger-500 bg-danger-100 text-danger-700',
     icon: ShieldAlert,
-    label: 'Action requise',
+    cle: 'cb.actionRequise' as Cle,
   },
   action_required: {
     wrap: 'border-warning-500 bg-warning-100 text-warning-700',
     icon: AlertTriangle,
-    label: 'À vérifier',
+    cle: 'cb.aVerifier' as Cle,
   },
   info: {
     wrap: 'border-slate-300 bg-slate-100 text-slate-700',
     icon: Info,
-    label: 'Information',
+    cle: 'cb.information' as Cle,
   },
 } as const
 
@@ -128,11 +130,15 @@ function CollapsibleNotice({
 }
 
 export function ComplianceBanner() {
+  const t = useT()
+  // L'avis vient du serveur, qui le rend dans la langue demandée. Le figer en
+  // français laissait un bandeau francophone au milieu d'un écran allemand.
+  const langue = useLangue()
   const [dismissed, setDismissed] = useState<Record<string, string>>(loadDismissed)
 
   const { data } = useQuery({
-    queryKey: ['compliance-advisories'],
-    queryFn: () => complianceApi.advisories('fr').then((r) => r.data),
+    queryKey: ['compliance-advisories', langue],
+    queryFn: () => complianceApi.advisories(langue).then((r) => r.data),
     // Le flux est embarqué dans le binaire : il ne change qu'à la mise à jour
     // de l'application, inutile de le réinterroger en boucle.
     staleTime: 60 * 60 * 1000,
@@ -174,15 +180,13 @@ export function ComplianceBanner() {
         <CollapsibleNotice
           wrap="border-alpine-500 bg-alpine-100 text-alpine-700"
           Icon={Download}
-          label="Mise à jour"
-          title={`La version ${updateVersion} est disponible`}
+          label={t('cb.miseAJour')}
+          title={t('cb.versionDisponible', { version: updateVersion ?? '' })}
           onDismiss={() => remember('__update__', updateVersion!)}
-          dismissLabel="Masquer cette notification"
+          dismissLabel={t('cb.masquerNotification')}
         >
           <p>
-            Les mises à jour contiennent les correctifs de conformité (QR-facture,
-            TVA, obligations légales). Installer la dernière version garantit que
-            vos factures restent acceptées par les banques.
+            {t('cb.miseAJourAide')}
           </p>
           {update?.release_url && (
             <a
@@ -191,7 +195,7 @@ export function ComplianceBanner() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-xs mt-2 underline opacity-80 hover:opacity-100"
             >
-              Voir les nouveautés et télécharger
+              {t('cb.voirNouveautes')}
               <ExternalLink className="w-3 h-3" aria-hidden />
             </a>
           )}
@@ -207,10 +211,10 @@ export function ComplianceBanner() {
             key={a.id}
             wrap={style.wrap}
             Icon={style.icon}
-            label={style.label}
+            label={t(style.cle)}
             title={a.title}
             onDismiss={() => remember(a.id, a.published_at ?? 'v1')}
-            dismissLabel="Masquer cet avis"
+            dismissLabel={t('cb.masquerAvis')}
           >
             {effective && (
               <p className="text-xs opacity-70 mb-1">En vigueur depuis le {effective}</p>

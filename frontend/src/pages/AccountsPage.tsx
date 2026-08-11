@@ -30,13 +30,15 @@ import { accountsApi } from '@/api/client'
 import { PageHeader, LoadingSpinner, EmptyState, ErrorBanner } from '@/components/ui'
 import { formatCHF } from '@/utils'
 import type { Account, TrialBalanceLine } from '@/types'
+import { useT } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
 
-const TYPE_LABELS: Record<string, string> = {
-  asset:     'Actif',
-  liability: 'Passif',
-  equity:    'Capitaux propres',
-  revenue:   'Produits',
-  expense:   'Charges',
+const TYPE_LABELS: Record<string, Cle> = {
+  asset:     'ac.actif',
+  liability: 'ac.passif',
+  equity:    'ac.capitauxPropres',
+  revenue:   'ac.produits',
+  expense:   'ac.charges',
 }
 
 // L'ordre du plan comptable suisse, et non l'ordre d'arrivée : « Actif, Passif,
@@ -44,6 +46,7 @@ const TYPE_LABELS: Record<string, string> = {
 const TYPE_ORDER = ['asset', 'liability', 'equity', 'revenue', 'expense']
 
 export function AccountsPage() {
+  const t = useT()
   const [view, setView] = useState<'accounts' | 'balance'>('accounts')
   // Quatre-vingt-un comptes dont trois bougent : montrer les soixante-dix-huit
   // autres à zéro noie le contrôle. Le repli reste possible — une balance
@@ -83,15 +86,15 @@ export function AccountsPage() {
   return (
     <div>
       <PageHeader
-        title="Plan comptable"
-        subtitle="PME suisse — CO art. 957"
+        title={t('nav.planComptable')}
+        subtitle={t('ac.sousTitre')}
       />
 
       <div className="flex gap-1 mb-5 bg-alpine-100 rounded-lg p-1 w-fit">
-        {[
-          { key: 'accounts', label: 'Plan comptable' },
-          { key: 'balance',  label: 'Balance de vérification' },
-        ].map(tab => (
+        {([
+          { key: 'accounts', cle: 'ac.ongletPlan' },
+          { key: 'balance',  cle: 'ac.ongletBalance' },
+        ] as const).map(tab => (
           <button
             key={tab.key}
             onClick={() => setView(tab.key as typeof view)}
@@ -101,7 +104,7 @@ export function AccountsPage() {
                 : 'text-alpine-600 hover:text-alpine-800'
             }`}
           >
-            {tab.label}
+            {t(tab.cle)}
           </button>
         ))}
       </div>
@@ -110,13 +113,11 @@ export function AccountsPage() {
       {view === 'accounts' && (
         <div className="space-y-5">
           {accounts.isLoading && <LoadingSpinner />}
-          {accounts.isError && <ErrorBanner message="Le plan comptable n'a pas pu être lu." />}
+          {accounts.isError && <ErrorBanner message={t('ac.erreurPlan')} />}
 
           {!accounts.isLoading && (accounts.data?.length ?? 0) > 0 && (
             <p className="text-sm text-alpine-600">
-              Ces numéros sont ceux à saisir dans le journal. Le plan est celui des PME suisses ;
-              il n&rsquo;est pas modifiable depuis l&rsquo;interface, car les états financiers
-              regroupent les comptes par tranche de numéro.
+              {t('ac.planAide')}
             </p>
           )}
 
@@ -126,18 +127,18 @@ export function AccountsPage() {
                 <div className="flex items-center gap-2">
                   <BookOpen size={15} className="text-alpine-500" />
                   <span className="font-semibold text-sm text-alpine-800">
-                    {TYPE_LABELS[type] ?? type}
+                    {TYPE_LABELS[type] ? t(TYPE_LABELS[type]) : type}
                   </span>
-                  <span className="badge badge-draft">{grouped[type].length} comptes</span>
+                  <span className="badge badge-draft">{t('ac.nComptes', { n: grouped[type].length })}</span>
                 </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th style={{ width: '90px' }}>N°</th>
-                      <th>Désignation</th>
-                      <th>Usage</th>
+                      <th style={{ width: '90px' }}>{t('ac.colNumero')}</th>
+                      <th>{t('ac.colDesignation')}</th>
+                      <th>{t('ac.colUsage')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -149,7 +150,7 @@ export function AccountsPage() {
                         <td className="text-alpine-800">
                           {a.name}
                           {!a.is_active && (
-                            <span className="ml-2 text-xs text-alpine-500">(désactivé)</span>
+                            <span className="ml-2 text-xs text-alpine-500">{t('ac.desactive')}</span>
                           )}
                         </td>
                         <td className="text-alpine-600 text-xs">{a.description || '—'}</td>
@@ -163,8 +164,8 @@ export function AccountsPage() {
 
           {!accounts.isLoading && !accounts.isError && (accounts.data?.length ?? 0) === 0 && (
             <EmptyState
-              title="Plan comptable vide"
-              description="Le plan PME suisse est normalement chargé au premier démarrage. Son absence signale une base incomplète : restaurez une sauvegarde ou signalez-le."
+              title={t('ac.planVide')}
+              description={t('ac.planVideAide')}
             />
           )}
         </div>
@@ -175,13 +176,12 @@ export function AccountsPage() {
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-alpine-600 max-w-2xl">
-              Totaux des écritures <strong>comptabilisées</strong>. Les brouillons n&rsquo;y
-              figurent pas : ils ne sont scellés par rien et ne font pas encore partie des livres.
+              {t('ac.balanceAide')}
             </p>
             <label className="flex items-center gap-2 text-sm text-alpine-600 shrink-0">
               <input type="checkbox" checked={tousLesComptes}
                      onChange={e => setTousLesComptes(e.target.checked)} />
-              Montrer les comptes sans mouvement
+              {t('ac.montrerSansMouvement')}
             </label>
           </div>
 
@@ -190,11 +190,11 @@ export function AccountsPage() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th style={{ width: '90px' }}>Compte</th>
-                    <th>Désignation</th>
-                    <th className="text-right">Débit CHF</th>
-                    <th className="text-right">Crédit CHF</th>
-                    <th className="text-right">Solde CHF</th>
+                    <th style={{ width: '90px' }}>{t('ac.colCompte')}</th>
+                    <th>{t('ac.colDesignation')}</th>
+                    <th className="text-right">{t('ac.colDebit')}</th>
+                    <th className="text-right">{t('ac.colCredit')}</th>
+                    <th className="text-right">{t('ac.colSolde')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -203,7 +203,7 @@ export function AccountsPage() {
                   )}
                   {balance.isError && (
                     <tr><td colSpan={5}>
-                      <ErrorBanner message="La balance n'a pas pu être lue." />
+                      <ErrorBanner message={t('ac.erreurBalance')} />
                     </td></tr>
                   )}
                   {affichees.map(row => (
@@ -227,13 +227,13 @@ export function AccountsPage() {
                   ))}
                   {!balance.isLoading && !balance.isError && affichees.length > 0 && (
                     <tr className="bg-alpine-900 text-white font-semibold">
-                      <td className="font-mono">TOTAL</td>
-                      <td>Balance de vérification</td>
+                      <td className="font-mono">{t('ac.total')}</td>
+                      <td>{t('ac.ongletBalance')}</td>
                       <td className="text-right font-mono tabular-nums">{formatCHF(totalDebit)}</td>
                       <td className="text-right font-mono tabular-nums">{formatCHF(totalCredit)}</td>
                       <td className="text-right font-mono tabular-nums">
                         {ecart === 0
-                          ? <span className="text-success-500">Équilibrée</span>
+                          ? <span className="text-success-500">{t('ac.equilibree')}</span>
                           : formatCHF(ecart)}
                       </td>
                     </tr>
@@ -244,8 +244,8 @@ export function AccountsPage() {
 
             {!balance.isLoading && !balance.isError && avecMouvement.length === 0 && (
               <EmptyState
-                title="Aucune écriture comptabilisée"
-                description="La balance se remplit à mesure que les écritures sont comptabilisées. Un brouillon n'y figure pas."
+                title={t('ac.aucuneComptabilisee')}
+                description={t('ac.aucuneComptabiliseeAide')}
               />
             )}
           </div>
@@ -257,13 +257,10 @@ export function AccountsPage() {
           {!balance.isLoading && affichees.length > 0 && ecart !== 0 && (
             <div className="rounded-md border border-danger-500 bg-danger-500/5 px-4 py-3 text-sm">
               <p className="font-medium flex items-center gap-1.5">
-                <Scale size={15} /> La balance ne s&rsquo;équilibre pas ({formatCHF(ecart)})
+                <Scale size={15} /> {t('ac.pasEquilibree', { ecart: formatCHF(ecart) })}
               </p>
               <p className="text-alpine-700 mt-1">
-                Cela ne devrait pas arriver : LedgerAlps refuse toute écriture dont le débit ne
-                vaut pas le crédit. Lancez la vérification d&rsquo;intégrité dans
-                Paramètres&nbsp;→&nbsp;Maintenance et conservez une copie de la base avant toute
-                autre opération.
+                {t('ac.pasEquilibreeAide')}
               </p>
             </div>
           )}

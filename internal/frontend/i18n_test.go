@@ -23,6 +23,9 @@ import (
 
 var reCle = regexp.MustCompile(`(?m)^\s*'([\w.]+)':\s*'((?:[^'\\]|\\.)*)'`)
 
+// Un nombre suivi d'un seul mot : une durée, pas une phrase.
+var reDuree = regexp.MustCompile(`^\d+\s+\p{L}+$`)
+
 func catalogue(t *testing.T, code string) map[string]string {
 	t.Helper()
 	chemin := filepath.Join("..", "..", "frontend", "src", "i18n", code+".ts")
@@ -70,44 +73,7 @@ func TestAucuneTraductionNEstVide(t *testing.T) {
 }
 
 // LE test qui compte : rien ne doit être resté en français.
-//
-// Certaines valeurs sont IDENTIQUES d'une langue à l'autre en toute légitimité
-// — « IBAN », « QR-IBAN », « Journal », « Saldo ». Ce sont des termes que les
-// Implementation Guidelines de SIX ou l'usage laissent inchangés, et les
-// signaler serait du bruit. Ils sont donc listés ici, explicitement : ajouter
-// une exception oblige à y penser.
 func TestRienNEstResteEnFrancais(t *testing.T) {
-	// Identiques par nature : sigles, termes SIX, ou mots qui se disent
-	// pareil. Chaque entrée est un choix, pas un oubli.
-	memeMot := map[string]map[string]bool{
-		"de": {
-			"nav.journal": true, "paiement.iban": true, "paiement.qrIban": true,
-			"compta.solde": true, "securite.phraseDePasse": true,
-			"role.admin": true, "statut.archivee": false,
-			// « Total CHF » est un en-tête de colonne : le sigle de la monnaie
-			// ne se traduit pas, et « Total » est le même mot.
-			"fact.colTotal": true,
-		},
-		"it": {
-			"paiement.iban": true, "paiement.qrIban": true, "compta.solde": true,
-			"securite.phraseDePasse": true, "securite.motDePasse": true,
-			"nav.contacts": true,
-			// « E-mail » s'écrit pareil dans les quatre langues.
-			"ach.email": true,
-		},
-		"en": {
-			"paiement.iban": true, "paiement.qrIban": true,
-			"securite.phraseDePasse": true, "nav.contacts": true,
-			"nav.journal": true,
-			// Mots identiques en français et en anglais.
-			"fact.colDate": true, "fact.colContact": true, "fact.colTotal": true,
-			"compta.credit": true, "securite.motDePasse": false,
-			// Mots identiques en français et en anglais.
-			"fact.unDocument": true, "fact.desDocuments": true, "ach.email": true,
-			"jr.date": true, "jr.description": true, "jr.colDescription": true,
-		},
-	}
-
 	ref := catalogue(t, "fr")
 	for _, code := range []string{"de", "it", "en"} {
 		autre := catalogue(t, code)
@@ -117,11 +83,8 @@ func TestRienNEstResteEnFrancais(t *testing.T) {
 			if !ok {
 				continue // signalé par l'autre test
 			}
-			if val != valFR {
+			if val != valFR || identiqueParNature(cle, valFR) {
 				continue
-			}
-			if memeMot[code][cle] {
-				continue // identique volontairement
 			}
 			identiques++
 			t.Errorf("%s : %q vaut encore le français %q — non traduit ?", code, cle, valFR)
@@ -130,6 +93,66 @@ func TestRienNEstResteEnFrancais(t *testing.T) {
 			t.Logf("%s : %d valeur(s) encore identiques au français", code, identiques)
 		}
 	}
+}
+
+// identiqueParNature dit si une valeur a de bonnes raisons d'être la même dans
+// toutes les langues.
+//
+// # Pourquoi des catégories plutôt qu'une liste de clés
+//
+// La première version listait chaque exception nommément. Cela tenait à
+// quatre-vingts clés et devenait ingérable à mille : chaque lot de traduction
+// ajoutait cinq lignes à la liste, et une liste qu'on rallonge machinalement
+// finit par être remplie sans qu'on lise ce qu'on y met — ce qui vide le test
+// de son sens.
+//
+// Une catégorie, elle, se justifie une fois : un exemple de saisie n'est pas du
+// texte à traduire, un sigle n'a pas de version française. Et les mots que le
+// hasard rend identiques sont reconnus par leur VALEUR, si bien que « Date »
+// vaut exception partout où il apparaît, sur cent écrans comme sur un.
+func identiqueParNature(cle, valeur string) bool {
+	// Les EXEMPLES de saisie — « Acme SA », « +41 24 000 00 00 », une adresse
+	// lausannoise. Ce sont des illustrations de format, pas des phrases : les
+	// traduire n'apprendrait rien et inventerait des entreprises.
+	if strings.HasSuffix(cle, "Exemple") {
+		return true
+	}
+
+	// Ce qui ne se traduit dans aucune langue : sigles, identifiants
+	// normalisés, termes que les Implementation Guidelines de SIX laissent tels
+	// quels.
+	inchangeable := map[string]bool{
+		"paiement.iban": true, "paiement.qrIban": true, "pr.bic": true,
+		"securite.phraseDePasse": true, "pr.deviseEUR": true,
+		"fd.qrRef": true, "cf.olicoLien": true,
+	}
+	if inchangeable[cle] {
+		return true
+	}
+
+	// Les DURÉES : un nombre suivi de son unité, « 5 minutes », « 1 hour ».
+	// Français et anglais écrivent « minutes » de la même façon ; l'allemand
+	// écrit « Minuten » et sera donc contrôlé normalement. Une catégorie plutôt
+	// que trois entrées : le prochain « 30 minutes » n'aura rien à rallonger.
+	if reDuree.MatchString(valeur) {
+		return true
+	}
+
+	// Mots que le hasard rend identiques d'une langue à l'autre.
+	memeMot := map[string]bool{
+		"Date": true, "Contact": true, "Contacts": true, "Description": true,
+		"Description *": true, "Date *": true, "Journal": true, "Solde": true,
+		"E-mail": true, "Administrateur": true, "Total CHF": true, "Mai": true,
+		"Adresse": true, "NPA": true, "Novembre": true, "Maintenance": true,
+		"{n} document": true, "{n} documents": true, "Crédit": true,
+		"Mot de passe": true, "Archivée": true, "Contact *": true,
+		"Type *": true, "File": true, "Notes": true,
+		"Version": true, "Information": true, "Protections": true,
+		"Total": true, "Type": true, "Documents ({n})": true,
+		"Document": true, "Action": true, "TOTAL": true,
+		"Solide": true, "Acceptable": true,
+	}
+	return memeMot[valeur]
 }
 
 // Les repères d'interpolation survivent à la traduction.

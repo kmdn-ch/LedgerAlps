@@ -268,7 +268,7 @@ export function PurchasesPage() {
         supplier?: { id: string; name: string }
       }
       if (!d.found || !d.bill) {
-        setScan({ ok: false, message: d.reason ?? 'Aucun QR-facture trouvé.' })
+        setScan({ ok: false, message: d.reason ?? t('ah.aucunQR') })
         return
       }
       const h = d.hints
@@ -415,7 +415,7 @@ export function PurchasesPage() {
         }`}>
           <p className="font-medium flex items-center gap-1.5">
             {scan.ok ? <ScanLine size={15} /> : <Upload size={15} />}
-            {scan.ok ? 'QR-facture lu' : 'Rien à lire dans ce document'}
+            {t(scan.ok ? 'ah.qrLu' : 'ah.rienALire')}
           </p>
           <p className="text-alpine-700 mt-1">{scan.message}</p>
           <button onClick={() => setScan(null)}
@@ -583,7 +583,7 @@ export function PurchasesPage() {
                 {/* Une facture reçue annonce ce qu'il faut PAYER, et c'est aussi
                     ce que porte le QR. Le mode par défaut est donc TTC ; le hors
                     taxe se déduit du taux. */}
-                <select className="select w-24" aria-label="Le montant saisi est"
+                <select className="select w-24" aria-label={t('ah.montantSaisiEst')}
                         value={form.amount_mode}
                         onChange={e => setForm({
                           ...form, amount_mode: e.target.value as 'ht' | 'ttc',
@@ -630,8 +630,7 @@ export function PurchasesPage() {
                   l'encaissement. Sans elle le virement part quand même, mais il
                   arrive anonyme — et la relance suit. */}
               <p className="text-xs text-alpine-500 mt-1">
-                Celle du bulletin de versement, pas le n° de facture. Elle voyagera dans l&rsquo;ordre
-                de virement pour que le fournisseur reconnaisse votre paiement.
+                {t('ah.referenceAide')}
               </p>
             </div>
           </div>

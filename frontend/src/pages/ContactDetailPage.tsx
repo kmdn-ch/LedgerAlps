@@ -12,7 +12,7 @@ import { ContactDocuments } from '@/components/contacts/ContactDocuments'
 import { PageHeader, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import type { Contact } from '@/types'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
-import { useT } from '@/i18n/useT'
+import { useT, useTv } from '@/i18n/useT'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ const opt = <T extends z.ZodTypeAny>(s: T) =>
 const schema = z.object({
   contact_type:      z.enum(['customer', 'supplier', 'both']),
   is_company:        z.boolean().default(false),
-  name:              z.string().min(1, 'Nom requis'),
+  name:              z.string().min(1, 'val.nomRequis'),
   legal_name:        opt(z.string()),
   address:           opt(z.string()),
   postal_code:       opt(z.string()),
@@ -30,7 +30,7 @@ const schema = z.object({
   country:           z.string().min(2).max(2).default('CH'),
   uid_number:        opt(z.string()),
   vat_number:        opt(z.string()),
-  email:             opt(z.string().email('E-mail invalide')),
+  email:             opt(z.string().email('val.emailInvalide')),
   phone:             opt(z.string()),
   payment_term_days: z.coerce.number().int().min(0).max(365).default(30),
   iban:              opt(z.string()),
@@ -44,6 +44,7 @@ type FormData = z.infer<typeof schema>
 
 export function ContactDetailPage() {
   const t = useT()
+  const tv = useTv()
   const { contactId } = useParams<{ contactId: string }>()
   const peutEcrire    = useCanWrite()
   const navigate      = useNavigate()
@@ -100,7 +101,7 @@ export function ContactDetailPage() {
   })
 
   if (isLoading) return <LoadingSpinner />
-  if (error || !contact) return <ErrorBanner message="Contact introuvable." />
+  if (error || !contact) return <ErrorBanner message={t('co.introuvable')} />
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -111,7 +112,7 @@ export function ContactDetailPage() {
         </button>
         <PageHeader
           title={contact.name}
-          subtitle={contact.is_company ? 'Entreprise' : 'Particulier'}
+          subtitle={t(contact.is_company ? 'co.entreprise' : 'co.particulier')}
           /* La désactivation manuelle a été retirée : elle n'apportait rien
              qu'on ne fasse mieux autrement. Un contact qu'on ne veut plus voir
              s'anonymise (nLPD art. 6 al. 4), ce qui l'écarte des listes ET
@@ -124,13 +125,13 @@ export function ContactDetailPage() {
 
       {save.isError && (
         <ErrorBanner message={
-          (save.error as any)?.response?.data?.error ?? 'Erreur lors de la sauvegarde.'
+          (save.error as any)?.response?.data?.error ?? t('co.erreurSauvegarde')
         } />
       )}
       {save.isSuccess && !isDirty && (
         <div className="mb-4 px-4 py-2.5 rounded-lg bg-success-100 border border-success-100
                         text-sm text-success-700">
-          Modifications enregistrées.
+          {t('co.enregistre')}
         </div>
       )}
 
@@ -156,53 +157,53 @@ export function ContactDetailPage() {
                 ? <Building2 size={15} className="text-alpine-500" />
                 : <User      size={15} className="text-alpine-500" />
               }
-              <h2 className="text-sm font-semibold text-alpine-800">Identité</h2>
+              <h2 className="text-sm font-semibold text-alpine-800">{t('co.identite')}</h2>
             </div>
           </div>
           <div className="card-body space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="label">Type *</label>
+                <label className="label">{t('co.type')}</label>
                 <select className="select" {...register('contact_type')}>
-                  <option value="customer">Client</option>
-                  <option value="supplier">Fournisseur</option>
-                  <option value="both">Les deux</option>
+                  <option value="customer">{t('co.client')}</option>
+                  <option value="supplier">{t('co.fournisseur')}</option>
+                  <option value="both">{t('co.lesDeux')}</option>
                 </select>
               </div>
               <div className="flex items-end pb-2">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" {...register('is_company')}
                     className="rounded border-alpine-300 accent-accent-500" />
-                  <span className="text-sm text-alpine-700">Entreprise</span>
+                  <span className="text-sm text-alpine-700">{t('co.entreprise')}</span>
                 </label>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="label">Nom / Raison sociale *</label>
+                <label className="label">{t('co.nomRaisonSociale')}</label>
                 <input className={`input ${errors.name ? 'input-error' : ''}`}
                   {...register('name')} />
-                {errors.name && <p className="error-msg">{errors.name.message}</p>}
+                {errors.name && <p className="error-msg">{tv(errors.name.message)}</p>}
               </div>
               <div>
-                <label className="label">Raison sociale légale</label>
+                <label className="label">{t('co.raisonSocialeLegale')}</label>
                 <input className="input" {...register('legal_name')} />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="label">Pays</label>
+                <label className="label">{t('co.pays')}</label>
                 <input className="input uppercase" maxLength={2} {...register('country')} />
               </div>
               <div>
-                <label className="label">N° IDE (CHE-…)</label>
+                <label className="label">{t('co.ide')}</label>
                 <input className="input font-mono" placeholder="CHE-123.456.789"
                   {...register('uid_number')} />
               </div>
               <div>
-                <label className="label">N° TVA</label>
+                <label className="label">{t('co.numeroTVA')}</label>
                 <input className="input font-mono" {...register('vat_number')} />
               </div>
             </div>
@@ -212,30 +213,30 @@ export function ContactDetailPage() {
         {/* Coordonnées */}
         <div className="card">
           <div className="card-header">
-            <h2 className="text-sm font-semibold text-alpine-800">Coordonnées</h2>
+            <h2 className="text-sm font-semibold text-alpine-800">{t('co.coordonnees')}</h2>
           </div>
           <div className="card-body space-y-4">
             <div>
-              <label className="label">Adresse</label>
-              <input className="input mb-2" placeholder="Rue et numéro" {...register('address')} />
+              <label className="label">{t('co.adresse')}</label>
+              <input className="input mb-2" placeholder={t('co.placeholderRue')} {...register('address')} />
               <div className="grid grid-cols-3 gap-3">
-                <input className="input" placeholder="NPA" {...register('postal_code')} />
-                <input className="input col-span-2" placeholder="Localité" {...register('city')} />
+                <input className="input" placeholder={t('pr.npa')} {...register('postal_code')} />
+                <input className="input col-span-2" placeholder={t('co.placeholderLocalite')} {...register('city')} />
               </div>
               <p className="text-xs text-alpine-400 mt-1.5">
-                Rue, NPA et localité sont requis pour inclure le débiteur dans le QR code de paiement SPC 0200.
+                {t('co.adresseQRAide')}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="label">E-mail</label>
+                <label className="label">{t('co.email')}</label>
                 <input type="email"
                   className={`input ${errors.email ? 'input-error' : ''}`}
                   {...register('email')} />
-                {errors.email && <p className="error-msg">{errors.email.message}</p>}
+                {errors.email && <p className="error-msg">{tv(errors.email.message)}</p>}
               </div>
               <div>
-                <label className="label">Téléphone</label>
+                <label className="label">{t('co.telephone')}</label>
                 <input type="tel" className="input" {...register('phone')} />
               </div>
             </div>
@@ -245,17 +246,17 @@ export function ContactDetailPage() {
         {/* Paiement */}
         <div className="card">
           <div className="card-header">
-            <h2 className="text-sm font-semibold text-alpine-800">Paiement</h2>
+            <h2 className="text-sm font-semibold text-alpine-800">{t('co.paiement')}</h2>
           </div>
           <div className="card-body">
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="label">Délai (jours)</label>
+                <label className="label">{t('co.delaiJours')}</label>
                 <input type="number" min="0" max="365" className="input"
                   {...register('payment_term_days')} />
               </div>
               <div className="col-span-2">
-                <label className="label">IBAN</label>
+                <label className="label">{t('paiement.iban')}</label>
                 <input className="input font-mono" placeholder="CH…" {...register('iban')} />
               </div>
             </div>
@@ -266,13 +267,11 @@ export function ContactDetailPage() {
                 Lu sur une facture, il était enregistré ici sans jamais être
                 montré — ce qui est invisible ne se corrige pas. */}
             <div className="mt-4">
-              <label className="label">QR-IBAN</label>
+              <label className="label">{t('paiement.qrIban')}</label>
               <input className="input font-mono" placeholder="CH…"
                 {...register('qr_iban')} />
               <p className="text-xs text-alpine-500 mt-1">
-                Rempli automatiquement à la lecture d’une QR-facture. Il porte un
-                numéro d’institution entre 30000 et 31999 et n’accepte qu’une
-                référence QR.
+                {t('co.qrIbanAide')}
               </p>
             </div>
           </div>
@@ -281,7 +280,7 @@ export function ContactDetailPage() {
         {/* Notes */}
         <div className="card">
           <div className="card-header">
-            <h2 className="text-sm font-semibold text-alpine-800">Notes</h2>
+            <h2 className="text-sm font-semibold text-alpine-800">{t('co.notes')}</h2>
           </div>
           <div className="card-body">
             <textarea rows={3} className="input resize-none w-full" {...register('notes')} />
@@ -294,7 +293,7 @@ export function ContactDetailPage() {
             lecteur doit pouvoir repartir. */}
         <div className="flex justify-end gap-3 pb-6">
           <button type="button" onClick={() => navigate('/contacts')} className="btn-secondary">
-            Retour
+            {t('action.retour')}
           </button>
           {peutEcrire && (
             <button
@@ -303,7 +302,7 @@ export function ContactDetailPage() {
               disabled={save.isPending || !isDirty}
             >
               <Save size={15} />
-              {save.isPending ? 'Enregistrement…' : 'Enregistrer'}
+              {save.isPending ? t('etat.enregistrement') : t('action.enregistrer')}
             </button>
           )}
         </div>

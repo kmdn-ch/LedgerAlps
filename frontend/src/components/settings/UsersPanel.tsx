@@ -17,23 +17,19 @@ import { usersApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import type { AppUser, UserRole } from '@/types'
+import { useT } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
 
-const ROLES: Array<{ v: UserRole; label: string; icon: typeof Eye; desc: string }> = [
-  {
-    v: 'admin', label: 'Administrateur', icon: ShieldCheck,
-    desc: "Tout, y compris les comptes, les sauvegardes et la sécurité.",
-  },
-  {
-    v: 'accountant', label: 'Comptable', icon: Calculator,
-    desc: "Tient les livres. Ne touche ni aux comptes, ni aux sauvegardes, ni à la sécurité.",
-  },
-  {
-    v: 'viewer', label: 'Lecture seule', icon: Eye,
-    desc: "Consulte et exporte, n'écrit rien. C'est le rôle de votre fiduciaire.",
-  },
+// Les rôles sont décrits par des CLÉS : cette table est construite au
+// chargement du module, où `useT()` n'existe pas encore.
+const ROLES: Array<{ v: UserRole; cle: Cle; icon: typeof Eye; desc: Cle }> = [
+  { v: 'admin',      cle: 'role.admin',     icon: ShieldCheck, desc: 'us.roleAdminDesc' },
+  { v: 'accountant', cle: 'role.comptable', icon: Calculator,  desc: 'us.roleComptableDesc' },
+  { v: 'viewer',     cle: 'role.lecture',   icon: Eye,         desc: 'us.roleLectureDesc' },
 ]
 
 export function UsersPanel() {
+  const t = useT()
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -62,19 +58,19 @@ export function UsersPanel() {
       setForm({ name: '', email: '', password: '', role: 'viewer' })
       invalidate()
     },
-    onError: fail("Le compte n'a pas pu être créé."),
+    onError: fail(t('us.echecCreation')),
   })
 
   const setRole = useMutation({
     mutationFn: (v: { id: string; role: UserRole }) => usersApi.setRole(v.id, v.role),
     onSuccess: () => { setError(null); invalidate() },
-    onError: fail("Le rôle n'a pas pu être changé."),
+    onError: fail(t('us.echecRole')),
   })
 
   const setActive = useMutation({
     mutationFn: (v: { id: string; active: boolean }) => usersApi.setActive(v.id, v.active),
     onSuccess: () => { setError(null); invalidate() },
-    onError: fail("L'état du compte n'a pas pu être changé."),
+    onError: fail(t('us.echecEtat')),
   })
 
   const reset = useMutation({
@@ -84,13 +80,13 @@ export function UsersPanel() {
       setIssued({ email: u.email, password: data.temporary_password })
       invalidate()
     },
-    onError: (e) => { setConfirmReset(null); fail("L'accès n'a pas pu être réinitialisé.")(e) },
+    onError: (e) => { setConfirmReset(null); fail(t('us.echecReinit'))(e) },
   })
 
   const removeMfa = useMutation({
     mutationFn: (u: AppUser) => usersApi.removeMfa(u.id),
     onSuccess: () => { setError(null); setConfirmMfa(null); invalidate() },
-    onError: (e) => { setConfirmMfa(null); fail("Le second facteur n'a pas pu être retiré.")(e) },
+    onError: (e) => { setConfirmMfa(null); fail(t('us.echecMfa'))(e) },
   })
 
   const copyPassword = async () => {
@@ -100,7 +96,7 @@ export function UsersPanel() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2500)
     } catch {
-      setError('La copie a échoué. Recopiez le mot de passe à la main.')
+      setError(t('us.echecCopie'))
     }
   }
 
@@ -110,22 +106,23 @@ export function UsersPanel() {
 
   return (
     <div className="mt-6">
-      <SectionTitle>Comptes et rôles</SectionTitle>
+      <SectionTitle>{t('us.comptesEtRoles')}</SectionTitle>
       <p className="text-sm text-alpine-600 mb-3">
-        Donnez un accès à votre fiduciaire sans partager votre compte. Un rôle change
-        <strong> immédiatement</strong> : les droits sont relus à chaque requête, sans attendre
-        l'expiration d'une session.
+        {t('us.introduction')}
       </p>
 
       {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
       {users.isLoading && <LoadingSpinner />}
-      {users.isError && <ErrorBanner message="La liste des comptes n'a pas pu être lue." />}
+      {users.isError && <ErrorBanner message={t('us.erreurListe')} />}
 
       {items.length > 0 && (
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
-              <tr><th>Nom</th><th>Adresse e-mail</th><th>Rôle</th><th>État</th><th /></tr>
+              <tr>
+                <th>{t('us.colNom')}</th><th>{t('us.colEmail')}</th>
+                <th>{t('us.colRole')}</th><th>{t('us.colEtat')}</th><th />
+              </tr>
             </thead>
             <tbody>
               {items.map(u => (
@@ -139,13 +136,13 @@ export function UsersPanel() {
                       disabled={setRole.isPending}
                       onChange={e => setRole.mutate({ id: u.id, role: e.target.value as UserRole })}
                     >
-                      {ROLES.map(r => <option key={r.v} value={r.v}>{r.label}</option>)}
+                      {ROLES.map(r => <option key={r.v} value={r.v}>{t(r.cle)}</option>)}
                     </select>
                   </td>
                   <td>
                     {u.is_active
-                      ? <span className="text-success-700">Actif</span>
-                      : <span className="text-alpine-500">Désactivé</span>}
+                      ? <span className="text-success-700">{t('us.actif')}</span>
+                      : <span className="text-alpine-500">{t('us.desactive')}</span>}
                   </td>
                   <td className="text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -153,26 +150,28 @@ export function UsersPanel() {
                         <button
                           onClick={() => { setError(null); setIssued(null); setConfirmReset(u) }}
                           disabled={reset.isPending}
-                          title="Remplacer le mot de passe par un mot de passe temporaire"
+                          title={t('us.infoBulleReinit')}
                           className="btn-ghost btn-sm flex items-center gap-1"
                         >
-                          <KeyRound size={13} /> Réinitialiser
+                          <KeyRound size={13} /> {t('us.reinitialiser')}
                         </button>
                       )}
                       <button
                         onClick={() => { setError(null); setConfirmMfa(u) }}
                         disabled={removeMfa.isPending}
-                        title="Retirer le second facteur (application 2FA/OTP perdue)"
+                        title={t('us.infoBulleMfa')}
                         className="btn-ghost btn-sm flex items-center gap-1"
                       >
-                        <Smartphone size={13} /> Second facteur
+                        <Smartphone size={13} /> {t('us.secondFacteur')}
                       </button>
                       <button
                         onClick={() => setActive.mutate({ id: u.id, active: !u.is_active })}
                         disabled={setActive.isPending}
                         className="btn-ghost btn-sm flex items-center gap-1"
                       >
-                        {u.is_active ? <><UserX size={13} /> Désactiver</> : <><UserCheck size={13} /> Réactiver</>}
+                        {u.is_active
+                          ? <><UserX size={13} /> {t('us.desactiver')}</>
+                          : <><UserCheck size={13} /> {t('us.reactiver')}</>}
                       </button>
                     </div>
                   </td>
@@ -189,7 +188,7 @@ export function UsersPanel() {
       {issued && (
         <div className="mt-4 rounded-md border border-warning-500 bg-warning-100 px-4 py-3">
           <p className="text-sm font-medium flex items-center gap-1.5">
-            <AlertTriangle size={15} /> Mot de passe temporaire pour {issued.email}
+            <AlertTriangle size={15} /> {t('us.motDePasseTemporaire', { email: issued.email })}
           </p>
           <p className="mt-2 font-mono text-base tracking-wider bg-white border border-neutral-200
                         rounded px-3 py-2 select-all">
@@ -198,15 +197,14 @@ export function UsersPanel() {
           <div className="mt-2 flex items-center gap-2">
             <button onClick={copyPassword} className="btn-secondary btn-sm flex items-center gap-1.5">
               {copied ? <Check size={13} /> : <Copy size={13} />}
-              {copied ? 'Copié' : 'Copier'}
+              {copied ? t('us.copie') : t('us.copier')}
             </button>
             <button onClick={() => setIssued(null)} className="btn-ghost btn-sm">
-              J'ai transmis le mot de passe
+              {t('us.transmis')}
             </button>
           </div>
           <p className="text-xs text-alpine-600 mt-2">
-            Il ne s'affichera plus. Transmettez-le de vive voix plutôt que par message : il sera
-            remplacé à la première connexion, mais tant qu'il vaut, il ouvre le compte.
+            {t('us.transmisAide')}
           </p>
         </div>
       )}
@@ -215,24 +213,24 @@ export function UsersPanel() {
       {confirmReset && (
         <div className="mt-4 rounded-md border border-neutral-300 bg-neutral-50 px-4 py-3">
           <p className="text-sm font-medium">
-            Réinitialiser l'accès de {confirmReset.name} ({confirmReset.email}) ?
+            {t('us.confirmerReinit', { nom: confirmReset.name, email: confirmReset.email })}
           </p>
           <ul className="mt-2 text-sm text-alpine-600 list-disc list-inside space-y-0.5">
-            <li>Son mot de passe actuel est <strong>détruit</strong> — personne ne peut le lire.</li>
-            <li>Un mot de passe temporaire s'affichera ici, une seule fois.</li>
-            <li>Ses sessions ouvertes sont fermées immédiatement.</li>
-            <li>Il devra choisir son propre mot de passe avant de pouvoir faire quoi que ce soit.</li>
+            <li>{t('us.reinitCons1')}</li>
+            <li>{t('us.reinitCons2')}</li>
+            <li>{t('us.reinitCons3')}</li>
+            <li>{t('us.reinitCons4')}</li>
           </ul>
           <p className="text-xs text-alpine-500 mt-2">
-            Son second facteur, s'il en a un, n'est pas touché : c'est une action séparée.
+            {t('us.reinitSansMfa')}
           </p>
           <div className="mt-3 flex items-center gap-2">
             <button onClick={() => reset.mutate(confirmReset)} disabled={reset.isPending}
                     className="btn-primary btn-sm flex items-center gap-1.5">
               {reset.isPending && <Loader2 size={13} className="animate-spin" />}
-              Réinitialiser l'accès
+              {t('us.reinitialiserAcces')}
             </button>
-            <button onClick={() => setConfirmReset(null)} className="btn-ghost btn-sm">Annuler</button>
+            <button onClick={() => setConfirmReset(null)} className="btn-ghost btn-sm">{t('action.annuler')}</button>
           </div>
         </div>
       )}
@@ -242,20 +240,18 @@ export function UsersPanel() {
       {confirmMfa && (
         <div className="mt-4 rounded-md border border-danger-500 bg-danger-500/5 px-4 py-3">
           <p className="text-sm font-medium">
-            Retirer le second facteur de {confirmMfa.name} ({confirmMfa.email}) ?
+            {t('us.confirmerMfa', { nom: confirmMfa.name, email: confirmMfa.email })}
           </p>
           <p className="text-sm text-alpine-600 mt-1">
-            À faire quand son téléphone est perdu et que ses codes de secours sont épuisés. Le
-            compte revient au mot de passe seul, et ses sessions ouvertes sont fermées. Si c'est un
-            administrateur, il devra inscrire un nouveau téléphone avant de pouvoir travailler.
+            {t('us.mfaAide')}
           </p>
           <div className="mt-3 flex items-center gap-2">
             <button onClick={() => removeMfa.mutate(confirmMfa)} disabled={removeMfa.isPending}
                     className="btn-danger btn-sm flex items-center gap-1.5">
               {removeMfa.isPending && <Loader2 size={13} className="animate-spin" />}
-              Retirer le second facteur
+              {t('us.retirerSecondFacteur')}
             </button>
-            <button onClick={() => setConfirmMfa(null)} className="btn-ghost btn-sm">Annuler</button>
+            <button onClick={() => setConfirmMfa(null)} className="btn-ghost btn-sm">{t('action.annuler')}</button>
           </div>
         </div>
       )}
@@ -264,44 +260,41 @@ export function UsersPanel() {
           l'identifiant de leur auteur : effacer la ligne casserait la
           traçabilité que le CO art. 957a al. 2 ch. 5 exige. */}
       <p className="text-xs text-alpine-500 mt-2">
-        Un compte se désactive, il ne se supprime pas : les écritures et les documents portent le
-        nom de leur auteur, et l'effacer romprait la traçabilité que le CO art. 957a exige. Un
-        compte désactivé ne peut plus rien faire, y compris avec une session déjà ouverte.
+        {t('us.pasDeSuppression')}
       </p>
 
       {!creating ? (
         <button onClick={() => { setError(null); setCreating(true) }}
                 className="btn-secondary btn-sm flex items-center gap-1.5 mt-4">
-          <UserPlus size={14} /> Ajouter un compte
+          <UserPlus size={14} /> {t('us.ajouterCompte')}
         </button>
       ) : (
         <div className="mt-4 rounded-md border border-neutral-200 px-4 py-3 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="label" htmlFor="u-name">Nom</label>
+              <label className="label" htmlFor="u-name">{t('us.colNom')}</label>
               <input id="u-name" className="input" value={form.name}
                      onChange={e => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
-              <label className="label" htmlFor="u-email">Adresse e-mail</label>
+              <label className="label" htmlFor="u-email">{t('us.colEmail')}</label>
               <input id="u-email" type="email" className="input" value={form.email}
                      onChange={e => setForm({ ...form, email: e.target.value })} />
             </div>
           </div>
 
           <div>
-            <label className="label" htmlFor="u-pass">Mot de passe</label>
+            <label className="label" htmlFor="u-pass">{t('securite.motDePasse')}</label>
             <input id="u-pass" type="password" className="input" autoComplete="new-password"
                    value={form.password}
                    onChange={e => setForm({ ...form, password: e.target.value })} />
             <p className={`text-xs mt-1 ${passwordOK ? 'text-success-700' : 'text-alpine-500'}`}>
-              Au moins 8 caractères. Transmettez-le à la personne par un autre canal que
-              l'e-mail où vous lui annoncez son accès.
+              {t('us.motDePasseAide')}
             </p>
           </div>
 
           <div>
-            <span className="label">Rôle</span>
+            <span className="label">{t('us.colRole')}</span>
             <div className="space-y-2 mt-1">
               {ROLES.map(r => (
                 <label key={r.v} className={`flex items-start gap-2 rounded-md border px-3 py-2 cursor-pointer ${
@@ -311,9 +304,9 @@ export function UsersPanel() {
                          onChange={() => setForm({ ...form, role: r.v })} />
                   <span>
                     <span className="text-sm font-medium flex items-center gap-1.5">
-                      <r.icon size={14} /> {r.label}
+                      <r.icon size={14} /> {t(r.cle)}
                     </span>
-                    <span className="block text-xs text-alpine-600 mt-0.5">{r.desc}</span>
+                    <span className="block text-xs text-alpine-600 mt-0.5">{t(r.desc)}</span>
                   </span>
                 </label>
               ))}
@@ -324,10 +317,10 @@ export function UsersPanel() {
             <button onClick={() => create.mutate()} disabled={!canCreate || create.isPending}
                     className="btn-primary btn-sm flex items-center gap-1.5">
               {create.isPending && <Loader2 size={13} className="animate-spin" />}
-              Créer le compte
+              {t('us.creerCompte')}
             </button>
             <button onClick={() => { setCreating(false); setError(null) }} className="btn-ghost btn-sm">
-              Annuler
+              {t('action.annuler')}
             </button>
           </div>
         </div>

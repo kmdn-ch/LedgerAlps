@@ -69,6 +69,45 @@ export function useT() {
 }
 
 /**
+ * traduire est la version HORS composant de `useT()`.
+ *
+ * Elle sert aux modules qui ne sont pas des composants React — la couche API,
+ * les formateurs — et qui doivent tout de même rendre un texte à l'utilisateur.
+ * Elle lit la langue dans le magasin, qui vit en dehors de React.
+ *
+ * Ne l'utilisez PAS dans un composant : n'étant abonnée à rien, elle ne
+ * provoquerait aucun rendu au changement de langue, et l'écran garderait
+ * l'ancien texte jusqu'au prochain rendu venu d'ailleurs. Dans un composant,
+ * `useT()`.
+ */
+export function traduire(cle: Cle, valeurs?: Record<string, string | number>): string {
+  const cat = CATALOGUES[useLangueStore.getState().langue] ?? fr
+  return interpole(cat[cle] ?? fr[cle] ?? String(cle), valeurs)
+}
+
+/**
+ * useTv traduit un message de validation.
+ *
+ * # Pourquoi un crochet séparé
+ *
+ * Les schémas zod sont des constantes de module : ils sont construits une fois,
+ * au chargement du fichier, avant qu'aucun composant n'existe. `useT()` n'y est
+ * donc pas appelable. On écrit la CLÉ dans le schéma — `z.string().min(1,
+ * 'val.requis')` — et on la traduit ici, au moment d'afficher l'erreur.
+ *
+ * Un message qui n'est pas une clé connue ressort tel quel : les refus du
+ * serveur arrivent déjà rédigés, et les rendre en « val.requis » serait pire
+ * que de ne rien traduire.
+ */
+export function useTv() {
+  const t = useT()
+  return (message?: string): string => {
+    if (!message) return ''
+    return message in fr ? t(message as Cle) : message
+  }
+}
+
+/**
  * useFormats rend les formateurs accordés à la langue.
  *
  * Ils comptent autant que les mots : `1'234.50` est suisse, `1,234.50` est

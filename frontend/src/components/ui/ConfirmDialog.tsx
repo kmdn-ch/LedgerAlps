@@ -11,6 +11,7 @@
 
 import { useEffect, useRef } from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
+import { useT } from '@/i18n/useT'
 
 export interface ConfirmDialogProps {
   open: boolean
@@ -32,6 +33,7 @@ export function ConfirmDialog({
   confirmLabel, tone = 'normal', busy = false,
   onConfirm, onCancel,
 }: ConfirmDialogProps) {
+  const t = useT()
   const cancelRef = useRef<HTMLButtonElement>(null)
 
   // Le focus va sur « Annuler », pas sur la confirmation : une frappe sur
@@ -85,7 +87,7 @@ export function ConfirmDialog({
 
         <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-3">
           <button ref={cancelRef} onClick={onCancel} className="btn-ghost btn-sm">
-            Annuler
+            {t('action.annuler')}
           </button>
           <button
             onClick={onConfirm}

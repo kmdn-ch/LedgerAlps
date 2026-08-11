@@ -20,8 +20,10 @@ import { databaseApi } from '@/api/client'
 import { SectionTitle, ErrorBanner, PassphraseField, passphraseIsStrong } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import type { DatabaseEncryption } from '@/types'
+import { useT } from '@/i18n/useT'
 
 export function DatabaseEncryptionPanel() {
+  const t = useT()
   const qc = useQueryClient()
   const [mode, setMode] = useState<'idle' | 'enable' | 'recover' | 'rekey'>('idle')
   const [pass, setPass] = useState('')
@@ -49,18 +51,15 @@ export function DatabaseEncryptionPanel() {
   if (!s.supported) {
     return (
       <div>
-        <SectionTitle>Chiffrement de la base</SectionTitle>
-        <p className="text-sm text-alpine-600">
-          Cette installation utilise PostgreSQL : le chiffrement au repos s'y règle côté serveur
-          de base de données.
-        </p>
+        <SectionTitle>{t('be.titre')}</SectionTitle>
+        <p className="text-sm text-alpine-600">{t('be.postgres')}</p>
       </div>
     )
   }
 
   return (
     <div>
-      <SectionTitle>Chiffrement de la base</SectionTitle>
+      <SectionTitle>{t('be.titre')}</SectionTitle>
 
       {/* L'état d'abord, en une phrase. Le reste l'explique. */}
       <div className={`rounded-md border px-4 py-3 text-sm ${
@@ -72,41 +71,33 @@ export function DatabaseEncryptionPanel() {
             : <LockOpen size={16} className="mt-0.5 flex-shrink-0 text-alpine-500" />}
           <div className="flex-1">
             <p className="font-medium">
-              {s.encrypted ? 'La base de données est chiffrée' : 'La base de données est en clair'}
+              {t(s.encrypted ? 'be.estChiffree' : 'be.estEnClair')}
             </p>
 
             {s.encrypted ? (
               <p className="mt-1 text-alpine-700">
-                Le fichier reste illisible s'il est copié ailleurs — NAS, partage réseau, dossier
-                synchronisé. Clé conservée par LedgerAlps ({s.mechanism}) ; rien à saisir au
-                démarrage.
+                {t('be.chiffreeAide', { mecanisme: s.mechanism ?? '' })}
               </p>
             ) : (
               <p className="mt-1 text-alpine-700">
-                C'est le réglage normal, et il suffit à la plupart des installations : le
-                chiffrement du disque protège déjà contre le vol du poste. Chiffrer la base
-                n'ajoute qu'une chose, mais elle est réelle — la protection <em>suit le fichier</em>.
+                {t('be.enClairAide')}
               </p>
             )}
 
             {/* Ce que ça ne fait pas. Dit ici, et pas en petit ailleurs. */}
             <p className="mt-1.5 text-alpine-500 text-xs">
-              Dans les deux cas, un programme lancé sous votre compte Windows accède à vos données :
-              il peut demander la clé comme LedgerAlps le fait. Ce chiffrement protège le fichier,
-              pas la session.
+              {t('be.pasLaSession')}
             </p>
 
             {s.configured && !s.key_available && (
               <p className="mt-2 text-danger-700">
-                <strong>La clé ne se descelle pas sur ce compte.</strong> Cette base vient d'un autre
-                compte Windows ou d'une autre machine. Utilisez la phrase de récupération.
+                {t('be.cleNonDescellee')}
               </p>
             )}
 
             {s.encrypted && !s.has_recovery && (
               <p className="mt-2 text-warning-700">
-                <strong>Aucune phrase de récupération n'est enregistrée.</strong> Si ce compte
-                Windows disparaît, cette base ne s'ouvrira plus.
+                {t('be.sansRecuperation')}
               </p>
             )}
           </div>
@@ -122,20 +113,17 @@ export function DatabaseEncryptionPanel() {
             <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-warning-700" />
             <div className="flex-1">
               <p className="font-medium">
-                {s.pending === 'encrypt'
-                  ? 'Chiffrement programmé au prochain démarrage'
-                  : 'Retour en clair programmé au prochain démarrage'}
+                {t(s.pending === 'encrypt' ? 'be.chiffrementProgramme' : 'be.clairProgramme')}
               </p>
               <p className="mt-1">
-                La conversion remplace le fichier que le serveur a ouvert : elle ne peut pas se
-                faire maintenant. <strong>Fermez puis rouvrez LedgerAlps.</strong>
+                {t('be.conversionAide')}
               </p>
               <button
                 onClick={() => cancel.mutate()}
                 disabled={cancel.isPending}
                 className="btn-ghost btn-sm mt-2"
               >
-                Annuler
+                {t('action.annuler')}
               </button>
             </div>
           </div>
@@ -147,12 +135,12 @@ export function DatabaseEncryptionPanel() {
         <div className="flex flex-wrap items-center gap-3 mt-3">
           {!s.configured && (
             <button onClick={() => setMode('enable')} className="btn-secondary btn-sm">
-              Chiffrer la base de données
+              {t('be.chiffrerLaBase')}
             </button>
           )}
           {s.configured && !s.key_available && (
             <button onClick={() => setMode('recover')} className="btn-primary btn-sm flex items-center gap-1.5">
-              <KeyRound size={13} /> Récupérer la clé
+              <KeyRound size={13} /> {t('be.recupererCle')}
             </button>
           )}
           {s.configured && s.key_available && (
@@ -164,14 +152,14 @@ export function DatabaseEncryptionPanel() {
                   antérieures à l'assistant n'ont jamais vu la question, et
                   quelqu'un qui a décliné doit pouvoir changer d'avis. */}
               <button onClick={() => setMode('rekey')} className="btn-secondary btn-sm">
-                Changer la phrase de récupération
+                {t('be.changerPhrase')}
               </button>
               <button
                 onClick={() => disable.mutate()}
                 disabled={disable.isPending}
                 className="text-xs text-alpine-600 hover:text-danger-700 underline underline-offset-2"
               >
-                Revenir à une base en clair
+                {t('be.revenirEnClair')}
               </button>
             </>
           )}
@@ -182,43 +170,25 @@ export function DatabaseEncryptionPanel() {
         <div className="mt-3 space-y-3 text-sm">
           <PassphraseField
             id="dbrecovery"
-            label={mode === 'recover'
-              ? 'Votre phrase de récupération de la base'
-              : mode === 'rekey'
-                ? 'Nouvelle phrase de récupération de la base'
-                : 'Phrase de récupération de la base'}
+            label={t(mode === 'recover' ? 'be.champVotrePhrase'
+              : mode === 'rekey' ? 'be.champNouvellePhrase'
+              : 'be.champPhrase')}
             value={pass}
             onChange={setPass}
             autoFocus
             showStrength={mode !== 'recover'}
-            hint={mode !== 'recover' ? (
-              <>
-                <strong>Ce n'est pas la phrase de vos sauvegardes.</strong> Celle-ci ne sert
-                qu'à retrouver la clé de la base sur un autre compte Windows ; elle n'ouvre
-                aucun fichier de sauvegarde. Prenez-en une <strong>différente</strong> : une
-                seule phrase compromise ouvrirait sinon les deux, et vous ne les tapez
-                presque jamais.
-              </>
-            ) : (
-              <>Celle que vous avez notée en activant le chiffrement — pas celle de vos
-              sauvegardes.</>
-            )}
+            hint={t(mode !== 'recover' ? 'be.aideNouvelle' : 'be.aideRecuperation')}
           />
 
           {mode !== 'recover' && (
             <>
               <p className="text-alpine-600 text-xs">
-                Elle n'est demandée qu'en cas de changement de machine ou de compte Windows.
-                Au quotidien, LedgerAlps s'ouvre sans rien réclamer — c'est pourquoi elle
-                doit être notée maintenant : vous n'aurez aucune occasion de la réviser.
+                {t('be.rarementDemandee')}
               </p>
               <label className="flex items-start gap-2 text-alpine-700">
                 <input type="checkbox" checked={noted} onChange={e => setNoted(e.target.checked)} className="mt-0.5" />
                 <span>
-                  <strong>Je l'ai notée ailleurs que sur cet ordinateur.</strong> Sans elle, une
-                  réinstallation de Windows ou une panne de cette machine rend la base
-                  définitivement illisible — y compris les dix ans de pièces que le CO art. 958f
-                  impose de conserver.
+                  {t('be.jeLaiNotee')}
                 </span>
               </label>
             </>
@@ -227,9 +197,9 @@ export function DatabaseEncryptionPanel() {
           {(enable.isError || recover.isError || rekey.isError) && (
             <ErrorBanner message={refusalMessage(
               enable.error ?? recover.error ?? rekey.error,
-              mode === 'enable' ? "Le chiffrement n'a pas pu être activé."
-                : mode === 'rekey' ? "La phrase de récupération n'a pas pu être changée."
-                : "La clé n'a pas pu être récupérée.",
+              t(mode === 'enable' ? 'be.echecActivation'
+                : mode === 'rekey' ? 'be.echecChangement'
+                : 'be.echecRecuperation'),
             )} />
           )}
 
@@ -244,11 +214,11 @@ export function DatabaseEncryptionPanel() {
               className="btn-primary btn-sm flex items-center gap-1.5"
             >
               {(enable.isPending || recover.isPending || rekey.isPending) && <Loader2 size={13} className="animate-spin" />}
-              {mode === 'enable' ? 'Programmer le chiffrement'
-                : mode === 'rekey' ? 'Enregistrer la nouvelle phrase'
-                : 'Récupérer'}
+              {t(mode === 'enable' ? 'be.programmerChiffrement'
+                : mode === 'rekey' ? 'be.enregistrerNouvelle'
+                : 'be.recuperer')}
             </button>
-            <button onClick={reset} className="btn-ghost btn-sm">Annuler</button>
+            <button onClick={reset} className="btn-ghost btn-sm">{t('action.annuler')}</button>
           </div>
         </div>
       )}

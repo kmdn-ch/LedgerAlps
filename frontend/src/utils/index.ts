@@ -3,38 +3,80 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { format, parseISO } from 'date-fns'
-import { fr } from 'date-fns/locale'
+import { de, enGB, fr, it } from 'date-fns/locale'
 import type { DisplayStatus } from '@/types'
+import { localeIntl, type Cle, type Langue } from '@/i18n'
+import { useLangueStore } from '@/i18n/useT'
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs))
 }
 
+// ─── Ces deux fonctions sont appelées HORS composant ──────────────────────────
+//
+// `formatCHF` et `formatDate` sont utilisées dans des rendus, des tableaux et
+// des chaînes construites à la volée — cent cinquante appels, dont plusieurs
+// hors de tout composant React. Les convertir en crochets aurait demandé de
+// réécrire chaque appelant ; elles lisent donc la langue directement dans le
+// magasin zustand, qui vit hors de React et rend la valeur du moment.
+//
+// C'est un compromis assumé : elles ne s'abonnent pas au magasin et ne
+// provoquent donc aucun rendu à elles seules. En pratique, changer de langue
+// re-rend l'écran par les textes qui, eux, passent par `useT()` — et ces
+// fonctions sont rappelées dans la foulée avec la nouvelle langue.
+function langueCourante(): Langue {
+  return useLangueStore.getState().langue
+}
+
 // ─── Formatage CHF ────────────────────────────────────────────────────────────
+//
+// `1'234.50` est suisse, `1,234.50` est britannique. Le séparateur figé en
+// `de-CH` affichait une apostrophe suisse sur une interface anglaise.
 export function formatCHF(value: string | number, currency = 'CHF'): string {
   const n = typeof value === 'string' ? parseFloat(value) : value
   if (isNaN(n)) return `0.00 ${currency}`
   return (
-    n.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
+    n.toLocaleString(localeIntl(langueCourante()),
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
     ' ' + currency
   )
 }
 
 // ─── Formatage date ───────────────────────────────────────────────────────────
-export function formatDate(iso: string | null | undefined, fmt = 'dd.MM.yyyy'): string {
+//
+// Le format suit la langue : `11.08.2026` en Suisse, `11/08/2026` pour un
+// Britannique. Le figer en `dd.MM.yyyy` avec la locale française donnait des
+// noms de mois français dès qu'un appelant demandait `MMMM`.
+const LOCALES_DATE = { fr, de, it, en: enGB } as const
+
+const FORMAT_PAR_LANGUE: Record<Langue, string> = {
+  fr: 'dd.MM.yyyy', de: 'dd.MM.yyyy', it: 'dd.MM.yyyy', en: 'dd/MM/yyyy',
+}
+
+export function formatDate(iso: string | null | undefined, fmt?: string): string {
   if (!iso) return '—'
-  try { return format(parseISO(iso), fmt, { locale: fr }) }
+  const langue = langueCourante()
+  // Un format explicite est respecté tel quel — il porte souvent une heure
+  // (« dd.MM.yyyy HH:mm ») que l'appelant a choisie sciemment. Seul le format
+  // par défaut suit la langue.
+  const motif = fmt ?? FORMAT_PAR_LANGUE[langue]
+  try { return format(parseISO(iso), motif, { locale: LOCALES_DATE[langue] }) }
   catch { return iso }
 }
 
 // ─── Badge status ─────────────────────────────────────────────────────────────
-const STATUS_LABELS: Record<DisplayStatus, string> = {
-  draft:     'Brouillon',
-  sent:      'Envoyée',
-  paid:      'Payée',
-  overdue:   'En retard',
-  cancelled: 'Annulée',
-  archived:  'Archivée',
+//
+// La table porte des CLÉS, pas des mots : c'est une constante de module, et le
+// badge s'affiche sur presque tous les écrans. Rester en français ici aurait
+// laissé « Envoyée » au milieu de chaque liste allemande — l'endroit le plus
+// visible, et le dernier qu'on pense à regarder.
+export const STATUS_LABELS: Record<DisplayStatus, Cle> = {
+  draft:     'statut.brouillon',
+  sent:      'statut.envoyee',
+  paid:      'statut.payee',
+  overdue:   'statut.enRetard',
+  cancelled: 'statut.annulee',
+  archived:  'statut.archivee',
 }
 
 const STATUS_CLASS: Record<DisplayStatus, string> = {
@@ -46,7 +88,7 @@ const STATUS_CLASS: Record<DisplayStatus, string> = {
   archived:  'badge-archived',
 }
 
-export function statusLabel(s: DisplayStatus): string { return STATUS_LABELS[s] ?? s }
+export function statusCle(s: DisplayStatus): Cle | null { return STATUS_LABELS[s] ?? null }
 export function statusClass(s: DisplayStatus): string { return STATUS_CLASS[s] ?? 'badge-draft' }
 
 // ─── IBAN formaté ─────────────────────────────────────────────────────────────
