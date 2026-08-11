@@ -866,12 +866,12 @@ Une plateforme sera réintégrée le jour où elle sera testée en CI, pas avant
 
 La Suisse compte quatre langues officielles.
 
-| Langue | Code | Interface | Messages du serveur | Documents (PDF, CSV) |
-|---|---|---|---|---|
-| Français | `fr` | ✅ | ✅ | ✅ |
-| Deutsch | `de` | 🔎 complète | ⏳ | ⏳ |
-| Italiano | `it` | 🔎 complète | ⏳ | ⏳ |
-| English | `en` | 🔎 complète | ⏳ | ⏳ |
+| Langue | Code | Interface | Messages du serveur | Documents (PDF, CSV) | Installeur |
+|---|---|---|---|---|---|
+| Français | `fr` | ✅ | ✅ | ✅ | ✅ |
+| Deutsch | `de` | 🔎 | 🔎 | 🔎 | 🔎 |
+| Italiano | `it` | 🔎 | 🔎 | 🔎 | 🔎 |
+| English | `en` | 🔎 | 🔎 | 🔎 | ✅ |
 
 **L'interface est faite** : les 36 écrans, 998 clés, avec les formats qui
 suivent la langue — dates, séparateurs de milliers, noms de mois, badges de
@@ -885,17 +885,23 @@ clé manquante, une valeur vide, un repère d'interpolation perdu **ou une valeu
 restée en français**. C'est ce dernier contrôle qui compte — copier `fr.ts` en
 `de.ts` compile parfaitement.
 
-**Ce qui reste** — deux lots distincts, à décider séparément :
+**Le serveur suit**, avec ses 360 phrases : refus, confirmations, facture PDF,
+bulletin de versement QR, exports CSV, attestation d'intégrité. La langue voyage
+dans `Accept-Language`, posé une fois par le client, et la traduction se fait au
+POINT DE PASSAGE — un intercepteur relit les réponses JSON en sortie plutôt que
+de toucher aux deux cents endroits qui refusent. Une route ajoutée demain est
+couverte sans qu'on y pense.
 
-1. **Les messages de refus du serveur** (97 chaînes). Ils atteignent
-   l'utilisateur : « aucun numéro de TVA n'est enregistré ». Ils demandent une
-   négociation de langue par requête, ou un catalogue côté serveur.
-2. **Les documents** : facture PDF, bulletin QR, exports CSV, attestation
-   d'intégrité. La question n'est pas technique — **la langue d'une facture
-   doit suivre le CLIENT**, pas l'interface de celui qui l'émet. Elle relève du
-   paramètre société et de la fiche contact, pas du sélecteur de langue.
+**Les documents suivent le sélecteur**, pas la fiche du client : ce qu'on voit à
+l'écran est ce qui sort de l'imprimante. Le vocabulaire du bulletin QR reste
+celui des Implementation Guidelines de SIX, que la banque attend au mot près.
 
-Le pack NSIS italien reste à ajouter.
+**Ce qui reste délibérément en français** : une vingtaine de messages de
+diagnostic — chargement du flux de conformité au démarrage, outil en ligne de
+commande, défauts d'infrastructure. Ils vont au journal du serveur, et leur
+texte sert à retrouver la ligne dans les sources à partir d'un rapport
+d'incident. Ils sont déclarés un par un dans `internal/i18n/diagnostic.go`,
+avec leur raison.
 
 ---
 

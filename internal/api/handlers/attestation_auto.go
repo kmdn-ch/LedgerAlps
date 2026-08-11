@@ -37,6 +37,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 )
 
 // AttestationDir est le sous-dossier des attestations, à côté des sauvegardes.
@@ -64,7 +66,7 @@ func (h *AuditHandler) EmitAttestationFile(ctx context.Context, dataDir string) 
 	// « LedgerAlps (émission automatique) » plutôt qu'un nom d'utilisateur :
 	// personne n'a demandé ce document, et l'attribuer à quelqu'un qui dormait
 	// serait faux. L'attestation dit ce qu'elle est.
-	final, err := h.BuildAttestation(ctx, "LedgerAlps — émission automatique")
+	final, err := h.BuildAttestation(ctx, "LedgerAlps — émission automatique", i18n.Défaut)
 	if err != nil {
 		return "", fmt.Errorf("production de l'attestation: %w", err)
 	}

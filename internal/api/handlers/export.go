@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
 )
 
@@ -181,7 +183,7 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 	for _, f := range csvFiles {
 		files = append(files, namedFile{"csv/" + f.name, f.data})
 	}
-	files = append(files, namedFile{"csv/LISEZ-MOI.txt", csvReadme(csvFiles)})
+	files = append(files, namedFile{"csv/LISEZ-MOI.txt", csvReadme(i18n.Langue(c), csvFiles)})
 
 	// ── Compute SHA-256 hashes ────────────────────────────────────────────────
 	// Le manifeste couvre le CSV comme le JSON : un fichier de l'archive sans

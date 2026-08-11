@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/csv"
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 	"strings"
 	"testing"
 )
@@ -135,7 +136,7 @@ func TestBuildCSVFilesProducesTheExpectedSet(t *testing.T) {
 		}
 	}
 
-	readme := string(csvReadme(files))
+	readme := string(csvReadme(i18n.Défaut, files))
 	if !strings.Contains(readme, "journal_lines.entry_id") {
 		t.Error("le LISEZ-MOI ne documente pas les relations : un CSV sans clé de lecture se prête aux contresens")
 	}

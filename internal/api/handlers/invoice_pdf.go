@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
 	pdfsvc "github.com/kmdn-ch/ledgeralps/internal/services/pdf"
 )
@@ -23,7 +24,7 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	pdfBytes, filename, err := h.buildInvoicePDF(ctx, c.Param("id"))
+	pdfBytes, filename, err := h.buildInvoicePDF(ctx, c.Param("id"), i18n.Langue(c))
 	switch {
 	case err == errInvoiceNotFound:
 		c.JSON(http.StatusNotFound, gin.H{"error": "facture introuvable"})
@@ -47,11 +48,14 @@ var errInvoiceNotFound = errors.New("facture introuvable")
 // fini par diverger, et c'est le lot téléchargé — celui qu'on archive ou qu'on
 // transmet — qui aurait porté la version périmée.
 // buildInvoicePDF rend le PDF et son nom de fichier.
-func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byte, string, error) {
+func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string, lang i18n.Lang) ([]byte, string, error) {
 	data, filename, err := h.invoiceDataFor2(ctx, id)
 	if err != nil {
 		return nil, "", err
 	}
+	// Le document suit le sélecteur de langue de l'interface : ce qu'on voit à
+	// l'écran est ce qui sort de l'imprimante.
+	data.Lang = string(lang)
 	pdfBytes, err := pdfsvc.Generate(data)
 	if err != nil {
 		return nil, "", errors.New("pdf generation failed")

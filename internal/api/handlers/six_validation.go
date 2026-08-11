@@ -28,6 +28,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 	pdfsvc "github.com/kmdn-ch/ledgeralps/internal/services/pdf"
 )
 
@@ -40,7 +42,7 @@ const PortalURL = "https://validation.iso-payments.ch/"
 func (h *InvoicesHandler) SixValidationDossier(c *gin.Context) {
 	id := c.Param("id")
 
-	pdfBytes, invoiceNumber, err := h.buildInvoicePDF(c.Request.Context(), id)
+	pdfBytes, invoiceNumber, err := h.buildInvoicePDF(c.Request.Context(), id, i18n.Langue(c))
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return

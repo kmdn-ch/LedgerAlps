@@ -63,6 +63,8 @@ Unicode True
 
 !insertmacro MUI_LANGUAGE "English"
 !insertmacro MUI_LANGUAGE "French"
+!insertmacro MUI_LANGUAGE "German"
+!insertmacro MUI_LANGUAGE "Italian"
 
 ; --------------------------------------------------------------------------- ;
 ; Localised strings                                                           ;
@@ -78,15 +80,25 @@ LangString DeleteDataQuestion ${LANG_ENGLISH} \
   "Do you want to delete your accounting data?$\n(database, configuration, logs)"
 LangString DeleteDataQuestion ${LANG_FRENCH} \
   "Souhaitez-vous supprimer vos données comptables ?$\n(base de données, configuration, journaux)"
+LangString DeleteDataQuestion ${LANG_GERMAN} \
+  "Möchten Sie Ihre Buchhaltungsdaten löschen?$\n(Datenbank, Konfiguration, Protokolle)"
+LangString DeleteDataQuestion ${LANG_ITALIAN} \
+  "Desiderate eliminare i vostri dati contabili?$\n(base di dati, configurazione, registri)"
 
 LangString DataDeleted ${LANG_ENGLISH} "Data deleted: $APPDATA\LedgerAlps"
 LangString DataDeleted ${LANG_FRENCH}  "Données supprimées : $APPDATA\LedgerAlps"
+LangString DataDeleted ${LANG_GERMAN}  "Daten gelöscht: $APPDATA\LedgerAlps"
+LangString DataDeleted ${LANG_ITALIAN} "Dati eliminati: $APPDATA\LedgerAlps"
 
 LangString DataKept ${LANG_ENGLISH} "Your data in $APPDATA\LedgerAlps has been kept."
 LangString DataKept ${LANG_FRENCH}  "Vos données dans $APPDATA\LedgerAlps ont été conservées."
+LangString DataKept ${LANG_GERMAN}  "Ihre Daten in $APPDATA\LedgerAlps wurden beibehalten."
+LangString DataKept ${LANG_ITALIAN} "I vostri dati in $APPDATA\LedgerAlps sono stati conservati."
 
 LangString UninstallDone ${LANG_ENGLISH} "LedgerAlps has been uninstalled."
 LangString UninstallDone ${LANG_FRENCH}  "LedgerAlps a été désinstallé."
+LangString UninstallDone ${LANG_GERMAN}  "LedgerAlps wurde deinstalliert."
+LangString UninstallDone ${LANG_ITALIAN} "LedgerAlps è stato disinstallato."
 
 ; --------------------------------------------------------------------------- ;
 ; Installer metadata                                                          ;

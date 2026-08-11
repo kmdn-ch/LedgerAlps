@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 )
 
 // Export de réversibilité — le pendant CSV de l'archive légale.
@@ -194,20 +196,25 @@ func buildCSVFiles(sources map[string]any) ([]csvSet, error) {
 
 // csvReadme accompagne les fichiers : un CSV sans clé de lecture se prête aux
 // contresens, et celui-ci porte des données comptables.
-func csvReadme(files []csvSet) []byte {
+//
+// Le texte suit la langue demandée. Les NOMS de fichiers et de colonnes, eux,
+// ne bougent pas : ce sont des identifiants qu'un tableur ou un script relit,
+// et les traduire casserait précisément l'import qu'ils rendent possible.
+func csvReadme(l i18n.Lang, files []csvSet) []byte {
+	t := func(fr string) string { return i18n.T(l, fr) }
 	var b strings.Builder
-	b.WriteString("Export de réversibilité — LedgerAlps\n")
+	b.WriteString(t("Export de réversibilité — LedgerAlps\n"))
 	b.WriteString("====================================\n\n")
-	b.WriteString("Ces fichiers CSV contiennent les mêmes données que les fichiers JSON\n")
-	b.WriteString("de cette archive, dans un format ouvrable par un tableur ou importable\n")
-	b.WriteString("dans un autre logiciel comptable. Le JSON reste la référence : il porte\n")
-	b.WriteString("les types exacts, là où le CSV est du texte.\n\n")
+	b.WriteString(t("Ces fichiers CSV contiennent les mêmes données que les fichiers JSON\n"))
+	b.WriteString(t("de cette archive, dans un format ouvrable par un tableur ou importable\n"))
+	b.WriteString(t("dans un autre logiciel comptable. Le JSON reste la référence : il porte\n"))
+	b.WriteString(t("les types exacts, là où le CSV est du texte.\n\n"))
 	b.WriteString("Format\n")
 	b.WriteString("------\n")
-	b.WriteString("  - Séparateur : point-virgule (;) — attendu par Excel en Suisse.\n")
-	b.WriteString("  - Encodage   : UTF-8 avec BOM, pour qu'Excel affiche les accents.\n")
-	b.WriteString("  - Décimales  : point (.), comme dans le JSON.\n")
-	b.WriteString("  - Cellule vide = valeur absente, à distinguer d'un zéro.\n\n")
+	b.WriteString(t("  - Séparateur : point-virgule (;) — attendu par Excel en Suisse.\n"))
+	b.WriteString(t("  - Encodage   : UTF-8 avec BOM, pour qu'Excel affiche les accents.\n"))
+	b.WriteString(t("  - Décimales  : point (.), comme dans le JSON.\n"))
+	b.WriteString(t("  - Cellule vide = valeur absente, à distinguer d'un zéro.\n\n"))
 	b.WriteString("Relations\n")
 	b.WriteString("---------\n")
 	b.WriteString("  journal_lines.entry_id    → journal_entries.id\n")
@@ -220,8 +227,8 @@ func csvReadme(files []csvSet) []byte {
 	for _, f := range files {
 		b.WriteString(fmt.Sprintf("  %-24s %7d octets\n", f.name, len(f.data)))
 	}
-	b.WriteString("\nNote sur les données personnelles (nLPD) : les IBAN des contacts sont\n")
-	b.WriteString("masqués dans cet export, comme dans le JSON. L'export complet d'un IBAN\n")
-	b.WriteString("se fait depuis la fiche du contact concerné.\n")
+	b.WriteString(t("\nNote sur les données personnelles (nLPD) : les IBAN des contacts sont\n"))
+	b.WriteString(t("masqués dans cet export, comme dans le JSON. L'export complet d'un IBAN\n"))
+	b.WriteString(t("se fait depuis la fiche du contact concerné.\n"))
 	return []byte(b.String())
 }

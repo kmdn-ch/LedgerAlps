@@ -184,6 +184,11 @@ func main() {
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS(strings.Split(cfg.AllowedOrigins, ",")...))
 	r.Use(middleware.ErrorHandler())
+	// Avant tout ce qui produit une réponse, et après la reprise sur panique :
+	// un refus écrit par un gestionnaire comme par un intercepteur d'erreur
+	// doit ressortir dans la langue demandée. Voir middleware/langue.go pour
+	// la raison de traduire ici plutôt qu'aux deux cents endroits qui refusent.
+	r.Use(middleware.Langue())
 	if cfg.Debug {
 		r.Use(gin.Logger())
 	}
@@ -465,7 +470,7 @@ func main() {
 
 	// Audit logs
 	alh := handlers.NewAuditHandler(database, cfg.UsePostgres())
-		// Le journal d'audit et la verification de la chaine sont le CONTROLE des
+	// Le journal d'audit et la verification de la chaine sont le CONTROLE des
 	// livres : c'est le metier du comptable, pas de l'administrateur du
 	// logiciel. La lecture seule en est ecartee — ce registre nomme qui a fait
 	// quoi, et le consulter est deja sensible.

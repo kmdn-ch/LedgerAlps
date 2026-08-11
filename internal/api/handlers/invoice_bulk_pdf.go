@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 )
 
 // Téléchargement groupé de documents.
@@ -84,7 +86,7 @@ func (h *InvoicesHandler) BulkInvoicePDF(c *gin.Context) {
 
 	// ── Un seul document : le PDF nu ────────────────────────────────────────
 	if len(ids) == 1 {
-		pdfBytes, filename, err := h.buildInvoicePDF(ctx, ids[0])
+		pdfBytes, filename, err := h.buildInvoicePDF(ctx, ids[0], i18n.Langue(c))
 		switch {
 		case err == errInvoiceNotFound:
 			c.JSON(http.StatusNotFound, gin.H{"error": "document introuvable"})
@@ -105,7 +107,7 @@ func (h *InvoicesHandler) BulkInvoicePDF(c *gin.Context) {
 	var missing []string
 
 	for _, id := range ids {
-		pdfBytes, filename, err := h.buildInvoicePDF(ctx, id)
+		pdfBytes, filename, err := h.buildInvoicePDF(ctx, id, i18n.Langue(c))
 		if err == errInvoiceNotFound {
 			// Un document disparu entre l'affichage de la liste et le clic ne
 			// doit pas faire échouer les autres. Il est nommé dans l'en-tête de

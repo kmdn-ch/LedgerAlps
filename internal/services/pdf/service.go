@@ -18,6 +18,7 @@ import (
 	qrcode "github.com/skip2/go-qrcode"
 
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 )
 
 // ─── Data types ───────────────────────────────────────────────────────────────
@@ -86,6 +87,20 @@ type InvoiceData struct {
 	// Parties
 	Company  CompanyInfo
 	Customer CustomerInfo
+
+	// Lang est la langue du DOCUMENT, celle du sélecteur de l'interface au
+	// moment du téléchargement. Vide vaut français.
+	//
+	// Le document suit l'interface et non le client : c'est le choix demandé,
+	// et il rend l'impression prévisible — ce qu'on voit à l'écran est ce qui
+	// sort de l'imprimante. Faire suivre la fiche du client aurait produit une
+	// facture allemande depuis un écran français, sans que rien ne l'annonce.
+	Lang string
+}
+
+// t traduit un libellé du document.
+func (inv InvoiceData) t(fr string, args ...any) string {
+	return i18n.T(i18n.Valide(inv.Lang), fr, args...)
 }
 
 // CustomerInfo holds the debtor details.
@@ -234,13 +249,13 @@ func renderHeader(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	uid, vat := inv.Company.UIDNumber, inv.Company.VATNumber
 	switch {
 	case vat != "" && uid != "" && strings.Contains(normaliseUID(vat), normaliseUID(uid)):
-		companyLine(pdf, textX, "IDE / N° TVA : "+vat)
+		companyLine(pdf, textX, inv.t("IDE / N° TVA : ")+vat)
 	default:
 		if uid != "" {
 			companyLine(pdf, textX, "IDE : "+uid)
 		}
 		if vat != "" {
-			companyLine(pdf, textX, "N° TVA : "+vat)
+			companyLine(pdf, textX, inv.t("N° TVA : ")+vat)
 		}
 	}
 
@@ -249,7 +264,7 @@ func renderHeader(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	// deduct VAT from.
 	pdf.SetFont("Helvetica", "B", 22)
 	pdf.SetXY(130, 15)
-	pdf.CellFormat(65, 12, latin1(documentTitle(inv.DocumentType)), "", 1, "R", false, 0, "")
+	pdf.CellFormat(65, 12, latin1(documentTitle(inv)), "", 1, "R", false, 0, "")
 
 	pdf.SetY(45)
 }
@@ -306,17 +321,17 @@ func renderMeta(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		y += 6
 	}
 
-	metaRow(documentNumberLabel(inv.DocumentType), inv.InvoiceNumber)
-	metaRow("Date:", inv.IssueDate.Format("02.01.2006"))
+	metaRow(documentNumberLabel(inv), inv.InvoiceNumber)
+	metaRow(inv.t("Date:"), inv.IssueDate.Format("02.01.2006"))
 	if inv.DocumentType == "credit_note" {
 		// A credit note has no due date; what matters is what it cancels.
 		if inv.CorrectsInvoiceNumber != "" {
-			metaRow("Annule la facture:", inv.CorrectsInvoiceNumber)
+			metaRow(inv.t("Annule la facture:"), inv.CorrectsInvoiceNumber)
 		}
 	} else {
-		metaRow(dueDateLabel(inv.DocumentType), inv.DueDate.Format("02.01.2006"))
+		metaRow(dueDateLabel(inv), inv.DueDate.Format("02.01.2006"))
 	}
-	metaRow("Devise:", inv.Currency)
+	metaRow(inv.t("Devise:"), inv.Currency)
 
 	pdf.SetY(y + 5)
 }
@@ -344,13 +359,13 @@ func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		pdf.SetFont("Helvetica", "B", 9)
 		pdf.SetFillColor(240, 240, 240)
 		pdf.SetX(15)
-		pdf.CellFormat(wDesc, 7, "Description", "1", 0, "L", true, 0, "")
-		pdf.CellFormat(wQty, 7, latin1("Qt\u00e9"), "1", 0, "C", true, 0, "")
-		pdf.CellFormat(wPrice, 7, "Prix unit.", "1", 0, "R", true, 0, "")
+		pdf.CellFormat(wDesc, 7, latin1(inv.t("Description")), "1", 0, "L", true, 0, "")
+		pdf.CellFormat(wQty, 7, latin1(inv.t("Qté")), "1", 0, "C", true, 0, "")
+		pdf.CellFormat(wPrice, 7, latin1(inv.t("Prix unit.")), "1", 0, "R", true, 0, "")
 		if showVAT {
-			pdf.CellFormat(wVAT, 7, "TVA%", "1", 0, "C", true, 0, "")
+			pdf.CellFormat(wVAT, 7, latin1(inv.t("TVA%")), "1", 0, "C", true, 0, "")
 		}
-		pdf.CellFormat(wTotal, 7, "Total", "1", 1, "R", true, 0, "")
+		pdf.CellFormat(wTotal, 7, latin1(inv.t("Total")), "1", 1, "R", true, 0, "")
 		pdf.SetFont("Helvetica", "", 9)
 	}
 	header()
@@ -424,14 +439,14 @@ func renderTotals(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		pdf.CellFormat(w2, 6, val, "", 1, "R", false, 0, "")
 	}
 
-	totalRow("Sous-total:", fmtMoney(inv.SubtotalAmount, inv.Currency), false)
+	totalRow(inv.t("Sous-total:"), fmtMoney(inv.SubtotalAmount, inv.Currency), false)
 
 	// La ligne de TVA n'apparaît que s'il y a de la TVA. Elle était imprimée
 	// même à 0 %, ce qu'une entreprise non assujettie n'a pas le droit de faire
 	// figurer sur ses factures (LTVA art. 27 al. 1) — et qui la rendrait
 	// redevable de l'impôt ainsi mentionné (al. 2).
 	if inv.VATAmount != 0 || inv.VATRate != 0 {
-		totalRow(fmt.Sprintf("TVA %.1f%%:", inv.VATRate), fmtMoney(inv.VATAmount, inv.Currency), false)
+		totalRow(inv.t("TVA %.1f%%:", inv.VATRate), fmtMoney(inv.VATAmount, inv.Currency), false)
 	}
 
 	// Separator line
@@ -463,7 +478,7 @@ func renderBankDetails(pdf *gofpdf.Fpdf, inv InvoiceData) {
 
 	pdf.SetFont("Helvetica", "B", 9)
 	pdf.SetX(15)
-	pdf.CellFormat(180, 5, latin1("Paiement par virement bancaire"), "", 1, "L", false, 0, "")
+	pdf.CellFormat(180, 5, latin1(inv.t("Paiement par virement bancaire")), "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 9)
 
 	line := func(label, value string) {
@@ -482,7 +497,7 @@ func renderBankDetails(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		iban = c.QRIBAN
 	}
 	line("IBAN :", formatIBAN(iban))
-	line("Bénéficiaire :", c.Name)
+	line(inv.t("Bénéficiaire :"), c.Name)
 
 	pdf.SetY(pdf.GetY() + 3)
 }
@@ -639,7 +654,7 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 
 	pdf.SetFont("Helvetica", "B", 6)
 	pdf.SetX(margin)
-	pdf.CellFormat(rcWidth, 3.5, latin1("Compte / Payable \u00e0"), "", 1, "L", false, 0, "")
+	pdf.CellFormat(rcWidth, 3.5, latin1(inv.t("Compte / Payable à")), "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 8)
 	for _, line := range companyLines(iban, inv.Company) {
 		pdf.SetX(margin)
@@ -649,7 +664,7 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	if refType != "NON" {
 		pdf.SetFont("Helvetica", "B", 6)
 		pdf.SetX(margin)
-		pdf.CellFormat(rcWidth, 3.5, latin1("R\u00e9f\u00e9rence"), "", 1, "L", false, 0, "")
+		pdf.CellFormat(rcWidth, 3.5, latin1(inv.t("Référence")), "", 1, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 8)
 		pdf.SetX(margin)
 		pdf.CellFormat(rcWidth, 4, compliance.FormatQRRReference(ref), "", 1, "L", false, 0, "")
@@ -657,7 +672,7 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 
 	pdf.SetFont("Helvetica", "B", 6)
 	pdf.SetX(margin)
-	pdf.CellFormat(rcWidth, 3.5, "Payable par", "", 1, "L", false, 0, "")
+	pdf.CellFormat(rcWidth, 3.5, latin1(inv.t("Payable par")), "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 8)
 	for _, line := range customerLines(inv.Customer) {
 		pdf.SetX(margin)
@@ -667,9 +682,9 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	// Receipt amount
 	pdf.SetFont("Helvetica", "B", 6)
 	pdf.SetXY(margin, amountY)
-	pdf.CellFormat(20, 3.5, "Monnaie", "", 0, "L", false, 0, "")
+	pdf.CellFormat(20, 3.5, latin1(inv.t("Monnaie")), "", 0, "L", false, 0, "")
 	pdf.SetX(margin + 22)
-	pdf.CellFormat(28, 3.5, "Montant", "", 1, "L", false, 0, "")
+	pdf.CellFormat(28, 3.5, latin1(inv.t("Montant")), "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 8)
 	pdf.SetXY(margin, amountValY)
 	pdf.CellFormat(20, 5, inv.Currency, "", 0, "L", false, 0, "")
@@ -679,7 +694,7 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	// ── Payment part ──────────────────────────────────────────────────────────
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.SetXY(ppX, slipTop+margin)
-	pdf.CellFormat(qrSize+infoW+margin, 6, "Partie paiement", "", 1, "L", false, 0, "")
+	pdf.CellFormat(qrSize+infoW+margin, 6, latin1(inv.t("Partie paiement")), "", 1, "L", false, 0, "")
 
 	// QR code image (with Swiss cross already embedded)
 	imgKey := "qr_" + inv.InvoiceNumber
@@ -690,7 +705,7 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	// Info column — creditor
 	pdf.SetFont("Helvetica", "B", 8)
 	pdf.SetXY(infoX, slipTop+margin+7)
-	pdf.CellFormat(infoW, 4.5, latin1("Compte / Payable \u00e0"), "", 1, "L", false, 0, "")
+	pdf.CellFormat(infoW, 4.5, latin1(inv.t("Compte / Payable à")), "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
 	for _, line := range companyLines(iban, inv.Company) {
 		pdf.SetX(infoX)
@@ -709,7 +724,7 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	if inv.InvoiceNumber != "" {
 		pdf.SetFont("Helvetica", "B", 8)
 		pdf.SetX(infoX)
-		pdf.CellFormat(infoW, 4.5, "Message", "", 1, "L", false, 0, "")
+		pdf.CellFormat(infoW, 4.5, latin1(inv.t("Message")), "", 1, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 10)
 		pdf.SetX(infoX)
 		pdf.CellFormat(infoW, 4.5, inv.InvoiceNumber, "", 1, "L", false, 0, "")
@@ -718,7 +733,7 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	if inv.Customer.Name != "" {
 		pdf.SetFont("Helvetica", "B", 8)
 		pdf.SetX(infoX)
-		pdf.CellFormat(infoW, 4.5, "Payable par", "", 1, "L", false, 0, "")
+		pdf.CellFormat(infoW, 4.5, latin1(inv.t("Payable par")), "", 1, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 10)
 		for _, line := range customerLines(inv.Customer) {
 			pdf.SetX(infoX)
@@ -729,9 +744,9 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	// Payment part amount
 	pdf.SetFont("Helvetica", "B", 8)
 	pdf.SetXY(ppX, amountY)
-	pdf.CellFormat(20, 4, "Monnaie", "", 0, "L", false, 0, "")
+	pdf.CellFormat(20, 4, latin1(inv.t("Monnaie")), "", 0, "L", false, 0, "")
 	pdf.SetX(ppX + 22)
-	pdf.CellFormat(30, 4, "Montant", "", 1, "L", false, 0, "")
+	pdf.CellFormat(30, 4, latin1(inv.t("Montant")), "", 1, "L", false, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
 	pdf.SetXY(ppX, amountValY)
 	pdf.CellFormat(20, 5, inv.Currency, "", 0, "L", false, 0, "")
@@ -958,36 +973,36 @@ func latin1(s string) string {
 // documentTitle names the document on the page. The heading, the number label
 // and the presence of a payment slip are the only things distinguishing a
 // quote from an invoice on paper, so they must agree with document_type.
-func documentTitle(docType string) string {
-	switch docType {
+func documentTitle(inv InvoiceData) string {
+	switch inv.DocumentType {
 	case "quote":
-		return "OFFRE DE PRIX"
+		return inv.t("OFFRE DE PRIX")
 	case "credit_note":
-		return "NOTE DE CRÉDIT"
+		return inv.t("NOTE DE CRÉDIT")
 	default:
-		return "FACTURE"
+		return inv.t("FACTURE")
 	}
 }
 
-func documentNumberLabel(docType string) string {
-	switch docType {
+func documentNumberLabel(inv InvoiceData) string {
+	switch inv.DocumentType {
 	case "quote":
-		return "N° offre:"
+		return inv.t("N° offre:")
 	case "credit_note":
-		return "N° note de crédit:"
+		return inv.t("N° note de crédit:")
 	default:
-		return "N° facture:"
+		return inv.t("N° facture:")
 	}
 }
 
 // dueDateLabel names what the second date means. On an offer nothing is due —
 // the date says how long the price stands, and calling it "Échéance" invites
 // the reader to treat the document as payable.
-func dueDateLabel(docType string) string {
-	if docType == "quote" {
-		return "Valable jusqu'au:"
+func dueDateLabel(inv InvoiceData) string {
+	if inv.DocumentType == "quote" {
+		return inv.t("Valable jusqu'au:")
 	}
-	return "Échéance:"
+	return inv.t("Échéance:")
 }
 
 // wantsPaymentSlip reports whether a Swiss QR payment slip belongs on this

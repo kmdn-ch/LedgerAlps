@@ -9,6 +9,22 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Ajouté
 
+- **Le serveur et les documents parlent aussi les quatre langues.** Il ne reste plus un mot de français sur une interface allemande : les 360 phrases que LedgerAlps adresse à l'utilisateur — refus, confirmations, facture PDF, bulletin QR, exports CSV, attestation d'intégrité — suivent le sélecteur.
+
+  **Les documents suivent le SÉLECTEUR, pas la fiche du client.** Ce qu'on voit à l'écran est ce qui sort de l'imprimante. La facture PDF change de titre (`RECHNUNG`, `FATTURA`, `INVOICE`), d'en-têtes de colonnes, de libellés du bulletin de versement — et le vocabulaire du bulletin est celui des Implementation Guidelines de SIX, que la banque attend au mot près.
+
+  **La traduction se fait au POINT DE PASSAGE, pas aux deux cents endroits qui refusent.** Un intercepteur relit les réponses JSON en sortie ; le catalogue est indexé par la phrase française elle-même. Trois conséquences : une route ajoutée demain est couverte sans qu'on y pense, les journaux du serveur et la trentaine de tests qui comparent les messages au caractère près ne bougent pas, et une phrase absente du catalogue ressort en français — ce que l'utilisateur voyait déjà, jamais une clé nue.
+
+  **Un refus né dans la comptabilité traverse traduit** sans que le service connaisse la langue : « aucun numéro de TVA n'est enregistré » devient « Es ist keine MWST-Nummer hinterlegt ». Porter la langue de la requête jusqu'au calcul d'une écriture aurait mélangé deux choses qui n'ont rien à voir.
+
+  **Les valeurs restent à leur place.** « le compte 1020 est désactivé » retrouve son moule et rend « Konto 1020 ist deaktiviert ». Un test vérifie que les quatre langues d'une phrase portent exactement les mêmes verbes de format, dans le même ordre : un verbe déplacé afficherait le montant à la place du numéro de compte — une phrase parfaitement lisible et fausse.
+
+  **L'anglais qui atteignait l'utilisateur est corrigé au passage** : « journal entry not found », « invalid status transition », « missing or malformed Authorization header » s'affichaient tels quels sur un écran français.
+
+  **L'installeur Windows parle allemand et italien**, en plus du français et de l'anglais.
+
+  **Le garde-fou.** Un test relit les sources, retrouve tout ce qui part vers l'utilisateur, et échoue sur ce qui n'est pas au catalogue. Sa première version devinait « est-ce du français ? » d'après les accents : « identifiants incorrects » n'en a aucun, et le message le plus vu du produit est passé à travers en silence. La règle est désormais inversée — tout est à traduire, et les vingt exceptions de diagnostic sont déclarées une par une, avec leur raison.
+
 - **L'interface est traduite à 100 % en allemand, italien et anglais (UK).** Les 36 écrans, du tableau de bord au chiffrement de la base : 998 clés dans les quatre langues. L'avertissement « Traduction en cours » a disparu du sélecteur — il n'a plus d'objet.
 
   **Ce qui suit la langue en plus des mots.** Un texte traduit posé sur des formats suisses reste à moitié étranger :

@@ -2,7 +2,7 @@
 
 import axios, { type AxiosInstance } from 'axios'
 import { useAuthStore } from '@/store/auth'
-import { traduire } from '@/i18n/useT'
+import { traduire, useLangueStore } from '@/i18n/useT'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1'
 
@@ -16,9 +16,16 @@ export const api: AxiosInstance = axios.create({
 })
 
 // Injecter le token JWT dans chaque requête
+//
+// La langue voyage avec, dans `Accept-Language`. Un en-tête plutôt qu'un
+// paramètre d'URL : il s'applique à TOUTES les routes sans que chacune ait à
+// y penser, et une route ajoutée demain est couverte sans qu'on s'en occupe.
+// C'est le motif qui avait laissé passer des écrans non traduits côté
+// interface — on ne le refait pas côté serveur.
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken
   if (token) config.headers.Authorization = `Bearer ${token}`
+  config.headers['Accept-Language'] = useLangueStore.getState().langue
   return config
 })
 

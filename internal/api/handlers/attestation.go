@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 	"github.com/kmdn-ch/ledgeralps/version"
 )
 
@@ -108,7 +110,7 @@ func (h *AuditHandler) IntegrityAttestation(c *gin.Context) {
 		issuedBy = name
 	}
 
-	final, err := h.BuildAttestation(ctx, issuedBy)
+	final, err := h.BuildAttestation(ctx, issuedBy, i18n.Langue(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
@@ -126,7 +128,11 @@ func (h *AuditHandler) IntegrityAttestation(c *gin.Context) {
 // précisément le genre de divergence qu'on ne remarque pas — l'attestation
 // téléchargée à la main et celle déposée chaque jour diraient des choses
 // différentes du même état, sans que personne ne compare.
-func (h *AuditHandler) BuildAttestation(ctx context.Context, issuedBy string) ([]byte, error) {
+// La langue est celle du sélecteur au moment du téléchargement. L'émission
+// AUTOMATIQUE, elle, sort en français : elle n'est déclenchée par personne,
+// et lui inventer une langue serait deviner.
+func (h *AuditHandler) BuildAttestation(ctx context.Context, issuedBy string, lang i18n.Lang) ([]byte, error) {
+	t := func(fr string, args ...any) string { return i18n.T(lang, fr, args...) }
 	report, err := h.ComputeChainReport(ctx)
 	if err != nil {
 		return nil, err
@@ -138,13 +144,13 @@ func (h *AuditHandler) BuildAttestation(ctx context.Context, issuedBy string) ([
 	}
 
 	att := Attestation{
-		Document: "Attestation d'intégrité de la comptabilité",
+		Document: t("Attestation d'intégrité de la comptabilité"),
 		Product:  "LedgerAlps",
 		Version:  version.Version(),
 		IssuedAt: time.Now().UTC().Format(time.RFC3339),
 		IssuedBy: issuedBy,
 		LegalBasis: []string{
-			"CO art. 957a al. 2 ch. 5 — traçabilité des écritures",
+			t("CO art. 957a al. 2 ch. 5 — traçabilité des écritures"),
 			"CO art. 958f — conservation dix ans",
 			"Olico (RS 221.431) art. 9 — conservation sur support modifiable",
 		},
@@ -165,31 +171,31 @@ func (h *AuditHandler) BuildAttestation(ctx context.Context, issuedBy string) ([
 	}
 
 	if report.Legacy > 0 {
-		att.Chain.LegacyExplains = "Entrées écrites avant la v1.4.6, dont l'empreinte propre n'est pas recalculable : " +
-			"elle portait alors sur des valeurs qui n'étaient pas enregistrées. Leur chaînage est vérifié comme les autres, " +
-			"donc une suppression y reste détectable ; seule la question « le contenu de cette ligne a-t-il changé ? » est sans réponse."
+		att.Chain.LegacyExplains = t("Entrées écrites avant la v1.4.6, dont l'empreinte propre n'est pas recalculable : ") +
+			t("elle portait alors sur des valeurs qui n'étaient pas enregistrées. Leur chaînage est vérifié comme les autres, ") +
+			t("donc une suppression y reste détectable ; seule la question « le contenu de cette ligne a-t-il changé ? » est sans réponse.")
 	}
 
 	if report.Verified {
 		att.Statement = []string{
 			fmt.Sprintf("Au %s, la chaîne d'empreintes couvrant %d écriture(s) comptabilisée(s) est intacte.",
 				att.IssuedAt, report.Entries),
-			"Chaque entrée dérive par SHA-256 de la précédente. Aucune entrée n'a été modifiée, retirée ou réordonnée entre la première et la dernière.",
-			"L'empreinte de tête ci-dessus résume l'état de la chaîne : la conserver permet d'établir ultérieurement qu'aucune des écritures couvertes n'a bougé depuis l'émission de cette attestation.",
+			t("Chaque entrée dérive par SHA-256 de la précédente. Aucune entrée n'a été modifiée, retirée ou réordonnée entre la première et la dernière."),
+			t("L'empreinte de tête ci-dessus résume l'état de la chaîne : la conserver permet d'établir ultérieurement qu'aucune des écritures couvertes n'a bougé depuis l'émission de cette attestation."),
 		}
 	} else {
 		att.Statement = []string{
 			fmt.Sprintf("Au %s, la chaîne d'empreintes présente %d anomalie(s) sur %d écriture(s).",
 				att.IssuedAt, len(report.Breaks), report.Entries),
-			"Cette attestation ne certifie donc PAS l'intégrité de la comptabilité. Elle constate et documente une rupture.",
-			"Le détail des ruptures figure ci-dessus. Une sauvegarde antérieure à la rupture est nécessaire pour rétablir les livres.",
+			t("Cette attestation ne certifie donc PAS l'intégrité de la comptabilité. Elle constate et documente une rupture."),
+			t("Le détail des ruptures figure ci-dessus. Une sauvegarde antérieure à la rupture est nécessaire pour rétablir les livres."),
 		}
 	}
 
 	att.Limits = []string{
-		"L'horodatage provient de l'horloge du poste, non d'une autorité d'horodatage tierce. La chaîne établit l'ORDRE des enregistrements et leur cohérence, pas une date opposable au sens d'un horodatage qualifié (RFC 3161).",
-		"Une troncature en FIN de chaîne n'est pas détectable : rien ne distingue des écritures effacées après la dernière d'écritures jamais passées. Seule la comparaison avec une sauvegarde répond à cette question.",
-		"Cette attestation est produite par le logiciel lui-même. Elle documente l'état d'un mécanisme technique ; elle ne remplace ni un contrôle de révision, ni l'avis d'une fiduciaire.",
+		t("L'horodatage provient de l'horloge du poste, non d'une autorité d'horodatage tierce. La chaîne établit l'ORDRE des enregistrements et leur cohérence, pas une date opposable au sens d'un horodatage qualifié (RFC 3161)."),
+		t("Une troncature en FIN de chaîne n'est pas détectable : rien ne distingue des écritures effacées après la dernière d'écritures jamais passées. Seule la comparaison avec une sauvegarde répond à cette question."),
+		t("Cette attestation est produite par le logiciel lui-même. Elle documente l'état d'un mécanisme technique ; elle ne remplace ni un contrôle de révision, ni l'avis d'une fiduciaire."),
 	}
 
 	// Le sceau se calcule sur le document sans son propre champ, sérialisé de

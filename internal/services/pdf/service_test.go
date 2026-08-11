@@ -91,21 +91,22 @@ func TestDocumentTitleAndNumberLabel(t *testing.T) {
 		{"unexpected", "FACTURE", "N° facture:"},
 	}
 	for _, c := range cases {
-		if got := documentTitle(c.docType); got != c.title {
+		inv := InvoiceData{DocumentType: c.docType}
+		if got := documentTitle(inv); got != c.title {
 			t.Errorf("documentTitle(%q) = %q, want %q", c.docType, got, c.title)
 		}
-		if got := documentNumberLabel(c.docType); got != c.label {
+		if got := documentNumberLabel(inv); got != c.label {
 			t.Errorf("documentNumberLabel(%q) = %q, want %q", c.docType, got, c.label)
 		}
 	}
 }
 
 func TestDueDateLabel(t *testing.T) {
-	if got := dueDateLabel("quote"); got != "Valable jusqu'au:" {
+	if got := dueDateLabel(InvoiceData{DocumentType: "quote"}); got != "Valable jusqu'au:" {
 		t.Errorf("dueDateLabel(\"quote\") = %q — nothing is due on an offer", got)
 	}
 	for _, d := range []string{"invoice", "credit_note", ""} {
-		if got := dueDateLabel(d); got != "Échéance:" {
+		if got := dueDateLabel(InvoiceData{DocumentType: d}); got != "Échéance:" {
 			t.Errorf("dueDateLabel(%q) = %q, want \"Échéance:\"", d, got)
 		}
 	}
