@@ -5,7 +5,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
-## [Unreleased]
+## [1.5.0] — 2026-08-12
 
 ### Ajouté
 

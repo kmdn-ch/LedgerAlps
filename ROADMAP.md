@@ -869,9 +869,9 @@ La Suisse compte quatre langues officielles.
 | Langue | Code | Interface | Messages du serveur | Documents (PDF, CSV) | Installeur |
 |---|---|---|---|---|---|
 | Français | `fr` | ✅ | ✅ | ✅ | ✅ |
-| Deutsch | `de` | 🔎 | 🔎 | 🔎 | 🔎 |
-| Italiano | `it` | 🔎 | 🔎 | 🔎 | 🔎 |
-| English | `en` | 🔎 | 🔎 | 🔎 | ✅ |
+| Deutsch | `de` | ✅ | ✅ | ✅ | ✅ |
+| Italiano | `it` | ✅ | ✅ | ✅ | ✅ |
+| English | `en` | ✅ | ✅ | ✅ | ✅ |
 
 **L'interface est faite** : les 36 écrans, 998 clés, avec les formats qui
 suivent la langue — dates, séparateurs de milliers, noms de mois, badges de
@@ -912,7 +912,7 @@ avec leur raison.
 
 | Version | Apport principal |
 |---|---|
-| **v1.5.0** *(en préparation)* | Lecture complète d'une facture fournisseur (QR + couche texte), lecture seule réellement en lecture seule, QR-IBAN distingué de l'IBAN, traçabilité étendue et attestation d'intégrité automatique, retrait d'une facture de la liste des paiements par extourne |
+| **v1.5.0** | **Les quatre langues officielles, de bout en bout** — interface, messages du serveur, facture PDF, bulletin QR, exports CSV, attestation, installeur. Lecture complète d'une facture fournisseur (QR + couche texte), lecture seule réellement en lecture seule, QR-IBAN distingué de l'IBAN, traçabilité étendue et attestation d'intégrité automatique, retrait d'une facture de la liste des paiements par extourne |
 | **v1.4.9** | Exports comptables réels (journal, grand livre, balance), création de fournisseur à la volée, accents du PDF |
 | **v1.4.8** | Rôles et permissions, second facteur TOTP, ordinateurs de confiance, écriture au journal des factures fournisseurs |
 | **v1.4.7** | Correctifs et documentation |
