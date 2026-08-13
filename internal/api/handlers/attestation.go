@@ -75,6 +75,12 @@ type Attestation struct {
 	Chain      attestationChain `json:"chain"`
 	Statement  []string         `json:"statement"`
 	Limits     []string         `json:"limits"`
+	// HowToVerify décrit, dans le document lui-même, comment le contrôler.
+	//
+	// Une attestation qu'on ne peut pas vérifier ne vaut pas mieux qu'une
+	// affirmation orale. Le destinataire n'a pas LedgerAlps : la marche à
+	// suivre doit donc tenir avec les outils d'un poste ordinaire.
+	HowToVerify []string `json:"how_to_verify"`
 	// SelfHash scelle tout ce qui précède. Modifier une ligne du document sans
 	// recalculer cette empreinte se voit ; la recalculer suppose de disposer de
 	// l'outil, et l'empreinte de tête reste comparable à la base d'origine.
@@ -196,6 +202,12 @@ func (h *AuditHandler) BuildAttestation(ctx context.Context, issuedBy string, la
 		t("L'horodatage provient de l'horloge du poste, non d'une autorité d'horodatage tierce. La chaîne établit l'ORDRE des enregistrements et leur cohérence, pas une date opposable au sens d'un horodatage qualifié (RFC 3161)."),
 		t("Une troncature en FIN de chaîne n'est pas détectable : rien ne distingue des écritures effacées après la dernière d'écritures jamais passées. Seule la comparaison avec une sauvegarde répond à cette question."),
 		t("Cette attestation est produite par le logiciel lui-même. Elle documente l'état d'un mécanisme technique ; elle ne remplace ni un contrôle de révision, ni l'avis d'une fiduciaire."),
+	}
+
+	att.HowToVerify = []string{
+		t("1. Le SCEAU, sans aucun logiciel : retirez la ligne « self_hash » de ce fichier, calculez l'empreinte SHA-256 de ce qui reste, et comparez-la à la valeur retirée. Sous Windows : certutil -hashfile fichier.json SHA256. Sous macOS ou Linux : shasum -a 256 fichier.json."),
+		t("2. La CORRESPONDANCE, chez votre client : Paramètres → Maintenance → Conformité → « Vérifier une attestation », et déposez ce fichier. LedgerAlps compare l'empreinte de tête ci-dessus à celle que portent les livres au même numéro de séquence."),
+		t("3. Ce que la comparaison prouve : conservez ce fichier. S'il correspond encore dans six mois, aucune des écritures qu'il couvre n'a été réécrite entre-temps. C'est la copie que VOUS détenez qui donne sa valeur au contrôle — le sceau seul ne protège que du fichier retouché à la main."),
 	}
 
 	// Le sceau se calcule sur le document sans son propre champ, sérialisé de

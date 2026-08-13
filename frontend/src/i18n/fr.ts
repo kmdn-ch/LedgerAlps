@@ -28,7 +28,7 @@
 export const fr = {
   // ─── Navigation ────────────────────────────────────────────────────────────
   'nav.tableauDeBord': 'Tableau de bord',
-  'nav.facturation':   'Facturation',
+  'nav.facturation':   'Ventes',
   'nav.achats':        'Achats',
   'nav.contacts':      'Contacts',
   'nav.journal':       'Journal',
@@ -1189,4 +1189,31 @@ export const fr = {
 
   // ─── Interface — complément ───
   'ui.fichierIllisible': 'Impossible de lire le fichier',
+
+  // ─── Vérification d'attestation ───
+  'vf.titre': 'Vérifier une attestation',
+  'vf.introduction': 'Déposez une attestation d’intégrité — la vôtre, ou celle qu’un client vous a remise. LedgerAlps contrôle qu’elle n’a pas été retouchée, puis compare son empreinte à celle que portent ces livres au même numéro de séquence.',
+  'vf.choisirFichier': 'Choisir une attestation (.json)',
+  'vf.verification': 'Vérification…',
+  'vf.echec': 'L’attestation n’a pas pu être vérifiée.',
+  'vf.emiseLe': 'Émise le {date} par {auteur}',
+  'vf.sceau': 'Sceau du document',
+  'vf.sceauOk': 'intact',
+  'vf.sceauKo': 'rompu',
+  'vf.correspondance': 'Empreinte au maillon {n}',
+  'vf.correspondanceOk': 'identique',
+  'vf.correspondanceKo': 'différente',
+  'vf.chaine': 'Chaîne des livres aujourd’hui',
+  'vf.chaineOk': 'intacte',
+  'vf.chaineKo': 'rompue',
+  'vf.ecrituresDepuis': '{n} écriture(s) ont été comptabilisées depuis. C’est normal : une attestation couvre un instant, pas l’avenir.',
+  'vf.commentLaFiduciaireVerifie': 'Ce que votre fiduciaire peut vérifier sans LedgerAlps',
+  'vf.explicationFiduciaire': 'Le sceau se recalcule avec les outils de n’importe quel poste — la marche à suivre est écrite dans l’attestation, section « how_to_verify ». La comparaison des empreintes, elle, demande les livres : elle se fait ici, devant vous. C’est la copie que la fiduciaire CONSERVE qui donne sa valeur au contrôle : si elle correspond encore dans six mois, rien de ce qu’elle couvre n’a été réécrit entre-temps.',
+
+  // ─── Mot de passe — complément ───
+  'mdp.echecChangement': 'Le mot de passe n’a pas pu être changé.',
+
+  // ─── Vérification d'attestation — contrôle sans objet ───
+  'vf.correspondanceRien': 'Empreinte comparée',
+  'vf.correspondanceSansObjet': 'aucune écriture à couvrir',
 } as const

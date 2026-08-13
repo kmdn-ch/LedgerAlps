@@ -8,7 +8,7 @@ import type { Catalogue } from './index'
 
 export const it: Catalogue = {
   'nav.tableauDeBord': 'Cruscotto',
-  'nav.facturation': 'Fatturazione',
+  'nav.facturation': 'Vendite',
   'nav.achats': 'Acquisti',
   'nav.contacts': 'Contatti',
   'nav.journal': 'Giornale',
@@ -1145,4 +1145,31 @@ export const it: Catalogue = {
 
   // ─── Interface — complément ───
   'ui.fichierIllisible': 'Impossibile leggere il file',
+
+  // ─── Vérification d'attestation ───
+  'vf.titre': 'Verificare un’attestazione',
+  'vf.introduction': 'Depositate un’attestazione d’integrità — la vostra, o quella che un cliente vi ha consegnato. LedgerAlps controlla che non sia stata ritoccata, poi confronta la sua impronta con quella che questi libri recano allo stesso numero di sequenza.',
+  'vf.choisirFichier': 'Scegliere un’attestazione (.json)',
+  'vf.verification': 'Verifica…',
+  'vf.echec': 'L’attestazione non ha potuto essere verificata.',
+  'vf.emiseLe': 'Emessa il {date} da {auteur}',
+  'vf.sceau': 'Sigillo del documento',
+  'vf.sceauOk': 'intatto',
+  'vf.sceauKo': 'rotto',
+  'vf.correspondance': 'Impronta all’anello {n}',
+  'vf.correspondanceOk': 'identica',
+  'vf.correspondanceKo': 'diversa',
+  'vf.chaine': 'Catena dei libri oggi',
+  'vf.chaineOk': 'intatta',
+  'vf.chaineKo': 'rotta',
+  'vf.ecrituresDepuis': 'Da allora sono state contabilizzate {n} registrazione/i. È normale: un’attestazione copre un istante, non il futuro.',
+  'vf.commentLaFiduciaireVerifie': 'Ciò che il vostro fiduciario può verificare senza LedgerAlps',
+  'vf.explicationFiduciaire': 'Il sigillo si ricalcola con gli strumenti di qualsiasi computer — la procedura è scritta nell’attestazione, sezione «how_to_verify». Il confronto delle impronte richiede invece i libri: si effettua qui, davanti a voi. È la copia che il fiduciario CONSERVA a dare valore al controllo: se corrisponde ancora fra sei mesi, nulla di ciò che copre è stato riscritto nel frattempo.',
+
+  // ─── Mot de passe — complément ───
+  'mdp.echecChangement': 'La password non ha potuto essere cambiata.',
+
+  // ─── Vérification d'attestation — contrôle sans objet ───
+  'vf.correspondanceRien': 'Impronta confrontata',
+  'vf.correspondanceSansObjet': 'nessuna registrazione da coprire',
 }

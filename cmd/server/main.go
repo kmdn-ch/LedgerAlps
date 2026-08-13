@@ -479,6 +479,11 @@ func main() {
 	// so "verify-chain" is never read as an identifier.
 	api.GET("/audit-logs/verify-chain", authorizer.Require(authz.PermManage), alh.VerifyAuditChain)
 	api.GET("/audit-logs/attestation", authorizer.Require(authz.PermManage), alh.IntegrityAttestation)
+	// Vérifier une attestation qu'on nous présente. PermManage comme
+	// l'émission : le verdict révèle l'état de la chaîne, et une fiduciaire
+	// en lecture seule n'a pas à faire tourner un contrôle sur les livres —
+	// elle vérifie le sceau de son côté, sans logiciel.
+	api.POST("/audit-logs/attestation/verify", authorizer.Require(authz.PermManage), alh.VerifyAttestation)
 	api.GET("/audit-logs/:id/verify", authorizer.Require(authz.PermManage), alh.VerifyAuditLog)
 
 	// Security telemetry — admin only: lockout records expose client IPs (nLPD).

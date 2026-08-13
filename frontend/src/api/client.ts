@@ -254,6 +254,16 @@ export const auditApi = {
   attestationURL: () => `${BASE_URL}/audit-logs/attestation`,
   attestation: () =>
     api.get('/audit-logs/attestation', { responseType: 'blob', timeout: 120_000 }),
+  // Vérifier une attestation qu'on nous présente. Le serveur seul a les livres :
+  // il compare l'empreinte attestée à celle qu'ils portent au même maillon.
+  verifyAttestation: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/audit-logs/attestation/verify', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120_000,
+    })
+  },
 }
 
 // Chiffre d'affaires groupable. La convention de calcul est renvoyée avec les

@@ -46,6 +46,21 @@ var catalogue = map[string]map[Lang]string{
 		IT: "%d fattura/e su %d non sono più pagabili: possono essere state saldate o annullate nel frattempo. Ricaricate l’elenco",
 		EN: "%d of %d invoice(s) are no longer payable: they may have been settled or cancelled meanwhile. Reload the list",
 	},
+	"1. Le SCEAU, sans aucun logiciel : retirez la ligne « self_hash » de ce fichier, calculez l'empreinte SHA-256 de ce qui reste, et comparez-la à la valeur retirée. Sous Windows : certutil -hashfile fichier.json SHA256. Sous macOS ou Linux : shasum -a 256 fichier.json.": {
+		DE: "1. Das SIEGEL, ohne jede Software: entfernen Sie die Zeile «self_hash» aus dieser Datei, berechnen Sie den SHA-256-Hashwert des Rests und vergleichen Sie ihn mit dem entfernten Wert. Unter Windows: certutil -hashfile datei.json SHA256. Unter macOS oder Linux: shasum -a 256 datei.json.",
+		IT: "1. Il SIGILLO, senza alcun software: togliete la riga «self_hash» da questo file, calcolate l’impronta SHA-256 di ciò che resta e confrontatela con il valore tolto. Su Windows: certutil -hashfile file.json SHA256. Su macOS o Linux: shasum -a 256 file.json.",
+		EN: "1. The SEAL, with no software at all: remove the “self_hash” line from this file, compute the SHA-256 hash of what remains, and compare it with the value you removed. On Windows: certutil -hashfile file.json SHA256. On macOS or Linux: shasum -a 256 file.json.",
+	},
+	"2. La CORRESPONDANCE, chez votre client : Paramètres → Maintenance → Conformité → « Vérifier une attestation », et déposez ce fichier. LedgerAlps compare l'empreinte de tête ci-dessus à celle que portent les livres au même numéro de séquence.": {
+		DE: "2. Die ÜBEREINSTIMMUNG, bei Ihrem Kunden: Einstellungen → Wartung → Konformität → «Eine Bescheinigung prüfen», und legen Sie diese Datei ab. LedgerAlps vergleicht den obigen Kopf-Hashwert mit dem, den die Bücher an derselben Sequenznummer tragen.",
+		IT: "2. La CORRISPONDENZA, presso il vostro cliente: Impostazioni → Manutenzione → Conformità → «Verificare un’attestazione», e depositate questo file. LedgerAlps confronta l’impronta di testa qui sopra con quella che i libri recano allo stesso numero di sequenza.",
+		EN: "2. The MATCH, at your client’s: Settings → Maintenance → Compliance → “Check an attestation”, and drop this file. LedgerAlps compares the head hash above with the one the books carry at the same sequence number.",
+	},
+	"3. Ce que la comparaison prouve : conservez ce fichier. S'il correspond encore dans six mois, aucune des écritures qu'il couvre n'a été réécrite entre-temps. C'est la copie que VOUS détenez qui donne sa valeur au contrôle — le sceau seul ne protège que du fichier retouché à la main.": {
+		DE: "3. Was der Vergleich beweist: bewahren Sie diese Datei auf. Stimmt sie in sechs Monaten noch, wurde keine der abgedeckten Buchungen zwischenzeitlich umgeschrieben. Den Wert der Prüfung macht die Kopie aus, die SIE besitzen — das Siegel allein schützt nur vor der von Hand retuschierten Datei.",
+		IT: "3. Ciò che il confronto prova: conservate questo file. Se corrisponde ancora fra sei mesi, nessuna delle registrazioni che copre è stata riscritta nel frattempo. È la copia che VOI detenete a dare valore al controllo — il sigillo da solo protegge soltanto dal file ritoccato a mano.",
+		EN: "3. What the comparison proves: keep this file. If it still matches in six months, none of the entries it covers has been rewritten meanwhile. What gives the check its value is the copy YOU hold — the seal alone only protects against a file retouched by hand.",
+	},
 	"Accès réinitialisé. Les sessions ouvertes de ce compte sont fermées, et la personne devra choisir son propre mot de passe avant de pouvoir faire quoi que ce soit.": {
 		DE: "Zugang zurückgesetzt. Die offenen Sitzungen dieses Kontos sind beendet, und die Person muss ein eigenes Kennwort wählen, bevor sie irgendetwas tun kann.",
 		IT: "Accesso reimpostato. Le sessioni aperte di questo account sono chiuse e la persona dovrà scegliere una propria password prima di poter fare qualsiasi cosa.",
@@ -56,6 +71,11 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Account amministratore creato. Questo endpoint è ora disattivato.",
 		EN: "Administrator account created. This endpoint is now disabled.",
 	},
+	"Adresse :": {
+		DE: "Adresse: ",
+		IT: "Indirizzo: ",
+		EN: "Address: ",
+	},
 	"Annule la facture:": {
 		DE: "Storniert die Rechnung:",
 		IT: "Annulla la fattura:",
@@ -65,6 +85,21 @@ var catalogue = map[string]map[Lang]string{
 		DE: "Integritätsbescheinigung der Buchhaltung",
 		IT: "Attestazione d’integrità della contabilità",
 		EN: "Accounting integrity attestation",
+	},
+	"Attestation vérifiée": {
+		DE: "Bescheinigung geprüft",
+		IT: "Attestazione verificata",
+		EN: "Attestation verified",
+	},
+	"Attestation vérifiée — aucune écriture couverte": {
+		DE: "Bescheinigung geprüft — keine Buchung abgedeckt",
+		IT: "Attestazione verificata — nessuna registrazione coperta",
+		EN: "Attestation verified — no entry covered",
+	},
+	"Attestation vérifiée, mais les livres présentent une rupture": {
+		DE: "Bescheinigung geprüft, die Bücher weisen jedoch einen Bruch auf",
+		IT: "Attestazione verificata, ma i libri presentano una rottura",
+		EN: "Attestation verified, but the books show a break",
 	},
 	"Au %s, la chaîne d'empreintes couvrant %d écriture(s) comptabilisée(s) est intacte.": {
 		DE: "Am %s ist die Hash-Kette über %d verbuchte Buchung(en) unversehrt.",
@@ -81,10 +116,20 @@ var catalogue = map[string]map[Lang]string{
 		IT: "BIC",
 		EN: "BIC",
 	},
+	"BIC/SWIFT :": {
+		DE: "BIC/SWIFT: ",
+		IT: "BIC/SWIFT: ",
+		EN: "BIC/SWIFT: ",
+	},
 	"Banque": {
 		DE: "Bank",
 		IT: "Banca",
 		EN: "Bank",
+	},
+	"Banque :": {
+		DE: "Bank: ",
+		IT: "Banca: ",
+		EN: "Bank: ",
 	},
 	"Bénéficiaire :": {
 		DE: "Zahlungsempfänger:",
@@ -95,6 +140,11 @@ var catalogue = map[string]map[Lang]string{
 		DE: "OR Art. 957a Abs. 2 Ziff. 5 — Nachvollziehbarkeit der Buchungen",
 		IT: "CO art. 957a cpv. 2 n. 5 — tracciabilità delle registrazioni",
 		EN: "CO art. 957a para. 2 no. 5 — traceability of entries",
+	},
+	"Ce document a été modifié après son émission": {
+		DE: "Dieses Dokument wurde nach seiner Ausstellung verändert",
+		IT: "Questo documento è stato modificato dopo la sua emissione",
+		EN: "This document was altered after it was issued",
 	},
 	"Ces fichiers CSV contiennent les mêmes données que les fichiers JSON\n": {
 		DE: "Diese CSV-Dateien enthalten dieselben Daten wie die JSON-Dateien\n",
@@ -186,20 +236,40 @@ var catalogue = map[string]map[Lang]string{
 		IT: "FATTURA",
 		EN: "INVOICE",
 	},
+	"IBAN :": {
+		DE: "IBAN: ",
+		IT: "IBAN: ",
+		EN: "IBAN: ",
+	},
 	"IDE / N° TVA : ": {
 		DE: "UID / MWST-Nr.: ",
 		IT: "IDI / N. IVA: ",
 		EN: "UID / VAT no.: ",
+	},
+	"IDE : ": {
+		DE: "UID: ",
+		IT: "IDI: ",
+		EN: "UID: ",
 	},
 	"Informations supplémentaires": {
 		DE: "Zusätzliche Informationen",
 		IT: "Informazioni supplementari",
 		EN: "Additional information",
 	},
+	"L'attestation couvre des écritures que cette comptabilité ne contient pas. Ce sont deux comptabilités différentes, ou les écritures ont été supprimées.": {
+		DE: "Die Bescheinigung deckt Buchungen ab, die diese Buchhaltung nicht enthält. Es sind zwei verschiedene Buchhaltungen, oder die Buchungen wurden gelöscht.",
+		IT: "L’attestazione copre registrazioni che questa contabilità non contiene. Sono due contabilità diverse, oppure le registrazioni sono state eliminate.",
+		EN: "The attestation covers entries these accounts do not contain. Either these are two different sets of books, or the entries were deleted.",
+	},
 	"L'empreinte de tête ci-dessus résume l'état de la chaîne : la conserver permet d'établir ultérieurement qu'aucune des écritures couvertes n'a bougé depuis l'émission de cette attestation.": {
 		DE: "Der obige Kopf-Hashwert fasst den Zustand der Kette zusammen: ihn aufzubewahren erlaubt später den Nachweis, dass sich keine der erfassten Buchungen seit Ausstellung dieser Bescheinigung verändert hat.",
 		IT: "L’impronta di testa qui sopra riassume lo stato della catena: conservarla permette di stabilire in seguito che nessuna delle registrazioni coperte si è mossa dall’emissione di questa attestazione.",
 		EN: "The head hash above summarises the state of the chain: keeping it lets you establish later that none of the covered entries has moved since this attestation was issued.",
+	},
+	"L'empreinte enregistrée au même numéro de séquence ne correspond plus. Une écriture couverte par cette attestation a été réécrite. Une sauvegarde antérieure est nécessaire pour établir ce qui a bougé.": {
+		DE: "Der bei derselben Sequenznummer gespeicherte Hashwert stimmt nicht mehr. Eine von dieser Bescheinigung abgedeckte Buchung wurde umgeschrieben. Eine ältere Sicherung ist nötig, um festzustellen, was sich verändert hat.",
+		IT: "L’impronta registrata allo stesso numero di sequenza non corrisponde più. Una registrazione coperta da questa attestazione è stata riscritta. Un backup anteriore è necessario per stabilire cosa si è mosso.",
+		EN: "The hash stored at the same sequence number no longer matches. An entry covered by this attestation was rewritten. An earlier backup is needed to establish what moved.",
 	},
 	"L'horodatage provient de l'horloge du poste, non d'une autorité d'horodatage tierce. La chaîne établit l'ORDRE des enregistrements et leur cohérence, pas une date opposable au sens d'un horodatage qualifié (RFC 3161).": {
 		DE: "Der Zeitstempel stammt von der Uhr des Rechners, nicht von einer dritten Zeitstempelstelle. Die Kette belegt die REIHENFOLGE der Aufzeichnungen und ihre Stimmigkeit, nicht ein einwendbares Datum im Sinne eines qualifizierten Zeitstempels (RFC 3161).",
@@ -211,6 +281,16 @@ var catalogue = map[string]map[Lang]string{
 		IT: "La base sarà riscritta in chiaro al prossimo avvio di LedgerAlps.",
 		EN: "The database will be rewritten unencrypted at the next start of LedgerAlps.",
 	},
+	"Le document est intact et les livres portent toujours la même empreinte au numéro de séquence attesté. Aucune écriture couverte n'a été modifiée depuis l'émission.": {
+		DE: "Das Dokument ist unversehrt, und die Bücher tragen bei der bescheinigten Sequenznummer weiterhin denselben Hashwert. Keine abgedeckte Buchung wurde seit der Ausstellung verändert.",
+		IT: "Il documento è intatto e i libri recano sempre la stessa impronta al numero di sequenza attestato. Nessuna registrazione coperta è stata modificata dall’emissione.",
+		EN: "The document is intact and the books still carry the same hash at the attested sequence number. No covered entry has been altered since it was issued.",
+	},
+	"Le document est intact. Il a été émis alors qu'aucune écriture n'était encore comptabilisée : il n'y a donc rien à comparer. Une attestation ne devient probante qu'une fois les livres alimentés.": {
+		DE: "Das Dokument ist unversehrt. Es wurde ausgestellt, als noch keine Buchung verbucht war: es gibt also nichts zu vergleichen. Eine Bescheinigung wird erst beweiskräftig, wenn die Bücher gefüllt sind.",
+		IT: "Il documento è intatto. È stato emesso quando nessuna registrazione era ancora contabilizzata: non c’è dunque nulla da confrontare. Un’attestazione diventa probante solo una volta alimentati i libri.",
+		EN: "The document is intact. It was issued when no entry had yet been posted: there is therefore nothing to compare. An attestation only becomes probative once the books are filled.",
+	},
 	"Le détail des ruptures figure ci-dessus. Une sauvegarde antérieure à la rupture est nécessaire pour rétablir les livres.": {
 		DE: "Die Einzelheiten der Brüche stehen oben. Eine Sicherung von vor dem Bruch ist nötig, um die Bücher wiederherzustellen.",
 		IT: "Il dettaglio delle rotture figura sopra. Un backup anteriore alla rottura è necessario per ripristinare i libri.",
@@ -221,10 +301,25 @@ var catalogue = map[string]map[Lang]string{
 		IT: "LedgerAlps si riavvia per applicare le modifiche. Questa pagina si ricaricherà automaticamente.",
 		EN: "LedgerAlps is restarting to apply the changes. This page will reload automatically.",
 	},
+	"Les livres ne portent pas la séquence attestée": {
+		DE: "Die Bücher tragen die bescheinigte Sequenz nicht",
+		IT: "I libri non recano la sequenza attestata",
+		EN: "The books do not carry the attested sequence",
+	},
+	"Les livres ont changé depuis cette attestation": {
+		DE: "Die Bücher haben sich seit dieser Bescheinigung verändert",
+		IT: "I libri sono cambiati da questa attestazione",
+		EN: "The books have changed since this attestation",
+	},
 	"Les prochaines sauvegardes automatiques seront chiffrées.": {
 		DE: "Die nächsten automatischen Sicherungen werden verschlüsselt.",
 		IT: "I prossimi backup automatici saranno cifrati.",
 		EN: "The next automatic backups will be encrypted.",
+	},
+	"Les écritures couvertes par cette attestation n'ont pas bougé. La chaîne a en revanche rompu plus loin : voyez Paramètres → Maintenance → Piste d'audit.": {
+		DE: "Die von dieser Bescheinigung abgedeckten Buchungen haben sich nicht verändert. Die Kette ist hingegen weiter hinten gebrochen: siehe Einstellungen → Wartung → Prüfpfad.",
+		IT: "Le registrazioni coperte da questa attestazione non si sono mosse. La catena si è invece rotta più avanti: vedete Impostazioni → Manutenzione → Pista di controllo.",
+		EN: "The entries covered by this attestation have not moved. The chain has, however, broken further on: see Settings → Maintenance → Audit trail.",
 	},
 	"Message": {
 		DE: "Mitteilung",
@@ -471,10 +566,20 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Saldo cumulato CHF",
 		EN: "Running balance CHF",
 	},
+	"Son sceau ne correspond plus à son contenu. Demandez une attestation neuve : celle-ci ne prouve rien.": {
+		DE: "Sein Siegel stimmt nicht mehr mit seinem Inhalt überein. Verlangen Sie eine neue Bescheinigung: diese beweist nichts.",
+		IT: "Il suo sigillo non corrisponde più al suo contenuto. Chiedete un’attestazione nuova: questa non prova nulla.",
+		EN: "Its seal no longer matches its content. Ask for a fresh attestation: this one proves nothing.",
+	},
 	"Sous-total:": {
 		DE: "Zwischentotal:",
 		IT: "Subtotale:",
 		EN: "Subtotal:",
+	},
+	"TOTAL ": {
+		DE: "TOTAL ",
+		IT: "TOTALE ",
+		EN: "TOTAL ",
 	},
 	"TVA": {
 		DE: "MWST",
@@ -650,6 +755,11 @@ var catalogue = map[string]map[Lang]string{
 		DE: "Dieser Kontakt wurde bereits anonymisiert am ",
 		IT: "Questo contatto è già stato anonimizzato il ",
 		EN: "This contact was already anonymised on ",
+	},
+	"ce fichier n'est pas une attestation LedgerAlps": {
+		DE: "Diese Datei ist keine LedgerAlps-Bescheinigung",
+		IT: "Questo file non è un’attestazione LedgerAlps",
+		EN: "This file is not a LedgerAlps attestation",
 	},
 	"ce fichier n'est pas une sauvegarde chiffrée": {
 		DE: "Diese Datei ist keine verschlüsselte Sicherung",
@@ -1300,6 +1410,11 @@ var catalogue = map[string]map[Lang]string{
 		DE: "Die CSV-Datei konnte nicht erzeugt werden: ",
 		IT: "Il file CSV non ha potuto essere prodotto: ",
 		EN: "The CSV file could not be produced: ",
+	},
+	"le fichier d'attestation n'a pas pu être lu": {
+		DE: "Die Bescheinigungsdatei konnte nicht gelesen werden",
+		IT: "Il file di attestazione non ha potuto essere letto",
+		EN: "The attestation file could not be read",
 	},
 	"le fichier dépasse %d Mo": {
 		DE: "Die Datei überschreitet %d MB",

@@ -83,7 +83,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 9c | Droits du comptable, second facteur par rôle, lecture seule | ✅ | [↓](#9c--droits-du-comptable-et-second-facteur-par-rôle) |
 | 13 | Veille de conformité automatisée | ✅ | — |
 | 13b | Lecture d'une facture fournisseur (QR + texte) | ✅ | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
-| 13c | Traçabilité : couverture du journal et attestation automatique | 🔎 livré | [↓](#13c--traçabilité) |
+| 13c | Traçabilité : couverture du journal, attestation automatique **et vérifiable** | 🔎 livré | [↓](#13c--traçabilité) |
 | 13d | Retirer une facture de la liste des paiements | 🔎 livré | [↓](#13d--vider-la-liste-des-paiements) |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
@@ -713,6 +713,29 @@ fournisseur mal lue entre dans les livres et dans la déclaration de TVA ; un
 champ pré-rempli qu'on relit vaut mieux qu'un champ juste qu'on n'a pas vu.
 
 ### 13c — Traçabilité
+
+**Une attestation se vérifie maintenant.** Elle était produite, scellée et
+remise à un tiers qui n'avait aucun moyen de la contrôler — un document
+invérifiable ne vaut pas mieux qu'une affirmation orale.
+
+**Comment la fiduciaire l'exploite**, concrètement :
+
+1. **Elle en demande une à chaque bouclement**, et elle la CONSERVE. C'est la
+   seule chose à retenir : le pouvoir de preuve ne vient pas de la
+   cryptographie, il vient de ce que le client ne peut plus modifier la copie
+   qu'elle détient.
+2. **Elle contrôle le sceau sans logiciel** : retirer la ligne `self_hash`,
+   calculer le SHA-256 du reste, comparer. `certutil -hashfile x.json SHA256`
+   sous Windows, `shasum -a 256 x.json` ailleurs. La marche à suivre est écrite
+   dans le document, section `how_to_verify`.
+3. **Elle fait comparer les empreintes chez le client**, devant lui :
+   Paramètres → Maintenance → Conformité → « Vérifier une attestation ». Si
+   celle de janvier correspond encore en juin, aucune écriture qu'elle couvre
+   n'a été réécrite entre-temps.
+
+**Ce que chaque contrôle vaut, et l'écran le dit.** Le sceau détecte un fichier
+retouché à la main, rien de plus : qui a le logiciel recalcule l'empreinte.
+C'est la comparaison dans le temps qui porte la preuve.
 
 **Livré.** La chaîne d'empreintes du CO art. 957a existait, avec sa vérification
 et son attestation. **Trois actions y entraient** : la comptabilisation d'une

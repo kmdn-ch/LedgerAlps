@@ -8,7 +8,7 @@ import type { Catalogue } from './index'
 
 export const en: Catalogue = {
   'nav.tableauDeBord': 'Dashboard',
-  'nav.facturation': 'Invoicing',
+  'nav.facturation': 'Sales',
   'nav.achats': 'Purchases',
   'nav.contacts': 'Contacts',
   'nav.journal': 'Journal',
@@ -1145,4 +1145,31 @@ export const en: Catalogue = {
 
   // ─── Interface — complément ───
   'ui.fichierIllisible': 'The file could not be read',
+
+  // ─── Vérification d'attestation ───
+  'vf.titre': 'Check an attestation',
+  'vf.introduction': 'Drop an integrity attestation — your own, or the one a client handed you. LedgerAlps checks that it has not been altered, then compares its hash with the one these books carry at the same sequence number.',
+  'vf.choisirFichier': 'Choose an attestation (.json)',
+  'vf.verification': 'Checking…',
+  'vf.echec': 'The attestation could not be checked.',
+  'vf.emiseLe': 'Issued on {date} by {auteur}',
+  'vf.sceau': 'Document seal',
+  'vf.sceauOk': 'intact',
+  'vf.sceauKo': 'broken',
+  'vf.correspondance': 'Hash at link {n}',
+  'vf.correspondanceOk': 'identical',
+  'vf.correspondanceKo': 'different',
+  'vf.chaine': 'Chain of the books today',
+  'vf.chaineOk': 'intact',
+  'vf.chaineKo': 'broken',
+  'vf.ecrituresDepuis': '{n} entry/entries have been posted since. That is normal: an attestation covers a moment, not the future.',
+  'vf.commentLaFiduciaireVerifie': 'What your trustee can check without LedgerAlps',
+  'vf.explicationFiduciaire': 'The seal can be recomputed with any machine’s tools — the steps are written in the attestation, section “how_to_verify”. Comparing the hashes needs the books: that happens here, in front of you. What gives the check its value is the copy the trustee KEEPS: if it still matches in six months, nothing it covers has been rewritten meanwhile.',
+
+  // ─── Mot de passe — complément ───
+  'mdp.echecChangement': 'The password could not be changed.',
+
+  // ─── Vérification d'attestation — contrôle sans objet ───
+  'vf.correspondanceRien': 'Hash compared',
+  'vf.correspondanceSansObjet': 'no entry to cover',
 }

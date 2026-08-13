@@ -5,6 +5,36 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
+## [Unreleased]
+
+### Ajouté
+
+- **Une attestation d'intégrité se vérifie maintenant** — Paramètres → Maintenance → Conformité → « Vérifier une attestation ». Elle était produite, scellée, remise à un tiers… qui n'avait aucun moyen de la contrôler. Un document invérifiable ne vaut pas mieux qu'une affirmation orale.
+
+  **Trois contrôles, de valeur inégale, et l'écran le dit.** Le SCEAU détecte un fichier retouché à la main, rien de plus : qui a le logiciel recalcule l'empreinte. La CORRESPONDANCE est celle qui compte — l'empreinte de tête de l'attestation est comparée à celle que portent les livres aujourd'hui, au même maillon. L'ÉTAT ACTUEL reparcourt toute la chaîne.
+
+  **Ce qui donne sa force au contrôle n'est pas cryptographique, c'est la garde du fichier.** Une attestation remise en janvier et conservée par la fiduciaire prouve, en juin, qu'aucune écriture couverte n'a été réécrite — parce que le client ne peut plus modifier la copie qu'elle détient.
+
+  **La marche à suivre est écrite dans l'attestation elle-même** (section `how_to_verify`). Le sceau se recalcule avec `certutil` sous Windows ou `shasum` ailleurs : la fiduciaire n'a besoin d'aucun logiciel pour cette partie.
+
+### Corrigé
+
+- **« Créer en brouillon » affichait « Quitter cette page ? »** au lieu d'enregistrer. Le garde de saisie protégeait le formulaire contre une navigation — y compris celle qui suit l'enregistrement réussi. Le message était faux, la facture existait ; et qui le croyait cliquait « Annuler » et restait bloqué sur un écran dont le bouton principal semblait ne rien faire. Le garde se désarme désormais juste avant de naviguer.
+
+- **La facture PDF affichait « NÂ° facture: » et « Ã‰chÃ©ance: ».** `metaRow` écrivait ses arguments sans les convertir : gofpdf attend du cp1252 pour ses polices de base, et l'UTF-8 passait tel quel. Corrigé au point de passage — la fonction convertit, pas ses vingt appelants.
+
+  **Le test qui manquait.** Il en existait un contre le DOUBLE encodage ; aucun contre son ABSENCE. Ma première tentative cherchait les octets dans le fichier brut et passait au vert alors que le défaut était réintroduit exprès : les flux d'un PDF sont compressés. Le test décompresse maintenant, et sa capacité à échouer a été vérifiée.
+
+- **Les critères du mot de passe temporaire et le sous-titre de Maintenance** s'affichaient en français, l'un en dur, l'autre en montrant la clé brute (`mt.conformiteHint`).
+
+- **Le verdict de vérification se contredisait sur une chaîne vide** — cadre rouge, ligne « empreinte divergente », sous la phrase « Attestation vérifiée ». L'écran recalculait « c'est bon » par un ET des trois booléens, alors qu'une attestation émise sur des livres vides n'a aucune empreinte à faire correspondre. C'est le serveur qui tranche désormais : il rédige la phrase, il donne la couleur, et le contrôle sans objet s'affiche comme tel plutôt qu'en rouge.
+
+- **`Lauschadresse`** — l'allemand disait « adresse d'écoute » au sens de l'écoute clandestine. C'est `Netzwerkadresse`.
+
+### Modifié
+
+- **Le menu « Facturation » devient « Ventes »**, en face d'« Achats ». Il nomme ce qu'on y fait, pas l'outil qui le fait, et les deux se lisent en paire.
+
 ## [1.5.0] — 2026-08-12
 
 ### Ajouté

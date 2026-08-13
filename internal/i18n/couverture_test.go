@@ -36,7 +36,14 @@ import (
 
 var (
 	// Les endroits d'où part un texte vers l'utilisateur.
-	reContexte = regexp.MustCompile(`(?:gin\.H\{\s*)?"(?:error|message)":\s*|errors\.New\(\s*|fmt\.Errorf\(\s*`)
+	//
+	// Les appels `t("…")` — la fermeture locale d'un gestionnaire, la méthode
+	// `inv.t()` du PDF — ont été ajoutés après coup : ils échappaient au
+	// balayage, et une phrase absente du catalogue y retombe en français sans
+	// que rien ne le signale. C'est exactement le trou qu'on vient de corriger
+	// pour « identifiants incorrects », reproduit un cran plus loin.
+	reContexte = regexp.MustCompile(
+		`(?:gin\.H\{\s*)?"(?:error|message)":\s*|errors\.New\(\s*|fmt\.Errorf\(\s*|(?:^|[^A-Za-z0-9_])\.?t\(\s*`)
 	// Un littéral Go, éventuellement suivi d'autres collés par des `+`.
 	reSuite = regexp.MustCompile(`"(?:[^"\\]|\\.)*"(?:\s*\+\s*"(?:[^"\\]|\\.)*")*`)
 	reBout  = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)

@@ -20,6 +20,7 @@ import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { formatDate } from '@/utils'
 import type { FiscalYear } from '@/types'
 import { useT } from '@/i18n/useT'
+import { AttestationVerifyPanel } from '@/components/settings/AttestationVerifyPanel'
 
 export function CompliancePanel() {
   const t = useT()
@@ -170,6 +171,10 @@ export function CompliancePanel() {
             fetcher={() => exportApi.legalArchive()}
           />
         </div>
+
+        {/* Produire une attestation sans pouvoir la vérifier revient à
+            demander qu'on la croie sur parole. */}
+        <AttestationVerifyPanel />
       </div>
     </div>
   )

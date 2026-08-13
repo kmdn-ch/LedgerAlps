@@ -148,7 +148,8 @@ func identiqueParNature(cle, valeur string) bool {
 		"Mot de passe": true, "Archivée": true, "Contact *": true,
 		"Type *": true, "File": true, "Notes": true,
 		"Version": true, "Information": true, "Protections": true,
-		"Total": true, "Type": true, "Documents ({n})": true,
+		"intact": true,
+		"Total":  true, "Type": true, "Documents ({n})": true,
 		"Document": true, "Action": true, "TOTAL": true,
 		"Solide": true, "Acceptable": true,
 	}

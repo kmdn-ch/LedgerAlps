@@ -122,7 +122,7 @@ export function MaintenancePanel() {
 
       {/* Une ligne qui rappelle à quoi sert la section ouverte. Les titres seuls
           — « Conformité », « Diagnostic » — ne disent pas ce qu'on y fait. */}
-      <p className="text-sm text-alpine-500 mb-4">{current.hint}</p>
+      <p className="text-sm text-alpine-500 mb-4">{t(current.hint)}</p>
 
       {/* ── Contenu ──────────────────────────────────────────────────────── */}
       {active === 'diagnostic' && <DiagnosticPanel />}

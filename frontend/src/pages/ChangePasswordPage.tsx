@@ -18,18 +18,22 @@ import { ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import { useAuthStore } from '@/store/auth'
 import { useT } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
 
 // La même règle que le serveur (internal/api/handlers/password_change.go).
 // Reproduite pour être visible pendant la frappe plutôt que révélée par un
 // refus après coup ; le serveur reste l'autorité.
 const MIN_LEN = 12
 
-function checks(p: string) {
+// Les critères portent leur CLÉ : la fonction est appelée hors composant, et
+// c'est le rendu qui traduit. Les mêmes clés que PassphraseField, parce que
+// ce sont les mêmes critères — les dupliquer les ferait diverger.
+function checks(p: string): { cle: Cle; met: boolean }[] {
   return [
-    { label: `${MIN_LEN} caractères ou plus`, met: [...p].length >= MIN_LEN },
-    { label: 'une minuscule',                 met: /\p{Ll}/u.test(p) },
-    { label: 'une majuscule',                 met: /\p{Lu}/u.test(p) },
-    { label: 'un chiffre',                    met: /\p{Nd}/u.test(p) },
+    { cle: 'pf.longueurMini', met: [...p].length >= MIN_LEN },
+    { cle: 'pf.uneMinuscule', met: /\p{Ll}/u.test(p) },
+    { cle: 'pf.uneMajuscule', met: /\p{Lu}/u.test(p) },
+    { cle: 'pf.unChiffre',    met: /\p{Nd}/u.test(p) },
   ]
 }
 
@@ -50,7 +54,7 @@ export function ChangePasswordPage() {
   const change = useMutation({
     mutationFn: () => authApi.changePassword(current, next),
     onSuccess: () => { clearMustChange(); navigate('/', { replace: true }) },
-    onError: (e) => setError(refusalMessage(e, "Le mot de passe n'a pas pu être changé.")),
+    onError: (e) => setError(refusalMessage(e, t('mdp.echecChangement'))),
   })
 
   return (
@@ -87,11 +91,11 @@ export function ChangePasswordPage() {
               {next !== '' && (
                 <ul className="mt-2 space-y-0.5">
                   {list.map(c => (
-                    <li key={c.label} className={`text-xs flex items-center gap-1.5 ${
+                    <li key={c.cle} className={`text-xs flex items-center gap-1.5 ${
                       c.met ? 'text-success-500' : 'text-alpine-500'
                     }`}>
                       {c.met ? <Check size={12} /> : <Minus size={12} />}
-                      {c.label}
+                      {t(c.cle, { n: MIN_LEN })}
                     </li>
                   ))}
                 </ul>

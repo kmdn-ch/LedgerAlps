@@ -252,7 +252,7 @@ func renderHeader(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		companyLine(pdf, textX, inv.t("IDE / N° TVA : ")+vat)
 	default:
 		if uid != "" {
-			companyLine(pdf, textX, "IDE : "+uid)
+			companyLine(pdf, textX, inv.t("IDE : ")+uid)
 		}
 		if vat != "" {
 			companyLine(pdf, textX, inv.t("N° TVA : ")+vat)
@@ -311,13 +311,17 @@ func renderMeta(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	y := 65.0
 	col1, col2 := 15.0, 50.0
 
+	// latin1 ICI, et pas chez chaque appelant : gofpdf écrit les polices de
+	// base en cp1252, si bien qu'une chaîne UTF-8 passée telle quelle sort en
+	// « NÂ° facture: » et « Ã‰chÃ©ance: ». Le défaut se voit sur le PDF, jamais
+	// dans un test qui compare des chaînes Go — d'où six mois de vie.
 	metaRow := func(label, val string) {
 		pdf.SetXY(col1, y)
 		pdf.SetFont("Helvetica", "B", 10)
-		pdf.CellFormat(35, 6, label, "", 0, "L", false, 0, "")
+		pdf.CellFormat(35, 6, latin1(label), "", 0, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 10)
 		pdf.SetX(col2)
-		pdf.CellFormat(60, 6, val, "", 1, "L", false, 0, "")
+		pdf.CellFormat(60, 6, latin1(val), "", 1, "L", false, 0, "")
 		y += 6
 	}
 
@@ -403,7 +407,7 @@ func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
 
 		y := pdf.GetY()
 		pdf.SetXY(15, y)
-		pdf.MultiCell(wDesc, rowH/float64(len(wrapped)), desc, "1", "L", fill)
+		pdf.MultiCell(wDesc, rowH/float64(len(wrapped)), latin1(desc), "1", "L", fill)
 
 		pdf.SetXY(15+wDesc, y)
 		pdf.CellFormat(wQty, rowH, fmtFloat(line.Quantity), "1", 0, "C", fill, 0, "")
@@ -435,8 +439,8 @@ func renderTotals(pdf *gofpdf.Fpdf, inv InvoiceData) {
 			pdf.SetFont("Helvetica", "", 10)
 		}
 		pdf.SetX(x)
-		pdf.CellFormat(w1, 6, label, "", 0, "L", false, 0, "")
-		pdf.CellFormat(w2, 6, val, "", 1, "R", false, 0, "")
+		pdf.CellFormat(w1, 6, latin1(label), "", 0, "L", false, 0, "")
+		pdf.CellFormat(w2, 6, latin1(val), "", 1, "R", false, 0, "")
 	}
 
 	totalRow(inv.t("Sous-total:"), fmtMoney(inv.SubtotalAmount, inv.Currency), false)
@@ -454,7 +458,7 @@ func renderTotals(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	pdf.Line(x, y, x+w1+w2, y)
 	pdf.SetY(y + 1)
 
-	totalRow("TOTAL "+inv.Currency+":", fmtMoney(inv.TotalAmount, inv.Currency), true)
+	totalRow(inv.t("TOTAL ")+inv.Currency+":", fmtMoney(inv.TotalAmount, inv.Currency), true)
 	pdf.SetY(pdf.GetY() + 5)
 }
 
@@ -489,14 +493,14 @@ func renderBankDetails(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		pdf.CellFormat(30, 5, latin1(label), "", 0, "L", false, 0, "")
 		pdf.CellFormat(150, 5, latin1(value), "", 1, "L", false, 0, "")
 	}
-	line("Banque :", c.BankName)
-	line("Adresse :", c.BankAddress)
-	line("BIC/SWIFT :", c.BankBIC)
+	line(inv.t("Banque :"), c.BankName)
+	line(inv.t("Adresse :"), c.BankAddress)
+	line(inv.t("BIC/SWIFT :"), c.BankBIC)
 	iban := c.IBAN
 	if c.QRIBAN != "" {
 		iban = c.QRIBAN
 	}
-	line("IBAN :", formatIBAN(iban))
+	line(inv.t("IBAN :"), formatIBAN(iban))
 	line(inv.t("Bénéficiaire :"), c.Name)
 
 	pdf.SetY(pdf.GetY() + 3)

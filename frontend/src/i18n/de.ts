@@ -9,7 +9,7 @@ import type { Catalogue } from './index'
 
 export const de: Catalogue = {
   'nav.tableauDeBord': 'Übersicht',
-  'nav.facturation': 'Fakturierung',
+  'nav.facturation': 'Verkauf',
   'nav.achats': 'Einkauf',
   'nav.contacts': 'Kontakte',
   'nav.journal': 'Journal',
@@ -956,7 +956,7 @@ export const de: Catalogue = {
   'rs.certificatAide': 'Lassen Sie sie leer für ein selbstsigniertes Zertifikat. Werden sie angegeben, entfällt die Browserwarnung, sofern das Zertifikat von einer Stelle stammt, die Ihre Arbeitsplätze anerkennen.',
   'rs.reglagesRefuses': 'Einstellungen abgelehnt. Prüfen Sie die Zertifikatspfade — es wurde nichts verändert.',
   'rs.redemarrerMaintenant': 'Jetzt neu starten',
-  'rs.pasAppliques': 'Einstellungen gespeichert, aber noch nicht wirksam: Lauschadresse und Verschlüsselung werden einmalig beim Start gewählt. Starten Sie LedgerAlps neu, damit sie greifen.',
+  'rs.pasAppliques': 'Einstellungen gespeichert, aber noch nicht wirksam: Netzwerkadresse und Verschlüsselung werden einmalig beim Start gewählt. Starten Sie LedgerAlps neu, damit sie greifen.',
   'rs.serviEnHttps': 'Die Anwendung wird über https ausgeliefert, und Ihr Browser zeigt beim ersten Besuch eine Zertifikatswarnung.',
   'rs.redemarrageEnCours': 'Neustart läuft … die Seite öffnet sich unter der neuen Adresse.',
   'rs.avertissementAttendu': 'Ihr Browser zeigt eine Zertifikatswarnung: das ist bei einem selbstsignierten Zertifikat zu erwarten.',
@@ -1097,7 +1097,7 @@ export const de: Catalogue = {
   'mt.donneesPersonnelles': 'Personendaten',
   'mt.donneesPersonnellesHint': 'Aufbewahrung und Anonymisierung (DSG)',
   'mt.securiteReseau': 'Sicherheit und Netzwerk',
-  'mt.securiteReseauHint': 'Signaturschlüssel und Lauschadresse',
+  'mt.securiteReseauHint': 'Signaturschlüssel und Netzwerkadresse',
   'pf.insuffisante': 'Ungenügend',
   'pf.acceptable': 'Annehmbar',
   'pf.solide': 'Solide',
@@ -1146,4 +1146,31 @@ export const de: Catalogue = {
 
   // ─── Interface — complément ───
   'ui.fichierIllisible': 'Die Datei kann nicht gelesen werden',
+
+  // ─── Vérification d'attestation ───
+  'vf.titre': 'Eine Bescheinigung prüfen',
+  'vf.introduction': 'Legen Sie eine Integritätsbescheinigung ab — Ihre eigene oder die, die Ihnen ein Kunde übergeben hat. LedgerAlps prüft, ob sie unverändert ist, und vergleicht ihren Hashwert mit dem, den diese Bücher an derselben Sequenznummer tragen.',
+  'vf.choisirFichier': 'Bescheinigung wählen (.json)',
+  'vf.verification': 'Prüfung …',
+  'vf.echec': 'Die Bescheinigung konnte nicht geprüft werden.',
+  'vf.emiseLe': 'Ausgestellt am {date} von {auteur}',
+  'vf.sceau': 'Siegel des Dokuments',
+  'vf.sceauOk': 'unversehrt',
+  'vf.sceauKo': 'gebrochen',
+  'vf.correspondance': 'Hashwert bei Glied {n}',
+  'vf.correspondanceOk': 'identisch',
+  'vf.correspondanceKo': 'abweichend',
+  'vf.chaine': 'Kette der Bücher heute',
+  'vf.chaineOk': 'unversehrt',
+  'vf.chaineKo': 'gebrochen',
+  'vf.ecrituresDepuis': 'Seither wurden {n} Buchung(en) verbucht. Das ist normal: eine Bescheinigung deckt einen Zeitpunkt ab, nicht die Zukunft.',
+  'vf.commentLaFiduciaireVerifie': 'Was Ihr Treuhänder ohne LedgerAlps prüfen kann',
+  'vf.explicationFiduciaire': 'Das Siegel lässt sich mit den Werkzeugen jedes Rechners nachrechnen — die Anleitung steht in der Bescheinigung, Abschnitt «how_to_verify». Der Vergleich der Hashwerte verlangt hingegen die Bücher: er findet hier statt, vor Ihren Augen. Den Wert der Prüfung macht die Kopie aus, die der Treuhänder AUFBEWAHRT: stimmt sie in sechs Monaten noch, wurde nichts von dem, was sie abdeckt, zwischenzeitlich umgeschrieben.',
+
+  // ─── Mot de passe — complément ───
+  'mdp.echecChangement': 'Das Kennwort konnte nicht geändert werden.',
+
+  // ─── Vérification d'attestation — contrôle sans objet ───
+  'vf.correspondanceRien': 'Verglichener Hashwert',
+  'vf.correspondanceSansObjet': 'keine Buchung abzudecken',
 }

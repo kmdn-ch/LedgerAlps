@@ -231,6 +231,11 @@ export function NewInvoicePage() {
   const create = useMutation({
     mutationFn: (data: FormData) => invoicesApi.create(data),
     onSuccess: (res) => {
+      // Désarmer AVANT de naviguer : la facture est enregistrée, et le garde
+      // annoncerait sinon que la saisie va être perdue — un message faux, sur
+      // lequel on clique « Annuler », ce qui bloque sur un écran dont le
+      // bouton principal semble ne rien faire.
+      guard.désarmer()
       qc.invalidateQueries({ queryKey: ['invoices'] })
       navigate(`/invoices/${res.data.id}`)
     },
