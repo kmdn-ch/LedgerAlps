@@ -365,6 +365,7 @@ export function PurchasesPage() {
     <div>
       <PageHeader
         title={t('nav.achats')}
+        aide={t('aide.achats')}
         subtitle={t('ach.sousTitre')}
         actions={
           // Déposer un fichier EST une écriture : le document est transmis au

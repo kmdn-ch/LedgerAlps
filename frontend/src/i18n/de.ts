@@ -1173,4 +1173,38 @@ export const de: Catalogue = {
   // ─── Vérification d'attestation — contrôle sans objet ───
   'vf.correspondanceRien': 'Verglichener Hashwert',
   'vf.correspondanceSansObjet': 'keine Buchung abzudecken',
+
+  // ─── Mise en route et bulles d'aide ───
+  'mr.titre': 'Erste Schritte',
+  'mr.progression': '{faites} von {total}',
+  'mr.intro': 'Was noch einzurichten ist, damit eine Schweizer Rechnung am Schalter angenommen wird. Jede Zeile führt direkt zum betreffenden Feld.',
+  'mr.ilManque': 'Es fehlt: {champs}',
+  'mr.identiteTitre': 'Ihre Firma und Ihre Adresse',
+  'mr.identiteAide': 'Die QR-Rechnung verlangt eine strukturierte Adresse — Strasse, PLZ, Ort und Land getrennt (SIX IG v2.4 §4.2.2).',
+  'mr.ideTitre': 'Ihre UID-Nummer',
+  'mr.ideAide': 'CHE-123.456.789. Sind Sie mehrwertsteuerpflichtig, erfassen Sie auch Ihre MWST-Nummer: ohne sie stellt LedgerAlps keine Rechnung mit MWST aus (MWSTG Art. 26 Abs. 2).',
+  'mr.ibanTitre': 'Ihre Zahlungs-IBAN',
+  'mr.ibanAide': 'Ohne IBAN erscheint das PDF ohne Einzahlungsschein. Eine QR-IBAN gibt Ihnen zusätzlich eine von Ihrer Bank geprüfte Referenz.',
+  'mr.clientTitre': 'Ihr erster Kunde',
+  'mr.clientAide': 'Eine Rechnung nennt ihren Empfänger, und dessen Identität wird bei der Ausstellung festgeschrieben (MWSTG Art. 26 Abs. 2).',
+  'mr.factureTitre': 'Ihre erste Rechnung',
+  'mr.factureAide': 'Das ist der Zweck des Ganzen. Ein Entwurf verpflichtet zu nichts: er zählt weder zur Bilanz noch zur Erfolgsrechnung.',
+  'mr.champRaisonSociale': 'die Firma',
+  'mr.champNPA': 'die Postleitzahl',
+  'mr.champLocalite': 'der Ort',
+  'mr.champPays': 'das Land',
+  'mr.ideAbsent': 'die UID-Nummer',
+  'mr.ideFormat': 'eine UID im Format CHE-123.456.789',
+  'mr.ibanAbsent': 'die IBAN',
+  'mr.ibanInvalide': 'eine IBAN mit korrekter Prüfziffer',
+  'aide.aQuoiSertCetEcran': 'Wozu dieser Bildschirm dient',
+
+  // ─── Bulles d'aide — un écran, une phrase ───
+  'aide.tableauDeBord': 'Was Sie heute schulden und was man Ihnen schuldet. Offene Forderungen sind versandte, noch nicht eingegangene Rechnungen; der Verzug wird über die Fälligkeit berechnet, nicht über einen Status. Entwürfe zählen nirgends.',
+  'aide.ventes': 'Ihre Offerten, Rechnungen und Gutschriften. Ein Entwurf lässt sich frei ändern und löschen; ist die Rechnung einmal versandt, ist sie festgeschrieben und nur noch durch eine Gutschrift zu korrigieren (MWSTG Art. 27 Abs. 4).',
+  'aide.achats': 'Die Rechnungen Ihrer Lieferanten. Legen Sie das PDF ab: LedgerAlps liest den QR-Code und den Text, Sie müssen nur noch prüfen. Das Verbuchen trägt Aufwand und Vorsteuer in die Bücher ein — davon lebt die Ziffer 400 Ihrer MWST-Abrechnung.',
+  'aide.contacts': 'Ihre Kunden und Lieferanten. Die Adresse dient der QR-Rechnung, die sie strukturiert verlangt. Ein von einer Rechnung benutzter Kontakt lässt sich nicht löschen — der Beleg muss seinen Empfänger zehn Jahre lang nennen (OR Art. 958f); er wird anonymisiert (DSG Art. 6 Abs. 4).',
+  'aide.journal': 'Die Buchungen, der Reihe nach. Eine verbuchte Buchung ist durch einen verketteten Hashwert versiegelt und lässt sich nicht mehr ändern: korrigiert wird durch Storno. Ein Entwurf ist durch nichts versiegelt und zählt weder zur Bilanz noch zur Erfolgsrechnung.',
+  'aide.planComptable': 'Die Liste der Konten, in die die Beträge fliessen — 1000 die Kasse, 3200 die Verkäufe, 6500 der Aufwand. Im Alltag haben Sie hier nichts zu tun: LedgerAlps wählt die Konten beim Fakturieren selbst. Hier fügen Sie eines hinzu, wenn Ihr Treuhänder darum bittet.',
+  'aide.rapports': 'Die Unterlagen, die ein Treuhänder verlangt: Journal, Hauptbuch, Saldobilanz, als CSV für die Tabellenkalkulation. Hier legen Sie auch Ihren Bankauszug camt.053 ab, um Ihre Eingänge abzugleichen. Nur verbuchte Buchungen erscheinen darin.',
 }

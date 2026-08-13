@@ -1216,4 +1216,38 @@ export const fr = {
   // ─── Vérification d'attestation — contrôle sans objet ───
   'vf.correspondanceRien': 'Empreinte comparée',
   'vf.correspondanceSansObjet': 'aucune écriture à couvrir',
+
+  // ─── Mise en route et bulles d'aide ───
+  'mr.titre': 'Mise en route',
+  'mr.progression': '{faites} sur {total}',
+  'mr.intro': 'Ce qu’il reste à régler pour qu’une facture suisse soit acceptée au guichet. Chaque ligne mène droit au champ concerné.',
+  'mr.ilManque': 'Il manque : {champs}',
+  'mr.identiteTitre': 'Votre raison sociale et votre adresse',
+  'mr.identiteAide': 'La QR-facture impose une adresse structurée — rue, NPA, localité et pays séparés (SIX IG v2.4 §4.2.2).',
+  'mr.ideTitre': 'Votre numéro IDE',
+  'mr.ideAide': 'CHE-123.456.789. Si vous êtes assujetti à la TVA, saisissez aussi votre numéro TVA : sans lui, LedgerAlps refuse d’établir une facture portant de la TVA (LTVA art. 26 al. 2).',
+  'mr.ibanTitre': 'Votre IBAN de paiement',
+  'mr.ibanAide': 'Sans IBAN, le PDF sort sans bulletin de versement. Un QR-IBAN vous donne en plus une référence contrôlée par votre banque.',
+  'mr.clientTitre': 'Votre premier client',
+  'mr.clientAide': 'Une facture nomme son destinataire, et son identité est figée à l’émission (LTVA art. 26 al. 2).',
+  'mr.factureTitre': 'Votre première facture',
+  'mr.factureAide': 'C’est le geste pour lequel tout le reste existe. Un brouillon n’engage à rien : il ne compte ni à la balance, ni au bilan.',
+  'mr.champRaisonSociale': 'la raison sociale',
+  'mr.champNPA': 'le code postal',
+  'mr.champLocalite': 'la localité',
+  'mr.champPays': 'le pays',
+  'mr.ideAbsent': 'le numéro IDE',
+  'mr.ideFormat': 'un IDE au format CHE-123.456.789',
+  'mr.ibanAbsent': 'l’IBAN',
+  'mr.ibanInvalide': 'un IBAN dont la clé de contrôle est juste',
+  'aide.aQuoiSertCetEcran': 'À quoi sert cet écran',
+
+  // ─── Bulles d'aide — un écran, une phrase ───
+  'aide.tableauDeBord': 'Ce que vous devez à ce jour et ce qu’on vous doit. Les créances ouvertes sont les factures envoyées et pas encore encaissées ; le retard se calcule sur l’échéance, pas sur un statut. Les brouillons ne comptent nulle part.',
+  'aide.ventes': 'Vos devis, factures et notes de crédit. Un brouillon se modifie et se supprime librement ; une fois la facture envoyée, elle est figée et ne se corrige plus que par une note de crédit (LTVA art. 27 al. 4).',
+  'aide.achats': 'Les factures de vos fournisseurs. Déposez le PDF : LedgerAlps y lit le QR et le texte, et vous n’avez plus qu’à vérifier. Comptabiliser une facture inscrit la charge et l’impôt préalable dans les livres — c’est ce qui alimente le chiffre 400 de votre décompte TVA.',
+  'aide.contacts': 'Vos clients et vos fournisseurs. L’adresse sert à la QR-facture, qui l’exige structurée. Un contact utilisé par une facture ne se supprime pas — la pièce doit nommer son destinataire pendant dix ans (CO art. 958f) ; il s’anonymise (nLPD art. 6 al. 4).',
+  'aide.journal': 'Les écritures comptables, dans l’ordre. Une écriture comptabilisée est scellée par une empreinte chaînée et ne se modifie plus : on la corrige par contrepassation. Un brouillon, lui, n’est scellé par rien et ne compte ni à la balance, ni au bilan.',
+  'aide.planComptable': 'La liste des comptes où vont les montants — 1000 la caisse, 3200 les ventes, 6500 les frais. Vous n’avez rien à y faire au quotidien : LedgerAlps choisit les comptes tout seul quand vous facturez. C’est ici que vous en ajoutez un si votre fiduciaire vous le demande.',
+  'aide.rapports': 'Les documents que réclame une fiduciaire : journal, grand livre, balance, en CSV ouvrable dans un tableur. C’est aussi ici que vous déposez votre relevé bancaire camt.053 pour pointer vos encaissements. Seules les écritures comptabilisées y figurent.',
 } as const

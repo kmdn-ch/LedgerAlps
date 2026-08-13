@@ -3,19 +3,32 @@
 import { type ReactNode } from 'react'
 import { Loader2, AlertTriangle } from 'lucide-react'
 import { cn } from '@/utils'
+import { InfoBulle } from './InfoBulle'
 
 // ─── PageHeader ───────────────────────────────────────────────────────────────
 interface PageHeaderProps {
   title: string
   subtitle?: string
   actions?: ReactNode
+  /**
+   * L'aide de l'écran, derrière un « i » collé au titre.
+   *
+   * Elle vit ici et non dans chaque page parce qu'un titre est le seul endroit
+   * que tout le monde regarde. Une aide posée ailleurs sur chaque écran serait
+   * à chercher, donc jamais trouvée.
+   */
+  aide?: ReactNode
 }
 
-export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, actions, aide }: PageHeaderProps) {
   return (
     <div className="flex items-start justify-between mb-6">
       <div>
-        <h1 className="text-2xl font-display font-700 text-alpine-900">{title}</h1>
+        <h1 className="text-2xl font-display font-700 text-alpine-900
+                       flex items-center gap-2">
+          {title}
+          {aide && <InfoBulle>{aide}</InfoBulle>}
+        </h1>
         {subtitle && <p className="text-sm text-alpine-500 mt-1">{subtitle}</p>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
@@ -110,6 +123,7 @@ export function SectionTitle({ children }: { children: ReactNode }) {
 
 export { PDFPreview } from './PDFPreview'
 export { ConfirmDialog } from './ConfirmDialog'
+export { InfoBulle } from './InfoBulle'
 
 // Saisie de phrase de passe, robustesse évaluée pendant la frappe. Partagée
 // parce que LedgerAlps en manipule deux, qui ne protègent pas la même chose :

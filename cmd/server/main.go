@@ -512,6 +512,14 @@ func main() {
 	api.POST("/users/:id/reset-password", authorizer.Require(authz.PermAdmin), uh.ResetPassword)
 	api.DELETE("/users/:id/mfa", authorizer.Require(authz.PermAdmin), uh.RemoveMFA)
 
+	// La liste de mise en route. Lecture seule, donc PermRead — et le
+	// compte en lecture seule qui la reçoit ne la voit pas s'afficher : aucune
+	// de ses étapes ne lui est ouverte, et une liste de choses interdites
+	// n'aide personne. Le refus, lui, reste où il doit être : sur les routes
+	// d'écriture vers lesquelles les étapes conduisent.
+	oh := handlers.NewOnboardingHandler(database, cfg.UsePostgres())
+	api.GET("/onboarding", authorizer.Require(authz.PermRead), oh.GetOnboarding)
+
 	api.GET("/settings/company", sh.GetCompany)
 	api.PUT("/settings/company", authorizer.Require(authz.PermManage), sh.PutCompany)
 	api.POST("/settings/logo", sh.UploadLogo)

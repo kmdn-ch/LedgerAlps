@@ -85,6 +85,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 13b | Lecture d'une facture fournisseur (QR + texte) | ✅ | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
 | 13c | Traçabilité : couverture du journal, attestation automatique **et vérifiable** | 🔎 livré | [↓](#13c--traçabilité) |
 | 13d | Retirer une facture de la liste des paiements | 🔎 livré | [↓](#13d--vider-la-liste-des-paiements) |
+| 15 | Trouver ses marques : mise en route et aide par écran | 🔎 livré | [↓](#15--trouver-ses-marques) |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
 ---
@@ -804,6 +805,42 @@ Par lot ou une par une, **réservé à l'administrateur et au comptable**
 est supprimé, une facture comptabilisée est extournée, une facture déjà réglée
 est refusée — l'argent est parti. Neuf tests portent sur les **soldes**, pas sur
 le statut : c'est le seul endroit où le défaut se voyait.
+
+### 15 — Trouver ses marques
+
+**Livré.** Une installation neuve s'ouvrait sur quatre compteurs à zéro et un
+graphique vide. Rien n'annonçait que sans adresse structurée le bulletin QR
+serait refusé au guichet, ni que sans IBAN le PDF sortirait sans section de
+paiement. **L'information existait** — le contrôle de cohérence la produit
+depuis longtemps — mais dans Paramètres → Maintenance → Diagnostic, à trois
+clics d'un endroit où un débutant ne va jamais. Ce n'était pas un manque de
+fonction, c'était un manque de placement.
+
+**Une liste de mise en route** ouvre le tableau de bord tant qu'elle n'est pas
+faite : raison sociale et adresse, numéro IDE, IBAN, premier client, première
+facture. Chaque ligne mène **au champ** — `/settings#banking` ouvre l'onglet
+Banque — et ce qui bloque est nommé : « il manque le code postal, la localité ».
+
+**Un IBAN faux ne coche pas.** Il est pire qu'absent : il produit un bulletin
+d'apparence normale que la banque refusera. Les règles sont appliquées côté
+serveur (SIX IG v2.4 §4.2.2, clé ISO 13616), là où elles vivent déjà — les
+recopier dans le navigateur aurait garanti qu'elles divergent, comme la
+recherche IDE écrite deux fois et corrigée une seule.
+
+**Rien n'est mémorisé.** L'état se relit des données à chaque ouverture :
+effacer l'IBAN décoche sa case et fait revenir la liste. Un assistant aurait
+retenu « fait » et menti à partir de là. La liste ne s'affiche pas pour un
+compte en lecture seule, qui ne peut accomplir aucune de ses étapes.
+
+**Un « i » à côté du titre de chaque écran** porte une phrase sur ce que
+l'écran fait, et sur ce qu'il ne fait pas là où la confusion coûte cher : qu'un
+brouillon ne compte ni à la balance ni au bilan, qu'un contact facturé
+s'anonymise au lieu de se supprimer (CO art. 958f), qu'on n'a rien à faire dans
+le plan comptable au quotidien. Elle s'ouvre au survol, s'épingle au clic, se
+ferme par Échap — au doigt comme au clavier, il n'y a pas de survol.
+
+**Écarté pour l'instant** : regrouper le menu en « Mon activité » et « Ma
+comptabilité ». Cela déplace de la navigation apprise et se décide à part.
 
 ### 14 — Modules métier
 

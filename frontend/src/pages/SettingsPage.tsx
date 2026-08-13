@@ -1,6 +1,7 @@
 // LedgerAlps — Paramètres de la société
 
 import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -71,7 +72,15 @@ export function SettingsPage() {
   const t = useT()
   const tv = useTv()
   const peutEcrire = useCanWrite()
-  const [tab,   setTab]   = useState('identity')
+  // L'onglet ouvert peut être désigné par l'adresse : `/settings#banking`.
+  //
+  // Sans cela, « Votre IBAN de paiement » dans la liste de mise en route
+  // conduisait à Paramètres… sur l'onglet Identité, à charge pour l'utilisateur
+  // de deviner lequel des sept portait le champ. Envoyer quelqu'un au bon écran
+  // et le laisser chercher dedans, c'est ne pas l'avoir envoyé.
+  const ancre = useLocation().hash.replace('#', '')
+  const [tab,   setTab]   = useState(
+    () => TABS.some(t => t.key === ancre) ? ancre : 'identity')
   const [saved, setSaved] = useState(false)
   const qc = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -134,6 +143,12 @@ export function SettingsPage() {
     mutationFn: (data: FormData) => settingsApi.putCompany(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['company-settings'] })
+      // La liste de mise en route relit ces mêmes champs. Sans cette ligne,
+      // quelqu'un saisit sa localité, revient au tableau de bord et y lit
+      // encore « il manque la localité » pendant trente secondes — le temps
+      // que le cache expire. Une liste qui ment sur ce qu'on vient de faire
+      // est pire que pas de liste.
+      qc.invalidateQueries({ queryKey: ['onboarding'] })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     },

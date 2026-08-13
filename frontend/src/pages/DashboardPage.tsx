@@ -13,6 +13,7 @@ import {
 import { invoicesApi, statsApi } from '@/api/client'
 import { PageHeader, StatCard, StatusBadge, LoadingSpinner } from '@/components/ui'
 import { RevenuePanel } from '@/components/dashboard/RevenuePanel'
+import { OnboardingPanel } from '@/components/dashboard/OnboardingPanel'
 import { useCanWrite } from '@/hooks/usePermissions'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
 import { useT } from '@/i18n/useT'
@@ -67,6 +68,7 @@ export function DashboardPage() {
     <div>
       <PageHeader
         title={t('nav.tableauDeBord')}
+        aide={t('aide.tableauDeBord')}
         subtitle={t('tb.aujourdhui', { date: formatDate(new Date().toISOString()) })}
         actions={peutEcrire ? (
           <Link to="/invoices/new" className="btn-primary">
@@ -75,6 +77,11 @@ export function DashboardPage() {
           </Link>
         ) : undefined}
       />
+
+      {/* La mise en route passe AVANT les indicateurs : tant qu'elle n'est pas
+          faite, ces quatre compteurs à zéro n'apprennent rien, et ce qui manque
+          empêche une facture d'être acceptée. Elle disparaît d'elle-même. */}
+      <OnboardingPanel />
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

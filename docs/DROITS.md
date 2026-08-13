@@ -24,6 +24,18 @@ Légende : ✅ autorisé · 👁 lecture seule · ⛔ refusé (403)
 | Action | Lecture seule | Comptable | Admin |
 |---|:---:|:---:|:---:|
 | Voir les indicateurs, le chiffre d'affaires, les factures récentes | 👁 | ✅ | ✅ |
+| Voir la liste de **mise en route** | ⛔ | ✅ | ✅ |
+| Lire l'aide d'un écran (le « i » du titre) | ✅ | ✅ | ✅ |
+
+La **mise en route** n'est pas cachée par prudence : ses cinq étapes se règlent
+toutes dans les paramètres ou par une écriture, et un compte en lecture seule
+n'en accomplirait aucune. Lui présenter une liste de choses à faire dont il est
+écarté ne l'aide pas, cela lui reproche son rôle. La route `GET /onboarding`,
+elle, reste ouverte à tout compte authentifié : elle ne lit que des états.
+
+L'**aide d'un écran**, à l'inverse, est ouverte à tous. Comprendre ce qu'on
+regarde n'est pas un privilège, et une fiduciaire à qui l'on ouvre les livres en
+a autant besoin que le propriétaire.
 
 Les *clients actifs* ne comptent que les contacts **actifs**. Un contact ne se
 désactive plus à la main : il s'**anonymise**, ce qui l'écarte des listes et

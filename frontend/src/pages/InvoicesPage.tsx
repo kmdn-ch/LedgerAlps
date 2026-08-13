@@ -108,6 +108,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
 
       <PageHeader
         title={t('nav.facturation')}
+        aide={t('aide.ventes')}
         subtitle={pluriel(invoices.length,
           t('fact.unDocument', { n: invoices.length }),
           t('fact.desDocuments', { n: invoices.length }))}

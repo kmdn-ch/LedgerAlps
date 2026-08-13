@@ -1172,4 +1172,38 @@ export const en: Catalogue = {
   // ─── Vérification d'attestation — contrôle sans objet ───
   'vf.correspondanceRien': 'Hash compared',
   'vf.correspondanceSansObjet': 'no entry to cover',
+
+  // ─── Mise en route et bulles d'aide ───
+  'mr.titre': 'Getting started',
+  'mr.progression': '{faites} of {total}',
+  'mr.intro': 'What is left to set up so that a Swiss invoice is accepted at the counter. Each line leads straight to the field concerned.',
+  'mr.ilManque': 'Missing: {champs}',
+  'mr.identiteTitre': 'Your company name and address',
+  'mr.identiteAide': 'The QR-bill requires a structured address — street, postcode, town and country kept apart (SIX IG v2.4 §4.2.2).',
+  'mr.ideTitre': 'Your UID number',
+  'mr.ideAide': 'CHE-123.456.789. If you are liable for VAT, enter your VAT number as well: without it LedgerAlps refuses to issue an invoice carrying VAT (VAT Act art. 26 para. 2).',
+  'mr.ibanTitre': 'Your payment IBAN',
+  'mr.ibanAide': 'Without an IBAN the PDF comes out with no payment part. A QR-IBAN also gives you a reference your bank checks.',
+  'mr.clientTitre': 'Your first customer',
+  'mr.clientAide': 'An invoice names its recipient, and that identity is frozen when it is issued (VAT Act art. 26 para. 2).',
+  'mr.factureTitre': 'Your first invoice',
+  'mr.factureAide': 'This is what everything else is for. A draft commits you to nothing: it counts towards neither the balance sheet nor the income statement.',
+  'mr.champRaisonSociale': 'the company name',
+  'mr.champNPA': 'the postcode',
+  'mr.champLocalite': 'the town',
+  'mr.champPays': 'the country',
+  'mr.ideAbsent': 'the UID number',
+  'mr.ideFormat': 'a UID in the CHE-123.456.789 format',
+  'mr.ibanAbsent': 'the IBAN',
+  'mr.ibanInvalide': 'an IBAN whose check digits are right',
+  'aide.aQuoiSertCetEcran': 'What this screen is for',
+
+  // ─── Bulles d'aide — un écran, une phrase ───
+  'aide.tableauDeBord': 'What you owe today and what is owed to you. Open receivables are invoices sent and not yet paid; lateness is worked out from the due date, not from a status. Drafts count nowhere.',
+  'aide.ventes': 'Your quotes, invoices and credit notes. A draft can be changed and deleted freely; once the invoice is sent it is frozen and can only be corrected by a credit note (VAT Act art. 27 para. 4).',
+  'aide.achats': 'Your suppliers’ invoices. Drop the PDF in: LedgerAlps reads its QR code and its text, leaving you only the checking. Posting one enters the expense and the input tax in the books — that is what feeds line 400 of your VAT return.',
+  'aide.contacts': 'Your customers and suppliers. The address serves the QR-bill, which requires it structured. A contact used by an invoice cannot be deleted — the document must name its recipient for ten years (CO art. 958f); it is anonymised instead (FADP art. 6 para. 4).',
+  'aide.journal': 'The accounting entries, in order. A posted entry is sealed by a chained hash and can no longer be changed: you correct it by reversal. A draft is sealed by nothing and counts towards neither the trial balance nor the balance sheet.',
+  'aide.planComptable': 'The list of accounts the amounts go to — 1000 cash, 3200 sales, 6500 expenses. You have nothing to do here day to day: LedgerAlps picks the accounts itself when you invoice. This is where you add one if your accountant asks for it.',
+  'aide.rapports': 'The documents an accountant asks for: journal, general ledger, trial balance, as CSV you can open in a spreadsheet. This is also where you drop your camt.053 bank statement to tick off your receipts. Only posted entries appear in them.',
 }

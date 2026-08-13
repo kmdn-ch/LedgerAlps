@@ -78,6 +78,7 @@ export function ReportsPage() {
     <div>
       <PageHeader
         title={t('nav.rapports')}
+        aide={t('aide.rapports')}
         subtitle={t('rp.sousTitre')}
       />
 

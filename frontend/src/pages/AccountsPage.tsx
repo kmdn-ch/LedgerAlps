@@ -87,6 +87,7 @@ export function AccountsPage() {
     <div>
       <PageHeader
         title={t('nav.planComptable')}
+        aide={t('aide.planComptable')}
         subtitle={t('ac.sousTitre')}
       />
 

@@ -237,6 +237,13 @@ export const maintenanceApi = {
   putServerSettings: (data: unknown) => api.put('/settings/server', data),
 }
 
+// La mise en route — ce qu'il reste à régler avant qu'une facture tienne
+// debout. Le serveur applique les règles (SIX IG v2.4, ISO 13616) et ne renvoie
+// que des états : les phrases sont au catalogue.
+export const onboardingApi = {
+  get: () => api.get('/onboarding'),
+}
+
 // Piste d'audit — la chaîne d'empreintes du CO art. 957a.
 export const auditApi = {
   list: (params?: { limit?: number; offset?: number; order?: 'asc' | 'desc'; from?: string; to?: string }) =>

@@ -32,6 +32,7 @@ export function ContactsPage() {
     <div>
       <PageHeader
         title={t('nav.contacts')}
+        aide={t('aide.contacts')}
         subtitle={`${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`}
         actions={
           peutEcrire ? (

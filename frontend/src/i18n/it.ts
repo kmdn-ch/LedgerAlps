@@ -1172,4 +1172,38 @@ export const it: Catalogue = {
   // ─── Vérification d'attestation — contrôle sans objet ───
   'vf.correspondanceRien': 'Impronta confrontata',
   'vf.correspondanceSansObjet': 'nessuna registrazione da coprire',
+
+  // ─── Mise en route et bulles d'aide ───
+  'mr.titre': 'Primi passi',
+  'mr.progression': '{faites} su {total}',
+  'mr.intro': 'Ciò che resta da impostare perché una fattura svizzera sia accettata allo sportello. Ogni riga porta direttamente al campo interessato.',
+  'mr.ilManque': 'Manca: {champs}',
+  'mr.identiteTitre': 'La vostra ragione sociale e il vostro indirizzo',
+  'mr.identiteAide': 'La QR-fattura impone un indirizzo strutturato — via, NPA, località e paese separati (SIX IG v2.4 §4.2.2).',
+  'mr.ideTitre': 'Il vostro numero IDI',
+  'mr.ideAide': 'CHE-123.456.789. Se siete assoggettati all’IVA, inserite anche il vostro numero IVA: senza di esso LedgerAlps rifiuta di emettere una fattura con IVA (LIVA art. 26 cpv. 2).',
+  'mr.ibanTitre': 'Il vostro IBAN di pagamento',
+  'mr.ibanAide': 'Senza IBAN il PDF esce senza polizza di versamento. Un QR-IBAN vi dà inoltre un riferimento controllato dalla vostra banca.',
+  'mr.clientTitre': 'Il vostro primo cliente',
+  'mr.clientAide': 'Una fattura nomina il suo destinatario, e la sua identità è fissata all’emissione (LIVA art. 26 cpv. 2).',
+  'mr.factureTitre': 'La vostra prima fattura',
+  'mr.factureAide': 'È il gesto per cui tutto il resto esiste. Una bozza non impegna a nulla: non conta né a bilancio né a conto economico.',
+  'mr.champRaisonSociale': 'la ragione sociale',
+  'mr.champNPA': 'il codice postale',
+  'mr.champLocalite': 'la località',
+  'mr.champPays': 'il paese',
+  'mr.ideAbsent': 'il numero IDI',
+  'mr.ideFormat': 'un IDI nel formato CHE-123.456.789',
+  'mr.ibanAbsent': 'l’IBAN',
+  'mr.ibanInvalide': 'un IBAN con cifra di controllo corretta',
+  'aide.aQuoiSertCetEcran': 'A cosa serve questa schermata',
+
+  // ─── Bulles d'aide — un écran, une phrase ───
+  'aide.tableauDeBord': 'Ciò che dovete a oggi e ciò che vi è dovuto. I crediti aperti sono le fatture inviate e non ancora incassate; il ritardo si calcola sulla scadenza, non su uno stato. Le bozze non contano da nessuna parte.',
+  'aide.ventes': 'I vostri preventivi, fatture e note di credito. Una bozza si modifica ed elimina liberamente; una volta inviata, la fattura è fissata e si corregge solo con una nota di credito (LIVA art. 27 cpv. 4).',
+  'aide.achats': 'Le fatture dei vostri fornitori. Depositate il PDF: LedgerAlps ne legge il QR e il testo, a voi resta la verifica. Contabilizzare iscrive il costo e l’imposta precedente nei libri — è ciò che alimenta la cifra 400 del vostro rendiconto IVA.',
+  'aide.contacts': 'I vostri clienti e fornitori. L’indirizzo serve alla QR-fattura, che lo esige strutturato. Un contatto usato da una fattura non si elimina — il documento deve nominare il suo destinatario per dieci anni (CO art. 958f); si anonimizza (LPD art. 6 cpv. 4).',
+  'aide.journal': 'Le registrazioni contabili, in ordine. Una registrazione contabilizzata è sigillata da un’impronta concatenata e non si modifica più: si corregge per storno. Una bozza non è sigillata da nulla e non conta né a bilancio né a conto economico.',
+  'aide.planComptable': 'L’elenco dei conti dove vanno gli importi — 1000 la cassa, 3200 le vendite, 6500 i costi. Nel quotidiano non avete nulla da farci: LedgerAlps sceglie i conti da solo quando fatturate. Qui ne aggiungete uno se il vostro fiduciario ve lo chiede.',
+  'aide.rapports': 'I documenti che un fiduciario reclama: giornale, libro mastro, bilancio di verifica, in CSV apribile in un foglio di calcolo. Qui depositate anche il vostro estratto bancario camt.053 per spuntare gli incassi. Vi figurano solo le registrazioni contabilizzate.',
 }

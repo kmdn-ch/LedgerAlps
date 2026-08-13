@@ -9,6 +9,20 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Ajouté
 
+- **Une liste de mise en route sur le tableau de bord.** Une installation neuve s'ouvrait sur quatre compteurs à zéro et un graphique vide : rien n'annonçait que sans adresse structurée le bulletin QR serait refusé au guichet, ni que sans IBAN le PDF sortirait sans section de paiement.
+
+  **L'information existait déjà** — le contrôle de cohérence la produit — mais dans Paramètres → Maintenance → Diagnostic, à trois clics d'un endroit où un débutant ne va jamais. Ce n'était pas un manque de fonction, c'était un manque de placement.
+
+  Cinq étapes : raison sociale et adresse, numéro IDE, IBAN, premier client, première facture. Chaque ligne mène **au champ**, pas à l'écran : `/settings#banking` ouvre l'onglet Banque, et les onglets de Paramètres sont désormais atteignables par ancre.
+
+  **Ce qui bloque est nommé** : « il manque le code postal, la localité », pas « quelque chose est incomplet ». Un IBAN présent mais dont la clé de contrôle est fausse ne coche pas la case — il est pire qu'absent, puisqu'il produit un bulletin d'apparence normale que la banque refusera.
+
+  **Rien n'est mémorisé.** L'état se relit des données à chaque ouverture : effacer l'IBAN décoche sa case et fait revenir la liste. Un assistant aurait retenu « fait » et menti à partir de là. La liste disparaît d'elle-même quand les cinq étapes sont faites, et ne s'affiche pas pour un compte en lecture seule — qui ne peut en accomplir aucune.
+
+- **Un « i » à côté du titre de chaque écran.** Une phrase sous chaque titre aide le premier jour et encombre les mille suivants. La bulle s'ouvre au survol, s'épingle au clic, se ferme par Échap ou un clic ailleurs — le clic n'est pas un luxe : au doigt comme au clavier, il n'y a pas de survol.
+
+  Sept écrans, et le texte dit ce que l'écran fait **et ce qu'il ne fait pas** là où la confusion est fréquente : qu'un brouillon ne compte ni à la balance ni au bilan, qu'un contact facturé s'anonymise au lieu de se supprimer, qu'on n'a rien à faire dans le plan comptable au quotidien.
+
 - **Une attestation d'intégrité se vérifie maintenant** — Paramètres → Maintenance → Conformité → « Vérifier une attestation ». Elle était produite, scellée, remise à un tiers… qui n'avait aucun moyen de la contrôler. Un document invérifiable ne vaut pas mieux qu'une affirmation orale.
 
   **Trois contrôles, de valeur inégale, et l'écran le dit.** Le SCEAU détecte un fichier retouché à la main, rien de plus : qui a le logiciel recalcule l'empreinte. La CORRESPONDANCE est celle qui compte — l'empreinte de tête de l'attestation est comparée à celle que portent les livres aujourd'hui, au même maillon. L'ÉTAT ACTUEL reparcourt toute la chaîne.

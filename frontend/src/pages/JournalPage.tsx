@@ -200,6 +200,7 @@ export function JournalPage() {
     <div>
       <PageHeader
         title={t('nav.journal')}
+        aide={t('aide.journal')}
         subtitle={t('jr.sousTitre')}
         actions={
           peutEcrire ? (

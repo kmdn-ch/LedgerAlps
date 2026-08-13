@@ -422,6 +422,7 @@ jusqu'à réponse avant de recharger la page.
 
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
+| GET | `/onboarding` | auth | Mise en route : les cinq étapes sans lesquelles une facture suisse ne tient pas, et ce qui bloque chacune. Ne rend que des **états** et des noms de champs — les phrases sont au catalogue du frontend |
 | GET | `/maintenance/integrity` | **admin** | Contrôle de cohérence des données |
 | GET | `/maintenance/health` | **admin** | État du système, sauvegardes, exposition réseau |
 | GET | `/settings/server` | **admin** | Réglages réseau en vigueur |
@@ -613,6 +614,7 @@ s'écrit dans `<Cd>`.
 | GET | `/audit-logs/verify-chain` | **admin** | Vérifier **toute** la chaîne : empreintes, chaînage, continuité des numéros. `200` si intacte, `409` avec le rapport sinon |
 | GET | `/audit-logs/attestation` | **admin** | Attestation d'intégrité (Olico art. 9), en pièce jointe JSON : état de la chaîne, empreinte de tête, périmètre, **et ses limites** |
 | GET | `/audit-logs/:id/verify` | **admin** | Vérifier une entrée isolée. Détecte une modification de contenu, **pas une suppression** — voir la note ci-dessous |
+| POST | `/audit-logs/attestation/verify` | **admin** | Vérifier une attestation qu'on nous présente — la sienne, ou celle qu'un client a remise. Le fichier va dans un formulaire (`file`) ou dans le corps. Rend trois contrôles : le sceau du document, la correspondance de l'empreinte de tête avec les livres au même numéro de séquence, et l'état actuel de la chaîne |
 | GET | `/compliance/advisories` | auth | Avis de conformité — voir [compliance](../compliance/README.md) |
 | GET | `/security-events` | **admin** | Verrouillages de connexion (contient des adresses IP — nLPD) |
 | GET | `/exports/legal-archive` | auth | Archive ZIP 10 ans avec manifeste (CO art. 958f). Contient le JSON **et** un dossier `csv/` — export de réversibilité ouvrable dans un tableur, avec les lignes imbriquées extraites dans leurs propres fichiers |

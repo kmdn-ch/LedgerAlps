@@ -40,6 +40,17 @@ var httpClient = &http.Client{Timeout: 10 * time.Second}
 // reCHE matches the Swiss CHE format with or without dots.
 var reCHE = regexp.MustCompile(`(?i)^CHE[-.]?(\d{3})\.?(\d{3})\.?(\d{3})$`)
 
+// ValidFormat reports whether s looks like a CHE number, without asking the
+// registry anything.
+//
+// The getting-started checklist needs exactly this and nothing more: it runs on
+// every dashboard load, and it must not depend on a network LedgerAlps is not
+// supposed to need. Callers that want to know whether the company actually
+// EXISTS still go through Lookup.
+func ValidFormat(s string) bool {
+	return reCHE.MatchString(strings.TrimSpace(s))
+}
+
 var (
 	// ErrInvalidFormat means the input is not a CHE number at all.
 	ErrInvalidFormat = errors.New("format IDE invalide")

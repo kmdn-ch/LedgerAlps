@@ -152,6 +152,8 @@ func identiqueParNature(cle, valeur string) bool {
 		"Total":  true, "Type": true, "Documents ({n})": true,
 		"Document": true, "Action": true, "TOTAL": true,
 		"Solide": true, "Acceptable": true,
+		// Le français et l'italien élident tous deux devant la voyelle.
+		"l’IBAN": true,
 	}
 	return memeMot[valeur]
 }
