@@ -1,6 +1,6 @@
 // LedgerAlps — Formulaire de création de facture
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -185,6 +185,15 @@ export function NewInvoicePage() {
     queryFn:  () => settingsApi.getCompany().then(r => r.data),
   })
 
+  // Le taux proposé suit le statut TVA déclaré.
+  //
+  // Avant ce réglage, chaque ligne partait à 8.1 % et le refus tombait au
+  // moment d'établir la facture : le mur arrivait APRÈS le travail, et celui
+  // qui n'est pas assujetti ne pouvait le comprendre qu'en lisant la LTVA.
+  // Tant que la question n'a pas de réponse, on garde 8.1 % — c'est le cas le
+  // plus fréquent, et proposer 0 % à un assujetti lui ferait sous-facturer.
+  const tauxParDefaut = company?.vat_status === 'exempt' ? 0 : 8.1
+
   const today = new Date().toISOString().slice(0, 10)
   const defaultDueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
@@ -202,6 +211,17 @@ export function NewInvoicePage() {
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
+
+  // La fiche société arrive APRÈS le montage : `defaultValues` est déjà figé
+  // quand on apprend le statut. La première ligne est donc recalée une fois,
+  // et seulement tant que rien n'a été saisi — corriger un taux que quelqu'un
+  // vient de choisir serait pire que le mauvais défaut.
+  const tauxRecale = useRef(false)
+  useEffect(() => {
+    if (!company || tauxRecale.current || isDirty) return
+    tauxRecale.current = true
+    if (tauxParDefaut !== 8.1) setValue('lines.0.vat_rate', tauxParDefaut)
+  }, [company, isDirty, tauxParDefaut, setValue])
 
   // Une facture de quinze lignes disparaît entièrement sur un clic dans le
   // menu : LedgerAlps n'enregistre aucun brouillon automatique. Le garde bloque
@@ -367,7 +387,7 @@ export function NewInvoicePage() {
             <button
               type="button"
               className="btn-secondary btn-sm"
-              onClick={() => append({ description: '', quantity: 1, unit_price: 0, discount_pct: 0, vat_rate: 8.1 })}
+              onClick={() => append({ description: '', quantity: 1, unit_price: 0, discount_pct: 0, vat_rate: tauxParDefaut })}
             >
               <Plus size={14} /> {t('nf.ajouterLigne')}
             </button>

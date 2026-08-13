@@ -1250,4 +1250,19 @@ export const fr = {
   'aide.journal': 'Les écritures comptables, dans l’ordre. Une écriture comptabilisée est scellée par une empreinte chaînée et ne se modifie plus : on la corrige par contrepassation. Un brouillon, lui, n’est scellé par rien et ne compte ni à la balance, ni au bilan.',
   'aide.planComptable': 'La liste des comptes où vont les montants — 1000 la caisse, 3200 les ventes, 6500 les frais. Vous n’avez rien à y faire au quotidien : LedgerAlps choisit les comptes tout seul quand vous facturez. C’est ici que vous en ajoutez un si votre fiduciaire vous le demande.',
   'aide.rapports': 'Les documents que réclame une fiduciaire : journal, grand livre, balance, en CSV ouvrable dans un tableur. C’est aussi ici que vous déposez votre relevé bancaire camt.053 pour pointer vos encaissements. Seules les écritures comptabilisées y figurent.',
+
+  // ─── Statut TVA — assujetti ou non ───
+  'pr.statutTVA': 'Êtes-vous assujetti à la TVA ?',
+  'pr.tvaAssujetti': 'Assujetti',
+  'pr.tvaAssujettiAide': 'Inscrit au registre AFC des assujettis. Vos lignes portent 8.1 % par défaut, et votre numéro de TVA figure sur les factures.',
+  'pr.tvaNonAssujetti': 'Non assujetti',
+  'pr.tvaNonAssujettiAide': 'Chiffre d’affaires sous le seuil, ou activité exclue. Vos lignes partent à 0 % : la LTVA art. 27 al. 1 vous interdit de faire figurer l’impôt.',
+  'pr.tvaNonDeclare': 'Tant que vous n’avez pas répondu, LedgerAlps applique 8.1 % par défaut et refusera la facture si aucun numéro de TVA n’est enregistré.',
+  'pr.tvaAFCAide': 'Exigé sur toute facture portant de la TVA (LTVA art. 26 al. 2 let. a). Sans lui, LedgerAlps refuse d’établir le document.',
+  'pr.tvaNumeroEfface': 'Le numéro de TVA a été retiré : il s’imprime sur la facture, et l’y laisser contredirait votre déclaration.',
+  'pr.virementAide': 'Ces informations s’ajoutent à la facture pour un client qui paie par virement plutôt qu’avec le QR code — typiquement depuis l’étranger. Laissez-les vides si vous n’encaissez qu’en Suisse.',
+  'mr.tvaTitre': 'Votre statut TVA',
+  'mr.tvaAide': 'La question la plus coûteuse à remettre à plus tard : faire figurer la TVA sans y être assujetti vous en rend redevable, encaissée ou non (LTVA art. 27 al. 2).',
+  'mr.tvaNonDeclare': 'une réponse à la question',
+  'mr.tvaNumeroManquant': 'votre numéro de TVA',
 } as const

@@ -1791,6 +1791,11 @@ var catalogue = map[string]map[Lang]string{
 		IT: "La data di inizio dev’essere nel formato AAAA-MM-GG",
 		EN: "The start date must be in YYYY-MM-DD format",
 	},
+	"statut TVA inconnu : attendu « assujetti » ou « non assujetti »": {
+		DE: "Unbekannter MWST-Status: erwartet «steuerpflichtig» oder «nicht steuerpflichtig»",
+		IT: "Stato IVA sconosciuto: atteso «assoggettato» o «non assoggettato»",
+		EN: "Unknown VAT status: expected “liable” or “not liable”",
+	},
 	"statut inconnu ": {
 		DE: "Unbekannter Status ",
 		IT: "Stato sconosciuto ",
@@ -1865,6 +1870,11 @@ var catalogue = map[string]map[Lang]string{
 		DE: "Ihre Rolle (",
 		IT: "Il vostro ruolo (",
 		EN: "Your role (",
+	},
+	"vous avez déclaré ne pas être assujetti à la TVA : la LTVA art. 27 al. 1 vous interdit de la faire figurer sur une facture, et l'al. 2 vous en rendrait redevable même sans l'avoir encaissée. Passez les lignes à 0 %, ou corrigez votre statut dans Paramètres → Banque": {
+		DE: "Sie haben erklärt, nicht mehrwertsteuerpflichtig zu sein: MWSTG Art. 27 Abs. 1 untersagt Ihnen, die Steuer auf einer Rechnung auszuweisen, und Abs. 2 würde Sie dafür steuerpflichtig machen, auch ohne sie vereinnahmt zu haben. Setzen Sie die Zeilen auf 0 %, oder berichtigen Sie Ihren Status unter Einstellungen → Bank",
+		IT: "Avete dichiarato di non essere assoggettati all’IVA: la LIVA art. 27 cpv. 1 vi vieta di indicarla su una fattura, e il cpv. 2 ve ne renderebbe debitori anche senza averla incassata. Portate le righe a 0 %, oppure correggete il vostro stato in Impostazioni → Banca",
+		EN: "You have declared that you are not liable for VAT: VAT Act art. 27 para. 1 forbids you to show it on an invoice, and para. 2 would make you liable for it even if you never collected it. Set the lines to 0 %, or correct your status under Settings → Bank",
 	},
 	"vous ne pouvez pas changer votre propre rôle : une rétrogradation par mégarde vous couperait l'accès. Demandez à un autre administrateur.": {
 		DE: "Sie können Ihre eigene Rolle nicht ändern: eine versehentliche Herabstufung würde Ihnen den Zugang abschneiden. Fragen Sie einen anderen Administrator.",

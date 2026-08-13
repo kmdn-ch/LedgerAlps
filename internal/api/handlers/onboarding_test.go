@@ -164,14 +164,57 @@ func TestMiseEnRouteDistingueIDEAbsentEtIDEMalForme(t *testing.T) {
 	}
 }
 
+// Le statut TVA est une DÉCISION : « pas encore répondu » n'est pas « non
+// assujetti ». Les deux se ressemblent dans la base — champ vide contre valeur
+// posée — et les confondre ferait tomber les lignes d'un assujetti à 0 %.
+func TestMiseEnRouteDistingueTVANonDeclareeEtExemption(t *testing.T) {
+	h, exec := nouvelleMiseEnRoute(t)
+	exec(`INSERT INTO company_settings (company_name) VALUES ('Test SA')`)
+
+	e := étape(t, lireMiseEnRoute(t, h), ÉtapeTVA)
+	if e.Fait {
+		t.Fatal("étape cochée alors que la question n'a pas de réponse")
+	}
+	if len(e.Manquants) != 1 || e.Manquants[0] != "vat_undeclared" {
+		t.Fatalf("manquants = %v, attendu [vat_undeclared]", e.Manquants)
+	}
+
+	// « Non assujetti » : rien de plus à saisir, l'étape est faite.
+	h2, exec2 := nouvelleMiseEnRoute(t)
+	exec2(`INSERT INTO company_settings (company_name, vat_status)
+	       VALUES ('Test SA', 'exempt')`)
+	if e := étape(t, lireMiseEnRoute(t, h2), ÉtapeTVA); !e.Fait {
+		t.Errorf("« non assujetti » devrait clore l'étape ; manquants = %v", e.Manquants)
+	}
+}
+
+// « Assujetti » sans numéro ne compte pas pour fait : la LTVA art. 26 al. 2
+// let. a l'exige sur toute facture portant de la TVA. Déclarer sans saisir
+// laisserait croire que tout est réglé alors que la première facture sera
+// refusée.
+func TestMiseEnRouteExigeLeNumeroQuandAssujetti(t *testing.T) {
+	h, exec := nouvelleMiseEnRoute(t)
+	exec(`INSERT INTO company_settings (company_name, vat_status)
+	      VALUES ('Test SA', 'liable')`)
+
+	e := étape(t, lireMiseEnRoute(t, h), ÉtapeTVA)
+	if e.Fait {
+		t.Fatal("étape cochée alors que le numéro de TVA manque")
+	}
+	if len(e.Manquants) != 1 || e.Manquants[0] != "vat_number_missing" {
+		t.Errorf("manquants = %v, attendu [vat_number_missing]", e.Manquants)
+	}
+}
+
 // Tout réglé : la liste se déclare terminée, et c'est ce qui la fait
 // disparaître de l'écran.
 func TestMiseEnRouteSeTermine(t *testing.T) {
 	h, exec := nouvelleMiseEnRoute(t)
 	exec(`INSERT INTO company_settings (company_name, address_postal_code,
-	        address_city, address_country, che_number, iban)
+	        address_city, address_country, che_number, iban,
+	        vat_status, vat_number)
 	      VALUES ('Test SA', '1000', 'Lausanne', 'CH', 'CHE-123.456.789',
-	              'CH9300762011623852957')`)
+	              'CH9300762011623852957', 'liable', 'CHE-123.456.789 TVA')`)
 	exec(`INSERT INTO users (id, email, name, password_hash)
 	      VALUES ('u1', 'a@t.ch', 'A', 'x')`)
 	exec(`INSERT INTO contacts (id, name, contact_type) VALUES ('c1', 'Client', 'customer')`)

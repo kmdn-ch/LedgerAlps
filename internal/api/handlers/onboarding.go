@@ -39,6 +39,7 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/core/zefix"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/models"
 )
 
 // Les clés d'étape. Le frontend les traduit ; elles ne changent jamais, sous
@@ -46,6 +47,7 @@ import (
 const (
 	ÉtapeIdentité = "identity"
 	ÉtapeIDE      = "uid"
+	ÉtapeTVA      = "vat"
 	ÉtapeIBAN     = "iban"
 	ÉtapeClient   = "customer"
 	ÉtapeFacture  = "invoice"
@@ -85,15 +87,17 @@ func NewOnboardingHandler(database *sql.DB, usePostgres bool) *OnboardingHandler
 func (h *OnboardingHandler) GetOnboarding(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	var nom, npa, localité, pays, ide, iban string
+	var nom, npa, localité, pays, ide, iban, tvaStatut, tvaNuméro string
 	q := db.Rebind(`
 		SELECT COALESCE(company_name,''), COALESCE(address_postal_code,''),
 		       COALESCE(address_city,''), COALESCE(address_country,''),
-		       COALESCE(che_number,''), COALESCE(iban,'')
+		       COALESCE(che_number,''), COALESCE(iban,''),
+		       COALESCE(vat_status,''), COALESCE(vat_number,'')
 		FROM company_settings LIMIT 1`, h.usePostgres)
 	// Aucune fiche société : ce n'est pas une erreur, c'est le premier jour.
-	// Les six variables restent vides et toutes les étapes sont à faire.
-	_ = h.db.QueryRowContext(ctx, q).Scan(&nom, &npa, &localité, &pays, &ide, &iban)
+	// Les variables restent vides et toutes les étapes sont à faire.
+	_ = h.db.QueryRowContext(ctx, q).Scan(&nom, &npa, &localité, &pays, &ide, &iban,
+		&tvaStatut, &tvaNuméro)
 
 	m := MiseEnRoute{}
 
@@ -129,6 +133,26 @@ func (h *OnboardingHandler) GetOnboarding(c *gin.Context) {
 		manqueIDE = append(manqueIDE, "uid_invalid")
 	}
 	m.ajoute(ÉtapeIDE, manqueIDE)
+
+	// ── Le statut TVA ────────────────────────────────────────────────────────
+	//
+	// L'étape la plus utile de la liste, parce que c'est la seule qui porte une
+	// DÉCISION plutôt qu'une saisie — et la plus coûteuse à manquer : la LTVA
+	// art. 27 al. 2 rend redevable de l'impôt celui qui le fait figurer sans y
+	// être assujetti, encaissé ou non. LedgerAlps appliquait 8.1 % par défaut,
+	// puis refusait la facture : le mur arrivait après le travail.
+	//
+	// « Assujetti » sans numéro ne compte pas pour fait : la LTVA art. 26 al. 2
+	// let. a l'exige sur toute facture portant de la TVA, donc la déclaration
+	// seule ne permet pas encore de facturer.
+	var manqueTVA []string
+	switch {
+	case tvaStatut == "":
+		manqueTVA = append(manqueTVA, "vat_undeclared")
+	case tvaStatut == models.VatLiable && tvaNuméro == "":
+		manqueTVA = append(manqueTVA, "vat_number_missing")
+	}
+	m.ajoute(ÉtapeTVA, manqueTVA)
 
 	// ── L'IBAN ───────────────────────────────────────────────────────────────
 	//

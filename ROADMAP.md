@@ -50,7 +50,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | Support modifiable admis | Olico art. 9 | ✅ attestation d'intégrité exportable |
 | Exercice bouclé immuable | CO art. 958f, Olico art. 3 | ✅ verrouillage de période |
 | Facture nommant son destinataire | LTVA art. 26 al. 2 | ✅ identité figée à l'émission |
-| Interdiction de mentionner la TVA sans l'être | LTVA art. 27 al. 1 et 2 | ✅ refusé à la source |
+| Interdiction de mentionner la TVA sans l'être | LTVA art. 27 al. 1 et 2 | ✅ statut déclaré, taux par défaut aligné, refusé à la source |
 | Correction par note de crédit | LTVA art. 27 al. 4, art. 41 | ✅ liée, bornée, signée en déclaration |
 | QR-facture | SIX IG v2.4 | ✅ conforme · ⏳ validation portail SIX |
 | Sécurité des données | nLPD art. 8, OPDo art. 3 | ✅ HTTPS réseau · ✅ sauvegardes chiffrées · ✅ base chiffrable |
@@ -85,7 +85,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 13b | Lecture d'une facture fournisseur (QR + texte) | ✅ | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
 | 13c | Traçabilité : couverture du journal, attestation automatique **et vérifiable** | 🔎 livré | [↓](#13c--traçabilité) |
 | 13d | Retirer une facture de la liste des paiements | 🔎 livré | [↓](#13d--vider-la-liste-des-paiements) |
-| 15 | Trouver ses marques : mise en route et aide par écran | 🔎 livré | [↓](#15--trouver-ses-marques) |
+| 15 | Trouver ses marques : mise en route, statut TVA, aide par écran | 🔎 livré | [↓](#15--trouver-ses-marques) |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
 ---
@@ -831,6 +831,18 @@ recherche IDE écrite deux fois et corrigée une seule.
 effacer l'IBAN décoche sa case et fait revenir la liste. Un assistant aurait
 retenu « fait » et menti à partir de là. La liste ne s'affiche pas pour un
 compte en lecture seule, qui ne peut accomplir aucune de ses étapes.
+
+**Le statut TVA est devenu une question, avec ses conséquences.** C'est l'étape
+qui rapporte le plus de la liste, parce que c'est la seule qui porte une
+DÉCISION plutôt qu'une saisie, et la plus coûteuse à manquer : la LTVA art. 27
+al. 2 rend redevable de l'impôt celui qui le fait figurer sans y être assujetti,
+encaissé ou non. LedgerAlps appliquait 8.1 % par défaut puis refusait la
+facture — le mur arrivait après le travail.
+
+Trois états et non deux : « non déclaré » n'est pas « non assujetti », sinon les
+lignes d'un assujetti qui n'a pas encore saisi son numéro tomberaient à 0 %.
+Déclarer « non assujetti » efface le numéro de TVA, qui s'imprime sur la
+facture : une fiche ne doit pas dire le contraire du document qu'elle produit.
 
 **Un « i » à côté du titre de chaque écran** porte une phrase sur ce que
 l'écran fait, et sur ce qu'il ne fait pas là où la confusion coûte cher : qu'un

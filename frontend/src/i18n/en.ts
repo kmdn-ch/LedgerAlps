@@ -1206,4 +1206,19 @@ export const en: Catalogue = {
   'aide.journal': 'The accounting entries, in order. A posted entry is sealed by a chained hash and can no longer be changed: you correct it by reversal. A draft is sealed by nothing and counts towards neither the trial balance nor the balance sheet.',
   'aide.planComptable': 'The list of accounts the amounts go to — 1000 cash, 3200 sales, 6500 expenses. You have nothing to do here day to day: LedgerAlps picks the accounts itself when you invoice. This is where you add one if your accountant asks for it.',
   'aide.rapports': 'The documents an accountant asks for: journal, general ledger, trial balance, as CSV you can open in a spreadsheet. This is also where you drop your camt.053 bank statement to tick off your receipts. Only posted entries appear in them.',
+
+  // ─── Statut TVA — assujetti ou non ───
+  'pr.statutTVA': 'Are you liable for VAT?',
+  'pr.tvaAssujetti': 'Liable',
+  'pr.tvaAssujettiAide': 'Registered with the FTA as a taxable person. Your lines carry 8.1 % by default, and your VAT number appears on invoices.',
+  'pr.tvaNonAssujetti': 'Not liable',
+  'pr.tvaNonAssujettiAide': 'Turnover below the threshold, or an excluded activity. Your lines start at 0 %: VAT Act art. 27 para. 1 forbids you to show the tax.',
+  'pr.tvaNonDeclare': 'Until you answer, LedgerAlps applies 8.1 % by default and will refuse the invoice if no VAT number is on file.',
+  'pr.tvaAFCAide': 'Required on any invoice carrying VAT (VAT Act art. 26 para. 2 let. a). Without it, LedgerAlps refuses to issue the document.',
+  'pr.tvaNumeroEfface': 'The VAT number has been removed: it is printed on the invoice, and leaving it there would contradict your declaration.',
+  'pr.virementAide': 'This information is added to the invoice for a customer paying by transfer rather than with the QR code — typically from abroad. Leave it empty if you only collect within Switzerland.',
+  'mr.tvaTitre': 'Your VAT status',
+  'mr.tvaAide': 'The costliest question to put off: showing VAT without being liable makes you liable for it, collected or not (VAT Act art. 27 para. 2).',
+  'mr.tvaNonDeclare': 'an answer to the question',
+  'mr.tvaNumeroManquant': 'your VAT number',
 }

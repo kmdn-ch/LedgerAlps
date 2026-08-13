@@ -237,6 +237,20 @@ type Payment struct {
 // ─── Company settings ─────────────────────────────────────────────────────────
 
 // CompanySettings holds the one-row singleton for this installation's tenant profile.
+// Les trois valeurs de VatStatus. Nommées, parce qu'elles voyagent entre le
+// gestionnaire de réglages, le garde-fou de facturation et la liste de mise en
+// route : une faute de frappe dans l'un des trois passerait la compilation et
+// se traduirait par une facture refusée sans raison visible.
+const (
+	// VatUndeclared : la question n'a pas encore été posée.
+	VatUndeclared = ""
+	// VatLiable : inscrit au registre AFC des assujettis.
+	VatLiable = "liable"
+	// VatExempt : non assujetti — la LTVA art. 27 al. 1 lui interdit de faire
+	// figurer l'impôt sur ses factures.
+	VatExempt = "exempt"
+)
+
 type CompanySettings struct {
 	ID                string `db:"id"                       json:"id"`
 	CompanyName       string `db:"company_name"             json:"company_name"`
@@ -247,11 +261,16 @@ type CompanySettings struct {
 	AddressCountry    string `db:"address_country"          json:"address_country"`
 	CheNumber         string `db:"che_number"               json:"che_number"`
 	VatNumber         string `db:"vat_number"               json:"vat_number"`
-	Phone             string `db:"phone"                json:"phone"`
-	Email             string `db:"email"                json:"email"`
-	BankName          string `db:"bank_name"            json:"bank_name"`
-	BankAddress       string `db:"bank_address"         json:"bank_address"`
-	BankBIC           string `db:"bank_bic"             json:"bank_bic"`
+	// VatStatus vaut "", "liable" ou "exempt". Le vide n'est pas un défaut :
+	// c'est « la question n'a pas été posée », et il se distingue de « non
+	// assujetti » — sans quoi un numéro de TVA pas encore saisi passerait pour
+	// une exemption, et les lignes tomberaient à 0 % toutes seules.
+	VatStatus   string `db:"vat_status"               json:"vat_status"`
+	Phone       string `db:"phone"                json:"phone"`
+	Email       string `db:"email"                json:"email"`
+	BankName    string `db:"bank_name"            json:"bank_name"`
+	BankAddress string `db:"bank_address"         json:"bank_address"`
+	BankBIC     string `db:"bank_bic"             json:"bank_bic"`
 	// AutoPostInvoices comptabilise la facture au journal dès son envoi. Éteint
 	// sur les installations antérieures à ce réglage : l'allumer d'office y
 	// doublerait les écritures saisies à la main.

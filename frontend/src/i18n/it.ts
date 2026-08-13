@@ -1206,4 +1206,19 @@ export const it: Catalogue = {
   'aide.journal': 'Le registrazioni contabili, in ordine. Una registrazione contabilizzata è sigillata da un’impronta concatenata e non si modifica più: si corregge per storno. Una bozza non è sigillata da nulla e non conta né a bilancio né a conto economico.',
   'aide.planComptable': 'L’elenco dei conti dove vanno gli importi — 1000 la cassa, 3200 le vendite, 6500 i costi. Nel quotidiano non avete nulla da farci: LedgerAlps sceglie i conti da solo quando fatturate. Qui ne aggiungete uno se il vostro fiduciario ve lo chiede.',
   'aide.rapports': 'I documenti che un fiduciario reclama: giornale, libro mastro, bilancio di verifica, in CSV apribile in un foglio di calcolo. Qui depositate anche il vostro estratto bancario camt.053 per spuntare gli incassi. Vi figurano solo le registrazioni contabilizzate.',
+
+  // ─── Statut TVA — assujetti ou non ───
+  'pr.statutTVA': 'Siete assoggettati all’IVA?',
+  'pr.tvaAssujetti': 'Assoggettato',
+  'pr.tvaAssujettiAide': 'Iscritto al registro AFC dei contribuenti. Le vostre righe portano l’8.1 % per impostazione predefinita, e il vostro numero IVA figura sulle fatture.',
+  'pr.tvaNonAssujetti': 'Non assoggettato',
+  'pr.tvaNonAssujettiAide': 'Cifra d’affari sotto la soglia, oppure attività esclusa. Le vostre righe partono da 0 %: la LIVA art. 27 cpv. 1 vi vieta di indicare l’imposta.',
+  'pr.tvaNonDeclare': 'Finché non avete risposto, LedgerAlps applica l’8.1 % per impostazione predefinita e rifiuterà la fattura se nessun numero IVA è registrato.',
+  'pr.tvaAFCAide': 'Richiesto su ogni fattura con IVA (LIVA art. 26 cpv. 2 lett. a). Senza di esso, LedgerAlps rifiuta di emettere il documento.',
+  'pr.tvaNumeroEfface': 'Il numero IVA è stato rimosso: si stampa sulla fattura, e lasciarvelo contraddirebbe la vostra dichiarazione.',
+  'pr.virementAide': 'Queste informazioni si aggiungono alla fattura per un cliente che paga con bonifico anziché con il codice QR — tipicamente dall’estero. Lasciatele vuote se incassate solo in Svizzera.',
+  'mr.tvaTitre': 'Il vostro stato IVA',
+  'mr.tvaAide': 'La domanda più costosa da rimandare: indicare l’IVA senza esservi assoggettati ve ne rende debitori, incassata o meno (LIVA art. 27 cpv. 2).',
+  'mr.tvaNonDeclare': 'una risposta alla domanda',
+  'mr.tvaNumeroManquant': 'il vostro numero IVA',
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, type UseFormRegister } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -22,6 +22,9 @@ const schema = z.object({
   legal_form:            z.string().default(''),
   che_number:            z.string().default(''),
   vat_number:            z.string().default(''),
+  // '' = non déclaré. Ce n'est pas un défaut technique mais une réponse
+  // manquante : la distinguer de « non assujetti » est tout l'intérêt du champ.
+  vat_status:            z.enum(['', 'liable', 'exempt']).default(''),
   phone:                 z.string().default(''),
   bank_name:             z.string().default(''),
   bank_address:          z.string().default(''),
@@ -98,6 +101,7 @@ export function SettingsPage() {
       legal_form: '',
       che_number: '',
       vat_number: '',
+      vat_status: '',
       phone: '',
       bank_name: '',
       bank_address: '',
@@ -122,6 +126,7 @@ export function SettingsPage() {
         legal_form:            company.legal_form             ?? '',
         che_number:            company.che_number             ?? '',
         vat_number:            company.vat_number             ?? '',
+        vat_status:            (company.vat_status as FormData['vat_status']) ?? '',
         phone:                 company.phone                  ?? '',
         bank_name:             company.bank_name              ?? '',
         bank_address:          company.bank_address           ?? '',
@@ -443,15 +448,41 @@ export function SettingsPage() {
                     </p>
                   )}
                 </div>
-                <div className="col-span-2">
-                  <label className="label">{t('pr.tvaAFC')}</label>
-                  <input className="input font-mono" placeholder="CHE-123.456.789 MWST" {...register('vat_number')} />
-                  <p className="text-xs text-alpine-400 mt-1">
-                    Sans ce numéro, LedgerAlps refuse d'établir une facture portant de la TVA :
-                    la LTVA art. 27 al. 1 l'interdit à qui n'est pas assujetti, et l'al. 2 vous
-                    en rendrait redevable même sans l'avoir encaissée.
-                  </p>
+                {/* ── Le statut TVA ──────────────────────────────────────────
+                    Une DÉCISION, posée avant le numéro, parce que c'est elle
+                    qui détermine s'il y a un numéro à saisir. Tant qu'elle
+                    n'est pas prise, LedgerAlps applique 8.1 % par défaut puis
+                    refuse la facture : le mur arrive après le travail. */}
+                <div className="col-span-2 pt-2 border-t border-neutral-200">
+                  <label className="label">{t('pr.statutTVA')}</label>
+                  <div className="space-y-2 mt-1">
+                    <Statut valeur="liable" titre={t('pr.tvaAssujetti')}
+                            aide={t('pr.tvaAssujettiAide')} register={register} />
+                    <Statut valeur="exempt" titre={t('pr.tvaNonAssujetti')}
+                            aide={t('pr.tvaNonAssujettiAide')} register={register} />
+                  </div>
+                  {watch('vat_status') === '' && (
+                    <p className="text-xs text-warning-700 mt-2">{t('pr.tvaNonDeclare')}</p>
+                  )}
                 </div>
+
+                {/* Le numéro n'a de sens qu'en étant assujetti. Le montrer à un
+                    non-assujetti inviterait à saisir ce que la LTVA art. 27
+                    al. 1 lui interdit de faire figurer — et le serveur efface
+                    ce champ quand « non assujetti » est enregistré, parce que
+                    ce numéro s'imprime sur la facture. */}
+                {watch('vat_status') !== 'exempt' && (
+                  <div className="col-span-2">
+                    <label className="label">{t('pr.tvaAFC')}</label>
+                    <input className="input font-mono" placeholder="CHE-123.456.789 MWST" {...register('vat_number')} />
+                    <p className="text-xs text-alpine-400 mt-1">{t('pr.tvaAFCAide')}</p>
+                  </div>
+                )}
+                {watch('vat_status') === 'exempt' && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-alpine-500">{t('pr.tvaNumeroEfface')}</p>
+                  </div>
+                )}
 
                 {/* Coordonnées de virement. La QR-facture suffit à un paiement
                     en Suisse ; un virement depuis l'étranger demande le nom de
@@ -460,11 +491,7 @@ export function SettingsPage() {
                   <h3 className="text-sm font-medium text-alpine-800 mb-1">
                     {t('pr.paiementVirement')} <span className="font-normal text-alpine-400">{t('pr.facultatif')}</span>
                   </h3>
-                  <p className="text-xs text-alpine-400 mb-3">
-                    Ces informations s'ajoutent à la facture pour un client qui paie par virement
-                    plutôt qu'avec le QR code — typiquement depuis l'étranger. Laissez-les vides
-                    si vous n'encaissez qu'en Suisse.
-                  </p>
+                  <p className="text-xs text-alpine-400 mb-3">{t('pr.virementAide')}</p>
                 </div>
                 <div>
                   <label className="label">{t('pr.nomBanque')}</label>
@@ -569,5 +596,39 @@ export function SettingsPage() {
         )}
       </div>
     </div>
+  )
+}
+
+// Un choix de statut TVA : une pastille, un titre, une phrase.
+//
+// Une liste déroulante aurait tenu en moins de place et caché la conséquence :
+// « assujetti » et « non assujetti » n'ont pas le même effet sur ce qui sort de
+// l'imprimante, et c'est cette différence qu'il faut lire AVANT de choisir, pas
+// découvrir au premier refus.
+function Statut({
+  valeur,
+  titre,
+  aide,
+  register,
+}: {
+  valeur: 'liable' | 'exempt'
+  titre: string
+  aide: string
+  register: UseFormRegister<FormData>
+}) {
+  return (
+    <label className="flex items-start gap-2.5 cursor-pointer rounded-md
+                      px-2 py-1.5 hover:bg-alpine-50 transition-colors">
+      <input
+        type="radio"
+        value={valeur}
+        className="mt-1 flex-shrink-0"
+        {...register('vat_status')}
+      />
+      <span>
+        <span className="block text-sm font-medium text-alpine-800">{titre}</span>
+        <span className="block text-xs text-alpine-500">{aide}</span>
+      </span>
+    </label>
   )
 }

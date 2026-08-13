@@ -34,6 +34,11 @@ type companySettingsRequest struct {
 	AddressCountry    string `json:"address_country"`
 	CheNumber         string `json:"che_number"`
 	VatNumber         string `json:"vat_number"`
+	// VatStatus : "", "liable" ou "exempt". Pointeur, pour la même raison
+	// qu'AutoPostInvoices — « absent » veut dire « ne touche pas ». Un
+	// formulaire qui ne porte pas ce champ remettrait sinon le statut à « non
+	// déclaré » à chaque enregistrement.
+	VatStatus *string `json:"vat_status,omitempty"`
 	// Coordonnées de contact. Pas exigées par la LTVA art. 26, mais une facture
 	// qu'on ne peut pas contester facilement se paie tard, ou pas.
 	Phone string `json:"phone"`
@@ -64,7 +69,8 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 	q := db.Rebind(`
 		SELECT id, company_name, legal_form,
 		       address_street, address_postal_code, address_city, address_country,
-		       che_number, vat_number, COALESCE(phone,''), COALESCE(email,''),
+		       che_number, vat_number, COALESCE(vat_status,''),
+		       COALESCE(phone,''), COALESCE(email,''),
 		       COALESCE(bank_name,''), COALESCE(bank_address,''), COALESCE(bank_bic,''), iban,
 		       COALESCE(auto_post_invoices,0),
 		       fiscal_year_start_month, currency, logo_data,
@@ -77,7 +83,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 	err := h.db.QueryRowContext(ctx, q).Scan(
 		&s.ID, &s.CompanyName, &s.LegalForm,
 		&s.AddressStreet, &s.AddressPostalCode, &s.AddressCity, &s.AddressCountry,
-		&s.CheNumber, &s.VatNumber, &s.Phone, &s.Email,
+		&s.CheNumber, &s.VatNumber, &s.VatStatus, &s.Phone, &s.Email,
 		&s.BankName, &s.BankAddress, &s.BankBIC, &s.IBAN,
 		&autoPost,
 		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
@@ -208,11 +214,43 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		}
 	}
 
+	// Le statut TVA, même logique : fourni ou pas touché.
+	//
+	// « Non assujetti » EFFACE le numéro de TVA, et ce n'est pas une commodité.
+	// Le numéro s'imprime sur la facture : le garder tout en déclarant ne pas
+	// être assujetti produirait un document qui affirme le contraire de ce que
+	// dit la fiche — exactement ce que la LTVA art. 27 al. 1 interdit, et l'al. 2
+	// rendrait redevable de l'impôt ainsi mentionné. Une contradiction se refuse
+	// là où elle naît ; la laisser vivre pour la rattraper plus loin, c'est
+	// signer qu'un chemin l'oubliera.
+	if req.VatStatus != nil {
+		statut := strings.TrimSpace(*req.VatStatus)
+		if statut != "" && statut != models.VatLiable && statut != models.VatExempt {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": "statut TVA inconnu : attendu « assujetti » ou « non assujetti »",
+			})
+			return
+		}
+		vatQ := db.Rebind(`UPDATE company_settings SET vat_status = ?, updated_at = ?`, h.usePostgres)
+		if _, err := h.db.ExecContext(ctx, vatQ, statut, now); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+			return
+		}
+		if statut == models.VatExempt {
+			clearQ := db.Rebind(`UPDATE company_settings SET vat_number = '', updated_at = ?`, h.usePostgres)
+			if _, err := h.db.ExecContext(ctx, clearQ, now); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+				return
+			}
+		}
+	}
+
 	// Return the updated row.
 	q := db.Rebind(`
 		SELECT id, company_name, legal_form,
 		       address_street, address_postal_code, address_city, address_country,
-		       che_number, vat_number, COALESCE(phone,''), COALESCE(email,''),
+		       che_number, vat_number, COALESCE(vat_status,''),
+		       COALESCE(phone,''), COALESCE(email,''),
 		       COALESCE(bank_name,''), COALESCE(bank_address,''), COALESCE(bank_bic,''), iban,
 		       COALESCE(auto_post_invoices,0),
 		       fiscal_year_start_month, currency, logo_data,
@@ -224,7 +262,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	if err := h.db.QueryRowContext(ctx, q, existingID).Scan(
 		&s.ID, &s.CompanyName, &s.LegalForm,
 		&s.AddressStreet, &s.AddressPostalCode, &s.AddressCity, &s.AddressCountry,
-		&s.CheNumber, &s.VatNumber, &s.Phone, &s.Email,
+		&s.CheNumber, &s.VatNumber, &s.VatStatus, &s.Phone, &s.Email,
 		&s.BankName, &s.BankAddress, &s.BankBIC, &s.IBAN,
 		&autoPostOut,
 		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,

@@ -1207,4 +1207,19 @@ export const de: Catalogue = {
   'aide.journal': 'Die Buchungen, der Reihe nach. Eine verbuchte Buchung ist durch einen verketteten Hashwert versiegelt und lässt sich nicht mehr ändern: korrigiert wird durch Storno. Ein Entwurf ist durch nichts versiegelt und zählt weder zur Bilanz noch zur Erfolgsrechnung.',
   'aide.planComptable': 'Die Liste der Konten, in die die Beträge fliessen — 1000 die Kasse, 3200 die Verkäufe, 6500 der Aufwand. Im Alltag haben Sie hier nichts zu tun: LedgerAlps wählt die Konten beim Fakturieren selbst. Hier fügen Sie eines hinzu, wenn Ihr Treuhänder darum bittet.',
   'aide.rapports': 'Die Unterlagen, die ein Treuhänder verlangt: Journal, Hauptbuch, Saldobilanz, als CSV für die Tabellenkalkulation. Hier legen Sie auch Ihren Bankauszug camt.053 ab, um Ihre Eingänge abzugleichen. Nur verbuchte Buchungen erscheinen darin.',
+
+  // ─── Statut TVA — assujetti ou non ───
+  'pr.statutTVA': 'Sind Sie mehrwertsteuerpflichtig?',
+  'pr.tvaAssujetti': 'Steuerpflichtig',
+  'pr.tvaAssujettiAide': 'Im ESTV-Register der Steuerpflichtigen eingetragen. Ihre Zeilen tragen standardmässig 8.1 %, und Ihre MWST-Nummer erscheint auf den Rechnungen.',
+  'pr.tvaNonAssujetti': 'Nicht steuerpflichtig',
+  'pr.tvaNonAssujettiAide': 'Umsatz unter der Schwelle, oder ausgenommene Tätigkeit. Ihre Zeilen starten bei 0 %: MWSTG Art. 27 Abs. 1 untersagt Ihnen den Ausweis der Steuer.',
+  'pr.tvaNonDeclare': 'Solange Sie nicht geantwortet haben, wendet LedgerAlps standardmässig 8.1 % an und verweigert die Rechnung, wenn keine MWST-Nummer hinterlegt ist.',
+  'pr.tvaAFCAide': 'Auf jeder Rechnung mit MWST verlangt (MWSTG Art. 26 Abs. 2 Bst. a). Ohne sie stellt LedgerAlps das Dokument nicht aus.',
+  'pr.tvaNumeroEfface': 'Die MWST-Nummer wurde entfernt: sie wird auf die Rechnung gedruckt, und sie dort zu lassen widerspräche Ihrer Erklärung.',
+  'pr.virementAide': 'Diese Angaben erscheinen zusätzlich auf der Rechnung für einen Kunden, der per Überweisung statt mit dem QR-Code zahlt — typischerweise aus dem Ausland. Lassen Sie sie leer, wenn Sie nur in der Schweiz vereinnahmen.',
+  'mr.tvaTitre': 'Ihr MWST-Status',
+  'mr.tvaAide': 'Die Frage, deren Aufschub am teuersten wird: die MWST auszuweisen, ohne pflichtig zu sein, macht Sie dafür steuerpflichtig, vereinnahmt oder nicht (MWSTG Art. 27 Abs. 2).',
+  'mr.tvaNonDeclare': 'eine Antwort auf die Frage',
+  'mr.tvaNumeroManquant': 'Ihre MWST-Nummer',
 }

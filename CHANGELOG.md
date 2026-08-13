@@ -9,6 +9,16 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Ajouté
 
+- **Assujetti ou non à la TVA : la question est posée, et elle a des conséquences.** Paramètres → Banque. Jusqu'ici, la seule trace de ce statut était la présence d'un numéro de TVA — un champ vide voulant dire deux choses opposées que rien ne distinguait. LedgerAlps appliquait donc 8.1 % par défaut à chaque ligne, **puis refusait la facture** : le mur arrivait après le travail, et celui qui n'est pas assujetti ne pouvait le comprendre qu'en lisant la LTVA.
+
+  **Trois états, pas deux.** « Non déclaré » n'est pas « non assujetti » : le confondre ferait tomber à 0 % les lignes d'un assujetti qui n'a pas encore saisi son numéro. Tant que la question n'a pas de réponse, rien ne change.
+
+  **« Non assujetti » efface le numéro de TVA**, et ce n'est pas une commodité : ce numéro s'imprime sur la facture, et l'y laisser produirait un document qui affirme le contraire de la fiche — précisément ce que la LTVA art. 27 al. 1 interdit et dont l'al. 2 rend redevable. Le garde-fou de facturation fait passer la déclaration avant le numéro, si bien qu'un numéro résiduel dans une base restaurée ne rouvre pas la porte.
+
+  **Le refus change de phrase selon la cause.** « Aucun numéro n'est enregistré » envoie chercher un numéro ; à qui s'est déclaré non assujetti, il n'y en a pas à chercher, et le message le dit.
+
+  **Les installations existantes qui portent un numéro de TVA** sont marquées assujetties par la migration : ce numéro ne s'obtient qu'en s'inscrivant au registre. Celles qui n'en portent pas restent non déclarées — deviner « non assujetti » corrigerait leur facturation en silence, sur une hypothèse.
+
 - **Une liste de mise en route sur le tableau de bord.** Une installation neuve s'ouvrait sur quatre compteurs à zéro et un graphique vide : rien n'annonçait que sans adresse structurée le bulletin QR serait refusé au guichet, ni que sans IBAN le PDF sortirait sans section de paiement.
 
   **L'information existait déjà** — le contrôle de cohérence la produit — mais dans Paramètres → Maintenance → Diagnostic, à trois clics d'un endroit où un débutant ne va jamais. Ce n'était pas un manque de fonction, c'était un manque de placement.
@@ -32,6 +42,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
   **La marche à suivre est écrite dans l'attestation elle-même** (section `how_to_verify`). Le sceau se recalcule avec `certutil` sous Windows ou `shasum` ailleurs : la fiduciaire n'a besoin d'aucun logiciel pour cette partie.
 
 ### Corrigé
+
+- **Deux textes de l'onglet Banque étaient écrits en dur en français** — l'aide du numéro de TVA et celle du paiement par virement. Ils s'affichaient tels quels sur un écran allemand.
 
 - **« Créer en brouillon » affichait « Quitter cette page ? »** au lieu d'enregistrer. Le garde de saisie protégeait le formulaire contre une navigation — y compris celle qui suit l'enregistrement réussi. Le message était faux, la facture existait ; et qui le croyait cliquait « Annuler » et restait bloqué sur un écran dont le bouton principal semblait ne rien faire. Le garde se désarme désormais juste avant de naviguer.
 

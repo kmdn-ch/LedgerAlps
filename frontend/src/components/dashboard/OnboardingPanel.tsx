@@ -39,6 +39,7 @@ import type { Onboarding, OnboardingStep } from '@/types'
 const ÉTAPES: Record<string, { titre: Cle; aide: Cle; vers: string }> = {
   identity: { titre: 'mr.identiteTitre', aide: 'mr.identiteAide', vers: '/settings#identity' },
   uid:      { titre: 'mr.ideTitre',      aide: 'mr.ideAide',      vers: '/settings#identity' },
+  vat:      { titre: 'mr.tvaTitre',      aide: 'mr.tvaAide',      vers: '/settings#banking' },
   iban:     { titre: 'mr.ibanTitre',     aide: 'mr.ibanAide',     vers: '/settings#banking' },
   customer: { titre: 'mr.clientTitre',   aide: 'mr.clientAide',   vers: '/contacts' },
   invoice:  { titre: 'mr.factureTitre',  aide: 'mr.factureAide',  vers: '/invoices/new' },
@@ -55,6 +56,8 @@ const MANQUANTS: Record<string, Cle> = {
   uid_invalid:  'mr.ideFormat',
   iban_missing: 'mr.ibanAbsent',
   iban_invalid: 'mr.ibanInvalide',
+  vat_undeclared:     'mr.tvaNonDeclare',
+  vat_number_missing: 'mr.tvaNumeroManquant',
 }
 
 export function OnboardingPanel() {

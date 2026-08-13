@@ -241,6 +241,9 @@ export interface CompanySettings {
   address_country: string
   che_number: string
   vat_number: string
+  // '' = la question n'a pas été posée. À distinguer de 'exempt' : un numéro
+  // pas encore saisi n'est pas une exemption.
+  vat_status?: '' | 'liable' | 'exempt'
   phone: string
   email: string
   bank_name: string
