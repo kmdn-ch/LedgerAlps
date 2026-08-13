@@ -43,6 +43,16 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Corrigé
 
+- **Le journal de l'installeur affichait du charabia.** « Op‚ration r,ussieÿ: le processus […] a ‚t, arr^t,. » — et, juste en dessous, « Erreurÿ: le processus est introuvable », qui est le cas normal quand l'application n'est pas lancée.
+
+  **Deux fautes en une.** `nsExec::ExecToLog` reversait dans le journal ce que `taskkill` écrit sur sa console. Cette sortie est dans la page de codes CONSOLE — CP850 sur un Windows français — que NSIS relit comme de l'ANSI : « é » devient « ‚ », « ê » devient « ^ », et l'espace insécable avant les deux-points ressort en « ÿ ». Et transcoder n'aurait pas suffi : ces lignes n'apprennent rien, et l'une d'elles alarme pour un état parfaitement normal.
+
+  L'installeur ne recopie plus la sortie d'un programme tiers. Il lit le code de retour — `0` arrêté, `128` pas lancé, les deux étant des succès — et écrit ses propres phrases, **dans les quatre langues**. Seul un échec réel (accès refusé) produit désormais une ligne.
+
+  **L'arrêt de l'application a aussi changé de place.** Il était dans `.onInit`, c'est-à-dire au lancement de l'installeur : LedgerAlps était fermé de force chez quelqu'un qui n'avait encore rien accepté et pouvait annuler à la page de licence. Il est maintenant en tête de la section d'installation, une fois celle-ci confirmée — et toujours avant l'écriture des fichiers.
+
+- **Le reste de l'installeur parlait anglais** sur un système français, allemand ou italien : le bouton « Launch LedgerAlps » de la dernière page, les trois lignes de fin d'installation, l'info-bulle des raccourcis et le raccourci « Uninstall LedgerAlps » du menu Démarrer. Tout est traduit ; l'ancien raccourci anglais est effacé à la mise à jour pour ne pas laisser les deux côte à côte.
+
 - **Deux textes de l'onglet Banque étaient écrits en dur en français** — l'aide du numéro de TVA et celle du paiement par virement. Ils s'affichaient tels quels sur un écran allemand.
 
 - **« Créer en brouillon » affichait « Quitter cette page ? »** au lieu d'enregistrer. Le garde de saisie protégeait le formulaire contre une navigation — y compris celle qui suit l'enregistrement réussi. Le message était faux, la facture existait ; et qui le croyait cliquait « Annuler » et restait bloqué sur un écran dont le bouton principal semblait ne rien faire. Le garde se désarme désormais juste avant de naviguer.
