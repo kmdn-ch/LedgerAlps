@@ -19,6 +19,12 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Corrigé
 
+- **L'écran de mise à jour partait avant qu'on ait pu le lire.** Il portait « Ouverture de LedgerAlps dans 5 secondes… » et se remplaçait tout seul. Or c'est le seul moment où le produit dit « vos données comptables ont été conservées » — la phrase que quelqu'un qui vient de remplacer un logiciel de comptabilité veut lire avant tout. Cinq secondes ne suffisent pas à la lire, et personne ne peut la relire ensuite : le message part avec la page.
+
+  L'écran **attend maintenant le clic**, comme un installeur Windows attend « Terminer ». Le bouton est un simple lien vers `/ok`, qui redirige vers l'application : le chemin ne dépend ni d'un script, ni d'une minuterie, ni de l'ordre dans lequel le navigateur exécute les choses. La page ne contient plus une ligne de JavaScript.
+
+  **Le garde-fou** : si la fenêtre est fermée sans cliquer, une limite d'une demi-heure ramasse le lanceur — assez longue pour que personne ne la rencontre, assez courte pour ne pas laisser un processus orphelin. Le témoin de réinstallation étant effacé dès l'entrée, l'écran ne réapparaît pas au lancement suivant.
+
 - **Un mot de passe faux rechargeait la page sans rien dire.** Le 401 de `/auth/login` déclenchait le mécanisme de session expirée : appel à `/auth/refresh`, échec, puis `window.location.href = '/login'` — un rechargement complet qui effaçait « identifiants incorrects » avant qu'on ait pu le lire. L'écran clignotait et rendait un formulaire vide, sans dire si l'on s'était trompé ou si le logiciel avait planté. Les routes d'authentification sont maintenant écartées de ce mécanisme : sur elles, un 401 veut dire « ce n'est pas le bon mot de passe », pas « votre session a expiré ».
 
 ### Modifié
