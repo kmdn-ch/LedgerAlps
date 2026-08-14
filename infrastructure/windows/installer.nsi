@@ -41,6 +41,15 @@ Unicode True
 
 !define MUI_ABORTWARNING
 
+; L'icône officielle, pour l'installeur ET le désinstalleur.
+;
+; Le raccourci du Bureau et l'entrée du menu Démarrer, eux, tirent la leur de
+; `ledgeralps.exe`, qui porte désormais la ressource — voir
+; cmd/launcher/rsrc_windows_amd64.syso. Sans elle, Windows affichait l'icône
+; générique bleue, et rien ne distinguait LedgerAlps d'un exécutable anonyme.
+!define MUI_ICON   "..\brand\ledgeralps.ico"
+!define MUI_UNICON "..\brand\ledgeralps.ico"
+
 ; The welcome and finish titles hold two lines by default. "Bienvenue dans le
 ; programme d'installation de LedgerAlps 1.4.4-rc3" does not fit, and the
 ; overflow is clipped mid-word rather than wrapped — the version number simply

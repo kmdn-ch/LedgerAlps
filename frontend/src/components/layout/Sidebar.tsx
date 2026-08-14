@@ -11,7 +11,7 @@ import { useAuthStore } from '@/store/auth'
 import { settingsApi, healthApi, authApi } from '@/api/client'
 import { AccountBanner } from './AccountBanner'
 import { useT } from '@/i18n/useT'
-import { LogoMark, Wordmark } from '@/components/brand/Logo'
+import { LedgerAlpsIcon, LedgerAlpsPlaque } from '@/components/brand/Logo'
 
 const NAV = [
   { to: '/',          icon: LayoutDashboard, cle: 'nav.tableauDeBord' },
@@ -78,8 +78,8 @@ export function Sidebar() {
           </div>
         ) : (
           <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center
-                          flex-shrink-0 text-alpine-900">
-            <LogoMark className="w-5 h-auto" />
+                          flex-shrink-0 p-1">
+            <LedgerAlpsIcon className="w-full h-full object-contain" />
           </div>
         )}
         <div className="min-w-0">
@@ -144,7 +144,7 @@ export function Sidebar() {
                 devant une capture d'écran : quel logiciel est-ce ? */}
             <div className="flex items-baseline justify-between gap-2 mt-2 pt-2
                             border-t border-alpine-800">
-              <Wordmark taille="text-[10px]" className="text-alpine-500" />
+              <LedgerAlpsPlaque hauteur="h-3" />
               {health?.version && (
                 <span className="text-[9px] text-alpine-600 tabular-nums flex-shrink-0">
                   {health.version}

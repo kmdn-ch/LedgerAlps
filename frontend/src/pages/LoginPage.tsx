@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff, Smartphone, ArrowLeft, LifeBuoy } from 'lucide-react'
-import { Logo } from '@/components/brand/Logo'
+import { LedgerAlpsLogo } from '@/components/brand/Logo'
 import { useState } from 'react'
 import { authApi } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
@@ -143,8 +143,10 @@ export function LoginPage() {
         {/* La marque, en entier. C'est le seul écran où personne n'est encore
             identifié : c'est donc ici qu'il faut pouvoir lire, sans ambiguïté,
             quel logiciel demande un mot de passe. */}
-        <div className="flex items-center justify-center mb-8 text-white">
-          <Logo taille="text-xl" />
+        <div className="flex items-center justify-center mb-8">
+          <span className="inline-flex items-center rounded-xl bg-white px-5 py-3 shadow-lg">
+            <LedgerAlpsLogo className="h-7 w-auto" />
+          </span>
         </div>
 
         {/* Card */}

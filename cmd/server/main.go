@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -550,17 +552,42 @@ func main() {
 		c.Data(http.StatusOK, contentType, data)
 	}
 
-	r.GET("/favicon.ico", func(c *gin.Context) { serveEmbedded(c, "favicon.ico", "image/x-icon") })
-	r.GET("/logo.svg", func(c *gin.Context) { serveEmbedded(c, "logo.svg", "image/svg+xml") })
 	fmt.Println("LedgerAlps: serving embedded frontend")
 
-	// SPA fallback: all non-API routes serve index.html for client-side routing.
+	// SPA fallback — et, avant elle, les fichiers posés à la racine de `public/`.
+	//
+	// Chaque fichier de `public/` avait sa propre route en dur : `/favicon.ico`,
+	// `/logo.svg`. Le piège est qu'on ne le découvre jamais en le lisant, mais en
+	// constatant qu'un fichier ajouté ne s'affiche pas — la route absente ne
+	// répond pas 404, elle tombe dans le repli et rend `index.html`, si bien que
+	// le navigateur reçoit du HTML là où il attendait une image et n'affiche
+	// rien du tout. C'est exactement ce qui vient d'arriver aux deux fichiers de
+	// la marque.
+	//
+	// On sert donc ce que le paquet embarqué contient RÉELLEMENT à sa racine.
+	// Aucun risque d'exposition : seuls les fichiers compilés dans le binaire
+	// existent dans ce système de fichiers, et les chemins d'API sont écartés
+	// juste au-dessus.
 	r.NoRoute(func(c *gin.Context) {
 		p := c.Request.URL.Path
 		if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/health") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
+
+		// Une extension distingue un FICHIER d'une route de l'application :
+		// « /ledgeralps-icon.svg » est un fichier, « /settings » ne l'est pas.
+		if nom := strings.TrimPrefix(p, "/"); path.Ext(nom) != "" && fs.ValidPath(nom) {
+			if data, err := fs.ReadFile(distFS, nom); err == nil {
+				typ := mime.TypeByExtension(path.Ext(nom))
+				if typ == "" {
+					typ = "application/octet-stream"
+				}
+				c.Data(http.StatusOK, typ, data)
+				return
+			}
+		}
+
 		serveEmbedded(c, "index.html", "text/html; charset=utf-8")
 	})
 
