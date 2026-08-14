@@ -47,6 +47,13 @@ var diagnostic = map[string]string{
 	"integrity check reported: %s":  "sortie brute de SQLite, à recopier telle quelle",
 	"integrity_check: %s":           "sortie brute de SQLite, à recopier telle quelle",
 
+	// ── Le logo : cette erreur ne sort jamais telle quelle ────────────────────
+	//
+	// `ajusterLogo` la rend au gestionnaire, qui la remplace par une phrase
+	// traduite. La garder en français ne coûte rien et dit, à la lecture d'un
+	// journal, ce qui n'allait pas dans l'adresse de données reçue.
+	"adresse de données sans virgule": "cause interne, remplacée par le gestionnaire",
+
 	// ── Appels réseau sortants : le code HTTP est la donnée utile ─────────────
 	"update check: HTTP %d":                                  "diagnostic d'appel sortant",
 	"update check: endpoint returned a draft or pre-release": "diagnostic d'appel sortant",

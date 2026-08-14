@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 92" role="img"
+     aria-label="LedgerAlps">
+  <!--
+    Le monogramme LedgerAlps : le « L », le « A », et le drapeau suisse.
+
+    Ce fichier sert de favicon. `frontend/index.html` le référençait déjà
+    (`<link rel="icon" href="/logo.svg">`) alors qu'il n'existait pas : l'onglet
+    du navigateur n'affichait donc rien.
+
+    Les couleurs sont figées ici — un favicon n'hérite d'aucun contexte. La
+    version de l'interface, elle, vit dans `src/components/brand/Logo.tsx` et
+    prend la couleur du texte ambiant, pour se poser aussi bien sur le fond
+    sombre de la barre latérale que sur un fond clair.
+
+    Rouge #D52B1E : le rouge fédéral suisse (Pantone 485).
+  -->
+  <g fill="#1D3A5C">
+    <rect x="0" y="0"  width="14" height="92" rx="3" />
+    <rect x="0" y="78" width="57" height="14" rx="3" />
+    <path d="M26 66 L56 2 L94 90" fill="none" stroke="#1D3A5C" stroke-width="14"
+          stroke-linejoin="round" />
+    <rect x="30" y="54.5" width="45" height="13" />
+  </g>
+  <g>
+    <rect x="79" y="0" width="21" height="21" fill="#D52B1E" />
+    <rect x="82.95" y="8.55" width="13.1" height="3.9" fill="#fff" />
+    <rect x="87.55" y="3.95" width="3.9" height="13.1" fill="#fff" />
+  </g>
+</svg>

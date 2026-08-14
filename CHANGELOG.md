@@ -19,6 +19,20 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
   **Les installations existantes qui portent un numéro de TVA** sont marquées assujetties par la migration : ce numéro ne s'obtient qu'en s'inscrivant au registre. Celles qui n'en portent pas restent non déclarées — deviner « non assujetti » corrigerait leur facturation en silence, sur une hypothèse.
 
+- **LedgerAlps porte enfin son nom à l'écran.** La barre latérale affiche le logo et le nom de l'ENTREPRISE — c'est juste, c'est son espace de travail — mais dès qu'une entreprise pose son logo, plus rien ne disait quel logiciel on utilisait. Ni au support, ni à la fiduciaire qui ouvre la session d'un client, ni à qui retrouve une capture d'écran six mois plus tard.
+
+  La marque du produit se pose donc là où elle n'entre pas en concurrence avec celle du client : **le pied de la barre latérale**, à côté du numéro de version, et **l'écran de connexion** — le seul écran où personne n'est encore identifié, donc celui où il faut pouvoir lire sans ambiguïté quel logiciel demande un mot de passe.
+
+  **Le favicon existe.** `index.html` référençait `/logo.svg` depuis toujours ; le fichier, lui, n'existait pas. L'onglet du navigateur n'affichait donc rien.
+
+  **Le monogramme prend la couleur du texte ambiant** (`currentColor`) : bleu nuit sur fond clair, blanc sur le bleu de la barre. Seul le drapeau garde le rouge fédéral (#D52B1E) — il ne se décline pas. Et le logotype est du TEXTE, pas une image : net à toutes les tailles, sélectionnable, lu par un lecteur d'écran.
+
+- **Le logo d'entreprise est ramené à 300 × 300 px.** Il est stocké en base64 dans la fiche société, laquelle part dans les sauvegardes, dans l'archive légale et dans chaque réponse que la barre latérale demande à l'ouverture. Une photo de 4000 px y pesait des mégaoctets pour s'afficher à 32 px de haut.
+
+  Le navigateur réduit l'image **avant** l'envoi — un logo de 2400 × 600 part en 300 × 75, 60 Ko deviennent 6 Ko — et le serveur refait le travail de son côté : la route reste ouverte à qui forge une requête, et c'est elle qui décide de ce qui entre en base. Les deux ne sont pas redondants : l'un sert le confort, l'autre tient la règle.
+
+  **Le rapport est conservé** : un logo horizontal ne devient pas un carré écrasé. **Aucune image n'est agrandie** : un logo de 120 px reste à 120 px, l'étirer ne créerait pas de détail. Et l'écran annonce ce que le SERVEUR a retenu, pas ce que le navigateur a envoyé.
+
 - **Une liste de mise en route sur le tableau de bord.** Une installation neuve s'ouvrait sur quatre compteurs à zéro et un graphique vide : rien n'annonçait que sans adresse structurée le bulletin QR serait refusé au guichet, ni que sans IBAN le PDF sortirait sans section de paiement.
 
   **L'information existait déjà** — le contrôle de cohérence la produit — mais dans Paramètres → Maintenance → Diagnostic, à trois clics d'un endroit où un débutant ne va jamais. Ce n'était pas un manque de fonction, c'était un manque de placement.

@@ -3,6 +3,7 @@
 import axios, { type AxiosInstance } from 'axios'
 import { useAuthStore } from '@/store/auth'
 import { traduire, useLangueStore } from '@/i18n/useT'
+import { preparerLogo } from '@/utils/logoImage'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1'
 
@@ -452,16 +453,25 @@ export const healthApi = {
 export const settingsApi = {
   getCompany: () => api.get('/settings/company'),
   putCompany: (data: unknown) => api.put('/settings/company', data),
-  uploadLogo: (file: File): Promise<import('axios').AxiosResponse> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const logoData = e.target?.result as string
-        api.post('/settings/logo', { logo_data: logoData }).then(resolve).catch(reject)
-      }
-      reader.onerror = () => reject(new Error(traduire('ui.fichierIllisible')))
-      reader.readAsDataURL(file)
-    }),
+  // Le logo est réduit à 300 px de côté AVANT l'envoi — voir utils/logoImage.
+  // Le serveur le refait de son côté : c'est lui qui décide de ce qui entre en
+  // base, et cette route reste ouverte à qui forge une requête.
+  uploadLogo: async (file: File): Promise<import('axios').AxiosResponse> => {
+    let prepare: { dataURL: string; reduit: boolean }
+    try {
+      prepare = await preparerLogo(file)
+    } catch {
+      throw new Error(traduire('ui.fichierIllisible'))
+    }
+    const res = await api.post('/settings/logo', { logo_data: prepare.dataURL })
+    // « Réduit » vaut pour l'utilisateur dès que l'image a rétréci quelque
+    // part. Le serveur ne voit que ce qu'on lui envoie : quand le navigateur a
+    // déjà fait le travail, il reçoit une image conforme et répond « rien à
+    // faire » — ce qui est vrai pour lui, et faux pour celui qui vient de
+    // déposer une photo de 1600 px.
+    res.data = { ...res.data, resized: res.data?.resized === true || prepare.reduit }
+    return res
+  },
   deleteLogo: () => api.delete('/settings/logo'),
 }
 

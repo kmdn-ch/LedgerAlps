@@ -4,13 +4,14 @@ import { NavLink } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard, FileText, Users, BookOpen,
-  BarChart3, Settings, LogOut, Mountain, ArrowLeftRight, ShoppingCart,
+  BarChart3, Settings, LogOut, ArrowLeftRight, ShoppingCart,
 } from 'lucide-react'
 import { cn } from '@/utils'
 import { useAuthStore } from '@/store/auth'
 import { settingsApi, healthApi, authApi } from '@/api/client'
 import { AccountBanner } from './AccountBanner'
 import { useT } from '@/i18n/useT'
+import { LogoMark, Wordmark } from '@/components/brand/Logo'
 
 const NAV = [
   { to: '/',          icon: LayoutDashboard, cle: 'nav.tableauDeBord' },
@@ -76,9 +77,9 @@ export function Sidebar() {
             />
           </div>
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-accent-500 flex items-center justify-center
-                          shadow-lg shadow-accent-500/30 flex-shrink-0">
-            <Mountain className="w-4.5 h-4.5 text-white" size={18} />
+          <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center
+                          flex-shrink-0 text-alpine-900">
+            <LogoMark className="w-5 h-auto" />
           </div>
         )}
         <div className="min-w-0">
@@ -136,11 +137,20 @@ export function Sidebar() {
           <div className="px-3 py-2 mt-1 border-t border-alpine-700/50">
             <div className="text-xs font-medium text-white truncate">{user.name}</div>
             <div className="text-[10px] text-alpine-400 truncate">{user.email}</div>
-            {health?.version && (
-              <div className="text-[9px] text-alpine-600 mt-1.5 tabular-nums">
-                {health.version}
-              </div>
-            )}
+            {/* La marque du PRODUIT, ici et pas en haut.
+                En haut vit l'entreprise de l'utilisateur — son logo, son nom —
+                et lui disputer cette place serait malpoli. En bas, elle ne
+                gêne personne et répond à la seule question qu'on se pose
+                devant une capture d'écran : quel logiciel est-ce ? */}
+            <div className="flex items-baseline justify-between gap-2 mt-2 pt-2
+                            border-t border-alpine-800">
+              <Wordmark taille="text-[10px]" className="text-alpine-500" />
+              {health?.version && (
+                <span className="text-[9px] text-alpine-600 tabular-nums flex-shrink-0">
+                  {health.version}
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>

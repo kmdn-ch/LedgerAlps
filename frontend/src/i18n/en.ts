@@ -322,7 +322,7 @@ export const en: Catalogue = {
   'pr.erreurSauvegarde': 'Error while saving.',
   'pr.erreurTelechargement': 'Error while uploading.',
   'pr.logoSociete': 'Company logo',
-  'pr.logoAide': 'PNG or JPEG, 2 MB maximum. Shown in the navigation bar and on the PDF invoices.',
+  'pr.logoAide': 'PNG or JPEG, 2 MB maximum. Above 300 × 300 px, LedgerAlps scales the image down to that size without distorting it. Shown in the navigation bar and on the PDF invoices.',
   'pr.remplacer': 'Replace',
   'pr.identiteSociete': 'Company identity',
   'pr.nomCommercial': 'Trading name *',
@@ -1221,4 +1221,8 @@ export const en: Catalogue = {
   'mr.tvaAide': 'The costliest question to put off: showing VAT without being liable makes you liable for it, collected or not (VAT Act art. 27 para. 2).',
   'mr.tvaNonDeclare': 'an answer to the question',
   'mr.tvaNumeroManquant': 'your VAT number',
+
+  // ─── Logo d'entreprise — ce que le serveur a retenu ───
+  'pr.logoEnregistre': 'Stored at {l} × {h} px.',
+  'pr.logoReduit': 'Scaled down to {l} × {h} px to fit the interface format.',
 }

@@ -341,6 +341,18 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 		return
 	}
 
+	// Ramener l'image à 300 px de côté au plus. L'écran le fait déjà avant
+	// l'envoi ; c'est ici que la règle tient, parce que c'est ici qu'on écrit
+	// en base. Voir logo_resize.go pour le pourquoi de cette limite.
+	logo, err := ajusterLogo(dataURL)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "ce fichier n'est pas une image lisible (PNG ou JPEG attendu)",
+		})
+		return
+	}
+	dataURL = logo.DataURL
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
@@ -376,7 +388,15 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"logo_data": dataURL})
+	// La réponse annonce ce qui a été RETENU, pas ce qui a été envoyé. L'écran
+	// réduit déjà l'image de son côté ; afficher sa propre estimation reviendrait
+	// à se croire sur parole, alors que c'est la base qui fait foi.
+	c.JSON(http.StatusOK, gin.H{
+		"logo_data": dataURL,
+		"width":     logo.Largeur,
+		"height":    logo.Hauteur,
+		"resized":   logo.Redimens,
+	})
 }
 
 // DeleteLogo godoc

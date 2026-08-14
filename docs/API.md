@@ -423,6 +423,7 @@ jusqu'à réponse avant de recharger la page.
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
 | GET | `/onboarding` | auth | Mise en route : les cinq étapes sans lesquelles une facture suisse ne tient pas, et ce qui bloque chacune. Ne rend que des **états** et des noms de champs — les phrases sont au catalogue du frontend |
+| POST | `/settings/logo` | **admin** | Logo de la société, en adresse de données PNG ou JPEG (2 Mo au plus). Toute image dont un côté dépasse **300 px** est réduite, sans déformation, et ré-encodée en PNG. La réponse rend `logo_data`, `width`, `height` et `resized` — ce qui a été RETENU, pas ce qui a été envoyé |
 | PUT | `/settings/company` | **admin** | `vat_status` vaut `""` (non déclaré), `"liable"` ou `"exempt"`. **Absent = ne touche pas** ; toute autre valeur répond `422`. `"exempt"` efface `vat_number` — il s'imprime sur la facture, et le garder contredirait la déclaration (LTVA art. 27 al. 1) |
 | GET | `/maintenance/integrity` | **admin** | Contrôle de cohérence des données |
 | GET | `/maintenance/health` | **admin** | État du système, sauvegardes, exposition réseau |

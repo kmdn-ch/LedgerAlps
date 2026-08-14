@@ -4,7 +4,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Mountain, Eye, EyeOff, Smartphone, ArrowLeft, LifeBuoy } from 'lucide-react'
+import { Eye, EyeOff, Smartphone, ArrowLeft, LifeBuoy } from 'lucide-react'
+import { Logo } from '@/components/brand/Logo'
 import { useState } from 'react'
 import { authApi } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
@@ -139,15 +140,11 @@ export function LoginPage() {
           </div>
         )}
 
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-accent-500 flex items-center justify-center
-                          shadow-lg shadow-accent-500/40">
-            <Mountain size={20} className="text-white" />
-          </div>
-          <div>
-            <div className="font-display font-700 text-xl text-white">LedgerAlps</div>
-          </div>
+        {/* La marque, en entier. C'est le seul écran où personne n'est encore
+            identifié : c'est donc ici qu'il faut pouvoir lire, sans ambiguïté,
+            quel logiciel demande un mot de passe. */}
+        <div className="flex items-center justify-center mb-8 text-white">
+          <Logo taille="text-xl" />
         </div>
 
         {/* Card */}

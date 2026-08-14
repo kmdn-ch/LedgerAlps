@@ -761,6 +761,11 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Questo file non è un’attestazione LedgerAlps",
 		EN: "This file is not a LedgerAlps attestation",
 	},
+	"ce fichier n'est pas une image lisible (PNG ou JPEG attendu)": {
+		DE: "Diese Datei ist kein lesbares Bild (PNG oder JPEG erwartet)",
+		IT: "Questo file non è un’immagine leggibile (atteso PNG o JPEG)",
+		EN: "This file is not a readable image (PNG or JPEG expected)",
+	},
 	"ce fichier n'est pas une sauvegarde chiffrée": {
 		DE: "Diese Datei ist keine verschlüsselte Sicherung",
 		IT: "Questo file non è un backup cifrato",

@@ -322,7 +322,7 @@ export const it: Catalogue = {
   'pr.erreurSauvegarde': 'Errore durante il salvataggio.',
   'pr.erreurTelechargement': 'Errore durante il caricamento.',
   'pr.logoSociete': 'Logo della società',
-  'pr.logoAide': 'Formato PNG o JPEG, max 2 MB. Visualizzato nella barra di navigazione e sulle fatture PDF.',
+  'pr.logoAide': 'PNG o JPEG, 2 MB al massimo. Oltre 300 × 300 px, LedgerAlps riduce l’immagine a questa dimensione senza deformarla. Visualizzato nella barra di navigazione e sulle fatture PDF.',
   'pr.remplacer': 'Sostituire',
   'pr.identiteSociete': 'Identità della società',
   'pr.nomCommercial': 'Nome commerciale *',
@@ -1221,4 +1221,8 @@ export const it: Catalogue = {
   'mr.tvaAide': 'La domanda più costosa da rimandare: indicare l’IVA senza esservi assoggettati ve ne rende debitori, incassata o meno (LIVA art. 27 cpv. 2).',
   'mr.tvaNonDeclare': 'una risposta alla domanda',
   'mr.tvaNumeroManquant': 'il vostro numero IVA',
+
+  // ─── Logo d'entreprise — ce que le serveur a retenu ───
+  'pr.logoEnregistre': 'Registrato in {l} × {h} px.',
+  'pr.logoReduit': 'Ridotto a {l} × {h} px per entrare nel formato dell’interfaccia.',
 }

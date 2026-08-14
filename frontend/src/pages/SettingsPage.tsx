@@ -159,14 +159,28 @@ export function SettingsPage() {
     },
   })
 
+  // Ce que le SERVEUR a retenu, pas ce que le navigateur a envoyé. Les deux
+  // réduisent l'image ; c'est la base qui fait foi, et l'écran le dit.
+  const [logoRetenu, setLogoRetenu] =
+    useState<{ l: number; h: number; reduit: boolean } | null>(null)
+
   const uploadLogo = useMutation({
     mutationFn: (file: File) => settingsApi.uploadLogo(file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['company-settings'] }),
+    onSuccess: (res) => {
+      const d = res.data as { width?: number; height?: number; resized?: boolean }
+      if (d.width && d.height) {
+        setLogoRetenu({ l: d.width, h: d.height, reduit: d.resized === true })
+      }
+      qc.invalidateQueries({ queryKey: ['company-settings'] })
+    },
   })
 
   const deleteLogo = useMutation({
     mutationFn: () => settingsApi.deleteLogo(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['company-settings'] }),
+    onSuccess: () => {
+      setLogoRetenu(null)
+      qc.invalidateQueries({ queryKey: ['company-settings'] })
+    },
   })
 
   const handleLogoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -318,6 +332,12 @@ export function SettingsPage() {
                       <p className="text-xs text-alpine-500">
                         {t('pr.logoAide')}
                       </p>
+                      {logoRetenu && (
+                        <p className="text-xs text-success-700">
+                          {t(logoRetenu.reduit ? 'pr.logoReduit' : 'pr.logoEnregistre',
+                             { l: logoRetenu.l, h: logoRetenu.h })}
+                        </p>
+                      )}
                       {!peutEcrire && (
                         <p className="text-xs text-alpine-500">{t(RAISON_LECTURE_SEULE)}</p>
                       )}

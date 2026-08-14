@@ -366,7 +366,7 @@ export const fr = {
   'pr.erreurSauvegarde': 'Erreur lors de la sauvegarde.',
   'pr.erreurTelechargement': 'Erreur lors du téléchargement.',
   'pr.logoSociete': 'Logo de la société',
-  'pr.logoAide': 'Format PNG ou JPEG, max 2 Mo. Affiché dans la barre de navigation et sur les factures PDF.',
+  'pr.logoAide': 'PNG ou JPEG, 2 Mo au maximum. Au-delà de 300 × 300 px, LedgerAlps réduit l’image à cette taille sans la déformer. Affiché dans la barre de navigation et sur les factures PDF.',
   'pr.remplacer': 'Remplacer',
   'pr.identiteSociete': 'Identité de la société',
   'pr.nomCommercial': 'Nom commercial *',
@@ -1265,4 +1265,8 @@ export const fr = {
   'mr.tvaAide': 'La question la plus coûteuse à remettre à plus tard : faire figurer la TVA sans y être assujetti vous en rend redevable, encaissée ou non (LTVA art. 27 al. 2).',
   'mr.tvaNonDeclare': 'une réponse à la question',
   'mr.tvaNumeroManquant': 'votre numéro de TVA',
+
+  // ─── Logo d'entreprise — ce que le serveur a retenu ───
+  'pr.logoEnregistre': 'Enregistré en {l} × {h} px.',
+  'pr.logoReduit': 'Réduit à {l} × {h} px pour tenir dans le format de l’interface.',
 } as const

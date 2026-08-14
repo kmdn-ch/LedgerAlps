@@ -323,7 +323,7 @@ export const de: Catalogue = {
   'pr.erreurSauvegarde': 'Fehler beim Speichern.',
   'pr.erreurTelechargement': 'Fehler beim Hochladen.',
   'pr.logoSociete': 'Firmenlogo',
-  'pr.logoAide': 'PNG oder JPEG, max. 2 MB. Erscheint in der Navigationsleiste und auf den PDF-Rechnungen.',
+  'pr.logoAide': 'PNG oder JPEG, höchstens 2 MB. Über 300 × 300 px verkleinert LedgerAlps das Bild auf diese Grösse, ohne es zu verzerren. Erscheint in der Navigationsleiste und auf den PDF-Rechnungen.',
   'pr.remplacer': 'Ersetzen',
   'pr.identiteSociete': 'Firmenidentität',
   'pr.nomCommercial': 'Firmenname *',
@@ -1222,4 +1222,8 @@ export const de: Catalogue = {
   'mr.tvaAide': 'Die Frage, deren Aufschub am teuersten wird: die MWST auszuweisen, ohne pflichtig zu sein, macht Sie dafür steuerpflichtig, vereinnahmt oder nicht (MWSTG Art. 27 Abs. 2).',
   'mr.tvaNonDeclare': 'eine Antwort auf die Frage',
   'mr.tvaNumeroManquant': 'Ihre MWST-Nummer',
+
+  // ─── Logo d'entreprise — ce que le serveur a retenu ───
+  'pr.logoEnregistre': 'Gespeichert mit {l} × {h} px.',
+  'pr.logoReduit': 'Auf {l} × {h} px verkleinert, damit es ins Format der Oberfläche passt.',
 }
