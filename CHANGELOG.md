@@ -17,7 +17,19 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 - **Le choix de la langue en pied de l'écran de connexion.** Il vivait dans Paramètres → Mon compte, c'est-à-dire derrière la connexion : un employé germanophone ou une fiduciaire tessinoise devait lire le français pour trouver comment ne plus lire le français.
 
+- **Un conseil de sécurité sur l'écran de connexion**, tiré au sort parmi trente-deux et frappé à la machine. C'est le seul moment de la journée où l'utilisateur n'a rien d'autre à faire que regarder ; la même consigne dans un manuel n'est jamais lue. Le tirage évite celui de la dernière fois, et l'effet respecte `prefers-reduced-motion` — qui a demandé à son système de calmer les animations reçoit la phrase entière, d'un coup. Les trente-deux conseils existent dans les quatre langues.
+
+- **Le verrouillage de connexion devient progressif.** Dix échecs verrouillent l'adresse, et chaque nouvelle série coûte plus cher : 30 s, 1 min, 5 min, 15 min, 1 h — le dernier barreau se répétant ensuite. Trente secondes ne gênent presque pas un humain et divisent déjà par mille la cadence d'un automate ; les barreaux suivants achèvent de rendre l'exercice sans intérêt. Une heure de silence après la fin d'un verrou ramène l'échelle à son premier barreau, et une connexion réussie l'efface entièrement.
+
+  **L'écran dit maintenant combien de temps il reste** au lieu de « identifiants incorrects » : quelqu'un qui ne sait pas qu'il est verrouillé réessaie, et allonge l'attente à chaque série.
+
+### Modifié
+
+- **L'écran de connexion s'allège.** Le bandeau supérieur — « portail sécurisé » et le témoin d'état — disparaît, et le pied du formulaire ne porte plus que **la version installée**, lue au serveur. C'est la première chose qu'on demande dans un ticket de support, et la dernière qu'on trouve.
+
 ### Corrigé
+
+- **Le barreau le plus long du verrouillage effaçait sa propre mémoire.** Le balayage des enregistrements ne regardait que l'inactivité : après une heure de verrou, la dernière tentative datait de plus d'une heure, l'enregistrement partait, et l'échelle repartait de trente secondes. Un automate n'aurait donc jamais dépassé la première minute. Trouvé par le test de l'échelle, pas à la relecture.
 
 - **L'écran de mise à jour partait avant qu'on ait pu le lire.** Il portait « Ouverture de LedgerAlps dans 5 secondes… » et se remplaçait tout seul. Or c'est le seul moment où le produit dit « vos données comptables ont été conservées » — la phrase que quelqu'un qui vient de remplacer un logiciel de comptabilité veut lire avant tout. Cinq secondes ne suffisent pas à la lire, et personne ne peut la relire ensuite : le message part avec la page.
 

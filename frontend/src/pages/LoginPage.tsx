@@ -29,10 +29,14 @@
 //   - Le choix de la langue, en pied de page. Il vivait derrière la connexion,
 //     ce qui obligeait à lire le français pour trouver comment ne plus le lire.
 //
-//   - Le témoin « système opérationnel » interroge vraiment le serveur. Une
-//     pastille verte peinte en dur serait une décoration ; celle-ci passe au
-//     gris quand l'API ne répond plus, ce qui distingue « mauvais mot de
-//     passe » de « serveur arrêté » au moment où la question se pose.
+//   - Un conseil de sécurité, tiré au sort et frappé à la machine. L'écran de
+//     connexion est le seul moment de la journée où l'utilisateur n'a rien
+//     d'autre à faire que regarder ; la même consigne dans un manuel n'est
+//     jamais lue.
+//
+//   - Le pied du formulaire porte la VERSION INSTALLÉE, lue au serveur. C'est
+//     la première chose qu'on demande dans un ticket de support, et la
+//     dernière qu'on trouve.
 
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -41,10 +45,11 @@ import { z } from 'zod'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Eye, EyeOff, Smartphone, ArrowLeft, ArrowRight, LifeBuoy,
-  Mail, Lock, ShieldCheck, Server, Scale, Loader2,
+  Mail, Lock, Server, Scale, Loader2,
 } from 'lucide-react'
 import { LedgerAlpsLogo } from '@/components/brand/Logo'
 import { SelecteurLangue } from '@/components/brand/SelecteurLangue'
+import { ConseilSecurite } from '@/components/brand/ConseilSecurite'
 import { authApi, healthApi } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
 import { useT, useTv } from '@/i18n/useT'
@@ -57,6 +62,21 @@ type FormData = z.infer<typeof schema>
 
 export function LoginPage() {
   const t = useT()
+
+  /**
+   * Des secondes en une durée qu'on lit.
+   *
+   * « Réessayez dans 3600 secondes » est exact et inutilisable. Les paliers du
+   * serveur — 30 s, 1 min, 5 min, 15 min, 1 h — tombent tous juste, et
+   * l'arrondi supérieur évite d'annoncer « 0 minute » sur les derniers
+   * instants d'un verrou.
+   */
+  const enClair = (secondes: number): string => {
+    if (secondes >= 3600) return t('duree.uneHeure')
+    if (secondes >= 120)  return t('duree.minutes', { n: Math.ceil(secondes / 60) })
+    if (secondes >= 60)   return t('duree.uneMinute')
+    return t('duree.secondes', { n: Math.max(1, Math.ceil(secondes)) })
+  }
   const tv = useTv()
   // Une déconnexion automatique doit se dire. Renvoyer quelqu'un sur l'écran de
   // connexion sans explication ressemble à une panne, et c'est la première
@@ -88,20 +108,17 @@ export function LoginPage() {
   const [remember, setRemember] = useState(false)
   const secours = mode === 'recovery'
 
-  // Le serveur répond-il ? Interrogé à l'ouverture, puis toutes les trente
-  // secondes. Le premier appel décide de la pastille ; les suivants la font
-  // tomber si le serveur s'arrête pendant que la page reste ouverte.
-  const [enLigne, setEnLigne] = useState<boolean | null>(null)
+  // La version INSTALLÉE, lue au serveur. Elle n'est pas compilée dans la page :
+  // le paquet du navigateur et le binaire se mettent à jour ensemble, mais c'est
+  // le binaire qui fait foi, et c'est lui qu'on veut lire dans un ticket de
+  // support.
+  const [version, setVersion] = useState('')
   useEffect(() => {
     let vivant = true
-    const sonder = () => {
-      healthApi.get()
-        .then(() => { if (vivant) setEnLigne(true) })
-        .catch(() => { if (vivant) setEnLigne(false) })
-    }
-    sonder()
-    const minuterie = setInterval(sonder, 30_000)
-    return () => { vivant = false; clearInterval(minuterie) }
+    healthApi.get()
+      .then(r => { if (vivant) setVersion(String(r.data?.version ?? '')) })
+      .catch(() => { /* le pied de page reste alors vide, plutôt que de mentir */ })
+    return () => { vivant = false }
   }, [])
 
   // La saisie est normalisée comme le serveur la normalise : majuscules, sans
@@ -143,7 +160,9 @@ export function LoginPage() {
         // chercher au mauvais endroit.
         setError(t(secours ? 'cx.secoursRefuse' : 'cx.codeIncorrect'))
       } else if (status === 429) {
-        setError(t('cx.tropDeTentatives'))
+        const secs = (e as { response?: { data?: { retry_after?: number } } })
+          .response?.data?.retry_after ?? 0
+        setError(t('cx.verrouille', { duree: enClair(secs) }))
       } else {
         setError(t('cx.verificationEchouee'))
         setChallenge(null)
@@ -170,8 +189,17 @@ export function LoginPage() {
         return
       }
       enter(data.email, res.data)
-    } catch {
-      setError(t('connexion.identifiantsIncorrects'))
+    } catch (e) {
+      // Un compte verrouillé ne doit PAS lire « identifiants incorrects » : il
+      // réessaierait, prolongeant l'attente à chaque série. Le serveur donne le
+      // délai qui reste ; on le rend lisible.
+      const rep = (e as { response?: { status?: number; data?: { retry_after?: number } } }).response
+      if (rep?.status === 429) {
+        setError(t('cx.verrouille', { duree: enClair(rep.data?.retry_after ?? 0) })
+                 + ' ' + t('cx.verrouilleAide'))
+      } else {
+        setError(t('connexion.identifiantsIncorrects'))
+      }
     } finally {
       setLoading(false)
     }
@@ -183,29 +211,6 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-navyBg text-slate-100 antialiased">
-
-      {/* ── Bandeau ────────────────────────────────────────────────────────── */}
-      <header className="w-full bg-slate-900/40 border-b border-slate-800/60 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <span className="inline-flex items-center justify-center bg-brand-orange/10
-                             text-brand-orange p-1.5 rounded-lg">
-              <ShieldCheck size={13} />
-            </span>
-            <span className="text-xs font-semibold tracking-wider text-slate-300 uppercase">
-              {t('cx.portailSecurise')}
-            </span>
-          </div>
-          <div className="text-xs text-slate-400 flex items-center gap-2">
-            <span className={`inline-block w-2 h-2 rounded-full ${
-              enLigne === true  ? 'bg-emerald-500 animate-pulse'
-              : enLigne === false ? 'bg-danger-500'
-              : 'bg-slate-600'
-            }`} />
-            <span>{enLigne === false ? t('cx.serveurInjoignable') : t('cx.systemeOperationnel')}</span>
-          </div>
-        </div>
-      </header>
 
       <main className="flex-grow flex items-center justify-center p-4 sm:p-6 lg:p-10">
         <div className="w-full max-w-5xl space-y-5">
@@ -245,6 +250,11 @@ export function LoginPage() {
                     {t('cx.accrocheSousTitre')}
                   </p>
                 </div>
+
+                {/* Le conseil du jour. Placé sous la marque, dans l'espace qui
+                    restait vide : c'est le seul moment où l'utilisateur n'a
+                    rien d'autre à faire que regarder. */}
+                <ConseilSecurite className="pt-2 border-t border-slate-800/60" />
               </div>
 
               <div className="space-y-3.5 pt-8 z-10 relative border-t border-slate-800/80
@@ -460,7 +470,7 @@ export function LoginPage() {
               </div>
 
               <div className="text-center text-xs text-slate-500 mt-8 tracking-wide">
-                {t('connexion.piedDePage')}
+                {version && `LedgerAlps Version : ${version}`}
               </div>
             </div>
           </div>

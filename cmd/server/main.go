@@ -210,10 +210,14 @@ func main() {
 	// Credential-checking routes sit behind a per-IP rate limiter so an attacker
 	// cannot brute-force a password against a locally exposed instance.
 	authHandler := handlers.NewAuthHandler(database, cfg)
+	//
+	// Dix échecs verrouillent l'adresse, puis l'attente s'allonge à chaque
+	// nouvelle série : 30 s, 1 min, 5 min, 15 min, 1 h. Une heure de calme
+	// ramène l'échelle à son premier barreau.
 	loginLimiter := middleware.NewLoginRateLimiter(
 		middleware.DefaultLoginMaxAttempts,
 		middleware.DefaultLoginWindow,
-		middleware.DefaultLoginLockout,
+		middleware.DefaultLoginPaliers...,
 	)
 	// Persist lockouts so brute-force attempts are visible to an administrator.
 	loginLimiter.OnLockout(func(ip string, until time.Time) {
