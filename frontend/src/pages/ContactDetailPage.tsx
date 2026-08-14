@@ -6,11 +6,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ArrowLeft, Save, Building2, User, PowerOff } from 'lucide-react'
+import { ArrowLeft, Save, Building2, User } from 'lucide-react'
 import { contactsApi } from '@/api/client'
 import { ContactDocuments } from '@/components/contacts/ContactDocuments'
 import { PageHeader, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import type { Contact } from '@/types'
+import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
+import { useT, useTv } from '@/i18n/useT'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -20,7 +22,7 @@ const opt = <T extends z.ZodTypeAny>(s: T) =>
 const schema = z.object({
   contact_type:      z.enum(['customer', 'supplier', 'both']),
   is_company:        z.boolean().default(false),
-  name:              z.string().min(1, 'Nom requis'),
+  name:              z.string().min(1, 'val.nomRequis'),
   legal_name:        opt(z.string()),
   address:           opt(z.string()),
   postal_code:       opt(z.string()),
@@ -28,10 +30,11 @@ const schema = z.object({
   country:           z.string().min(2).max(2).default('CH'),
   uid_number:        opt(z.string()),
   vat_number:        opt(z.string()),
-  email:             opt(z.string().email('E-mail invalide')),
+  email:             opt(z.string().email('val.emailInvalide')),
   phone:             opt(z.string()),
   payment_term_days: z.coerce.number().int().min(0).max(365).default(30),
   iban:              opt(z.string()),
+  qr_iban:           opt(z.string()),
   notes:             opt(z.string()),
 })
 
@@ -40,7 +43,10 @@ type FormData = z.infer<typeof schema>
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function ContactDetailPage() {
+  const t = useT()
+  const tv = useTv()
   const { contactId } = useParams<{ contactId: string }>()
+  const peutEcrire    = useCanWrite()
   const navigate      = useNavigate()
   const qc            = useQueryClient()
 
@@ -81,6 +87,7 @@ export function ContactDetailPage() {
       phone:             contact.phone ?? '',
       payment_term_days: contact.payment_term_days,
       iban:              contact.iban ?? '',
+      qr_iban:           contact.qr_iban ?? '',
       notes:             contact.notes ?? '',
     })
   }, [contact, reset])
@@ -93,16 +100,8 @@ export function ContactDetailPage() {
     },
   })
 
-  const toggleActive = useMutation({
-    mutationFn: () => contactsApi.update(contactId!, { is_active: !contact?.is_active }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['contact', contactId] })
-      qc.invalidateQueries({ queryKey: ['contacts'] })
-    },
-  })
-
   if (isLoading) return <LoadingSpinner />
-  if (error || !contact) return <ErrorBanner message="Contact introuvable." />
+  if (error || !contact) return <ErrorBanner message={t('co.introuvable')} />
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -113,37 +112,43 @@ export function ContactDetailPage() {
         </button>
         <PageHeader
           title={contact.name}
-          subtitle={contact.is_company ? 'Entreprise' : 'Particulier'}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => toggleActive.mutate()}
-                disabled={toggleActive.isPending}
-                className="btn-ghost btn-sm flex items-center gap-1.5 text-alpine-500"
-                title={contact.is_active ? 'Désactiver' : 'Réactiver'}
-              >
-                <PowerOff size={14} />
-                {contact.is_active ? 'Désactiver' : 'Réactiver'}
-              </button>
-            </div>
-          }
+          subtitle={t(contact.is_company ? 'co.entreprise' : 'co.particulier')}
+          /* La désactivation manuelle a été retirée : elle n'apportait rien
+             qu'on ne fasse mieux autrement. Un contact qu'on ne veut plus voir
+             s'anonymise (nLPD art. 6 al. 4), ce qui l'écarte des listes ET
+             efface ses données personnelles — un geste qui dit ce qu'il fait,
+             au lieu d'un interrupteur dont l'effet n'était visible nulle part.
+
+             La colonne is_active reste : c'est l'anonymisation qui la pose. */
         />
       </div>
 
       {save.isError && (
         <ErrorBanner message={
-          (save.error as any)?.response?.data?.error ?? 'Erreur lors de la sauvegarde.'
+          (save.error as any)?.response?.data?.error ?? t('co.erreurSauvegarde')
         } />
       )}
       {save.isSuccess && !isDirty && (
         <div className="mb-4 px-4 py-2.5 rounded-lg bg-success-100 border border-success-100
                         text-sm text-success-700">
-          Modifications enregistrées.
+          {t('co.enregistre')}
+        </div>
+      )}
+
+      {!peutEcrire && (
+        <div className="mb-4 px-4 py-2.5 rounded-lg bg-alpine-50 border border-alpine-200
+                        text-sm text-alpine-600">
+          {t(RAISON_LECTURE_SEULE)}
         </div>
       )}
 
       <form onSubmit={handleSubmit(d => save.mutate(d))} className="space-y-5">
+      {/* Un `fieldset` désactivé neutralise NATIVEMENT chaque champ et bouton
+          qu'il contient, y compris ceux qu'on y ajoutera plus tard. Désactiver
+          champ par champ marche le jour où on l'écrit, puis se périme au
+          premier champ ajouté sans y penser — c'est le motif qui a déjà laissé
+          passer des fonctions non gardées dans ce produit. */}
+      <fieldset disabled={!peutEcrire} className="contents">
         {/* Identité */}
         <div className="card">
           <div className="card-header">
@@ -152,53 +157,53 @@ export function ContactDetailPage() {
                 ? <Building2 size={15} className="text-alpine-500" />
                 : <User      size={15} className="text-alpine-500" />
               }
-              <h2 className="text-sm font-semibold text-alpine-800">Identité</h2>
+              <h2 className="text-sm font-semibold text-alpine-800">{t('co.identite')}</h2>
             </div>
           </div>
           <div className="card-body space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="label">Type *</label>
+                <label className="label">{t('co.type')}</label>
                 <select className="select" {...register('contact_type')}>
-                  <option value="customer">Client</option>
-                  <option value="supplier">Fournisseur</option>
-                  <option value="both">Les deux</option>
+                  <option value="customer">{t('co.client')}</option>
+                  <option value="supplier">{t('co.fournisseur')}</option>
+                  <option value="both">{t('co.lesDeux')}</option>
                 </select>
               </div>
               <div className="flex items-end pb-2">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" {...register('is_company')}
                     className="rounded border-alpine-300 accent-accent-500" />
-                  <span className="text-sm text-alpine-700">Entreprise</span>
+                  <span className="text-sm text-alpine-700">{t('co.entreprise')}</span>
                 </label>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="label">Nom / Raison sociale *</label>
+                <label className="label">{t('co.nomRaisonSociale')}</label>
                 <input className={`input ${errors.name ? 'input-error' : ''}`}
                   {...register('name')} />
-                {errors.name && <p className="error-msg">{errors.name.message}</p>}
+                {errors.name && <p className="error-msg">{tv(errors.name.message)}</p>}
               </div>
               <div>
-                <label className="label">Raison sociale légale</label>
+                <label className="label">{t('co.raisonSocialeLegale')}</label>
                 <input className="input" {...register('legal_name')} />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="label">Pays</label>
+                <label className="label">{t('co.pays')}</label>
                 <input className="input uppercase" maxLength={2} {...register('country')} />
               </div>
               <div>
-                <label className="label">N° IDE (CHE-…)</label>
+                <label className="label">{t('co.ide')}</label>
                 <input className="input font-mono" placeholder="CHE-123.456.789"
                   {...register('uid_number')} />
               </div>
               <div>
-                <label className="label">N° TVA</label>
+                <label className="label">{t('co.numeroTVA')}</label>
                 <input className="input font-mono" {...register('vat_number')} />
               </div>
             </div>
@@ -208,30 +213,30 @@ export function ContactDetailPage() {
         {/* Coordonnées */}
         <div className="card">
           <div className="card-header">
-            <h2 className="text-sm font-semibold text-alpine-800">Coordonnées</h2>
+            <h2 className="text-sm font-semibold text-alpine-800">{t('co.coordonnees')}</h2>
           </div>
           <div className="card-body space-y-4">
             <div>
-              <label className="label">Adresse</label>
-              <input className="input mb-2" placeholder="Rue et numéro" {...register('address')} />
+              <label className="label">{t('co.adresse')}</label>
+              <input className="input mb-2" placeholder={t('co.placeholderRue')} {...register('address')} />
               <div className="grid grid-cols-3 gap-3">
-                <input className="input" placeholder="NPA" {...register('postal_code')} />
-                <input className="input col-span-2" placeholder="Localité" {...register('city')} />
+                <input className="input" placeholder={t('pr.npa')} {...register('postal_code')} />
+                <input className="input col-span-2" placeholder={t('co.placeholderLocalite')} {...register('city')} />
               </div>
               <p className="text-xs text-alpine-400 mt-1.5">
-                Rue, NPA et localité sont requis pour inclure le débiteur dans le QR code de paiement SPC 0200.
+                {t('co.adresseQRAide')}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="label">E-mail</label>
+                <label className="label">{t('co.email')}</label>
                 <input type="email"
                   className={`input ${errors.email ? 'input-error' : ''}`}
                   {...register('email')} />
-                {errors.email && <p className="error-msg">{errors.email.message}</p>}
+                {errors.email && <p className="error-msg">{tv(errors.email.message)}</p>}
               </div>
               <div>
-                <label className="label">Téléphone</label>
+                <label className="label">{t('co.telephone')}</label>
                 <input type="tel" className="input" {...register('phone')} />
               </div>
             </div>
@@ -241,19 +246,33 @@ export function ContactDetailPage() {
         {/* Paiement */}
         <div className="card">
           <div className="card-header">
-            <h2 className="text-sm font-semibold text-alpine-800">Paiement</h2>
+            <h2 className="text-sm font-semibold text-alpine-800">{t('co.paiement')}</h2>
           </div>
           <div className="card-body">
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="label">Délai (jours)</label>
+                <label className="label">{t('co.delaiJours')}</label>
                 <input type="number" min="0" max="365" className="input"
                   {...register('payment_term_days')} />
               </div>
               <div className="col-span-2">
-                <label className="label">IBAN</label>
+                <label className="label">{t('paiement.iban')}</label>
                 <input className="input font-mono" placeholder="CH…" {...register('iban')} />
               </div>
+            </div>
+            {/* Le QR-IBAN se range à part parce qu'il ne se substitue pas à
+                l'IBAN : une référence QR n'est acceptée qu'avec lui, une
+                référence Creditor Reference qu'avec un IBAN ordinaire
+                (SIX IG v2.4 §4.2.2). Les confondre fait rejeter le virement.
+                Lu sur une facture, il était enregistré ici sans jamais être
+                montré — ce qui est invisible ne se corrige pas. */}
+            <div className="mt-4">
+              <label className="label">{t('paiement.qrIban')}</label>
+              <input className="input font-mono" placeholder="CH…"
+                {...register('qr_iban')} />
+              <p className="text-xs text-alpine-500 mt-1">
+                {t('co.qrIbanAide')}
+              </p>
             </div>
           </div>
         </div>
@@ -261,26 +280,31 @@ export function ContactDetailPage() {
         {/* Notes */}
         <div className="card">
           <div className="card-header">
-            <h2 className="text-sm font-semibold text-alpine-800">Notes</h2>
+            <h2 className="text-sm font-semibold text-alpine-800">{t('co.notes')}</h2>
           </div>
           <div className="card-body">
             <textarea rows={3} className="input resize-none w-full" {...register('notes')} />
           </div>
         </div>
 
-        {/* Actions */}
+        </fieldset>
+
+        {/* « Retour » vit hors du fieldset : naviguer n'écrit rien, et un
+            lecteur doit pouvoir repartir. */}
         <div className="flex justify-end gap-3 pb-6">
           <button type="button" onClick={() => navigate('/contacts')} className="btn-secondary">
-            Retour
+            {t('action.retour')}
           </button>
-          <button
-            type="submit"
-            className="btn-primary"
-            disabled={save.isPending || !isDirty}
-          >
-            <Save size={15} />
-            {save.isPending ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
+          {peutEcrire && (
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={save.isPending || !isDirty}
+            >
+              <Save size={15} />
+              {save.isPending ? t('etat.enregistrement') : t('action.enregistrer')}
+            </button>
+          )}
         </div>
       </form>
 

@@ -234,11 +234,20 @@ func TestBundledFeedIsValid(t *testing.T) {
 		if a.SourceURL == "" || a.SourceName == "" {
 			t.Errorf("advisory %q ships without a citable source", a.ID)
 		}
-		if Localised(a.Title, "fr") == "" || Localised(a.Body, "fr") == "" {
-			t.Errorf("advisory %q has no French text (product default language)", a.ID)
-		}
-		if Localised(a.Title, "en") == "" {
-			t.Errorf("advisory %q has no English title", a.ID)
+		// Les quatre langues de l'interface, sans repli.
+		//
+		// `Localised` retombe sur le français quand une langue manque, si bien
+		// qu'un avis écrit en fr/en seulement s'affiche PARFAITEMENT — en
+		// français, au milieu d'un écran allemand. Le repli protège l'exécution
+		// et masque l'oubli ; c'est donc ici qu'il faut le voir, en lisant la
+		// table sans passer par lui.
+		for _, lang := range []string{"fr", "de", "it", "en"} {
+			if strings.TrimSpace(a.Title[lang]) == "" {
+				t.Errorf("advisory %q : titre absent en %q", a.ID, lang)
+			}
+			if strings.TrimSpace(a.Body[lang]) == "" {
+				t.Errorf("advisory %q : corps absent en %q", a.ID, lang)
+			}
 		}
 	}
 }

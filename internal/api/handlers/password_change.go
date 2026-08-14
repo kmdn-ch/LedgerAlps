@@ -111,7 +111,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "ce compte n'est plus actif"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -135,7 +135,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 	newHash, err := security.HashPassword(body.NewPassword)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le mot de passe n'a pas pu être haché"})
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ?
 		WHERE id = ?`, h.cfg.UsePostgres())
 	if _, err := h.db.ExecContext(ctx, upd, newHash, time.Now().UTC(), claims.UserID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -153,6 +153,11 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	if _, err := h.db.ExecContext(ctx, revoke, claims.UserID); err != nil {
 		_ = err // non bloquant : le mot de passe est déjà changé
 	}
+
+	// Les postes de confiance tombent aussi. La dispense de second facteur
+	// reposait sur un mot de passe qui n'est plus le bon — souvent parce qu'on
+	// le croit compromis.
+	forgetDevices(ctx, h.db, h.cfg.UsePostgres(), claims.UserID)
 
 	recordSecurityEvent(ctx, h.db, h.cfg.UsePostgres(),
 		"password_changed", c.ClientIP(), "compte="+claims.UserID)

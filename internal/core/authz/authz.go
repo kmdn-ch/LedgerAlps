@@ -80,8 +80,23 @@ const (
 	PermWriteDocuments Permission = "write_documents"
 	// PermWriteAccounting : journal, plan comptable, exercices, TVA.
 	PermWriteAccounting Permission = "write_accounting"
-	// PermAdmin : comptes utilisateurs, sauvegardes, chiffrement, réseau,
-	// clés de signature. Tout ce dont l'abus ne se répare pas.
+	// PermManage : administration COMPTABLE — clôture d'exercice, réglages de
+	// l'entreprise, contrôle d'intégrité, création de sauvegardes, effacement
+	// des données personnelles (nLPD art. 6 al. 4).
+	//
+	// C'est le métier du comptable, pas celui de l'administrateur du logiciel.
+	// Ces actions étaient réservées à PermAdmin, si bien qu'un comptable ne
+	// pouvait pas boucler son exercice ni vérifier ses propres livres — il
+	// devait demander à quelqu'un dont le rôle est de gérer des mots de passe.
+	PermManage Permission = "manage"
+	// PermAdmin : sécurité du logiciel et comptes utilisateurs. Chiffrement de
+	// la base, restauration d'une sauvegarde, réseau et TLS, clé de signature,
+	// journal de sécurité, création et rôles des comptes.
+	//
+	// La frontière est celle-ci : PermManage administre la COMPTABILITÉ,
+	// PermAdmin administre le LOGICIEL et QUI Y ACCÈDE. Tout ce dont l'abus ne
+	// se répare pas, ou qui donne accès à autre chose que des chiffres, reste
+	// ici.
 	PermAdmin Permission = "admin"
 )
 
@@ -89,14 +104,35 @@ const (
 // conditions : on la lit d'un regard, et un droit ajouté par erreur se voit.
 var grants = map[Role]map[Permission]bool{
 	RoleAdmin: {
-		PermRead: true, PermWriteDocuments: true, PermWriteAccounting: true, PermAdmin: true,
+		PermRead: true, PermWriteDocuments: true, PermWriteAccounting: true,
+		PermManage: true, PermAdmin: true,
 	},
+	// Le comptable fait TOUT sur la comptabilité — y compris clôturer
+	// l'exercice, régler la fiche entreprise et contrôler l'intégrité des
+	// livres. Il ne touche ni à la sécurité du logiciel ni aux comptes des
+	// utilisateurs.
 	RoleAccountant: {
 		PermRead: true, PermWriteDocuments: true, PermWriteAccounting: true,
+		PermManage: true,
 	},
 	RoleViewer: {
 		PermRead: true,
 	},
+}
+
+// RequiresSecondFactor dit si un rôle doit inscrire un second facteur.
+//
+// Administrateur ET comptable : le premier détient les clés de l'installation,
+// le second écrit dans les livres — un mot de passe volé sur l'un ou l'autre
+// permet de fabriquer une comptabilité.
+//
+// La lecture seule en est dispensée. Ce rôle ne peut RIEN modifier : le pire
+// qu'un mot de passe volé permette est de lire des chiffres, ce qui est déjà
+// couvert par le chiffrement de la base et du disque. Lui imposer un téléphone
+// coûterait plus qu'il ne protège — et c'est le rôle qu'on donne à sa
+// fiduciaire, à qui l'on ne dicte pas son équipement.
+func RequiresSecondFactor(r Role) bool {
+	return r == RoleAdmin || r == RoleAccountant
 }
 
 // Can reports whether the role carries the permission.

@@ -4,18 +4,22 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Mountain, Eye, EyeOff, Smartphone, ArrowLeft, LifeBuoy } from 'lucide-react'
+import { Eye, EyeOff, Smartphone, ArrowLeft, LifeBuoy } from 'lucide-react'
+import { LedgerAlpsLogo } from '@/components/brand/Logo'
 import { useState } from 'react'
 import { authApi } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
+import { useT, useTv } from '@/i18n/useT'
 
 const schema = z.object({
-  email:    z.string().email('E-mail invalide'),
-  password: z.string().min(8, 'Minimum 8 caractères'),
+  email:    z.string().email('val.emailInvalide'),
+  password: z.string().min(8, 'cx.motDePasseCourt'),
 })
 type FormData = z.infer<typeof schema>
 
 export function LoginPage() {
+  const t = useT()
+  const tv = useTv()
   // Une déconnexion automatique doit se dire. Renvoyer quelqu'un sur l'écran de
   // connexion sans explication ressemble à une panne, et c'est la première
   // chose qu'on signale au support.
@@ -46,6 +50,9 @@ export function LoginPage() {
   // Un mode explicite, avec son bouton : le champ change de forme, de clavier et
   // de longueur, et l'utilisateur voit qu'il est au bon endroit.
   const [mode, setMode] = useState<'totp' | 'recovery'>('totp')
+  // Décoché par défaut, toujours. Une protection qu'on lève sans le savoir
+  // n'en est plus une : la dispense doit être un geste conscient.
+  const [remember, setRemember] = useState(false)
   const secours = mode === 'recovery'
 
   // La saisie est normalisée comme le serveur la normalise : majuscules, sans
@@ -77,7 +84,7 @@ export function LoginPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await authApi.mfaVerify(challenge.token, codeUtile)
+      const res = await authApi.mfaVerify(challenge.token, codeUtile, remember)
       enter(challenge.email, res.data)
     } catch (e) {
       const status = (e as { response?: { status?: number } }).response?.status
@@ -85,16 +92,11 @@ export function LoginPage() {
         // Le conseil doit correspondre à ce qui a été tenté. Parler d'horloge
         // de téléphone à quelqu'un qui saisit un code de secours l'envoie
         // chercher au mauvais endroit.
-        setError(secours
-          ? "Ce code de secours n'est pas reconnu. Chacun ne sert qu'une fois : " +
-            "vérifiez que celui-ci n'a pas déjà été utilisé, et recopiez-le sans " +
-            "confondre les caractères."
-          : "Code incorrect. Vérifiez l'heure de votre téléphone : un décalage de plus " +
-            "d'une minute décale tous les codes.")
+        setError(t(secours ? 'cx.secoursRefuse' : 'cx.codeIncorrect'))
       } else if (status === 429) {
-        setError('Trop de tentatives. Patientez quelques minutes avant de réessayer.')
+        setError(t('cx.tropDeTentatives'))
       } else {
-        setError("La vérification a échoué. Recommencez la connexion.")
+        setError(t('cx.verificationEchouee'))
         setChallenge(null)
       }
       setCode('')
@@ -120,7 +122,7 @@ export function LoginPage() {
       }
       enter(data.email, res.data)
     } catch {
-      setError('Identifiants incorrects.')
+      setError(t('connexion.identifiantsIncorrects'))
     } finally {
       setLoading(false)
     }
@@ -128,48 +130,37 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-alpine-950 p-4">
-      {/* Background géométrique */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full
-                        bg-accent-500/5 blur-3xl" />
-        <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full
-                        bg-alpine-700/20 blur-3xl" />
-      </div>
-
       <div className="relative w-full max-w-md">
         {idle && (
           <div className="mb-5 rounded-md border border-warning-500 bg-warning-100 px-4 py-3 text-sm">
-            <p className="font-medium">Session fermée après inactivité</p>
+            <p className="font-medium">{t('connexion.sessionFermee')}</p>
             <p className="mt-1 text-alpine-700">
-              Vous avez été déconnecté automatiquement. Le délai se règle dans
-              Paramètres → Maintenance → Sécurité.
+              {t('cx.deconnexionAuto')}
             </p>
           </div>
         )}
 
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-accent-500 flex items-center justify-center
-                          shadow-lg shadow-accent-500/40">
-            <Mountain size={20} className="text-white" />
-          </div>
-          <div>
-            <div className="font-display font-700 text-xl text-white">LedgerAlps</div>
-          </div>
+        {/* La marque, en entier. C'est le seul écran où personne n'est encore
+            identifié : c'est donc ici qu'il faut pouvoir lire, sans ambiguïté,
+            quel logiciel demande un mot de passe. */}
+        <div className="flex items-center justify-center mb-8">
+          <span className="inline-flex items-center rounded-xl bg-white px-5 py-3 shadow-lg">
+            <LedgerAlpsLogo className="h-7 w-auto" />
+          </span>
         </div>
 
         {/* Card */}
         <div className="bg-alpine-900/80 border border-alpine-700/50 rounded-2xl
                         backdrop-blur-sm shadow-modal p-8">
           <h1 className="font-display font-700 text-lg text-white mb-1">
-            {challenge ? 'Vérification' : 'Connexion'}
+            {challenge ? t('connexion.verification') : t('connexion.titre')}
           </h1>
           <p className="text-sm text-alpine-400 mb-6">
             {!challenge
-              ? 'Accédez à votre espace.'
+              ? t('connexion.sousTitre')
               : secours
-                ? 'Saisissez l’un des codes de secours notés lors de l’inscription.'
-                : 'Saisissez le code affiché par votre application d’authentification.'}
+                ? t('connexion.saisirCodeSecours')
+                : t('connexion.saisirCodeApp')}
           </p>
 
           {error && (
@@ -190,17 +181,15 @@ export function LoginPage() {
                   : <Smartphone size={16} className="text-accent-500 mt-0.5 shrink-0" />}
                 <span>
                   {secours
-                    ? <>Reprenez la liste notée lors de l&rsquo;inscription et saisissez un code
-                        non utilisé pour <strong className="text-white">{challenge.email}</strong>.</>
-                    : <>Ouvrez votre application d&rsquo;authentification et recopiez les six
-                        chiffres affichés pour <strong className="text-white">{challenge.email}</strong>.</>}
+                    ? <>{t('connexion.aideCodeSecours')}<strong className="text-white">{challenge.email}</strong>.</>
+                    : <>{t('connexion.aideCodeApp')}<strong className="text-white">{challenge.email}</strong>.</>}
                 </span>
               </div>
 
               <div>
                 <label htmlFor="otp"
                        className="block text-xs font-medium text-alpine-400 mb-1.5 uppercase tracking-wide">
-                  {secours ? 'Code de secours' : 'Code à six chiffres'}
+                  {t(secours ? 'cx.champCodeSecours' : 'cx.champCodeSixChiffres')}
                 </label>
                 {/* Le champ change vraiment de nature selon le mode : longueur,
                     clavier, casse, espacement. C'est ce qui manquait — la
@@ -227,6 +216,20 @@ export function LoginPage() {
                 />
               </div>
 
+              {/* Trente jours : assez pour couvrir un mois de travail sans
+                  redemander, assez court pour qu'un portable oublié redevienne
+                  protégé avant qu'on ait fini de le chercher. */}
+              <label className="flex items-start gap-2 text-sm text-alpine-300 cursor-pointer">
+                <input type="checkbox" className="mt-0.5" checked={remember}
+                       onChange={e => setRemember(e.target.checked)} />
+                <span>
+                  {t('cx.seSouvenir')}
+                  <span className="block text-xs text-alpine-500">
+                    {t('cx.seSouvenirAide')}
+                  </span>
+                </span>
+              </label>
+
               <button
                 type="button"
                 onClick={submitCode}
@@ -235,7 +238,7 @@ export function LoginPage() {
                            rounded-lg text-sm transition-all duration-150 active:scale-[0.98]
                            disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Vérification…' : 'Valider'}
+                {loading ? t('at.verificationEnCours') : t('cx.valider')}
               </button>
 
               {/* Le téléphone perdu ne doit pas enfermer dehors. Le passage au
@@ -248,13 +251,11 @@ export function LoginPage() {
                   className="text-xs text-accent-400 hover:text-accent-300 flex items-center gap-1.5"
                 >
                   {secours
-                    ? <><Smartphone size={12} /> Utiliser le code de mon application</>
-                    : <><LifeBuoy size={12} /> Téléphone perdu ? Utiliser un code de secours</>}
+                    ? <><Smartphone size={12} /> {t('connexion.utiliserApp')}</>
+                    : <><LifeBuoy size={12} /> {t('connexion.utiliserSecours')}</>}
                 </button>
                 <p className="text-xs text-alpine-500 mt-1.5">
-                  {secours
-                    ? 'Chacun ne sert qu’une fois. Les tirets et la casse n’ont pas d’importance.'
-                    : 'Les codes de secours sont ceux notés lors de l’inscription.'}
+                  {t(secours ? 'cx.secoursUneFois' : 'cx.secoursNotes')}
                 </p>
               </div>
 
@@ -265,14 +266,14 @@ export function LoginPage() {
                 }}
                 className="text-xs text-alpine-400 hover:text-alpine-200 flex items-center gap-1"
               >
-                <ArrowLeft size={12} /> Revenir à la connexion
+                <ArrowLeft size={12} /> {t('connexion.revenir')}
               </button>
             </div>
           ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-alpine-400 mb-1.5 uppercase tracking-wide">
-                Adresse e-mail
+                {t('connexion.email')}
               </label>
               <input
                 type="email"
@@ -284,12 +285,12 @@ export function LoginPage() {
                 placeholder="vous@exemple.ch"
                 {...register('email')}
               />
-              {errors.email && <p className="text-xs text-danger-500 mt-1">{errors.email.message}</p>}
+              {errors.email && <p className="text-xs text-danger-500 mt-1">{tv(errors.email.message)}</p>}
             </div>
 
             <div>
               <label className="block text-xs font-medium text-alpine-400 mb-1.5 uppercase tracking-wide">
-                Mot de passe
+                {t('connexion.motDePasse')}
               </label>
               <div className="relative">
                 <input
@@ -310,7 +311,7 @@ export function LoginPage() {
                   {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
-              {errors.password && <p className="text-xs text-danger-500 mt-1">{errors.password.message}</p>}
+              {errors.password && <p className="text-xs text-danger-500 mt-1">{tv(errors.password.message)}</p>}
             </div>
 
             <button
@@ -320,14 +321,14 @@ export function LoginPage() {
                          rounded-lg text-sm transition-all duration-150 active:scale-[0.98]
                          disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
-              {loading ? 'Connexion…' : 'Se connecter'}
+              {loading ? t('connexion.enCours') : t('connexion.seConnecter')}
             </button>
           </form>
           )}
         </div>
 
         <p className="text-center text-xs text-alpine-600 mt-6">
-          LedgerAlps — Données locales · CO · nLPD
+          {t('connexion.piedDePage')}
         </p>
       </div>
     </div>

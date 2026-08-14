@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
 )
 
@@ -90,14 +92,14 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 	}
 	if from := c.Query("from"); from != "" {
 		if _, err := time.Parse("2006-01-02", from); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "from must be YYYY-MM-DD"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "« from » doit être au format AAAA-MM-JJ"})
 			return
 		}
 		filters.From = &from
 	}
 	if to := c.Query("to"); to != "" {
 		if _, err := time.Parse("2006-01-02", to); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "to must be YYYY-MM-DD"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "« to » doit être au format AAAA-MM-JJ"})
 			return
 		}
 		filters.To = &to
@@ -110,31 +112,31 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 
 	accounts, err := h.fetchAccounts(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "accounts query failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "les comptes n'ont pas pu être lus : " + err.Error()})
 		return
 	}
 
 	journalEntries, err := h.fetchJournalEntries(ctx, filters)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "journal_entries query failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "les écritures n'ont pas pu être lues : " + err.Error()})
 		return
 	}
 
 	invoices, err := h.fetchInvoices(ctx, filters)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "invoices query failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "les factures n'ont pas pu être lues : " + err.Error()})
 		return
 	}
 
 	contacts, err := h.fetchContacts(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "contacts query failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "les contacts n'ont pas pu être lus : " + err.Error()})
 		return
 	}
 
 	fiscalYears, err := h.fetchFiscalYears(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "fiscal_years query failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "les exercices n'ont pas pu être lus : " + err.Error()})
 		return
 	}
 
@@ -157,7 +159,7 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 	} {
 		raw, err := json.MarshalIndent(nf.v, "", "  ")
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "json marshal failed for " + nf.name})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "la sérialisation JSON a échoué pour " + nf.name})
 			return
 		}
 		files = append(files, namedFile{nf.name, raw})
@@ -175,13 +177,13 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 		"fiscal_years":    fiscalYears,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "csv build failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le fichier CSV n'a pas pu être produit : " + err.Error()})
 		return
 	}
 	for _, f := range csvFiles {
 		files = append(files, namedFile{"csv/" + f.name, f.data})
 	}
-	files = append(files, namedFile{"csv/LISEZ-MOI.txt", csvReadme(csvFiles)})
+	files = append(files, namedFile{"csv/LISEZ-MOI.txt", csvReadme(i18n.Langue(c), csvFiles)})
 
 	// ── Compute SHA-256 hashes ────────────────────────────────────────────────
 	// Le manifeste couvre le CSV comme le JSON : un fichier de l'archive sans
@@ -201,7 +203,7 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 	}
 	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "manifest marshal failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le manifeste n'a pas pu être produit"})
 		return
 	}
 
@@ -211,19 +213,19 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 
 	// manifest first
 	if err := addZipFile(zw, dirName+"/manifest.json", manifestBytes); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "zip write failed: manifest.json"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture du manifeste dans l'archive impossible"})
 		return
 	}
 
 	for _, f := range files {
 		if err := addZipFile(zw, dirName+"/"+f.name, f.data); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "zip write failed: " + f.name})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture dans l'archive impossible : " + f.name})
 			return
 		}
 	}
 
 	if err := zw.Close(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "zip finalise failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "l'archive ZIP n'a pas pu être finalisée"})
 		return
 	}
 

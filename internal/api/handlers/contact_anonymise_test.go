@@ -6,9 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/core/authz"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
@@ -181,12 +184,26 @@ func TestAnonymiseRefusesASecondTime(t *testing.T) {
 	}
 }
 
-func TestAnonymiseRequiresAdmin(t *testing.T) {
-	h, database := newContactsDB(t)
-	seedContact(t, database, "c1", "Client SA")
+// L'effacement suit la permission de GESTION, declaree sur la route.
+//
+// La garde interne lisait le drapeau du jeton et ecartait le comptable —
+// pourtant, repondre a une demande d'effacement (nLPD art. 6 al. 4) fait partie
+// de son travail, pas de celui de l'administrateur du logiciel.
+func TestLEffacementSuitLaPermissionDeGestion(t *testing.T) {
+	if authz.Can(authz.RoleViewer, authz.PermManage) {
+		t.Fatal("la lecture seule pourrait effacer des donnees personnelles")
+	}
+	if !authz.Can(authz.RoleAccountant, authz.PermManage) {
+		t.Fatal("le comptable ne peut pas repondre a une demande d'effacement")
+	}
 
-	if code, _ := runAnonymise(t, h, "c1", false); code != http.StatusForbidden {
-		t.Fatalf("un non-administrateur a obtenu %d", code)
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "cmd", "server", "main.go"))
+	if err != nil {
+		t.Skipf("source des routes illisible: %v", err)
+	}
+	route := `api.POST("/contacts/:id/anonymise", authorizer.Require(authz.PermManage)`
+	if !strings.Contains(string(src), route) {
+		t.Errorf("route sans permission declaree : %s", route)
 	}
 }
 

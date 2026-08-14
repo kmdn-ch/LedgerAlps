@@ -241,6 +241,9 @@ export interface CompanySettings {
   address_country: string
   che_number: string
   vat_number: string
+  // '' = la question n'a pas été posée. À distinguer de 'exempt' : un numéro
+  // pas encore saisi n'est pas une exemption.
+  vat_status?: '' | 'liable' | 'exempt'
   phone: string
   email: string
   bank_name: string
@@ -298,6 +301,25 @@ export interface IntegrityReport {
   checked_at: string
   findings: IntegrityFinding[]
   clean: boolean
+}
+
+// ─── Mise en route ────────────────────────────────────────────────────────────
+//
+// `missing` porte des noms de CHAMPS, pas des phrases : le serveur ne rédige
+// rien, le catalogue traduit. Une clé inconnue ici veut dire qu'une étape a été
+// ajoutée côté serveur sans son libellé — l'écran l'ignore plutôt que
+// d'afficher une clé nue.
+export interface OnboardingStep {
+  key: string
+  done: boolean
+  missing?: string[]
+}
+
+export interface Onboarding {
+  steps: OnboardingStep[]
+  done_count: number
+  total: number
+  complete: boolean
 }
 
 export interface SystemHealth {

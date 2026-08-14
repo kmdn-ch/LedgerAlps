@@ -98,6 +98,21 @@ sortir d'un de ces états : changement de mot de passe, inscription et
 vérification du second facteur. Les y inclure enfermerait le compte
 définitivement.
 
+**Cinq permissions, deux frontières.** `read`, `write_documents`,
+`write_accounting`, `manage`, `admin`. La frontière qui compte est entre les deux
+dernières : **`manage` administre la comptabilité** — clôture d'exercice, contrôle
+d'intégrité, sauvegardes, fiche entreprise, effacement nLPD — et **`admin`
+administre le logiciel et qui y accède** : chiffrement, restauration, réseau, clé
+de signature, journal de sécurité, comptes. Le comptable a la première, pas la
+seconde. Le détail est dans [DROITS.md](DROITS.md).
+
+**Aucune garde ne lit le jeton.** Neuf handlers vérifiaient encore `IsAdmin` dans
+les claims — un drapeau figé à la connexion, donc encore valide une heure après
+une rétrogradation. Ils ont été retirés au profit de la permission déclarée sur
+la route, lue dans la base à chaque requête. Deux tests lisent le fichier des
+routes et vérifient que la permission y figure : sans eux, retirer le middleware
+laisserait le handler sans protection, et rien ne le signalerait.
+
 **Toute route d'écriture déclare sa permission**, même lorsque le filtre global
 la couvrirait déjà. Les deux barrières attrapent des erreurs différentes : le
 filtre couvre la route qu'on oublie d'annoter, la permission déclarée couvre le

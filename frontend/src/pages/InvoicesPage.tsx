@@ -8,21 +8,27 @@ import { invoicesApi, contactsApi, downloadBlob } from '@/api/client'
 import {
   PageHeader, StatusBadge, LoadingSpinner, EmptyState, ConfirmDialog,
 } from '@/components/ui'
+import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
+import { useT, useFormats } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
 import type { Invoice, DisplayStatus, Contact } from '@/types'
 import { useNavigate } from 'react-router-dom'
 
-const STATUS_FILTERS: { value: DisplayStatus | ''; label: string }[] = [
-  { value: '',          label: 'Toutes'       },
-  { value: 'draft',     label: 'Brouillons'   },
-  { value: 'sent',      label: 'Envoyées'     },
-  { value: 'paid',      label: 'Payées'       },
-  { value: 'overdue',   label: 'En retard'    },
+const STATUS_FILTERS: { value: DisplayStatus | ''; cle: Cle }[] = [
+  { value: '',          cle: 'fact.filtreToutes'     },
+  { value: 'draft',     cle: 'fact.filtreBrouillons' },
+  { value: 'sent',      cle: 'fact.filtreEnvoyees'   },
+  { value: 'paid',      cle: 'fact.filtrePayees'     },
+  { value: 'overdue',   cle: 'fact.filtreEnRetard'   },
 ]
 
 interface Props { mode?: 'invoice' | 'quote' }
 
 export function InvoicesPage({ mode = 'invoice' }: Props) {
+  const t = useT()
+  const { pluriel } = useFormats()
+  const peutEcrire = useCanWrite()
   // Les deux vues du même registre. Le menu n'en propose plus qu'une entrée :
   // c'est ici qu'on bascule, là où l'on regarde déjà les documents.
   const navigate = useNavigate()
@@ -90,23 +96,30 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
           pendingPaid
             ? `${formatCHF(pendingPaid.total_amount)} encaissé${pendingPaid.contact_name ? ` de ${pendingPaid.contact_name}` : ''}, à la date d'aujourd'hui.`
             : '',
-          'Le paiement est passé au journal (banque / débiteurs).',
-          'La facture ne sera plus modifiable.',
+          t('fact.paiementAuJournal'),
+          t('fact.plusModifiable'),
         ]}
-        reassurance="Si le montant reçu diffère, ouvrez la facture et enregistrez un paiement partiel."
-        confirmLabel="Marquer payée"
+        reassurance={t('iv.paiementPartiel')}
+        confirmLabel={t('iv.marquerPayee')}
         busy={markPaid.isPending}
         onConfirm={() => pendingPaid && markPaid.mutate(pendingPaid.id)}
         onCancel={() => setPendingPaid(null)}
       />
 
       <PageHeader
-        title="Facturation"
-        subtitle={`${invoices.length} document${invoices.length !== 1 ? 's' : ''}`}
+        title={t('nav.facturation')}
+        aide={t('aide.ventes')}
+        subtitle={pluriel(invoices.length,
+          t('fact.unDocument', { n: invoices.length }),
+          t('fact.desDocuments', { n: invoices.length }))}
         actions={
-          <Link to="/invoices/new" className="btn-primary">
-            <Plus size={15} /> {isQuote ? 'Nouvelle offre' : 'Nouvelle facture'}
-          </Link>
+          peutEcrire ? (
+            <Link to="/invoices/new" className="btn-primary">
+              <Plus size={15} /> {isQuote ? t('fact.nouvelleOffre') : t('fact.nouvelleFacture')}
+            </Link>
+          ) : (
+            <span className="text-xs text-alpine-500">{t(RAISON_LECTURE_SEULE)}</span>
+          )
         }
       />
 
@@ -120,7 +133,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
             isQuote ? 'text-alpine-600 hover:bg-alpine-50' : 'bg-alpine-900 text-white'
           }`}
         >
-          Factures
+          {t('fact.onglietFactures')}
         </button>
         <button
           onClick={() => navigate('/quotes')}
@@ -128,7 +141,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
             isQuote ? 'bg-alpine-900 text-white' : 'text-alpine-600 hover:bg-alpine-50'
           }`}
         >
-          Offres de prix
+          {t('fact.ongletOffres')}
         </button>
       </div>
 
@@ -138,7 +151,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-alpine-400" />
           <input
             className="input pl-8 w-56"
-            placeholder="Rechercher un numéro…"
+            placeholder={t('fact.rechercherNumero')}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -155,7 +168,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
                   : 'bg-white border border-alpine-200 text-alpine-600 hover:bg-alpine-50'
               }`}
             >
-              {f.label}
+              {t(f.cle)}
             </button>
           ))}
         </div>
@@ -164,9 +177,9 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
           className="input w-56"
           value={contactId}
           onChange={e => setContactId(e.target.value)}
-          aria-label={isQuote ? 'Filtrer les offres par contact' : 'Filtrer les factures par contact'}
+          aria-label={isQuote ? t('fact.filtrerOffres') : t('fact.filtrerFactures')}
         >
-          <option value="">Tous les contacts</option>
+          <option value="">{t('fact.tousContacts')}</option>
           {contacts.map(ct => (
             <option key={ct.id} value={ct.id}>{ct.name}</option>
           ))}
@@ -178,12 +191,12 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
         <table className="table">
           <thead>
             <tr>
-              <th>Numéro</th>
-              <th>Date</th>
-              <th>Échéance</th>
-              <th>Contact</th>
-              <th className="text-right">Total CHF</th>
-              <th>Statut</th>
+              <th>{t('fact.colNumero')}</th>
+              <th>{t('fact.colDate')}</th>
+              <th>{t('doc.echeance')}</th>
+              <th>{t('fact.colContact')}</th>
+              <th className="text-right">{t('fact.colTotal')}</th>
+              <th>{t('fact.colStatut')}</th>
               <th></th>
             </tr>
           </thead>
@@ -195,15 +208,15 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
               <tr>
                 <td colSpan={7}>
                   <EmptyState
-                    title={isQuote ? 'Aucune offre de prix' : 'Aucune facture'}
+                    title={isQuote ? t('fact.aucuneOffre') : t('fact.aucuneFacture')}
                     description={isQuote
-                      ? 'Créez votre première offre de prix.'
-                      : 'Créez votre première facture pour démarrer.'}
-                    action={
+                      ? t('fact.premiereOffre')
+                      : t('fact.premiereFacture')}
+                    action={peutEcrire ? (
                       <Link to="/invoices/new" className="btn-primary btn-sm">
-                        <Plus size={13} /> Créer
+                        <Plus size={13} /> {t('fact.creer')}
                       </Link>
-                    }
+                    ) : undefined}
                   />
                 </td>
               </tr>
@@ -225,7 +238,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
                   {formatDate(inv.due_date)}
                 </td>
                 <td className="text-alpine-700">
-                  {inv.contact_name || <span className="text-alpine-400 italic">contact supprimé</span>}
+                  {inv.contact_name || <span className="text-alpine-400 italic">{t('fact.contactSupprime')}</span>}
                 </td>
                 <td className="text-right font-mono font-medium tabular-nums">
                   {formatCHF(inv.total_amount)}
@@ -244,7 +257,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
                     <button
                       onClick={() => downloadPDF(inv.id, inv.invoice_number)}
                       className="btn-ghost btn-sm"
-                      title="Télécharger PDF"
+                      title={t('fact.telechargerPDF')}
                     >
                       <Download size={14} />
                     </button>

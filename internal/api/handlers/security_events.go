@@ -55,7 +55,7 @@ func (h *SecurityEventHandler) ListSecurityEvents(c *gin.Context) {
 	if v := c.Query("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 1000 {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "limit must be between 1 and 1000"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "limit doit être compris entre 1 et 1000"})
 			return
 		}
 		limit = n
@@ -76,7 +76,7 @@ func (h *SecurityEventHandler) ListSecurityEvents(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, db.Rebind(query, h.usePostgres), args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -85,13 +85,13 @@ func (h *SecurityEventHandler) ListSecurityEvents(c *gin.Context) {
 	for rows.Next() {
 		var e securityEvent
 		if err := rows.Scan(&e.ID, &e.EventType, &e.IPAddress, &e.Detail, &e.CreatedAt); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 		items = append(items, e)
 	}
 	if err := rows.Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

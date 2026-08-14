@@ -24,7 +24,8 @@ double-cliquez.
 Au premier lancement, LedgerAlps ouvre votre navigateur et vous demande de créer
 votre compte. **Il n'y a rien d'autre à configurer.**
 
-> Vos données sont enregistrées dans `%APPDATA%\LedgerAlps\` et survivent aux
+> Vos données sont enregistrées dans `C:\Users\<vous>\AppData\Roaming\LedgerAlps\`
+> — ce que Windows appelle `%APPDATA%` — et survivent aux
 > mises à jour comme aux désinstallations.
 
 *Linux : voir le [guide de déploiement](docs/PRODUCTION.md).*
@@ -128,7 +129,14 @@ remplacée.
 </tr>
 </table>
 
-**Achats et paiements.** Saisissez les factures que vous recevez : la TVA payée à
+**Achats et paiements.** Déposez le PDF d'une facture reçue : LedgerAlps lit son
+QR-facture *et* le texte du document, puis remplit le fournisseur, son IBAN, le
+montant, le numéro de la facture, sa date, son échéance et le taux de TVA.
+Chaque valeur est affichée avec l'étiquette d'où elle vient, pour que vous
+puissiez la vérifier d'un coup d'œil. Rien n'est enregistré sans votre confirmation, et rien ne sort de votre
+machine — le fichier est lu sur place, jamais envoyé.
+
+Saisissez les factures que vous recevez : la TVA payée à
 vos fournisseurs se déduit de celle que vous encaissez, et la charge entre dans
 votre résultat. Une fois comptabilisées, cochez celles à régler — LedgerAlps
 produit le fichier de paiement **ISO 20022 pain.001** que vous déposez dans votre
@@ -149,7 +157,7 @@ pour ouvrir vos livres à votre fiduciaire sans lui donner les clés. Le compte
 administrateur est protégé par un **second facteur** : un code à six chiffres
 calculé par votre téléphone, hors ligne, avec l'application de votre choix
 (Aegis, KeePassXC, FreeOTP conviennent et sont libres). Dix codes de secours sont
-remis à l'inscription — notez-les : sans eux, un téléphone perdu ferme la porte
+remis à l'activation — notez-les : sans eux, la perte de l'application ferme la porte
 définitivement.
 
 Un mot de passe oublié se règle depuis Paramètres → Sécurité : l'administrateur
@@ -344,6 +352,7 @@ n'étaient pas testés.
 |---|---|
 | [Roadmap](ROADMAP.md) | ce qui arrive, et ce qui n'arrivera pas |
 | [Déploiement serveur](docs/PRODUCTION.md) | installer sur Linux ou un serveur de bureau |
+| [Droits par rôle](docs/DROITS.md) | qui peut lire, modifier et cliquer quoi |
 | [Architecture](docs/ARCHITECTURE.md) | comprendre comment c'est construit |
 | [Développement](docs/DEVELOPMENT.md) | compiler, tester, contribuer |
 | [Référence API](docs/API.md) | intégrer un autre outil |

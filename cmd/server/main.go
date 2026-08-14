@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -184,6 +186,11 @@ func main() {
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS(strings.Split(cfg.AllowedOrigins, ",")...))
 	r.Use(middleware.ErrorHandler())
+	// Avant tout ce qui produit une réponse, et après la reprise sur panique :
+	// un refus écrit par un gestionnaire comme par un intercepteur d'erreur
+	// doit ressortir dans la langue demandée. Voir middleware/langue.go pour
+	// la raison de traduire ici plutôt qu'aux deux cents endroits qui refusent.
+	r.Use(middleware.Langue())
 	if cfg.Debug {
 		r.Use(gin.Logger())
 	}
@@ -239,6 +246,11 @@ func main() {
 	v1.POST("/auth/mfa/setup", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFASetup)
 	v1.POST("/auth/mfa/confirm", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFAConfirm)
 	v1.DELETE("/auth/mfa", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFADisable)
+	// Ordinateurs de confiance. Hors du groupe filtre pour la meme raison que le
+	// reste du second facteur : ces routes doivent rester joignables pendant
+	// qu'un compte est encore bloque sur l'inscription.
+	v1.GET("/auth/devices", middleware.RequireAuth(cfg.JWTSecret), authHandler.ListTrustedDevices)
+	v1.DELETE("/auth/devices", middleware.RequireAuth(cfg.JWTSecret), authHandler.ForgetTrustedDevices)
 
 	v1.POST("/auth/register", loginLimiter.Middleware(), authHandler.Register)
 	v1.POST("/auth/bootstrap", loginLimiter.Middleware(), authHandler.Bootstrap) // one-shot: creates first admin user
@@ -289,13 +301,13 @@ func main() {
 
 	// Contacts
 	ch := handlers.NewContactsHandler(database, cfg.UsePostgres())
-	api.GET("/contacts", ch.ListContacts)
+	api.GET("/contacts", authorizer.Require(authz.PermRead), ch.ListContacts)
 	api.GET("/contacts/:id", ch.GetContact)
 	api.POST("/contacts", ch.CreateContact)
 	api.PATCH("/contacts/:id", ch.UpdateContact)
 	// Anonymisation (nLPD art. 6 al. 4 et 32) : effacer les données d'une
 	// personne est une décision, pas une opération de saisie.
-	api.POST("/contacts/:id/anonymise", authorizer.Require(authz.PermAdmin), ch.AnonymiseContact)
+	api.POST("/contacts/:id/anonymise", authorizer.Require(authz.PermManage), ch.AnonymiseContact)
 
 	// Invoices
 	ih := handlers.NewInvoicesHandler(database, cfg.UsePostgres(), accountingSvc)
@@ -308,8 +320,24 @@ func main() {
 	api.GET("/supplier-invoices", sih.ListSupplierInvoices)
 	api.GET("/supplier-invoices/:id", sih.GetSupplierInvoice)
 	api.POST("/supplier-invoices", authorizer.Require(authz.PermWriteDocuments), sih.CreateSupplierInvoice)
+	// Lire le QR d'une facture deposee. Cette route ne fait que LIRE : elle
+	// n'enregistre rien, ne cree aucun contact. La permission d'ecriture est
+	// exigee malgre tout, parce qu'elle sert a preparer une saisie — et qu'un
+	// compte en lecture seule n'a rien a preparer.
+	qbh := handlers.NewQRBillHandler(database, cfg.UsePostgres())
+	api.POST("/supplier-invoices/read-qr",
+		authorizer.Require(authz.PermWriteDocuments), qbh.ReadSupplierBill)
+
+	// Modifier n'est possible qu'au brouillon : une facture comptabilisee porte
+	// une ecriture scellee, et la changer ferait mentir le journal.
+	api.PUT("/supplier-invoices/:id", authorizer.Require(authz.PermWriteDocuments), sih.UpdateSupplierInvoice)
 	api.POST("/supplier-invoices/:id/transition", authorizer.Require(authz.PermWriteAccounting), sih.TransitionSupplierInvoice)
 	api.DELETE("/supplier-invoices/:id", authorizer.Require(authz.PermWriteAccounting), sih.DeleteSupplierInvoice)
+	// Vider la liste des paiements sans mentir aux livres : un brouillon est
+	// supprimé, une facture comptabilisée est EXTOURNÉE puis marquée annulée.
+	// Tenir les livres est le métier du comptable autant que de l'administrateur.
+	api.POST("/supplier-invoices/cancel",
+		authorizer.Require(authz.PermWriteAccounting), sih.CancelSupplierInvoices)
 
 	api.GET("/invoices", ih.ListInvoices)
 	api.GET("/invoices/:id", ih.GetInvoice)
@@ -318,7 +346,7 @@ func main() {
 	// Téléchargement groupé : un PDF si un seul document, un ZIP si plusieurs.
 	api.POST("/invoices/bulk-pdf", ih.BulkInvoicePDF)
 	api.POST("/invoices", ih.CreateInvoice)
-	api.PATCH("/invoices/:id", ih.UpdateInvoice)
+	api.PATCH("/invoices/:id", authorizer.Require(authz.PermWriteDocuments), ih.UpdateInvoice)
 	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
 	// Quote lifecycle: an offer becomes an invoice by producing one, not by
 	// mutating into one — both documents are kept and linked.
@@ -333,8 +361,13 @@ func main() {
 	// démarrage suivant. Réservé aux administrateurs : une restauration
 	// remplace toute la comptabilité.
 	bh := handlers.NewBackupsHandler(database, cfg)
-	api.GET("/backups", authorizer.Require(authz.PermAdmin), bh.ListBackups)
-	api.POST("/backups", authorizer.Require(authz.PermAdmin), bh.CreateBackup)
+	// Creer une sauvegarde et lister celles qui existent releve de l'hygiene
+	// comptable : le comptable doit pouvoir le faire. RESTAURER, en revanche,
+	// remplace les livres par une autre version d'eux-memes, et la politique de
+	// chiffrement est une fonction de securite — les deux restent a
+	// l'administrateur.
+	api.GET("/backups", authorizer.Require(authz.PermManage), bh.ListBackups)
+	api.POST("/backups", authorizer.Require(authz.PermManage), bh.CreateBackup)
 	api.POST("/backups/restore", authorizer.Require(authz.PermAdmin), bh.StageRestore)
 	api.DELETE("/backups/restore", authorizer.Require(authz.PermAdmin), bh.CancelRestore)
 	api.GET("/backups/policy", authorizer.Require(authz.PermAdmin), bh.GetBackupPolicy)
@@ -367,14 +400,14 @@ func main() {
 	// une comptabilité incohérente se corrige par une écriture, pas par un
 	// bouton (CO art. 957a al. 2 ch. 5).
 	mh := handlers.NewMaintenanceHandler(database, cfg)
-	api.GET("/maintenance/integrity", authorizer.Require(authz.PermAdmin), mh.IntegrityCheck)
-	api.GET("/maintenance/health", authorizer.Require(authz.PermAdmin), mh.SystemHealth)
+	api.GET("/maintenance/integrity", authorizer.Require(authz.PermManage), mh.IntegrityCheck)
+	api.GET("/maintenance/health", authorizer.Require(authz.PermManage), mh.SystemHealth)
 
 	// Fiscal years + VAT declaration (admin)
 	fyh := handlers.NewFiscalYearHandler(database, cfg.UsePostgres())
 	api.GET("/fiscal-years", fyh.ListFiscalYears)
-	api.POST("/fiscal-years", authorizer.Require(authz.PermAdmin), fyh.CreateFiscalYear)
-	api.POST("/fiscal-years/:id/close", authorizer.Require(authz.PermAdmin), fyh.CloseFiscalYear)
+	api.POST("/fiscal-years", authorizer.Require(authz.PermManage), fyh.CreateFiscalYear)
+	api.POST("/fiscal-years/:id/close", authorizer.Require(authz.PermManage), fyh.CloseFiscalYear)
 	api.POST("/vat/declaration", fyh.GenerateVATDeclaration)
 
 	// VAT rates (static reference data — no DB)
@@ -439,12 +472,21 @@ func main() {
 
 	// Audit logs
 	alh := handlers.NewAuditHandler(database, cfg.UsePostgres())
-	api.GET("/audit-logs", alh.ListAuditLogs)
+	// Le journal d'audit et la verification de la chaine sont le CONTROLE des
+	// livres : c'est le metier du comptable, pas de l'administrateur du
+	// logiciel. La lecture seule en est ecartee — ce registre nomme qui a fait
+	// quoi, et le consulter est deja sensible.
+	api.GET("/audit-logs", authorizer.Require(authz.PermManage), alh.ListAuditLogs)
 	// Registered before the :id route: gin resolves the static segment first,
 	// so "verify-chain" is never read as an identifier.
-	api.GET("/audit-logs/verify-chain", alh.VerifyAuditChain)
-	api.GET("/audit-logs/attestation", alh.IntegrityAttestation)
-	api.GET("/audit-logs/:id/verify", alh.VerifyAuditLog)
+	api.GET("/audit-logs/verify-chain", authorizer.Require(authz.PermManage), alh.VerifyAuditChain)
+	api.GET("/audit-logs/attestation", authorizer.Require(authz.PermManage), alh.IntegrityAttestation)
+	// Vérifier une attestation qu'on nous présente. PermManage comme
+	// l'émission : le verdict révèle l'état de la chaîne, et une fiduciaire
+	// en lecture seule n'a pas à faire tourner un contrôle sur les livres —
+	// elle vérifie le sceau de son côté, sans logiciel.
+	api.POST("/audit-logs/attestation/verify", authorizer.Require(authz.PermManage), alh.VerifyAttestation)
+	api.GET("/audit-logs/:id/verify", authorizer.Require(authz.PermManage), alh.VerifyAuditLog)
 
 	// Security telemetry — admin only: lockout records expose client IPs (nLPD).
 	seh := handlers.NewSecurityEventHandler(database, cfg.UsePostgres())
@@ -472,8 +514,16 @@ func main() {
 	api.POST("/users/:id/reset-password", authorizer.Require(authz.PermAdmin), uh.ResetPassword)
 	api.DELETE("/users/:id/mfa", authorizer.Require(authz.PermAdmin), uh.RemoveMFA)
 
+	// La liste de mise en route. Lecture seule, donc PermRead — et le
+	// compte en lecture seule qui la reçoit ne la voit pas s'afficher : aucune
+	// de ses étapes ne lui est ouverte, et une liste de choses interdites
+	// n'aide personne. Le refus, lui, reste où il doit être : sur les routes
+	// d'écriture vers lesquelles les étapes conduisent.
+	oh := handlers.NewOnboardingHandler(database, cfg.UsePostgres())
+	api.GET("/onboarding", authorizer.Require(authz.PermRead), oh.GetOnboarding)
+
 	api.GET("/settings/company", sh.GetCompany)
-	api.PUT("/settings/company", authorizer.Require(authz.PermAdmin), sh.PutCompany)
+	api.PUT("/settings/company", authorizer.Require(authz.PermManage), sh.PutCompany)
 	api.POST("/settings/logo", sh.UploadLogo)
 	api.DELETE("/settings/logo", sh.DeleteLogo)
 
@@ -502,19 +552,58 @@ func main() {
 		c.Data(http.StatusOK, contentType, data)
 	}
 
-	r.GET("/favicon.ico", func(c *gin.Context) { serveEmbedded(c, "favicon.ico", "image/x-icon") })
-	r.GET("/logo.svg", func(c *gin.Context) { serveEmbedded(c, "logo.svg", "image/svg+xml") })
 	fmt.Println("LedgerAlps: serving embedded frontend")
 
-	// SPA fallback: all non-API routes serve index.html for client-side routing.
+	// SPA fallback — et, avant elle, les fichiers posés à la racine de `public/`.
+	//
+	// Chaque fichier de `public/` avait sa propre route en dur : `/favicon.ico`,
+	// `/logo.svg`. Le piège est qu'on ne le découvre jamais en le lisant, mais en
+	// constatant qu'un fichier ajouté ne s'affiche pas — la route absente ne
+	// répond pas 404, elle tombe dans le repli et rend `index.html`, si bien que
+	// le navigateur reçoit du HTML là où il attendait une image et n'affiche
+	// rien du tout. C'est exactement ce qui vient d'arriver aux deux fichiers de
+	// la marque.
+	//
+	// On sert donc ce que le paquet embarqué contient RÉELLEMENT à sa racine.
+	// Aucun risque d'exposition : seuls les fichiers compilés dans le binaire
+	// existent dans ce système de fichiers, et les chemins d'API sont écartés
+	// juste au-dessus.
 	r.NoRoute(func(c *gin.Context) {
 		p := c.Request.URL.Path
 		if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/health") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
+
+		// Une extension distingue un FICHIER d'une route de l'application :
+		// « /ledgeralps-icon.svg » est un fichier, « /settings » ne l'est pas.
+		if nom := strings.TrimPrefix(p, "/"); path.Ext(nom) != "" && fs.ValidPath(nom) {
+			if data, err := fs.ReadFile(distFS, nom); err == nil {
+				typ := mime.TypeByExtension(path.Ext(nom))
+				if typ == "" {
+					typ = "application/octet-stream"
+				}
+				c.Data(http.StatusOK, typ, data)
+				return
+			}
+		}
+
 		serveEmbedded(c, "index.html", "text/html; charset=utf-8")
 	})
+
+	// L'attestation d'intégrité s'émet seule, au démarrage puis chaque jour.
+	//
+	// La chaîne d'empreintes rend une modification détectable À CONDITION d'avoir
+	// un point de comparaison : qui peut écrire dans la base peut recalculer la
+	// chaîne entière, qui reste alors cohérente. L'ancrage est l'empreinte de
+	// tête conservée ailleurs, à une date connue — et une garantie qui suppose
+	// qu'on pense à cliquer chaque mois n'existe pas.
+	//
+	// Le fichier est déposé à côté des sauvegardes : il part donc avec elles
+	// vers le NAS ou la clé USB, et c'est ce déplacement qui vaut ancrage.
+	attestationCtx, arreterAttestation := context.WithCancel(context.Background())
+	defer arreterAttestation()
+	alh.StartAttestationScheduler(attestationCtx, config.AppDataDir())
 
 	// ── 9. Start ──────────────────────────────────────────────────────────────
 	addr := net.JoinHostPort(cfg.Host, cfg.Port)

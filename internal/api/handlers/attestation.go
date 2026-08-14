@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 	"github.com/kmdn-ch/ledgeralps/version"
 )
 
@@ -73,6 +75,12 @@ type Attestation struct {
 	Chain      attestationChain `json:"chain"`
 	Statement  []string         `json:"statement"`
 	Limits     []string         `json:"limits"`
+	// HowToVerify décrit, dans le document lui-même, comment le contrôler.
+	//
+	// Une attestation qu'on ne peut pas vérifier ne vaut pas mieux qu'une
+	// affirmation orale. Le destinataire n'a pas LedgerAlps : la marche à
+	// suivre doit donc tenir avec les outils d'un poste ordinaire.
+	HowToVerify []string `json:"how_to_verify"`
 	// SelfHash scelle tout ce qui précède. Modifier une ligne du document sans
 	// recalculer cette empreinte se voit ; la recalculer suppose de disposer de
 	// l'outil, et l'empreinte de tête reste comparable à la base d'origine.
@@ -84,25 +92,19 @@ type Attestation struct {
 // IntegrityAttestation produit l'attestation d'intégrité, en pièce jointe.
 // Accès : administrateur uniquement.
 func (h *AuditHandler) IntegrityAttestation(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required"})
-		return
-	}
+	// La garde qui lisait le drapeau administrateur DU JETON a ete retiree.
+	//
+	// Deux defauts en un. Elle lisait un drapeau fige a la connexion : rétrograder
+	// quelqu'un le laissait agir jusqu'a l'expiration de son jeton. Et elle
+	// reservait a l'administrateur l'attestation d'integrite, qui est
+	// le metier du COMPTABLE — il devait demander a quelqu'un dont le role est de
+	// gerer des mots de passe.
+	//
+	// La permission est desormais declaree sur la route (authz.PermManage) et lue
+	// dans la base a chaque requete.
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
-
-	report, err := h.ComputeChainReport(ctx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-
-	scope, err := h.attestationScope(ctx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
 
 	// Le nom plutôt que l'identifiant technique : le document part chez un tiers,
 	// à qui un UUID n'apprend rien.
@@ -114,14 +116,47 @@ func (h *AuditHandler) IntegrityAttestation(c *gin.Context) {
 		issuedBy = name
 	}
 
+	final, err := h.BuildAttestation(ctx, issuedBy, i18n.Langue(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+		return
+	}
+
+	filename := fmt.Sprintf("ledgeralps-attestation-integrite-%s.json", time.Now().UTC().Format("2006-01-02"))
+	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
+	c.Data(http.StatusOK, "application/json; charset=utf-8", final)
+}
+
+// BuildAttestation produit le document scellé, sans passer par HTTP.
+//
+// Extrait du handler parce qu'un SECOND chemin en a besoin : l'émission
+// automatique. Deux implémentations auraient fini par diverger, et c'est
+// précisément le genre de divergence qu'on ne remarque pas — l'attestation
+// téléchargée à la main et celle déposée chaque jour diraient des choses
+// différentes du même état, sans que personne ne compare.
+// La langue est celle du sélecteur au moment du téléchargement. L'émission
+// AUTOMATIQUE, elle, sort en français : elle n'est déclenchée par personne,
+// et lui inventer une langue serait deviner.
+func (h *AuditHandler) BuildAttestation(ctx context.Context, issuedBy string, lang i18n.Lang) ([]byte, error) {
+	t := func(fr string, args ...any) string { return i18n.T(lang, fr, args...) }
+	report, err := h.ComputeChainReport(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	scope, err := h.attestationScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	att := Attestation{
-		Document: "Attestation d'intégrité de la comptabilité",
+		Document: t("Attestation d'intégrité de la comptabilité"),
 		Product:  "LedgerAlps",
 		Version:  version.Version(),
 		IssuedAt: time.Now().UTC().Format(time.RFC3339),
 		IssuedBy: issuedBy,
 		LegalBasis: []string{
-			"CO art. 957a al. 2 ch. 5 — traçabilité des écritures",
+			t("CO art. 957a al. 2 ch. 5 — traçabilité des écritures"),
 			"CO art. 958f — conservation dix ans",
 			"Olico (RS 221.431) art. 9 — conservation sur support modifiable",
 		},
@@ -142,31 +177,37 @@ func (h *AuditHandler) IntegrityAttestation(c *gin.Context) {
 	}
 
 	if report.Legacy > 0 {
-		att.Chain.LegacyExplains = "Entrées écrites avant la v1.4.6, dont l'empreinte propre n'est pas recalculable : " +
-			"elle portait alors sur des valeurs qui n'étaient pas enregistrées. Leur chaînage est vérifié comme les autres, " +
-			"donc une suppression y reste détectable ; seule la question « le contenu de cette ligne a-t-il changé ? » est sans réponse."
+		att.Chain.LegacyExplains = t("Entrées écrites avant la v1.4.6, dont l'empreinte propre n'est pas recalculable : ") +
+			t("elle portait alors sur des valeurs qui n'étaient pas enregistrées. Leur chaînage est vérifié comme les autres, ") +
+			t("donc une suppression y reste détectable ; seule la question « le contenu de cette ligne a-t-il changé ? » est sans réponse.")
 	}
 
 	if report.Verified {
 		att.Statement = []string{
 			fmt.Sprintf("Au %s, la chaîne d'empreintes couvrant %d écriture(s) comptabilisée(s) est intacte.",
 				att.IssuedAt, report.Entries),
-			"Chaque entrée dérive par SHA-256 de la précédente. Aucune entrée n'a été modifiée, retirée ou réordonnée entre la première et la dernière.",
-			"L'empreinte de tête ci-dessus résume l'état de la chaîne : la conserver permet d'établir ultérieurement qu'aucune des écritures couvertes n'a bougé depuis l'émission de cette attestation.",
+			t("Chaque entrée dérive par SHA-256 de la précédente. Aucune entrée n'a été modifiée, retirée ou réordonnée entre la première et la dernière."),
+			t("L'empreinte de tête ci-dessus résume l'état de la chaîne : la conserver permet d'établir ultérieurement qu'aucune des écritures couvertes n'a bougé depuis l'émission de cette attestation."),
 		}
 	} else {
 		att.Statement = []string{
 			fmt.Sprintf("Au %s, la chaîne d'empreintes présente %d anomalie(s) sur %d écriture(s).",
 				att.IssuedAt, len(report.Breaks), report.Entries),
-			"Cette attestation ne certifie donc PAS l'intégrité de la comptabilité. Elle constate et documente une rupture.",
-			"Le détail des ruptures figure ci-dessus. Une sauvegarde antérieure à la rupture est nécessaire pour rétablir les livres.",
+			t("Cette attestation ne certifie donc PAS l'intégrité de la comptabilité. Elle constate et documente une rupture."),
+			t("Le détail des ruptures figure ci-dessus. Une sauvegarde antérieure à la rupture est nécessaire pour rétablir les livres."),
 		}
 	}
 
 	att.Limits = []string{
-		"L'horodatage provient de l'horloge du poste, non d'une autorité d'horodatage tierce. La chaîne établit l'ORDRE des enregistrements et leur cohérence, pas une date opposable au sens d'un horodatage qualifié (RFC 3161).",
-		"Une troncature en FIN de chaîne n'est pas détectable : rien ne distingue des écritures effacées après la dernière d'écritures jamais passées. Seule la comparaison avec une sauvegarde répond à cette question.",
-		"Cette attestation est produite par le logiciel lui-même. Elle documente l'état d'un mécanisme technique ; elle ne remplace ni un contrôle de révision, ni l'avis d'une fiduciaire.",
+		t("L'horodatage provient de l'horloge du poste, non d'une autorité d'horodatage tierce. La chaîne établit l'ORDRE des enregistrements et leur cohérence, pas une date opposable au sens d'un horodatage qualifié (RFC 3161)."),
+		t("Une troncature en FIN de chaîne n'est pas détectable : rien ne distingue des écritures effacées après la dernière d'écritures jamais passées. Seule la comparaison avec une sauvegarde répond à cette question."),
+		t("Cette attestation est produite par le logiciel lui-même. Elle documente l'état d'un mécanisme technique ; elle ne remplace ni un contrôle de révision, ni l'avis d'une fiduciaire."),
+	}
+
+	att.HowToVerify = []string{
+		t("1. Le SCEAU, sans aucun logiciel : retirez la ligne « self_hash » de ce fichier, calculez l'empreinte SHA-256 de ce qui reste, et comparez-la à la valeur retirée. Sous Windows : certutil -hashfile fichier.json SHA256. Sous macOS ou Linux : shasum -a 256 fichier.json."),
+		t("2. La CORRESPONDANCE, chez votre client : Paramètres → Maintenance → Conformité → « Vérifier une attestation », et déposez ce fichier. LedgerAlps compare l'empreinte de tête ci-dessus à celle que portent les livres au même numéro de séquence."),
+		t("3. Ce que la comparaison prouve : conservez ce fichier. S'il correspond encore dans six mois, aucune des écritures qu'il couvre n'a été réécrite entre-temps. C'est la copie que VOUS détenez qui donne sa valeur au contrôle — le sceau seul ne protège que du fichier retouché à la main."),
 	}
 
 	// Le sceau se calcule sur le document sans son propre champ, sérialisé de
@@ -174,21 +215,17 @@ func (h *AuditHandler) IntegrityAttestation(c *gin.Context) {
 	att.SelfHash = ""
 	body, err := json.MarshalIndent(att, "", "  ")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "encoding error"})
-		return
+		return nil, err
 	}
 	sum := sha256.Sum256(body)
 	att.SelfHash = hex.EncodeToString(sum[:])
 
 	final, err := json.MarshalIndent(att, "", "  ")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "encoding error"})
-		return
+		return nil, err
 	}
 
-	filename := fmt.Sprintf("ledgeralps-attestation-integrite-%s.json", time.Now().UTC().Format("2006-01-02"))
-	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
-	c.Data(http.StatusOK, "application/json; charset=utf-8", final)
+	return final, nil
 }
 
 // attestationScope décrit ce que l'attestation couvre : sans périmètre, un

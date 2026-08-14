@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
 	pdfsvc "github.com/kmdn-ch/ledgeralps/internal/services/pdf"
 )
@@ -23,10 +24,10 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	pdfBytes, filename, err := h.buildInvoicePDF(ctx, c.Param("id"))
+	pdfBytes, filename, err := h.buildInvoicePDF(ctx, c.Param("id"), i18n.Langue(c))
 	switch {
 	case err == errInvoiceNotFound:
-		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "facture introuvable"})
 		return
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -37,7 +38,7 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 	c.Data(http.StatusOK, "application/pdf", pdfBytes)
 }
 
-var errInvoiceNotFound = errors.New("invoice not found")
+var errInvoiceNotFound = errors.New("facture introuvable")
 
 // buildInvoicePDF produit le PDF d'un document et le nom de fichier qui lui
 // convient.
@@ -47,11 +48,14 @@ var errInvoiceNotFound = errors.New("invoice not found")
 // fini par diverger, et c'est le lot téléchargé — celui qu'on archive ou qu'on
 // transmet — qui aurait porté la version périmée.
 // buildInvoicePDF rend le PDF et son nom de fichier.
-func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string) ([]byte, string, error) {
+func (h *InvoicesHandler) buildInvoicePDF(ctx context.Context, id string, lang i18n.Lang) ([]byte, string, error) {
 	data, filename, err := h.invoiceDataFor2(ctx, id)
 	if err != nil {
 		return nil, "", err
 	}
+	// Le document suit le sélecteur de langue de l'interface : ce qu'on voit à
+	// l'écran est ce qui sort de l'imprimante.
+	data.Lang = string(lang)
 	pdfBytes, err := pdfsvc.Generate(data)
 	if err != nil {
 		return nil, "", errors.New("pdf generation failed")
@@ -96,7 +100,7 @@ func (h *InvoicesHandler) invoiceDataFor2(ctx context.Context, id string) (pdfsv
 		return pdfsvc.InvoiceData{}, "", errInvoiceNotFound
 	}
 	if err != nil {
-		return pdfsvc.InvoiceData{}, "", errors.New("database error")
+		return pdfsvc.InvoiceData{}, "", errors.New("erreur de base de données")
 	}
 
 	// Load invoice lines
@@ -105,7 +109,7 @@ func (h *InvoicesHandler) invoiceDataFor2(ctx context.Context, id string) (pdfsv
 		FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence`, h.usePostgres)
 	rows, err := h.db.QueryContext(ctx, linesQ, id)
 	if err != nil {
-		return pdfsvc.InvoiceData{}, "", errors.New("database error")
+		return pdfsvc.InvoiceData{}, "", errors.New("erreur de base de données")
 	}
 	defer rows.Close()
 	var pdfLines []pdfsvc.InvoiceLine
@@ -130,7 +134,7 @@ func (h *InvoicesHandler) invoiceDataFor2(ctx context.Context, id string) (pdfsv
 		&ct.IBAN, &ct.QRIBAN, &ct.VATNumber, &ct.PaymentTermDays, &isActive,
 		&ct.CreatedAt, &ct.UpdatedAt)
 	if err != nil && err != sql.ErrNoRows {
-		return pdfsvc.InvoiceData{}, "", errors.New("database error")
+		return pdfsvc.InvoiceData{}, "", errors.New("erreur de base de données")
 	}
 	ct.IsActive = isActive == 1
 

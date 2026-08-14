@@ -49,7 +49,7 @@ func (h *FiscalYearHandler) ListFiscalYears(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, q)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -94,10 +94,16 @@ type createFiscalYearRequest struct {
 //
 // Accès : administrateur uniquement.
 func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to create a fiscal year"})
-		return
-	}
+	// La garde qui lisait le drapeau administrateur DU JETON a ete retiree.
+	//
+	// Deux defauts en un. Elle lisait un drapeau fige a la connexion : rétrograder
+	// quelqu'un le laissait agir jusqu'a l'expiration de son jeton. Et elle
+	// reservait a l'administrateur les exercices comptables, qui est
+	// le metier du COMPTABLE — il devait demander a quelqu'un dont le role est de
+	// gerer des mots de passe.
+	//
+	// La permission est desormais declaree sur la route (authz.PermManage) et lue
+	// dans la base a chaque requete.
 
 	var req createFiscalYearRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -107,16 +113,16 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 
 	start, err := time.Parse("2006-01-02", req.StartDate)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "start_date must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "start_la date doit être au format AAAA-MM-JJ"})
 		return
 	}
 	end, err := time.Parse("2006-01-02", req.EndDate)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "end_date must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "end_la date doit être au format AAAA-MM-JJ"})
 		return
 	}
 	if !end.After(start) {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "end_date must be after start_date"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la date de fin doit suivre la date de début"})
 		return
 	}
 
@@ -139,7 +145,7 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 		return
 	}
 	if err != sql.ErrNoRows {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -166,15 +172,11 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 func (h *FiscalYearHandler) CloseFiscalYear(c *gin.Context) {
 	fiscalYearID := c.Param("id")
 	if fiscalYearID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "fiscal year id is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "l'identifiant de l'exercice est requis"})
 		return
 	}
 
 	userID := currentUserID(c)
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to close a fiscal year"})
-		return
-	}
 
 	if err := h.fySvc.CloseYear(c.Request.Context(), fiscalYearID, userID); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
@@ -195,10 +197,6 @@ type vatDeclarationRequest struct {
 // GenerateVATDeclaration computes the VAT declaration for a given period.
 // Access: admin only.
 func (h *FiscalYearHandler) GenerateVATDeclaration(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to generate VAT declarations"})
-		return
-	}
 
 	var req vatDeclarationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -208,16 +206,16 @@ func (h *FiscalYearHandler) GenerateVATDeclaration(c *gin.Context) {
 
 	periodStart, err := time.Parse("2006-01-02", req.PeriodStart)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "period_start must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "le début de période doit être au format AAAA-MM-JJ"})
 		return
 	}
 	periodEnd, err := time.Parse("2006-01-02", req.PeriodEnd)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "period_end must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la fin de période doit être au format AAAA-MM-JJ"})
 		return
 	}
 	if periodEnd.Before(periodStart) {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "period_end must be on or after period_start"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la fin de période doit être égale ou postérieure à son début"})
 		return
 	}
 

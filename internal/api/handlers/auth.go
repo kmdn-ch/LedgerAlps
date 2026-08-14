@@ -92,20 +92,20 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		// User not found: run bcrypt on dummy hash to equalise timing with the
 		// "wrong password" branch (~100ms), preventing email enumeration attacks.
 		security.CheckPassword(dummyHash, req.Password)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "identifiants incorrects"})
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
 	if !security.CheckPassword(passwordHash, req.Password) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "identifiants incorrects"})
 		return
 	}
 	if !isActive {
-		c.JSON(http.StatusForbidden, gin.H{"error": "account is disabled"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "ce compte est désactivé"})
 		return
 	}
 
@@ -114,10 +114,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Rien n'est délivré ici qu'un jeton d'attente de cinq minutes, qui ne vaut
 	// que pour /auth/mfa/verify. Ni jeton d'accès, ni cookie de
 	// rafraîchissement : une session ne naît qu'après le code.
-	if h.mfaEnabled(c.Request.Context(), userID) {
+	if h.mfaEnabled(c.Request.Context(), userID) &&
+		!h.deviceIsTrusted(c.Request.Context(), c, userID) {
 		challenge, err := security.GenerateMFAChallengeToken(h.cfg.JWTSecret, userID, isAdmin)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate token"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "le jeton n'a pas pu être produit"})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
@@ -158,14 +159,14 @@ func (h *AuthHandler) issueSession(c *gin.Context, userID string, isAdmin bool, 
 	accessTTL := time.Duration(h.cfg.JWTAccessMinutes) * time.Minute
 	accessToken, err := security.GenerateAccessToken(h.cfg.JWTSecret, userID, isAdmin, accessTTL)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate access token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le jeton d'accès n'a pas pu être produit"})
 		return
 	}
 
 	refreshTTL := time.Duration(h.cfg.JWTRefreshDays) * 24 * time.Hour
 	refreshToken, jti, err := security.GenerateRefreshToken(h.cfg.JWTSecret, userID, isAdmin, refreshTTL)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate refresh token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le jeton de rafraîchissement n'a pas pu être produit"})
 		return
 	}
 
@@ -173,7 +174,7 @@ func (h *AuthHandler) issueSession(c *gin.Context, userID string, isAdmin bool, 
 	//
 	// A fresh context: the one used for the password check was opened before
 	// CheckPassword, and bcrypt is deliberately slow. Reusing it meant a correct
-	// password on a slow machine could still end in "database error" — the login
+	// password on a slow machine could still end in "erreur de base de données" — the login
 	// had already spent most of its five seconds hashing before this insert.
 	insCtx, insCancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer insCancel()
@@ -184,7 +185,7 @@ func (h *AuthHandler) issueSession(c *gin.Context, userID string, isAdmin bool, 
 	if _, err := h.db.ExecContext(insCtx, insQ,
 		db.NewID(), userID, jti,
 		time.Now().UTC().Add(refreshTTL), time.Now().UTC()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -209,7 +210,11 @@ func (h *AuthHandler) issueSession(c *gin.Context, userID string, isAdmin bool, 
 		// Même logique pour l'inscription du second facteur : l'interface
 		// conduit à l'écran, le serveur refuse de toute façon tant que c'est
 		// dû.
-		"mfa_enrolment_required": role == string(authz.RoleAdmin) &&
+		// Administrateur ET comptable : les deux peuvent modifier quelque chose.
+		// Le drapeau suit exactement la règle du filtre serveur — s'il en
+		// divergeait, l'interface enverrait au tableau de bord un compte que
+		// chaque requête refuse ensuite.
+		"mfa_enrolment_required": authz.RequiresSecondFactor(authz.Role(role)) &&
 			!h.mfaEnabled(c.Request.Context(), userID),
 	})
 }
@@ -220,13 +225,13 @@ func (h *AuthHandler) issueSession(c *gin.Context, userID string, isAdmin bool, 
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	rawToken, ok := refreshTokenFromRequest(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "no refresh token supplied"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "aucun jeton de rafraîchissement fourni"})
 		return
 	}
 
 	claims, err := security.ParseToken(h.cfg.JWTSecret, rawToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired refresh token"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "jeton de rafraîchissement invalide ou expiré"})
 		return
 	}
 
@@ -241,26 +246,26 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	var expiresAt time.Time
 	var revokedAt sql.NullTime
 	if err := h.db.QueryRowContext(ctx, q, claims.JTI).Scan(&expiresAt, &revokedAt); err == sql.ErrNoRows {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token not found"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "jeton de rafraîchissement introuvable"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
 	if revokedAt.Valid {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token has been revoked"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ce jeton de rafraîchissement a été révoqué"})
 		return
 	}
 	if time.Now().After(expiresAt) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token has expired"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ce jeton de rafraîchissement a expiré"})
 		return
 	}
 
 	ttl := time.Duration(h.cfg.JWTAccessMinutes) * time.Minute
 	accessToken, err := security.GenerateAccessToken(h.cfg.JWTSecret, claims.UserID, claims.IsAdmin, ttl)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate access token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le jeton d'accès n'a pas pu être produit"})
 		return
 	}
 
@@ -282,13 +287,13 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 	rawToken, ok := refreshTokenFromRequest(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "no refresh token supplied"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "aucun jeton de rafraîchissement fourni"})
 		return
 	}
 
 	claims, err := security.ParseToken(h.cfg.JWTSecret, rawToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired refresh token"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "jeton de rafraîchissement invalide ou expiré"})
 		return
 	}
 
@@ -300,7 +305,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		SET revoked_at = ?
 		WHERE jti = ? AND revoked_at IS NULL`, h.cfg.UsePostgres())
 	if _, err := h.db.ExecContext(ctx, upd, time.Now().UTC(), claims.JTI); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -319,7 +324,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	hash, err := security.HashPassword(req.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le mot de passe n'a pas pu être haché"})
 		return
 	}
 
@@ -334,10 +339,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	if _, err := h.db.ExecContext(ctx, q, id, req.Email, req.Name, hash, now, now); err != nil {
 		// UNIQUE constraint on email
 		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
-			c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
+			c.JSON(http.StatusConflict, gin.H{"error": "cette adresse e-mail est déjà enregistrée"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -365,7 +370,7 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	// This timeout bounds database work only. bcrypt is deliberately slow —
 	// around 100 ms here, several times that on an old laptop or under a race
 	// detector — and letting it share the budget meant the INSERT that follows
-	// could time out and surface as "database error" during first-time setup,
+	// could time out and surface as "erreur de base de données" during first-time setup,
 	// on exactly the modest hardware this product targets. Register already
 	// hashes outside the context; Bootstrap and Login now match it.
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
@@ -374,11 +379,11 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	// Refuse if any user already exists — bootstrap is one-shot.
 	var count int
 	if err := h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if count > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "system already bootstrapped — use /auth/register or the admin panel"})
+		c.JSON(http.StatusConflict, gin.H{"error": "l'installation est déjà initialisée — passez par la création de compte ou le panneau d'administration"})
 		return
 	}
 
@@ -388,7 +393,7 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 
 	hash, err := security.HashPassword(req.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le mot de passe n'a pas pu être haché"})
 		return
 	}
 
@@ -401,7 +406,7 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	defer insCancel()
 
 	if _, err := h.db.ExecContext(insCtx, q, id, req.Email, req.Name, hash, now, now); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

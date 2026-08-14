@@ -19,8 +19,11 @@ import { fiscalYearsApi, auditApi, exportApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { formatDate } from '@/utils'
 import type { FiscalYear } from '@/types'
+import { useT } from '@/i18n/useT'
+import { AttestationVerifyPanel } from '@/components/settings/AttestationVerifyPanel'
 
 export function CompliancePanel() {
+  const t = useT()
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
   const [confirmClose, setConfirmClose] = useState<FiscalYear | null>(null)
@@ -39,7 +42,7 @@ export function CompliancePanel() {
       qc.invalidateQueries({ queryKey: ['maintenance'] })
       qc.invalidateQueries({ queryKey: ['audit-logs'] })
     },
-    onError: (e: any) => setError(e?.response?.data?.error ?? "La clôture a échoué."),
+    onError: (e: any) => setError(e?.response?.data?.error ?? t('cf.echecCloture')),
   })
 
   return (
@@ -47,20 +50,17 @@ export function CompliancePanel() {
       {/* ── Exercices ───────────────────────────────────────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <SectionTitle>Exercices comptables</SectionTitle>
+          <SectionTitle>{t('cf.exercices')}</SectionTitle>
           <button
             onClick={() => setCreating(v => !v)}
             className="btn-ghost btn-sm flex items-center gap-1.5"
           >
             {creating ? <X size={13} /> : <Plus size={13} />}
-            {creating ? 'Annuler' : 'Déclarer un exercice'}
+            {creating ? t('action.annuler') : t('cf.declarerExercice')}
           </button>
         </div>
         <p className="text-sm text-alpine-600 mb-3">
-          Chaque écriture appartient à un exercice. Si aucun ne couvre sa date,
-          LedgerAlps crée l'<strong>année civile</strong> correspondante. Pour un
-          exercice décalé — juillet à juin, par exemple — déclarez-le ici{' '}
-          <strong>avant</strong> d'y comptabiliser quoi que ce soit.
+          {t('cf.exercicesAide')}
         </p>
 
         {creating && <CreateFiscalYearForm onDone={() => {
@@ -69,13 +69,12 @@ export function CompliancePanel() {
         }} />}
 
         {years.isLoading && <LoadingSpinner />}
-        {years.isError && <ErrorBanner message="Les exercices n'ont pas pu être lus." />}
+        {years.isError && <ErrorBanner message={t('cf.erreurExercices')} />}
         {error && <div className="mb-2"><ErrorBanner message={error} /></div>}
 
         {years.data && years.data.length === 0 && (
           <p className="text-sm text-alpine-500">
-            Aucun exercice déclaré. Le premier sera créé automatiquement à votre
-            première écriture.
+            {t('cf.aucunExercice')}
           </p>
         )}
 
@@ -96,13 +95,13 @@ export function CompliancePanel() {
                   </div>
                 </div>
                 {y.is_closed
-                  ? <span className="text-xs text-alpine-500">Clôturé — plus modifiable</span>
+                  ? <span className="text-xs text-alpine-500">{t('cf.clotureNonModifiable')}</span>
                   : (
                     <button
                       onClick={() => { setError(null); setConfirmClose(y) }}
                       className="btn-secondary btn-sm"
                     >
-                      Clôturer
+                      {t('cf.cloturer')}
                     </button>
                   )}
               </div>
@@ -118,23 +117,15 @@ export function CompliancePanel() {
             <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-warning-700" />
             <div className="flex-1">
               <p className="font-medium text-warning-700">
-                Clôturer l'exercice {confirmClose.name} ?
+                {t('cf.confirmerCloture', { nom: confirmClose.name })}
               </p>
               <ul className="mt-1.5 space-y-1 text-alpine-700 list-disc list-inside">
-                <li>
-                  Les soldes de produits et de charges sont virés au résultat par une
-                  écriture de clôture, qui rejoint la chaîne d'intégrité comme les autres.
-                </li>
-                <li>
-                  <strong>Plus aucune écriture ne pourra être passée ni comptabilisée
-                  dans cet exercice</strong>, y compris antidatée. Une correction se passe
-                  dans l'exercice ouvert (CO art. 958f, Olico art. 3).
-                </li>
-                <li>Cette opération ne s'annule pas depuis l'application.</li>
+                <li>{t('cf.clotureCons1')}</li>
+                <li>{t('cf.clotureCons2')}</li>
+                <li>{t('cf.clotureCons3')}</li>
               </ul>
               <p className="mt-2 text-alpine-700">
-                Les écritures encore en brouillon empêchent la clôture : comptabilisez-les
-                ou supprimez-les d'abord.
+                {t('cf.brouillonsBloquent')}
               </p>
               <div className="mt-3 flex gap-2">
                 <button
@@ -143,10 +134,10 @@ export function CompliancePanel() {
                   className="btn-primary btn-sm flex items-center gap-1.5"
                 >
                   {close.isPending && <Loader2 size={13} className="animate-spin" />}
-                  Clôturer définitivement
+                  {t('cf.cloturerDefinitivement')}
                 </button>
                 <button onClick={() => setConfirmClose(null)} className="btn-ghost btn-sm">
-                  Annuler
+                  {t('action.annuler')}
                 </button>
               </div>
             </div>
@@ -156,31 +147,34 @@ export function CompliancePanel() {
 
       {/* ── Preuves à remettre à un tiers ───────────────────────────────────── */}
       <div>
-        <SectionTitle>Attestation et archive</SectionTitle>
+        <SectionTitle>{t('cf.attestationEtArchive')}</SectionTitle>
         <p className="text-sm text-alpine-600 mb-3">
-          L'<a className="underline decoration-alpine-300 hover:decoration-alpine-600" href="https://www.fedlex.admin.ch/eli/cc/2002/216/fr"
-             target="_blank" rel="noreferrer">Olico art. 9</a> autorise la conservation sur
-          support modifiable à condition que des procédés techniques garantissent
-          l'intégrité des données. La chaîne d'empreintes le fait ; ces deux documents
-          permettent de le montrer.
+          {t('cf.olicoAide2')}{' '}
+          <a className="underline decoration-alpine-300 hover:decoration-alpine-600"
+             href="https://www.fedlex.admin.ch/eli/cc/2002/216/fr"
+             target="_blank" rel="noreferrer">{t('cf.olicoLien')}</a>
         </p>
 
         <div className="space-y-2">
           <DownloadRow
             icon={FileCheck2}
-            title="Attestation d'intégrité"
-            description="État de la chaîne, empreinte de tête, périmètre couvert — et ce que l'attestation ne prouve pas. À remettre à votre fiduciaire ou à un réviseur."
+            title={t('cf.attestationTitre')}
+            description={t('cf.attestationDesc')}
             filename="attestation"
             fetcher={() => auditApi.attestation()}
           />
           <DownloadRow
             icon={Download}
-            title="Archive légale et export de réversibilité"
-            description="Dix ans de pièces en JSON (exact) et en CSV (ouvrable dans un tableur, importable ailleurs), avec un manifeste d'empreintes. Vos données ne sont retenues par aucun format."
+            title={t('cf.archiveTitre')}
+            description={t('cf.archiveDesc')}
             filename="archive"
             fetcher={() => exportApi.legalArchive()}
           />
         </div>
+
+        {/* Produire une attestation sans pouvoir la vérifier revient à
+            demander qu'on la croie sur parole. */}
+        <AttestationVerifyPanel />
       </div>
     </div>
   )
@@ -189,6 +183,7 @@ export function CompliancePanel() {
 // ─── Déclaration d'un exercice ────────────────────────────────────────────────
 
 function CreateFiscalYearForm({ onDone }: { onDone: () => void }) {
+  const t = useT()
   const thisYear = new Date().getFullYear()
   const [name, setName] = useState(String(thisYear))
   const [start, setStart] = useState(`${thisYear}-01-01`)
@@ -198,30 +193,29 @@ function CreateFiscalYearForm({ onDone }: { onDone: () => void }) {
   const create = useMutation({
     mutationFn: () => fiscalYearsApi.create({ name, start_date: start, end_date: end }),
     onSuccess: onDone,
-    onError: (e: any) => setError(e?.response?.data?.error ?? "L'exercice n'a pas pu être créé."),
+    onError: (e: any) => setError(e?.response?.data?.error ?? t('cf.echecCreationExercice')),
   })
 
   return (
     <div className="rounded-md border border-neutral-200 px-4 py-3 mb-3">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <label className="text-sm">
-          <span className="block text-xs text-alpine-500 mb-1">Nom</span>
+          <span className="block text-xs text-alpine-500 mb-1">{t('cf.nom')}</span>
           <input className="input w-full" value={name} onChange={e => setName(e.target.value)}
-                 placeholder="2026 ou 2026/27" />
+                 placeholder={t('cf.placeholderNom')} />
         </label>
         <label className="text-sm">
-          <span className="block text-xs text-alpine-500 mb-1">Début</span>
+          <span className="block text-xs text-alpine-500 mb-1">{t('cf.debut')}</span>
           <input type="date" className="input w-full" value={start} onChange={e => setStart(e.target.value)} />
         </label>
         <label className="text-sm">
-          <span className="block text-xs text-alpine-500 mb-1">Fin</span>
+          <span className="block text-xs text-alpine-500 mb-1">{t('cf.fin')}</span>
           <input type="date" className="input w-full" value={end} onChange={e => setEnd(e.target.value)} />
         </label>
       </div>
       {error && <p className="text-sm text-danger-700 mt-2">{error}</p>}
       <p className="text-xs text-alpine-500 mt-2">
-        Deux exercices ne peuvent pas se chevaucher : le rattachement d'une écriture,
-        et donc la clôture, deviendraient arbitraires.
+        {t('cf.pasDeChevauchement')}
       </p>
       <button
         onClick={() => { setError(null); create.mutate() }}
@@ -229,7 +223,7 @@ function CreateFiscalYearForm({ onDone }: { onDone: () => void }) {
         className="btn-primary btn-sm mt-2 flex items-center gap-1.5"
       >
         {create.isPending && <Loader2 size={13} className="animate-spin" />}
-        Créer l'exercice
+        {t('cf.creerExercice')}
       </button>
     </div>
   )
@@ -246,6 +240,7 @@ function DownloadRow({ icon: Icon, title, description, filename, fetcher }: {
   // partiels par nature, et seul content-disposition nous intéresse.
   fetcher: () => Promise<{ data: Blob; headers: any }>
 }) {
+  const t = useT()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -267,7 +262,7 @@ function DownloadRow({ icon: Icon, title, description, filename, fetcher }: {
       a.remove()
       URL.revokeObjectURL(url)
     } catch {
-      setError('Le téléchargement a échoué.')
+      setError(t('cf.echecTelechargement'))
     } finally {
       setBusy(false)
     }
@@ -287,7 +282,7 @@ function DownloadRow({ icon: Icon, title, description, filename, fetcher }: {
         <button onClick={download} disabled={busy}
                 className="btn-secondary btn-sm flex-shrink-0 flex items-center gap-1.5">
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-          Télécharger
+          {t('action.telecharger')}
         </button>
       </div>
     </div>

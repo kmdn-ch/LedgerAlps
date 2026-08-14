@@ -14,7 +14,7 @@ import (
 	accsvc "github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
-var ErrInvoiceNotFound = fmt.Errorf("invoice not found")
+var ErrInvoiceNotFound = fmt.Errorf("facture introuvable")
 var ErrInvalidTransition = fmt.Errorf("invalid status transition")
 
 // Conversion errors (quote → invoice).
@@ -954,6 +954,18 @@ var ErrVATWithoutNumber = errors.New(
 		"sinon, passez les lignes à 0 % — la LTVA art. 27 al. 1 interdit de faire " +
 		"figurer l'impôt, et l'al. 2 vous en rend redevable")
 
+// ErrVATNotLiable refuse la TVA à qui a DÉCLARÉ ne pas y être assujetti.
+//
+// Le refus est le même que ci-dessus, la phrase ne l'est pas. « Aucun numéro
+// n'est enregistré » envoie chercher un numéro ; ici, il n'y en a pas à
+// chercher, et rappeler la déclaration faite dit à la fois ce qui bloque et où
+// le corriger si elle était fausse.
+var ErrVATNotLiable = errors.New(
+	"vous avez déclaré ne pas être assujetti à la TVA : la LTVA art. 27 al. 1 " +
+		"vous interdit de la faire figurer sur une facture, et l'al. 2 vous en " +
+		"rendrait redevable même sans l'avoir encaissée. Passez les lignes à 0 %, " +
+		"ou corrigez votre statut dans Paramètres → Banque")
+
 type querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
@@ -973,15 +985,23 @@ func (s *Service) checkVATAllowed(ctx context.Context, q querier, vatAmount, vat
 	if vatAmount == 0 && vatRate == 0 {
 		return nil
 	}
-	var vatNumber string
+	var vatNumber, vatStatus string
 	err := q.QueryRowContext(ctx, db.Rebind(
-		`SELECT COALESCE(vat_number, '') FROM company_settings LIMIT 1`, s.usePostgres),
-	).Scan(&vatNumber)
+		`SELECT COALESCE(vat_number, ''), COALESCE(vat_status, '')
+		   FROM company_settings LIMIT 1`, s.usePostgres),
+	).Scan(&vatNumber, &vatStatus)
 	if err == sql.ErrNoRows {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("load company settings: %w", err)
+	}
+
+	// La déclaration passe avant le numéro. Quelqu'un qui s'est déclaré non
+	// assujetti n'a pas de numéro à saisir : lui répondre « aucun numéro n'est
+	// enregistré » l'enverrait chercher ce qui n'existe pas.
+	if vatStatus == models.VatExempt {
+		return ErrVATNotLiable
 	}
 	if strings.TrimSpace(vatNumber) == "" {
 		return ErrVATWithoutNumber

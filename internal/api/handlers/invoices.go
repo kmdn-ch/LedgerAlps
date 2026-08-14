@@ -76,11 +76,22 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 		args = append(args, v)
 	}
 
-	// Data isolation: non-admin users only see their own invoices (nLPD art. 6)
-	if uid := currentUserID(c); uid != "" && !isAdmin(c) {
-		where += " AND i.created_by_id = ?"
-		args = append(args, uid)
-	}
+	// Les factures NE SE FILTRENT PAS par auteur.
+	//
+	// Ce filtre ne montrait a un non-administrateur que les factures qu'il avait
+	// lui-meme creees, sous couvert de minimisation des donnees. C'est un
+	// contresens : les factures sont les pieces de l'entreprise, pas la boite de
+	// reception de celui qui les a saisies. Un comptable ne voyait aucune des
+	// factures emises par l'administrateur, une fiduciaire en lecture seule ne
+	// voyait rien du tout, et le total du tableau de bord contredisait la liste.
+	//
+	// La minimisation nLPD porte sur les donnees personnelles, pas sur des
+	// pieces que la loi oblige a conserver dix ans (CO art. 958f). Ce qui borne
+	// l'acces ici est le ROLE : lire demande la permission de lecture, ecrire
+	// celle d'ecriture, et un compte en lecture seule ne peut rien modifier.
+	//
+	// Meme correction que pour le journal en v1.4.8 — c'est la troisieme fois
+	// que ce motif produit un defaut.
 
 	// "overdue" is a filter, never a stored state: an invoice becomes late
 	// because the due date passed, not because someone marked it. Translating
@@ -100,7 +111,7 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 	countQ := db.Rebind("SELECT COUNT(*) FROM invoices i"+where, h.usePostgres)
 	var total int
 	if err := h.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -121,7 +132,7 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 	offset := (page - 1) * pageSize
 	rows, err := h.db.QueryContext(ctx, listQ, append(args, pageSize, offset)...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -175,11 +186,11 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 		&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome, &inv.CorrectsInvoiceID,
 		&inv.CreatedAt, &inv.UpdatedAt, &inv.ContactName, &inv.CreditedAmount)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "facture introuvable"})
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -189,7 +200,7 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 		FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence`, h.usePostgres)
 	lrows, err := h.db.QueryContext(ctx, linesQ, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer lrows.Close()
@@ -238,12 +249,12 @@ func (h *InvoicesHandler) CreateInvoice(c *gin.Context) {
 
 	issueDate, err := time.Parse("2006-01-02", req.IssueDate)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_date must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_la date doit être au format AAAA-MM-JJ"})
 		return
 	}
 	dueDate, err := time.Parse("2006-01-02", req.DueDate)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "due_date must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "due_la date doit être au format AAAA-MM-JJ"})
 		return
 	}
 
@@ -300,12 +311,12 @@ func (h *InvoicesHandler) UpdateInvoice(c *gin.Context) {
 
 	issueDate, err := time.Parse("2006-01-02", req.IssueDate)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_date must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_la date doit être au format AAAA-MM-JJ"})
 		return
 	}
 	dueDate, err := time.Parse("2006-01-02", req.DueDate)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "due_date must be YYYY-MM-DD"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "due_la date doit être au format AAAA-MM-JJ"})
 		return
 	}
 
@@ -407,7 +418,7 @@ func (h *InvoicesHandler) ConvertQuote(c *gin.Context) {
 	if body.IssueDate != "" {
 		d, err := time.Parse("2006-01-02", body.IssueDate)
 		if err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_date must be YYYY-MM-DD"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_la date doit être au format AAAA-MM-JJ"})
 			return
 		}
 		req.IssueDate = d
@@ -415,7 +426,7 @@ func (h *InvoicesHandler) ConvertQuote(c *gin.Context) {
 	if body.DueDate != "" {
 		d, err := time.Parse("2006-01-02", body.DueDate)
 		if err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "due_date must be YYYY-MM-DD"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "due_la date doit être au format AAAA-MM-JJ"})
 			return
 		}
 		req.DueDate = d
@@ -493,7 +504,7 @@ func (h *InvoicesHandler) CreateCreditNote(c *gin.Context) {
 	if body.IssueDate != "" {
 		d, err := time.Parse("2006-01-02", body.IssueDate)
 		if err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_date must be YYYY-MM-DD"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_la date doit être au format AAAA-MM-JJ"})
 			return
 		}
 		req.IssueDate = d

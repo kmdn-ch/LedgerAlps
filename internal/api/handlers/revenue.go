@@ -81,7 +81,7 @@ func (h *ReportsHandler) Revenue(c *gin.Context) {
 
 	rows, totals, err := h.revenueRows(ctx, groupBy, from, to)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

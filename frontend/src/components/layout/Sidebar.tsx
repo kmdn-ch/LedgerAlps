@@ -4,30 +4,33 @@ import { NavLink } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard, FileText, Users, BookOpen,
-  BarChart3, Settings, LogOut, Mountain, ArrowLeftRight, ShoppingCart,
+  BarChart3, Settings, LogOut, ArrowLeftRight, ShoppingCart,
 } from 'lucide-react'
 import { cn } from '@/utils'
 import { useAuthStore } from '@/store/auth'
 import { settingsApi, healthApi, authApi } from '@/api/client'
 import { AccountBanner } from './AccountBanner'
+import { useT } from '@/i18n/useT'
+import { LedgerAlpsIcon, LedgerAlpsPlaque } from '@/components/brand/Logo'
 
 const NAV = [
-  { to: '/',          icon: LayoutDashboard, label: 'Tableau de bord' },
+  { to: '/',          icon: LayoutDashboard, cle: 'nav.tableauDeBord' },
   // Un seul libellé : les deux vivent dans le même écran, qui bascule de l'un
   // à l'autre. Deux entrées de menu pour deux vues du même objet donnaient
   // l'impression de deux registres séparés, qu'ils ne sont pas — une offre
   // acceptée devient une facture, et les deux se citent.
-  { to: '/invoices',  icon: FileText,        label: 'Facturation'     },
+  { to: '/invoices',  icon: FileText,        cle: 'nav.facturation'   },
   // Les achats vivent à côté de la facturation : ce sont les deux sens du
   // même flux, et payer un fournisseur commence par saisir sa facture.
-  { to: '/purchases', icon: ShoppingCart,    label: 'Achats'          },
-  { to: '/contacts',  icon: Users,           label: 'Contacts'        },
-  { to: '/journal',   icon: ArrowLeftRight,  label: 'Journal'         },
-  { to: '/accounts',  icon: BookOpen,        label: 'Plan comptable'  },
-  { to: '/reports',   icon: BarChart3,       label: 'Rapports'        },
-]
+  { to: '/purchases', icon: ShoppingCart,    cle: 'nav.achats'        },
+  { to: '/contacts',  icon: Users,           cle: 'nav.contacts'      },
+  { to: '/journal',   icon: ArrowLeftRight,  cle: 'nav.journal'       },
+  { to: '/accounts',  icon: BookOpen,        cle: 'nav.planComptable' },
+  { to: '/reports',   icon: BarChart3,       cle: 'nav.rapports'      },
+] as const
 
 export function Sidebar() {
+  const t = useT()
   const { user, logout } = useAuthStore()
 
   // Se déconnecter doit révoquer la session côté serveur, pas seulement effacer
@@ -74,9 +77,9 @@ export function Sidebar() {
             />
           </div>
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-accent-500 flex items-center justify-center
-                          shadow-lg shadow-accent-500/30 flex-shrink-0">
-            <Mountain className="w-4.5 h-4.5 text-white" size={18} />
+          <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center
+                          flex-shrink-0 p-1">
+            <LedgerAlpsIcon className="w-full h-full object-contain" />
           </div>
         )}
         <div className="min-w-0">
@@ -86,7 +89,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ to, icon: Icon, label }) => (
+        {NAV.map(({ to, icon: Icon, cle }) => (
           <NavLink
             key={to}
             to={to}
@@ -99,7 +102,7 @@ export function Sidebar() {
             )}
           >
             <Icon size={16} className="flex-shrink-0" />
-            <span>{label}</span>
+            <span>{t(cle)}</span>
           </NavLink>
         ))}
       </nav>
@@ -118,7 +121,7 @@ export function Sidebar() {
                      text-alpine-300 hover:bg-alpine-800 hover:text-white transition-all"
         >
           <Settings size={16} />
-          <span>Paramètres</span>
+          <span>{t('nav.parametres')}</span>
         </NavLink>
 
         <button
@@ -127,18 +130,27 @@ export function Sidebar() {
                      text-alpine-400 hover:bg-danger-500/10 hover:text-danger-500 transition-all"
         >
           <LogOut size={16} />
-          <span>Déconnexion</span>
+          <span>{t('nav.deconnexion')}</span>
         </button>
 
         {user && (
           <div className="px-3 py-2 mt-1 border-t border-alpine-700/50">
             <div className="text-xs font-medium text-white truncate">{user.name}</div>
             <div className="text-[10px] text-alpine-400 truncate">{user.email}</div>
-            {health?.version && (
-              <div className="text-[9px] text-alpine-600 mt-1.5 tabular-nums">
-                {health.version}
-              </div>
-            )}
+            {/* La marque du PRODUIT, ici et pas en haut.
+                En haut vit l'entreprise de l'utilisateur — son logo, son nom —
+                et lui disputer cette place serait malpoli. En bas, elle ne
+                gêne personne et répond à la seule question qu'on se pose
+                devant une capture d'écran : quel logiciel est-ce ? */}
+            <div className="flex items-baseline justify-between gap-2 mt-2 pt-2
+                            border-t border-alpine-800">
+              <LedgerAlpsPlaque hauteur="h-3" />
+              {health?.version && (
+                <span className="text-[9px] text-alpine-600 tabular-nums flex-shrink-0">
+                  {health.version}
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -33,10 +33,16 @@ func NewAuditHandler(database *sql.DB, usePostgres bool) *AuditHandler {
 //
 // Access: admin only.
 func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to access audit logs"})
-		return
-	}
+	// La garde qui lisait le drapeau administrateur DU JETON a ete retiree.
+	//
+	// Deux defauts en un. Elle lisait un drapeau fige a la connexion : rétrograder
+	// quelqu'un le laissait agir jusqu'a l'expiration de son jeton. Et elle
+	// reservait a l'administrateur le journal d'audit, qui est
+	// le metier du COMPTABLE — il devait demander a quelqu'un dont le role est de
+	// gerer des mots de passe.
+	//
+	// La permission est desormais declaree sur la route (authz.PermManage) et lue
+	// dans la base a chaque requete.
 
 	tableName := c.Query("table_name")
 	recordID := c.Query("record_id")
@@ -54,13 +60,13 @@ func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
 
 	if fromStr != "" {
 		if _, err := time.Parse("2006-01-02", fromStr); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "from must be YYYY-MM-DD"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "« from » doit être au format AAAA-MM-JJ"})
 			return
 		}
 	}
 	if toStr != "" {
 		if _, err := time.Parse("2006-01-02", toStr); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "to must be YYYY-MM-DD"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "« to » doit être au format AAAA-MM-JJ"})
 			return
 		}
 	}
@@ -94,7 +100,7 @@ func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
 	countQ := db.Rebind("SELECT COUNT(*) FROM audit_logs a"+where, h.usePostgres)
 	var total int
 	if err := h.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -122,7 +128,7 @@ func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, listQ, append(args, limit, offset)...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -167,10 +173,6 @@ func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
 // if it does not (indicating possible tampering or corruption).
 // Access: admin only.
 func (h *AuditHandler) VerifyAuditLog(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to verify audit logs"})
-		return
-	}
 
 	id := c.Param("id")
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
@@ -203,11 +205,11 @@ func (h *AuditHandler) VerifyAuditLog(c *gin.Context) {
 		&storedHash, &createdAt, &hashVersion,
 	)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "audit log entry not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "maillon d'audit introuvable"})
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -247,7 +249,7 @@ func (h *AuditHandler) VerifyAuditLog(c *gin.Context) {
 		"verified":        false,
 		"stored_hash":     storedHash,
 		"recomputed_hash": recomputed,
-		"error":           "integrity check failed: stored hash does not match recomputed hash (CO art. 957a)",
+		"error":           "contrôle d'intégrité en échec : l'empreinte enregistrée ne correspond pas à celle recalculée (CO art. 957a)",
 	})
 }
 
@@ -305,17 +307,13 @@ const maxChainBreaks = 100
 //
 // Accès : administrateur uniquement.
 func (h *AuditHandler) VerifyAuditChain(c *gin.Context) {
-	if !isAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin privileges required to verify audit logs"})
-		return
-	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
 
 	report, err := h.ComputeChainReport(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

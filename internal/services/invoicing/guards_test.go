@@ -199,6 +199,63 @@ func TestCannotChargeVATWithoutAVATNumber(t *testing.T) {
 	}
 }
 
+// Qui s'est DÉCLARÉ non assujetti est refusé par une autre phrase que celui à
+// qui il manque un numéro. Le refus est le même ; la marche à suivre ne l'est
+// pas — l'un n'a rien à saisir, et l'envoyer chercher un numéro le ferait
+// tourner en rond.
+func TestCannotChargeVATWhenDeclaredNotLiable(t *testing.T) {
+	s, database, contactID := newGuardDB(t, "")
+	if _, err := database.Exec(
+		`UPDATE company_settings SET vat_status = 'exempt'`); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := s.CreateInvoice(context.Background(), "u1", CreateInvoiceRequest{
+		ContactID: contactID,
+		IssueDate: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC),
+		DueDate:   time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC),
+		Currency:  "CHF",
+		Lines:     []LineInput{{Description: "Avec TVA", Quantity: 1, UnitPrice: 100, VATRate: 8.1}},
+	})
+	if !errors.Is(err, ErrVATNotLiable) {
+		t.Fatalf("erreur = %v, attendu ErrVATNotLiable", err)
+	}
+}
+
+// La déclaration passe AVANT le numéro. Une fiche contradictoire — non
+// assujetti mais numéro encore présent — ne doit pas rouvrir la porte : le
+// gestionnaire de réglages efface ce numéro, mais une base restaurée ou
+// modifiée à la main peut porter les deux.
+func TestNotLiableWinsOverALeftoverVATNumber(t *testing.T) {
+	s, database, contactID := newGuardDB(t, "CHE-123.456.789 TVA")
+	if _, err := database.Exec(
+		`UPDATE company_settings SET vat_status = 'exempt'`); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := s.CreateInvoice(context.Background(), "u1", CreateInvoiceRequest{
+		ContactID: contactID,
+		IssueDate: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC),
+		DueDate:   time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC),
+		Currency:  "CHF",
+		Lines:     []LineInput{{Description: "Avec TVA", Quantity: 1, UnitPrice: 100, VATRate: 8.1}},
+	})
+	if !errors.Is(err, ErrVATNotLiable) {
+		t.Fatalf("erreur = %v — un numéro résiduel a rouvert la TVA à un non-assujetti", err)
+	}
+}
+
+// Non assujetti, à 0 % : c'est la facturation normale de qui n'est pas au
+// registre. Rien ne doit la gêner.
+func TestZeroVATIsAllowedWhenNotLiable(t *testing.T) {
+	s, database, contactID := newGuardDB(t, "")
+	if _, err := database.Exec(
+		`UPDATE company_settings SET vat_status = 'exempt'`); err != nil {
+		t.Fatal(err)
+	}
+	makeInvoice(t, s, contactID, 100, 0)
+}
+
 func TestZeroVATIsAllowedWithoutAVATNumber(t *testing.T) {
 	s, _, contactID := newGuardDB(t, "")
 	makeInvoice(t, s, contactID, 100, 0) // échoue via t.Fatalf si refusé

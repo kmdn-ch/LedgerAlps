@@ -34,6 +34,11 @@ type companySettingsRequest struct {
 	AddressCountry    string `json:"address_country"`
 	CheNumber         string `json:"che_number"`
 	VatNumber         string `json:"vat_number"`
+	// VatStatus : "", "liable" ou "exempt". Pointeur, pour la même raison
+	// qu'AutoPostInvoices — « absent » veut dire « ne touche pas ». Un
+	// formulaire qui ne porte pas ce champ remettrait sinon le statut à « non
+	// déclaré » à chaque enregistrement.
+	VatStatus *string `json:"vat_status,omitempty"`
 	// Coordonnées de contact. Pas exigées par la LTVA art. 26, mais une facture
 	// qu'on ne peut pas contester facilement se paie tard, ou pas.
 	Phone string `json:"phone"`
@@ -64,7 +69,8 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 	q := db.Rebind(`
 		SELECT id, company_name, legal_form,
 		       address_street, address_postal_code, address_city, address_country,
-		       che_number, vat_number, COALESCE(phone,''), COALESCE(email,''),
+		       che_number, vat_number, COALESCE(vat_status,''),
+		       COALESCE(phone,''), COALESCE(email,''),
 		       COALESCE(bank_name,''), COALESCE(bank_address,''), COALESCE(bank_bic,''), iban,
 		       COALESCE(auto_post_invoices,0),
 		       fiscal_year_start_month, currency, logo_data,
@@ -77,7 +83,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 	err := h.db.QueryRowContext(ctx, q).Scan(
 		&s.ID, &s.CompanyName, &s.LegalForm,
 		&s.AddressStreet, &s.AddressPostalCode, &s.AddressCity, &s.AddressCountry,
-		&s.CheNumber, &s.VatNumber, &s.Phone, &s.Email,
+		&s.CheNumber, &s.VatNumber, &s.VatStatus, &s.Phone, &s.Email,
 		&s.BankName, &s.BankAddress, &s.BankBIC, &s.IBAN,
 		&autoPost,
 		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
@@ -93,7 +99,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	s.AutoPostInvoices = autoPost == 1
@@ -152,12 +158,12 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 			req.FiscalYearStartMonth, req.Currency,
 			now, now,
 		); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 		existingID = newID
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	} else {
 		// Row exists — UPDATE (do NOT touch logo_data).
@@ -190,7 +196,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 			now,
 			existingID,
 		); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	}
@@ -203,8 +209,39 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	if req.AutoPostInvoices != nil {
 		autoQ := db.Rebind(`UPDATE company_settings SET auto_post_invoices = ?, updated_at = ?`, h.usePostgres)
 		if _, err := h.db.ExecContext(ctx, autoQ, boolToSQL(*req.AutoPostInvoices), now); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
+		}
+	}
+
+	// Le statut TVA, même logique : fourni ou pas touché.
+	//
+	// « Non assujetti » EFFACE le numéro de TVA, et ce n'est pas une commodité.
+	// Le numéro s'imprime sur la facture : le garder tout en déclarant ne pas
+	// être assujetti produirait un document qui affirme le contraire de ce que
+	// dit la fiche — exactement ce que la LTVA art. 27 al. 1 interdit, et l'al. 2
+	// rendrait redevable de l'impôt ainsi mentionné. Une contradiction se refuse
+	// là où elle naît ; la laisser vivre pour la rattraper plus loin, c'est
+	// signer qu'un chemin l'oubliera.
+	if req.VatStatus != nil {
+		statut := strings.TrimSpace(*req.VatStatus)
+		if statut != "" && statut != models.VatLiable && statut != models.VatExempt {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": "statut TVA inconnu : attendu « assujetti » ou « non assujetti »",
+			})
+			return
+		}
+		vatQ := db.Rebind(`UPDATE company_settings SET vat_status = ?, updated_at = ?`, h.usePostgres)
+		if _, err := h.db.ExecContext(ctx, vatQ, statut, now); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+			return
+		}
+		if statut == models.VatExempt {
+			clearQ := db.Rebind(`UPDATE company_settings SET vat_number = '', updated_at = ?`, h.usePostgres)
+			if _, err := h.db.ExecContext(ctx, clearQ, now); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+				return
+			}
 		}
 	}
 
@@ -212,7 +249,8 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	q := db.Rebind(`
 		SELECT id, company_name, legal_form,
 		       address_street, address_postal_code, address_city, address_country,
-		       che_number, vat_number, COALESCE(phone,''), COALESCE(email,''),
+		       che_number, vat_number, COALESCE(vat_status,''),
+		       COALESCE(phone,''), COALESCE(email,''),
 		       COALESCE(bank_name,''), COALESCE(bank_address,''), COALESCE(bank_bic,''), iban,
 		       COALESCE(auto_post_invoices,0),
 		       fiscal_year_start_month, currency, logo_data,
@@ -224,16 +262,24 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	if err := h.db.QueryRowContext(ctx, q, existingID).Scan(
 		&s.ID, &s.CompanyName, &s.LegalForm,
 		&s.AddressStreet, &s.AddressPostalCode, &s.AddressCity, &s.AddressCountry,
-		&s.CheNumber, &s.VatNumber, &s.Phone, &s.Email,
+		&s.CheNumber, &s.VatNumber, &s.VatStatus, &s.Phone, &s.Email,
 		&s.BankName, &s.BankAddress, &s.BankBIC, &s.IBAN,
 		&autoPostOut,
 		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
 		&s.CreatedAt, &s.UpdatedAt,
 	); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	s.AutoPostInvoices = autoPostOut == 1
+
+	// Qui a changé l'IBAN de l'entreprise, et quand : c'est ce compte qui
+	// recevra les virements de tous les clients. Un changement non tracé y
+	// serait indétectable.
+	trace(c, h.db, h.usePostgres, TableCompanySettings,
+		ActionCompanySettingsUpdated, "company", map[string]any{
+			"iban_modifie": true,
+		})
 
 	c.JSON(http.StatusOK, s)
 }
@@ -248,14 +294,14 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 		LogoData string `json:"logo_data" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "logo_data (base64 data URL) required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "logo_data est requis (adresse de données base64)"})
 		return
 	}
 
 	// Validate data URL format: "data:<mime>;base64,<data>"
 	dataURL := req.LogoData
 	if len(dataURL) < 22 {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid logo data URL"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "l'adresse de données du logo est invalide"})
 		return
 	}
 	// Split header from base64 payload
@@ -267,7 +313,7 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 		}
 	}
 	if commaIdx < 0 {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid logo data URL"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "l'adresse de données du logo est invalide"})
 		return
 	}
 	header := dataURL[:commaIdx] // e.g. "data:image/png;base64"
@@ -275,7 +321,7 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 
 	// Validate MIME type from header
 	if !strings.Contains(header, "image/png") && !strings.Contains(header, "image/jpeg") {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "logo must be PNG or JPEG"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "le logo doit être au format PNG ou JPEG"})
 		return
 	}
 
@@ -285,15 +331,27 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 		// Try without padding
 		decoded, err = base64.RawStdEncoding.DecodeString(b64Data)
 		if err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid base64 data"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "données base64 invalides"})
 			return
 		}
 	}
 	const maxSize = 2 << 20 // 2 MB
 	if len(decoded) > maxSize {
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "logo too large (max 2 MB)"})
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "logo trop volumineux (2 Mo au maximum)"})
 		return
 	}
+
+	// Ramener l'image à 300 px de côté au plus. L'écran le fait déjà avant
+	// l'envoi ; c'est ici que la règle tient, parce que c'est ici qu'on écrit
+	// en base. Voir logo_resize.go pour le pourquoi de cette limite.
+	logo, err := ajusterLogo(dataURL)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "ce fichier n'est pas une image lisible (PNG ou JPEG attendu)",
+		})
+		return
+	}
+	dataURL = logo.DataURL
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
@@ -316,21 +374,29 @@ func (h *SettingsHandler) UploadLogo(c *gin.Context) {
 			     created_at, updated_at)
 			VALUES (?, '', '', '', '', '', 'CH', '', '', '', 1, 'CHF', ?, ?, ?)`, h.usePostgres)
 		if _, err := h.db.ExecContext(ctx, insertQ, newID, dataURL, now, now); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	} else {
 		updateQ := db.Rebind(`UPDATE company_settings SET logo_data = ?, updated_at = ? WHERE id = ?`, h.usePostgres)
 		if _, err := h.db.ExecContext(ctx, updateQ, dataURL, now, existingID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"logo_data": dataURL})
+	// La réponse annonce ce qui a été RETENU, pas ce qui a été envoyé. L'écran
+	// réduit déjà l'image de son côté ; afficher sa propre estimation reviendrait
+	// à se croire sur parole, alors que c'est la base qui fait foi.
+	c.JSON(http.StatusOK, gin.H{
+		"logo_data": dataURL,
+		"width":     logo.Largeur,
+		"height":    logo.Hauteur,
+		"resized":   logo.Redimens,
+	})
 }
 
 // DeleteLogo godoc
@@ -342,7 +408,7 @@ func (h *SettingsHandler) DeleteLogo(c *gin.Context) {
 
 	q := db.Rebind(`UPDATE company_settings SET logo_data = NULL, updated_at = ?`, h.usePostgres)
 	if _, err := h.db.ExecContext(ctx, q, time.Now().UTC()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})

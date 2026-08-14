@@ -22,6 +22,7 @@ import { authApi } from '@/api/client'
 import { ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import { useAuthStore } from '@/store/auth'
+import { useT } from '@/i18n/useT'
 
 interface SetupData {
   secret: string
@@ -31,6 +32,7 @@ interface SetupData {
 }
 
 export function MFAEnrolmentPage() {
+  const t = useT()
   const navigate = useNavigate()
   const clearMfaEnrolment = useAuthStore(s => s.clearMfaEnrolment)
 
@@ -43,7 +45,7 @@ export function MFAEnrolmentPage() {
   const start = useMutation({
     mutationFn: () => authApi.mfaSetup(),
     onSuccess: (r) => { setError(null); setSetup(r.data as SetupData) },
-    onError: (e) => setError(refusalMessage(e, "L'inscription n'a pas pu démarrer.")),
+    onError: (e) => setError(refusalMessage(e, t('mf.echecDemarrage'))),
   })
 
   const confirm = useMutation({
@@ -53,7 +55,7 @@ export function MFAEnrolmentPage() {
       setCodes((r.data.recovery_codes ?? []) as string[])
       clearMfaEnrolment()
     },
-    onError: (e) => { setError(refusalMessage(e, 'Le code n’a pas été accepté.')); setCode('') },
+    onError: (e) => { setError(refusalMessage(e, t('mf.codeRefuse'))); setCode('') },
   })
 
   const copyCodes = async () => {
@@ -63,7 +65,7 @@ export function MFAEnrolmentPage() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2500)
     } catch {
-      setError('La copie a échoué. Notez les codes à la main.')
+      setError(t('mf.echecCopie'))
     }
   }
 
@@ -84,16 +86,14 @@ export function MFAEnrolmentPage() {
             <>
               <h1 className="font-display font-700 text-lg text-white flex items-center gap-2">
                 <ShieldCheck size={18} className="text-success-500" />
-                Second facteur activé
+                {t('mf.active')}
               </h1>
 
               <div className="mt-4 rounded-lg border border-warning-500/40 bg-warning-500/10 p-4">
                 <p className="text-sm text-warning-200 flex items-start gap-2">
                   <AlertTriangle size={16} className="shrink-0 mt-0.5" />
                   <span>
-                    <strong>Notez ces codes maintenant.</strong> Ils ne seront plus jamais
-                    affichés. Sans eux, un téléphone perdu vous ferme définitivement l&rsquo;accès —
-                    et personne d&rsquo;autre ne peut vous le rendre.
+                    {t('mf.notezMaintenant')}
                   </span>
                 </p>
               </div>
@@ -110,28 +110,25 @@ export function MFAEnrolmentPage() {
               <div className="mt-4 flex items-center gap-2">
                 <button onClick={copyCodes} className="btn-secondary btn-sm flex items-center gap-1.5">
                   {copied ? <Check size={13} /> : <Copy size={13} />}
-                  {copied ? 'Copié' : 'Copier les codes'}
+                  {copied ? t('us.copie') : t('mf.copierCodes')}
                 </button>
               </div>
 
               <p className="text-xs text-alpine-500 mt-3">
-                Rangez-les ailleurs que sur ce PC et hors de votre téléphone : un papier dans un
-                tiroir fermé fait très bien l&rsquo;affaire. Chacun ne sert qu&rsquo;une fois.
+                {t('mf.rangezAilleurs')}
               </p>
               {/* Dire OÙ ils se saisissent, pas seulement de les noter : un code
                   de secours se ressort des mois plus tard, dans un moment
                   d'urgence, et chercher le bouton n'est pas le moment. */}
               <p className="text-xs text-alpine-400 mt-2">
-                Pour vous en servir : à l&rsquo;écran de connexion, après votre mot de passe,
-                choisissez <strong className="text-alpine-200">« Téléphone perdu ? Utiliser un
-                code de secours »</strong>.
+                {t('mf.ouLesSaisir')}
               </p>
 
               <button
                 onClick={() => navigate('/', { replace: true })}
                 className="btn-primary w-full mt-5"
               >
-                J&rsquo;ai noté mes codes de secours
+                {t('mf.jaiNote')}
               </button>
             </>
           ) : setup ? (
@@ -139,33 +136,32 @@ export function MFAEnrolmentPage() {
             <>
               <h1 className="font-display font-700 text-lg text-white flex items-center gap-2">
                 <Smartphone size={18} className="text-accent-500" />
-                Enregistrez votre application
+                {t('mf.activezTitre')}
               </h1>
               <p className="text-sm text-alpine-400 mt-2">
-                Scannez ce code avec votre application d&rsquo;authentification, puis saisissez
-                celui qu&rsquo;elle affiche.
+                {t('mf.scannezAide')}
               </p>
 
               <div className="mt-5 flex flex-col items-center gap-3">
-                <img src={setup.qr_png} alt="Code à scanner"
+                <img src={setup.qr_png} alt={t('mf.altCodeAScanner')}
                      className="rounded-lg bg-white p-3" width={240} height={240} />
                 <details className="w-full">
                   <summary className="text-xs text-alpine-400 cursor-pointer">
-                    Impossible de scanner ? Saisir la clé à la main
+                    {t('mf.impossibleScanner')}
                   </summary>
                   <p className="mt-2 font-mono text-xs break-all rounded border border-alpine-700
                                 bg-alpine-800 px-3 py-2 text-alpine-200">
                     {setup.secret}
                   </p>
                   <p className="text-xs text-alpine-500 mt-1">
-                    Compte : {setup.account} — type « temporel », six chiffres, 30 secondes.
+                    {t('mf.compteEtType', { compte: setup.account })}
                   </p>
                 </details>
               </div>
 
               <div className="mt-5">
                 <label htmlFor="otp" className="label text-alpine-300">
-                  Code affiché par l&rsquo;application
+                  {t('mf.codeAffiche')}
                 </label>
                 <input
                   id="otp" autoFocus inputMode="numeric" maxLength={7}
@@ -184,7 +180,7 @@ export function MFAEnrolmentPage() {
                 className="btn-primary w-full mt-4 flex items-center justify-center gap-2"
               >
                 {confirm.isPending && <Loader2 size={14} className="animate-spin" />}
-                Activer le second facteur
+                {t('mf.activerLeSecondFacteur')}
               </button>
             </>
           ) : (
@@ -192,18 +188,15 @@ export function MFAEnrolmentPage() {
             <>
               <h1 className="font-display font-700 text-lg text-white flex items-center gap-2">
                 <KeyRound size={18} className="text-accent-500" />
-                Protégez le compte administrateur
+                {t('mf.protegezTitre')}
               </h1>
               <p className="text-sm text-alpine-400 mt-2">
-                Ce compte peut créer des comptes, restaurer une sauvegarde et déverrouiller une
-                période. Aujourd&rsquo;hui, seul votre mot de passe l&rsquo;en sépare. Un second
-                facteur fait qu&rsquo;un mot de passe volé ne suffit plus.
+                {t('mf.protegezAide')}
               </p>
 
               <div className="mt-4 rounded-lg border border-alpine-700 bg-alpine-800/50 p-4">
                 <p className="text-sm text-alpine-300">
-                  Il vous faut une application d&rsquo;authentification sur votre téléphone.
-                  Toutes conviennent ; les suivantes sont libres et fonctionnent hors ligne :
+                  {t('mf.ilVousFaut')}
                 </p>
                 <ul className="mt-2 text-sm text-alpine-400 list-disc list-inside space-y-0.5">
                   <li>Aegis Authenticator (Android)</li>
@@ -211,8 +204,7 @@ export function MFAEnrolmentPage() {
                   <li>FreeOTP (Android, iOS)</li>
                 </ul>
                 <p className="text-xs text-alpine-500 mt-3">
-                  Rien ne sort de cette machine : le code se calcule à partir d&rsquo;un secret
-                  partagé une seule fois, sans aucun appel réseau.
+                  {t('mf.rienNeSort')}
                 </p>
               </div>
 
@@ -224,7 +216,7 @@ export function MFAEnrolmentPage() {
                 className="btn-primary w-full mt-5 flex items-center justify-center gap-2"
               >
                 {start.isPending && <Loader2 size={14} className="animate-spin" />}
-                Commencer
+                {t('mf.commencer')}
               </button>
             </>
           )}

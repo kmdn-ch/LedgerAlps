@@ -12,33 +12,41 @@ import { securityApi } from '@/api/client'
 import { SectionTitle, ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import type { SecuritySettings } from '@/types'
+import { useT, useLangue } from '@/i18n/useT'
+import { localeIntl } from '@/i18n'
+import type { Cle } from '@/i18n'
 
 // Deux minutes est le plancher accepté par le serveur : en dessous, la
 // déconnexion tombe pendant la lecture d'un document, et comme aucun brouillon
 // n'est enregistré, la saisie est perdue.
-const IDLE_CHOICES = [
-  { v: 0,  label: 'Jamais' },
-  { v: 5,  label: '5 minutes' },
-  { v: 10, label: '10 minutes' },
-  { v: 20, label: '20 minutes' },
-  { v: 60, label: '1 heure' },
+const IDLE_CHOICES: { v: number; cle: Cle }[] = [
+  { v: 0,  cle: 'ss.jamais' },
+  { v: 5,  cle: 'ss.cinqMinutes' },
+  { v: 10, cle: 'ss.dixMinutes' },
+  { v: 20, cle: 'ss.vingtMinutes' },
+  { v: 60, cle: 'ss.uneHeure' },
 ]
 
-const ROTATION_CHOICES = [
-  { v: 0,  label: 'Jamais' },
-  { v: 1,  label: 'Chaque jour' },
-  { v: 7,  label: 'Chaque semaine' },
-  { v: 30, label: 'Chaque mois' },
+const ROTATION_CHOICES: { v: number; cle: Cle }[] = [
+  { v: 0,  cle: 'ss.jamais' },
+  { v: 1,  cle: 'ss.chaqueJour' },
+  { v: 7,  cle: 'ss.chaqueSemaine' },
+  { v: 30, cle: 'ss.chaqueMois' },
 ]
 
-function formatDateTime(iso?: string): string {
+// La locale suit la langue choisie : « 09.02.2026 14:30 » est suisse, un
+// Britannique lit « 09/02/2026, 14:30 ». Le figer en fr-CH affichait une date
+// française sur une interface anglaise.
+function formatDateTime(iso: string | undefined, loc: string): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('fr-CH', {
+  return new Date(iso).toLocaleString(loc, {
     dateStyle: 'short', timeStyle: 'short',
   })
 }
 
 export function SessionSecurityPanel() {
+  const t = useT()
+  const loc = localeIntl(useLangue())
   const qc = useQueryClient()
   const [error, setError] = useState<string | null>(null)
 
@@ -51,7 +59,7 @@ export function SessionSecurityPanel() {
     mutationFn: (body: { rotation_days?: number; idle_logout_minutes?: number }) =>
       securityApi.saveSettings(body),
     onSuccess: () => { setError(null); qc.invalidateQueries({ queryKey: ['settings', 'security'] }) },
-    onError:   (e) => setError(refusalMessage(e, "Le réglage n'a pas pu être enregistré.")),
+    onError:   (e) => setError(refusalMessage(e, t('ss.echecReglage'))),
   })
 
   const s = settings.data
@@ -59,7 +67,7 @@ export function SessionSecurityPanel() {
 
   return (
     <div className="mt-6">
-      <SectionTitle>Durée de vie des sessions</SectionTitle>
+      <SectionTitle>{t('ss.titre')}</SectionTitle>
 
       {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
 
@@ -69,12 +77,9 @@ export function SessionSecurityPanel() {
           <div className="flex items-start gap-2">
             <Clock size={16} className="mt-0.5 flex-shrink-0 text-alpine-500" />
             <div className="flex-1">
-              <p className="font-medium">Déconnexion après inactivité</p>
+              <p className="font-medium">{t('ss.deconnexionTitre')}</p>
               <p className="text-alpine-600 mt-0.5">
-                Protège l'écran laissé ouvert — un bureau partagé, un portable en salle
-                d'attente. Un avertissement d'une minute précède la coupure, avec un bouton
-                pour rester : LedgerAlps ne conserve pas de brouillon automatique, et une
-                saisie en cours ne doit pas disparaître sans qu'on ait pu l'arrêter.
+                {t('ss.deconnexionAide')}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {IDLE_CHOICES.map(c => (
@@ -88,14 +93,14 @@ export function SessionSecurityPanel() {
                         : 'border-neutral-200 hover:border-alpine-500'
                     }`}
                   >
-                    {c.label}
+                    {t(c.cle)}
                   </button>
                 ))}
                 {save.isPending && <Loader2 size={13} className="animate-spin text-alpine-500" />}
               </div>
               {s.idle_logout_minutes === 0 && (
                 <p className="mt-2 text-warning-700 text-xs">
-                  Désactivée : une session ouverte le reste tant que la fenêtre l'est.
+                  {t('ss.deconnexionDesactivee')}
                 </p>
               )}
             </div>
@@ -107,12 +112,9 @@ export function SessionSecurityPanel() {
           <div className="flex items-start gap-2">
             <RefreshCw size={16} className="mt-0.5 flex-shrink-0 text-alpine-500" />
             <div className="flex-1">
-              <p className="font-medium">Régénération automatique de la clé de signature</p>
+              <p className="font-medium">{t('ss.rotationTitre')}</p>
               <p className="text-alpine-600 mt-0.5">
-                Borne la valeur d'une fuite passée : un fichier de configuration parti dans
-                un ticket de support la semaine dernière ne permet plus rien aujourd'hui.
-                La clé est régénérée <strong>au démarrage</strong>, jamais en cours de
-                session — vous aurez simplement à vous reconnecter.
+                {t('ss.rotationAide')}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {ROTATION_CHOICES.map(c => (
@@ -126,17 +128,18 @@ export function SessionSecurityPanel() {
                         : 'border-neutral-200 hover:border-alpine-500'
                     }`}
                   >
-                    {c.label}
+                    {t(c.cle)}
                   </button>
                 ))}
               </div>
               <p className="mt-2 text-xs text-alpine-500">
-                Dernière régénération : {formatDateTime(s.rotation.rotated_at)}
-                {s.rotation.next_at && <> · prochaine au démarrage suivant le {formatDateTime(s.rotation.next_at)}</>}
+                {t('ss.derniereRegeneration', { date: formatDateTime(s.rotation.rotated_at, loc) })}
+                {s.rotation.next_at
+                  && t('ss.prochaineAu', { date: formatDateTime(s.rotation.next_at, loc) })}
               </p>
               {s.rotation.max_age_days === 0 && (
                 <p className="mt-1 text-warning-700 text-xs">
-                  Désactivée : la clé ne changera plus que si vous la régénérez vous-même.
+                  {t('ss.rotationDesactivee')}
                 </p>
               )}
             </div>

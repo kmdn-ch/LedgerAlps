@@ -86,7 +86,7 @@ func (h *UsersHandler) ResetPassword(c *gin.Context) {
 	}
 	hash, err := security.HashPassword(temp)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le mot de passe n'a pas pu être haché"})
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *UsersHandler) ResetPassword(c *gin.Context) {
 		WHERE id = ?`, h.usePostgres)
 	res, err := h.db.ExecContext(c.Request.Context(), upd, hash, time.Now().UTC(), targetID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -148,7 +148,7 @@ func (h *UsersHandler) RemoveMFA(c *gin.Context) {
 	if _, err := h.db.ExecContext(c.Request.Context(),
 		db.Rebind(`DELETE FROM user_mfa WHERE user_id = ?`, h.usePostgres),
 		targetID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if _, err := h.db.ExecContext(c.Request.Context(),

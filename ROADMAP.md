@@ -50,7 +50,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | Support modifiable admis | Olico art. 9 | ✅ attestation d'intégrité exportable |
 | Exercice bouclé immuable | CO art. 958f, Olico art. 3 | ✅ verrouillage de période |
 | Facture nommant son destinataire | LTVA art. 26 al. 2 | ✅ identité figée à l'émission |
-| Interdiction de mentionner la TVA sans l'être | LTVA art. 27 al. 1 et 2 | ✅ refusé à la source |
+| Interdiction de mentionner la TVA sans l'être | LTVA art. 27 al. 1 et 2 | ✅ statut déclaré, taux par défaut aligné, refusé à la source |
 | Correction par note de crédit | LTVA art. 27 al. 4, art. 41 | ✅ liée, bornée, signée en déclaration |
 | QR-facture | SIX IG v2.4 | ✅ conforme · ⏳ validation portail SIX |
 | Sécurité des données | nLPD art. 8, OPDo art. 3 | ✅ HTTPS réseau · ✅ sauvegardes chiffrées · ✅ base chiffrable |
@@ -80,7 +80,12 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 11 | eBill | ⛔ écarté — réseau fermé | [↓](#11--ebill) |
 | 12 | Validation contre le portail SIX | 🔎 dossier livré | [↓](#12--validation-contre-le-portail-six) |
 | 12b | Exports comptables (journal, grand livre, balance) | 🔎 livré | [↓](#12b--exports-comptables) |
+| 9c | Droits du comptable, second facteur par rôle, lecture seule | ✅ | [↓](#9c--droits-du-comptable-et-second-facteur-par-rôle) |
 | 13 | Veille de conformité automatisée | ✅ | — |
+| 13b | Lecture d'une facture fournisseur (QR + texte) | ✅ | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
+| 13c | Traçabilité : couverture du journal, attestation automatique **et vérifiable** | 🔎 livré | [↓](#13c--traçabilité) |
+| 13d | Retirer une facture de la liste des paiements | 🔎 livré | [↓](#13d--vider-la-liste-des-paiements) |
+| 15 | Trouver ses marques : mise en route, statut TVA, aide par écran | 🔎 livré | [↓](#15--trouver-ses-marques) |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
 ---
@@ -160,9 +165,11 @@ croire couvert pour les trois.
 
 | | Protège | État |
 |---|---|---|
-| **Chiffrement du disque** (BitLocker, LUKS) | Tout le poste | 🔎 conseil rendu applicable — édition Windows détectée, marche à suivre affichée |
-| **Sauvegardes** (Argon2id + XChaCha20) | La copie qui voyage | 🔎 chiffrées dès qu'une phrase de passe est enregistrée |
-| **Base de données** (VFS adiantum) | Le fichier, même copié ailleurs | 🔎 option, désactivée par défaut |
+| **Chiffrement du disque** (BitLocker, LUKS) | Tout le poste | ✅ conseil rendu applicable — édition Windows détectée, marche à suivre affichée |
+| **Sauvegardes** (Argon2id + XChaCha20) | La copie qui voyage | ✅ chiffrées dès qu'une phrase de passe est enregistrée |
+| **Base de données** (VFS adiantum) | Le fichier, même copié ailleurs | ✅ proposée à l'installation, activable ensuite |
+
+**Validé par l'utilisateur.** Les trois protections sont livrées et vérifiées.
 
 **Le trou réel n'était pas celui du roadmap.** Les sauvegardes automatiques
 n'étaient chiffrées que si la variable d'environnement `BACKUP_PASSPHRASE`
@@ -442,8 +449,8 @@ pour `/auth/mfa/verify`, et le filtre d'authentification le refuse partout
 ailleurs — donc aussi sur les routes qui n'existent pas encore. Un code ne sert
 qu'une fois. La vérification est derrière la limitation de tentatives existante.
 
-**Dix codes de secours, montrés une fois, hachés en base.** Sans eux, un
-téléphone perdu enfermerait définitivement le dernier administrateur : le second
+**Dix codes de secours, montrés une fois, hachés en base.** Sans eux, la perte
+de l'application d'authentification enfermerait définitivement le dernier administrateur : le second
 facteur créerait la panne qu'il est censé prévenir.
 
 **Réinitialisation d'accès par l'administrateur.** « Réinitialiser » remplace le
@@ -458,12 +465,48 @@ compte, et le second facteur ne protégerait plus de rien face à lui. Le retrai
 est une action séparée, confirmée et tracée à part.
 
 **À la première connexion après la mise à jour**, l'administrateur d'une
-installation existante sera conduit à inscrire son téléphone avant de pouvoir
-travailler. C'est voulu : une protection qu'on peut remettre à plus tard n'est
+installation existante devra activer le 2FA avec une application
+d'authentification OTP avant de pouvoir travailler. C'est voulu : une protection qu'on peut remettre à plus tard n'est
 jamais activée.
 
 **Reste** : rien d'obligatoire. Une clé matérielle (WebAuthn) attendrait HTTPS
 généralisé et un besoin réel.
+
+### 9c — Droits du comptable et second facteur par rôle
+
+**Livré.** Le rôle comptable ne pouvait pas faire son métier : clôturer un
+exercice, vérifier la chaîne d'empreintes, prendre une sauvegarde, répondre à une
+demande d'effacement, régler la fiche entreprise — tout cela lui était refusé.
+Il devait demander à quelqu'un dont le rôle est de gérer des mots de passe.
+
+La frontière est désormais celle-ci : **PermManage administre la COMPTABILITÉ,
+PermAdmin administre le LOGICIEL et QUI Y ACCÈDE.** Le comptable a la première,
+l'administrateur les deux.
+
+**Neuf gardes internes lisaient le drapeau du JETON**, pas le rôle en base —
+attestation, journal d'audit (trois fois), anonymisation, exercices (trois fois),
+contacts. Le défaut que l'Authorizer avait été construit pour supprimer
+subsistait donc dans les handlers : rétrograder quelqu'un le laissait agir
+jusqu'à l'expiration de son jeton. Elles sont retirées ; la permission est
+déclarée sur la route et lue dans la base à chaque requête. Deux tests vérifient
+que ces routes portent bien leur permission — sans quoi retirer le middleware les
+ouvrirait à tout compte connecté sans que rien ne le signale.
+
+**Le second facteur suit maintenant le pouvoir de modifier.** Exigé de
+l'administrateur *et* du comptable — un mot de passe volé sur l'un ou l'autre
+permet de fabriquer une comptabilité. La lecture seule en est dispensée : elle ne
+peut rien modifier, et c'est le rôle qu'on donne à sa fiduciaire, à qui l'on ne
+dicte pas son équipement.
+
+**« Se souvenir de cet ordinateur », trente jours.** Redemander un code chaque
+jour sur le poste habituel n'ajoute presque rien — quelqu'un qui a déjà la main
+sur la machine n'attend pas la prochaine connexion — et une protection vécue
+comme une brimade finit désactivée. La date est **absolue** : se connecter ne la
+prolonge pas, sans quoi l'exception deviendrait la règle. Le jeton est haché en
+base, le navigateur en garde l'unique copie dans un cookie HttpOnly, et changer
+de mot de passe ou de second facteur oublie tous les postes.
+
+Inventaire complet des droits : [docs/DROITS.md](docs/DROITS.md).
 
 ### 10 — Rapprochement bancaire
 
@@ -576,6 +619,241 @@ les clés.
 **Reste** : rien d'obligatoire. Un format destiné à un logiciel fiduciaire précis
 (Abacus, Crésus) attendra qu'un besoin réel le demande.
 
+### 13b — Lecture automatique des factures fournisseurs (PDF)
+
+**Tranché.** Saisir une facture reçue à la main est le geste le plus répétitif du
+produit. Trois voies avaient été étudiées ; **les deux premières sont livrées**,
+la troisième reste écartée pour la raison expliquée plus bas. L'analyse qui a
+mené à ce choix est conservée ci-dessous — elle dit ce que chaque voie coûte.
+
+**1. La QR-facture, d'abord.** Une facture suisse conforme porte un QR code qui
+contient déjà, en clair et sans ambiguïté : l'IBAN du créancier, son nom, son
+adresse, le montant, la devise et la référence de paiement. Aucune
+reconnaissance de caractères n'est nécessaire — il suffit de trouver l'image dans
+le PDF et de la décoder. Les bibliothèques existent en Go (`gozxing`,
+licence Apache 2.0). **Fiabilité proche de 100 % quand le code est présent**, ce
+qui est le cas de la grande majorité des factures suisses depuis le
+30 septembre 2022. C'est de loin le meilleur rapport résultat/risque, et cela ne
+lit que ce que la norme SIX définit — donc rien à deviner.
+
+**2. Le texte du PDF, pour le reste.** Numéro de facture, date, montants hors
+taxe et taux de TVA se trouvent dans la couche texte d'un PDF produit par un
+logiciel de facturation. `pdfcpu` (Apache 2.0) ou `ledongthuc/pdf` (BSD)
+extraient ce texte en Go pur, sans dépendance système. Des expressions régulières
+et quelques heuristiques suffisent pour proposer des valeurs — **à confirmer par
+l'utilisateur, jamais à enregistrer d'office.**
+
+**3. L'OCR, seulement pour les scans.** Une facture photographiée n'a pas de
+couche texte. Tesseract (Apache 2.0) sait la lire, mais impose une dépendance
+native — donc `CGO_ENABLED=1`, ce qui casse le binaire unique sans configuration
+qui est la promesse du produit. À réserver à une version ultérieure, en option
+détectée si Tesseract est déjà installé.
+
+**Ce qui est exclu.** Tout service d'extraction en ligne, toute API de modèle de
+langage hébergée : une facture fournisseur contient l'IBAN, le nom et l'adresse
+d'un tiers, et l'envoyer chez un prestataire contredit frontalement la promesse
+de souveraineté. Un modèle local (Ollama) reste envisageable, mais pèse plusieurs
+gigaoctets pour un gain incertain face au QR code.
+
+### Ce qui est livré — la voie 1
+
+**Livré.** On dépose le PDF depuis l'écran Achats, LedgerAlps décode le
+QR-facture et pré-remplit le fournisseur (reconnu **par son IBAN**), la référence
+de paiement et le numéro de la pièce. Le contrôle référence QR ⇔ QR-IBAN est
+appliqué à la lecture, donc bien avant qu'un paiement parte.
+
+Vérifié sur un serveur réel avec un PDF portant un vrai QR : créancier, IBAN,
+montant, référence et type de référence tous relus correctement, fournisseur
+connu reconnu, **et aucune facture créée** — la route lit, elle n'écrit pas.
+
+Deux dépendances, toutes deux en Go pur : `gozxing` et `pdfcpu`, Apache 2.0,
+`CGO_ENABLED=0` conservé.
+
+**Ce qui n'est pas couvert, et le dit** : une facture sans QR, ou dont le QR est
+tracé en vecteurs plutôt qu'en image. La réponse est « aucun QR trouvé » avec
+l'explication, jamais un formulaire vide sans raison.
+
+### La voie 2 aussi
+
+**Livrée.** La couche texte du PDF apporte ce que le QR ne porte pas : numéro de
+facture, date, échéance, taux de TVA, numéro IDE du fournisseur.
+
+**La lecture est géométrique, pas textuelle.** Un chiffre ne veut rien dire sans
+son étiquette : « 538690 » est un numéro de facture parce qu'il est écrit sous la
+colonne « Numéro de facture ». On lit donc chaque fragment avec ses coordonnées,
+on reconstitue des lignes, et on rattache une valeur à son étiquette par la
+position — comme un humain lit une facture.
+
+**Deux pièges réels, trouvés sur une facture réelle :**
+
+*Deux dates portent l'étiquette « Date »* sur un rappel — celle du rappel et
+celle de la facture rappelée. La lecture porte sur la **ligne** du tableau : le
+numéro, sa date et son échéance viennent de la même rangée.
+
+*Les colonnes de nombres sont alignées à droite*, si bien que leur abscisse tombe
+sous l'en-tête précédent et décale toute la ligne d'un cran. Chaque valeur reste
+juste, chaque étiquette devient fausse — le pire des cas, puisque rien ne cloche
+à l'œil. L'appariement se fait par rang, et un contrôle de cohérence refuse
+l'assignation décalée.
+
+**Chaque valeur voyage avec sa provenance**, affichée à l'écran. Rien n'est
+enregistré sans confirmation.
+
+**Reste** : les factures scannées, sans couche texte. Elles demanderaient un
+rendu de page et une reconnaissance de caractères, donc une dépendance native —
+ce qui casserait le binaire unique. Le refus est explicite.
+
+**Recommandation initiale, conservée pour mémoire** : la voie 1 seule pour commencer — décoder le QR d'une
+facture déposée, pré-remplir créancier, IBAN, montant et référence de paiement,
+et laisser l'utilisateur compléter le reste. C'est peu de code, aucune dépendance
+native, aucun risque d'erreur silencieuse, et cela couvre le cas courant. La voie
+2 s'ajoute ensuite si le besoin se confirme.
+
+**Aucune valeur ne doit être enregistrée sans confirmation.** Une facture
+fournisseur mal lue entre dans les livres et dans la déclaration de TVA ; un
+champ pré-rempli qu'on relit vaut mieux qu'un champ juste qu'on n'a pas vu.
+
+### 13c — Traçabilité
+
+**Une attestation se vérifie maintenant.** Elle était produite, scellée et
+remise à un tiers qui n'avait aucun moyen de la contrôler — un document
+invérifiable ne vaut pas mieux qu'une affirmation orale.
+
+**Comment la fiduciaire l'exploite**, concrètement :
+
+1. **Elle en demande une à chaque bouclement**, et elle la CONSERVE. C'est la
+   seule chose à retenir : le pouvoir de preuve ne vient pas de la
+   cryptographie, il vient de ce que le client ne peut plus modifier la copie
+   qu'elle détient.
+2. **Elle contrôle le sceau sans logiciel** : retirer la ligne `self_hash`,
+   calculer le SHA-256 du reste, comparer. `certutil -hashfile x.json SHA256`
+   sous Windows, `shasum -a 256 x.json` ailleurs. La marche à suivre est écrite
+   dans le document, section `how_to_verify`.
+3. **Elle fait comparer les empreintes chez le client**, devant lui :
+   Paramètres → Maintenance → Conformité → « Vérifier une attestation ». Si
+   celle de janvier correspond encore en juin, aucune écriture qu'elle couvre
+   n'a été réécrite entre-temps.
+
+**Ce que chaque contrôle vaut, et l'écran le dit.** Le sceau détecte un fichier
+retouché à la main, rien de plus : qui a le logiciel recalcule l'empreinte.
+C'est la comparaison dans le temps qui porte la preuve.
+
+**Livré.** La chaîne d'empreintes du CO art. 957a existait, avec sa vérification
+et son attestation. **Trois actions y entraient** : la comptabilisation d'une
+écriture, la clôture d'un exercice, le changement de statut d'une facture. Les
+constantes `ActionContactUpdated`, `ActionPaymentRecorded`,
+`ActionBankEntryMatched` étaient déclarées et jamais appelées.
+
+Un journal à trous est pire qu'un journal absent : on le consulte en croyant
+qu'il dit tout, et l'absence d'une ligne se lit comme « cela n'a pas eu lieu »
+alors qu'elle veut dire « cela n'a jamais été écrit ».
+
+**Ce qui entre désormais dans la chaîne** : création, modification,
+comptabilisation, annulation et suppression d'une facture fournisseur ;
+modification des coordonnées de l'entreprise — c'est l'IBAN qui reçoit les
+virements de tous les clients ; et les refus, pas seulement les succès. Un refus
+non tracé laisse sans réponse la question qui vient après : « on a bien essayé,
+pourquoi est-ce encore là ? »
+
+**L'attestation s'émet seule**, au démarrage puis chaque jour, dans
+`attestations/` à côté des sauvegardes. La chaîne rend une modification
+détectable **à condition d'avoir un point de comparaison** : qui peut écrire
+dans la base peut recalculer la chaîne entière, qui reste alors cohérente.
+L'ancrage est l'empreinte de tête conservée ailleurs, à une date connue — et une
+garantie qui suppose qu'on pense à cliquer chaque mois n'existe pas.
+
+Le fichier part avec les sauvegardes vers le NAS ou la clé USB ; c'est ce
+déplacement, décidé par l'utilisateur, qui vaut ancrage. **Rien n'est envoyé
+nulle part** : un horodatage tiers (RFC 3161) supposerait un appel réseau,
+contraire à la promesse du produit. La limite est écrite dans l'attestation
+elle-même.
+
+**Finalité déclarée** (nLPD art. 6) : traçabilité comptable et sécurité. Ce sont
+des **opérations sur des pièces** qui sont enregistrées, jamais des clics ni du
+temps de présence. L'OLT 3 art. 26 interdit les systèmes destinés à surveiller
+le comportement des travailleurs ; ce journal n'en est pas un, et sa conception
+doit le rester.
+
+**Reste** : le fichier en ajout seul hors de la base (« lot 2 »), qui protégerait
+du cas d'une restauration effaçant l'historique. Écarté pour l'instant — il
+place une seconde écriture dans le chemin critique de chaque action, pour un
+seul scénario.
+
+### 13d — Vider la liste des paiements
+
+**Livré.** La liste accumulait tout ce qui est comptabilisé et non réglé :
+factures payées hors LedgerAlps, saisies d'essai, doublons. Les **factures
+bloquées** — celles qui ne peuvent pas être payées faute de QR-IBAN ou de
+référence valide — y restaient pour toujours, puisque rien ne les en faisait
+sortir. Une liste qu'on ne peut pas vider cesse d'être lue, et le jour où elle
+porte une vraie facture en retard, personne ne la voit.
+
+**Supprimer n'était pas la réponse.** Une facture comptabilisée est une charge
+dans les livres, avec sa dette au compte créanciers ; l'effacer ferait
+disparaître la charge d'un exercice tenu, et le CO art. 958f impose de conserver
+la pièce dix ans. Le geste juste est l'**annulation avec extourne** : la facture
+reste, marquée annulée, et une écriture inverse neutralise la charge et la TVA
+déductible. Un réviseur voit une correction, pas un trou.
+
+**Un défaut corrigé au passage.** Passer une facture comptabilisée à « annulée »
+ne faisait que changer son statut : l'écriture restait dans les livres et
+continuait d'alimenter le résultat et la déclaration pendant que l'écran
+affichait « annulée ». L'écart ne se serait vu qu'au décompte trimestriel.
+
+Par lot ou une par une, **réservé à l'administrateur et au comptable**
+(`PermWriteAccounting`). Chaque facture reçoit son propre verdict : un brouillon
+est supprimé, une facture comptabilisée est extournée, une facture déjà réglée
+est refusée — l'argent est parti. Neuf tests portent sur les **soldes**, pas sur
+le statut : c'est le seul endroit où le défaut se voyait.
+
+### 15 — Trouver ses marques
+
+**Livré.** Une installation neuve s'ouvrait sur quatre compteurs à zéro et un
+graphique vide. Rien n'annonçait que sans adresse structurée le bulletin QR
+serait refusé au guichet, ni que sans IBAN le PDF sortirait sans section de
+paiement. **L'information existait** — le contrôle de cohérence la produit
+depuis longtemps — mais dans Paramètres → Maintenance → Diagnostic, à trois
+clics d'un endroit où un débutant ne va jamais. Ce n'était pas un manque de
+fonction, c'était un manque de placement.
+
+**Une liste de mise en route** ouvre le tableau de bord tant qu'elle n'est pas
+faite : raison sociale et adresse, numéro IDE, IBAN, premier client, première
+facture. Chaque ligne mène **au champ** — `/settings#banking` ouvre l'onglet
+Banque — et ce qui bloque est nommé : « il manque le code postal, la localité ».
+
+**Un IBAN faux ne coche pas.** Il est pire qu'absent : il produit un bulletin
+d'apparence normale que la banque refusera. Les règles sont appliquées côté
+serveur (SIX IG v2.4 §4.2.2, clé ISO 13616), là où elles vivent déjà — les
+recopier dans le navigateur aurait garanti qu'elles divergent, comme la
+recherche IDE écrite deux fois et corrigée une seule.
+
+**Rien n'est mémorisé.** L'état se relit des données à chaque ouverture :
+effacer l'IBAN décoche sa case et fait revenir la liste. Un assistant aurait
+retenu « fait » et menti à partir de là. La liste ne s'affiche pas pour un
+compte en lecture seule, qui ne peut accomplir aucune de ses étapes.
+
+**Le statut TVA est devenu une question, avec ses conséquences.** C'est l'étape
+qui rapporte le plus de la liste, parce que c'est la seule qui porte une
+DÉCISION plutôt qu'une saisie, et la plus coûteuse à manquer : la LTVA art. 27
+al. 2 rend redevable de l'impôt celui qui le fait figurer sans y être assujetti,
+encaissé ou non. LedgerAlps appliquait 8.1 % par défaut puis refusait la
+facture — le mur arrivait après le travail.
+
+Trois états et non deux : « non déclaré » n'est pas « non assujetti », sinon les
+lignes d'un assujetti qui n'a pas encore saisi son numéro tomberaient à 0 %.
+Déclarer « non assujetti » efface le numéro de TVA, qui s'imprime sur la
+facture : une fiche ne doit pas dire le contraire du document qu'elle produit.
+
+**Un « i » à côté du titre de chaque écran** porte une phrase sur ce que
+l'écran fait, et sur ce qu'il ne fait pas là où la confusion coûte cher : qu'un
+brouillon ne compte ni à la balance ni au bilan, qu'un contact facturé
+s'anonymise au lieu de se supprimer (CO art. 958f), qu'on n'a rien à faire dans
+le plan comptable au quotidien. Elle s'ouvre au survol, s'épingle au clic, se
+ferme par Échap — au doigt comme au clavier, il n'y a pas de survol.
+
+**Écarté pour l'instant** : regrouper le menu en « Mon activité » et « Ma
+comptabilité ». Cela déplace de la navigation apprise et se décide à part.
+
 ### 14 — Modules métier
 
 **Piste retenue pour l'évolution du produit, non engagée.**
@@ -656,21 +934,46 @@ Une plateforme sera réintégrée le jour où elle sera testée en CI, pas avant
 
 ---
 
-## En cours — interface multilingue
+## Interface multilingue
 
 La Suisse compte quatre langues officielles.
 
-| Langue | Code | État |
-|---|---|---|
-| Français | `fr` | ✅ défaut actuel |
-| Deutsch | `de` | ⏳ |
-| Italiano | `it` | ⏳ |
-| English | `en` | 🔎 partiel (chaînes UI) |
+| Langue | Code | Interface | Messages du serveur | Documents (PDF, CSV) | Installeur |
+|---|---|---|---|---|---|
+| Français | `fr` | ✅ | ✅ | ✅ | ✅ |
+| Deutsch | `de` | ✅ | ✅ | ✅ | ✅ |
+| Italiano | `it` | ✅ | ✅ | ✅ | ✅ |
+| English | `en` | ✅ | ✅ | ✅ | ✅ |
 
-**Périmètre** : menus, formulaires, messages d'erreur, gabarits de facture,
-libellés créancier/débiteur du bulletin QR, langue de la facture liée au
-paramètre société. `react-i18next` en frontend, génération PDF *language-aware*
-côté serveur, pack NSIS italien à ajouter.
+**L'interface est faite** : les 36 écrans, 998 clés, avec les formats qui
+suivent la langue — dates, séparateurs de milliers, noms de mois, badges de
+statut — et les avis de conformité rendus par le serveur dans la langue
+demandée. Le sélecteur vit dans Paramètres → Mon compte et est visible pour
+tous les rôles, y compris un accès en lecture seule : une fiduciaire tessinoise
+doit pouvoir lire en italien sans demander la permission.
+
+Aucune bibliothèque : un catalogue typé, `useT()`, et un test Go qui refuse une
+clé manquante, une valeur vide, un repère d'interpolation perdu **ou une valeur
+restée en français**. C'est ce dernier contrôle qui compte — copier `fr.ts` en
+`de.ts` compile parfaitement.
+
+**Le serveur suit**, avec ses 360 phrases : refus, confirmations, facture PDF,
+bulletin de versement QR, exports CSV, attestation d'intégrité. La langue voyage
+dans `Accept-Language`, posé une fois par le client, et la traduction se fait au
+POINT DE PASSAGE — un intercepteur relit les réponses JSON en sortie plutôt que
+de toucher aux deux cents endroits qui refusent. Une route ajoutée demain est
+couverte sans qu'on y pense.
+
+**Les documents suivent le sélecteur**, pas la fiche du client : ce qu'on voit à
+l'écran est ce qui sort de l'imprimante. Le vocabulaire du bulletin QR reste
+celui des Implementation Guidelines de SIX, que la banque attend au mot près.
+
+**Ce qui reste délibérément en français** : une vingtaine de messages de
+diagnostic — chargement du flux de conformité au démarrage, outil en ligne de
+commande, défauts d'infrastructure. Ils vont au journal du serveur, et leur
+texte sert à retrouver la ligne dans les sources à partir d'un rapport
+d'incident. Ils sont déclarés un par un dans `internal/i18n/diagnostic.go`,
+avec leur raison.
 
 ---
 
@@ -681,6 +984,10 @@ côté serveur, pack NSIS italien à ajouter.
 
 | Version | Apport principal |
 |---|---|
+| **v1.5.0** | **Les quatre langues officielles, de bout en bout** — interface, messages du serveur, facture PDF, bulletin QR, exports CSV, attestation, installeur. Lecture complète d'une facture fournisseur (QR + couche texte), lecture seule réellement en lecture seule, QR-IBAN distingué de l'IBAN, traçabilité étendue et attestation d'intégrité automatique, retrait d'une facture de la liste des paiements par extourne |
+| **v1.4.9** | Exports comptables réels (journal, grand livre, balance), création de fournisseur à la volée, accents du PDF |
+| **v1.4.8** | Rôles et permissions, second facteur TOTP, ordinateurs de confiance, écriture au journal des factures fournisseurs |
+| **v1.4.7** | Correctifs et documentation |
 | **v1.4.6** | Clôture d'exercice réellement effectuée, verrouillage de période, piste d'audit vérifiable, attestation Olico art. 9, anonymisation nLPD, export CSV, rotation du secret, validation IBAN ISO 13616, factures multi-pages, garde-fous note de crédit et TVA |
 | **v1.4.5** | HTTPS natif, écoute sur `127.0.0.1` par défaut, Maintenance & Système (1ʳᵉ tranche), garde-fou mécanique des avis de conformité, détection BitLocker |
 | **v1.4.4** | Sauvegardes chiffrées (Argon2id + XChaCha20-Poly1305), interface de sauvegarde/restauration, notes de crédit liées et bornées |

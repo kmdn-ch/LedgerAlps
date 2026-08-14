@@ -111,7 +111,7 @@ func (h *ReportsHandler) BalanceSheet(c *gin.Context) {
 		asOf = time.Now().Format("2006-01-02")
 	}
 	if _, err := time.Parse("2006-01-02", asOf); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "date must be YYYY-MM-DD"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "la date doit être au format AAAA-MM-JJ"})
 		return
 	}
 
@@ -145,7 +145,7 @@ func (h *ReportsHandler) BalanceSheet(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, q, asOf)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -203,15 +203,15 @@ func (h *ReportsHandler) IncomeStatement(c *gin.Context) {
 	fromStr := c.Query("from")
 	toStr := c.Query("to")
 	if fromStr == "" || toStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "from and to query parameters are required (YYYY-MM-DD)"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "les paramètres « from » et « to » sont requis (AAAA-MM-JJ)"})
 		return
 	}
 	if _, err := time.Parse("2006-01-02", fromStr); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "from must be YYYY-MM-DD"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "« from » doit être au format AAAA-MM-JJ"})
 		return
 	}
 	if _, err := time.Parse("2006-01-02", toStr); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "to must be YYYY-MM-DD"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "« to » doit être au format AAAA-MM-JJ"})
 		return
 	}
 
@@ -241,7 +241,7 @@ func (h *ReportsHandler) IncomeStatement(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, q, fromStr, toStr)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -296,20 +296,20 @@ func (h *ReportsHandler) IncomeStatement(c *gin.Context) {
 func (h *ReportsHandler) GeneralLedger(c *gin.Context) {
 	accountCode := c.Query("account_code")
 	if accountCode == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "account_code query parameter is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "le paramètre account_code est requis"})
 		return
 	}
 	fromStr := c.Query("from")
 	toStr := c.Query("to")
 	if fromStr != "" {
 		if _, err := time.Parse("2006-01-02", fromStr); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "from must be YYYY-MM-DD"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "« from » doit être au format AAAA-MM-JJ"})
 			return
 		}
 	}
 	if toStr != "" {
 		if _, err := time.Parse("2006-01-02", toStr); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "to must be YYYY-MM-DD"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "« to » doit être au format AAAA-MM-JJ"})
 			return
 		}
 	}
@@ -321,10 +321,10 @@ func (h *ReportsHandler) GeneralLedger(c *gin.Context) {
 	acctQ := db.Rebind(`SELECT id, name FROM accounts WHERE code = ? AND is_active = 1`, h.usePostgres)
 	var accountID, accountName string
 	if err := h.db.QueryRowContext(ctx, acctQ, accountCode).Scan(&accountID, &accountName); err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "compte introuvable"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -340,7 +340,7 @@ func (h *ReportsHandler) GeneralLedger(c *gin.Context) {
 			WHERE jl.account_id = ? AND je.date < ?`, h.usePostgres)
 		var obDebit, obCredit float64
 		if err := h.db.QueryRowContext(ctx, obQ, accountID, fromStr).Scan(&obDebit, &obCredit); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 		// Use debit - credit as the running balance basis (adjusted per account type
@@ -375,7 +375,7 @@ func (h *ReportsHandler) GeneralLedger(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, db.Rebind(baseQ, h.usePostgres), args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -451,7 +451,7 @@ func (h *ReportsHandler) ARaging(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, q)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()

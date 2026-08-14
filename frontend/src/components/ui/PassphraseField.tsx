@@ -22,18 +22,23 @@
 // éventuel se solde par son message d'erreur, pas par une phrase faible acceptée.
 
 import { useState, type ReactNode } from 'react'
+import { useT } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
 import { Check, Minus, Eye, EyeOff } from 'lucide-react'
 
 export const PASSPHRASE_MIN_LEN = 16
 
-export interface PassphraseCheck { label: string; met: boolean }
+// Le critère porte sa CLÉ : la liste est produite par une fonction pure,
+// appelée aussi bien pendant le rendu que hors de tout composant
+// (`passphraseIsStrong`), où `useT()` n'existe pas.
+export interface PassphraseCheck { cle: Cle; met: boolean }
 
 export function passphraseChecks(p: string): PassphraseCheck[] {
   return [
-    { label: `${PASSPHRASE_MIN_LEN} caractères ou plus`, met: [...p].length >= PASSPHRASE_MIN_LEN },
-    { label: 'une minuscule',                            met: /\p{Ll}/u.test(p) },
-    { label: 'une majuscule',                            met: /\p{Lu}/u.test(p) },
-    { label: 'un chiffre',                               met: /\p{Nd}/u.test(p) },
+    { cle: 'pf.longueurMini', met: [...p].length >= PASSPHRASE_MIN_LEN },
+    { cle: 'pf.uneMinuscule', met: /\p{Ll}/u.test(p) },
+    { cle: 'pf.uneMajuscule', met: /\p{Lu}/u.test(p) },
+    { cle: 'pf.unChiffre',    met: /\p{Nd}/u.test(p) },
   ]
 }
 
@@ -44,22 +49,23 @@ export function passphraseIsStrong(p: string): boolean {
 // Le symbole et la longueur au-delà du minimum ne sont pas exigés mais
 // renforcent : présentés comme un bonus, pas comme un obstacle de plus. Le but
 // est d'encourager une phrase longue, pas de faire échouer la saisie.
-function strengthOf(p: string): { score: number; label: string; className: string } {
-  if (p === '') return { score: 0, label: '', className: '' }
+function strengthOf(p: string): { score: number; cle: Cle | null; className: string } {
+  if (p === '') return { score: 0, cle: null, className: '' }
   const met   = passphraseChecks(p).filter(c => c.met).length
   const bonus = /[^\p{L}\p{Nd}]/u.test(p) ? 1 : 0
   const long  = [...p].length >= 24 ? 1 : 0
   const score = met + bonus + long // 0..6
 
-  if (met < 4)     return { score, label: 'Insuffisante', className: 'bg-danger-500' }
-  if (score >= 6)  return { score, label: 'Excellente',   className: 'bg-success-700' }
-  if (score === 5) return { score, label: 'Solide',       className: 'bg-success-500' }
-  return { score, label: 'Acceptable', className: 'bg-warning-500' }
+  if (met < 4)     return { score, cle: 'pf.insuffisante', className: 'bg-danger-500' }
+  if (score >= 6)  return { score, cle: 'pf.excellente',   className: 'bg-success-700' }
+  if (score === 5) return { score, cle: 'pf.solide',       className: 'bg-success-500' }
+  return { score, cle: 'pf.acceptable', className: 'bg-warning-500' }
 }
 
 export function PassphraseStrength({ value }: { value: string }) {
+  const t = useT()
   const checks = passphraseChecks(value)
-  const { score, label, className } = strengthOf(value)
+  const { score, cle, className } = strengthOf(value)
   const allMet = checks.every(c => c.met)
 
   return (
@@ -71,20 +77,20 @@ export function PassphraseStrength({ value }: { value: string }) {
             style={{ width: `${(score / 6) * 100}%` }}
           />
         </div>
-        {label && (
+        {cle && (
           <span className={`text-xs font-medium ${allMet ? 'text-success-700' : 'text-danger-700'}`}>
-            {label}
+            {t(cle)}
           </span>
         )}
       </div>
 
       <ul className="mt-2 space-y-0.5">
         {checks.map(c => (
-          <li key={c.label} className={`text-xs flex items-center gap-1.5 ${
+          <li key={c.cle} className={`text-xs flex items-center gap-1.5 ${
             c.met ? 'text-success-700' : 'text-alpine-500'
           }`}>
             {c.met ? <Check size={12} /> : <Minus size={12} />}
-            {c.label}
+            {t(c.cle, { n: PASSPHRASE_MIN_LEN })}
           </li>
         ))}
       </ul>
@@ -95,8 +101,7 @@ export function PassphraseStrength({ value }: { value: string }) {
           se retiennent. */}
       {allMet && score < 6 && (
         <p className="mt-1.5 text-xs text-alpine-500">
-          Vous pouvez faire mieux : au-delà de 24 caractères, chaque signe
-          supplémentaire compte plus que n'importe quelle astuce de composition.
+          {t('pf.faireMieux')}
         </p>
       )}
     </div>
@@ -120,6 +125,7 @@ export function PassphraseField({
   autoFocus?: boolean
   showStrength?: boolean
 }) {
+  const t = useT()
   const [visible, setVisible] = useState(false)
 
   return (
@@ -139,7 +145,7 @@ export function PassphraseField({
         <button
           type="button"
           onClick={() => setVisible(!visible)}
-          aria-label={visible ? 'Masquer la phrase de passe' : 'Afficher la phrase de passe'}
+          aria-label={visible ? t('sv.masquerPhrase') : t('sv.afficherPhrase')}
           className="absolute right-2 top-1/2 -translate-y-1/2 text-alpine-500 hover:text-alpine-900"
         >
           {visible ? <EyeOff size={16} /> : <Eye size={16} />}

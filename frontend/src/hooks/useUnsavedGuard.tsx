@@ -17,7 +17,7 @@
 // pour un formulaire vide serait le meilleur moyen d'apprendre à cliquer
 // « Quitter » sans lire.
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { useBlocker } from 'react-router-dom'
 
 /**
@@ -49,11 +49,25 @@ export function useBeforeUnload(active: boolean) {
  * enregistré.
  */
 export function useUnsavedGuard(dirty: boolean) {
-  useBeforeUnload(dirty)
+  // # Le garde doit se taire quand la saisie a été ENREGISTRÉE
+  //
+  // Sans cela il se retourne contre ce qu'il protège : « Créer en brouillon »
+  // enregistre la facture, puis navigue vers elle — et le garde, qui ne voit
+  // qu'une navigation sur un formulaire encore « dirty », affiche « Quitter
+  // cette page ? Ce que vous avez saisi sera perdu ». Le message est faux, la
+  // facture existe ; et l'utilisateur qui le croit clique « Annuler » et reste
+  // bloqué sur un écran dont le bouton principal ne fait plus rien.
+  //
+  // Un `ref` et non un état : `désarmer()` est appelé juste avant `navigate()`,
+  // dans le même tour. Un état ne serait pas encore appliqué quand React Router
+  // consulte la condition, et le garde se déclencherait quand même.
+  const désarmé = useRef(false)
+
+  useBeforeUnload(dirty && !désarmé.current)
 
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
-      dirty && currentLocation.pathname !== nextLocation.pathname,
+      dirty && !désarmé.current && currentLocation.pathname !== nextLocation.pathname,
   )
 
   const confirmLeave = useCallback(() => {
@@ -64,11 +78,17 @@ export function useUnsavedGuard(dirty: boolean) {
     if (blocker.state === 'blocked') blocker.reset()
   }, [blocker])
 
+  /** À appeler avant de naviguer après un enregistrement réussi. */
+  const désarmer = useCallback(() => {
+    désarmé.current = true
+  }, [])
+
   return {
     /** Vrai quand une navigation attend la décision de l'utilisateur. */
     blocked: blocker.state === 'blocked',
     confirmLeave,
     cancelLeave,
+    désarmer,
   }
 }
 

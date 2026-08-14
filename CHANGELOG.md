@@ -5,6 +5,329 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
+## [1.5.1] — 2026-08-14
+
+### Ajouté
+
+- **Assujetti ou non à la TVA : la question est posée, et elle a des conséquences.** Paramètres → Banque. Jusqu'ici, la seule trace de ce statut était la présence d'un numéro de TVA — un champ vide voulant dire deux choses opposées que rien ne distinguait. LedgerAlps appliquait donc 8.1 % par défaut à chaque ligne, **puis refusait la facture** : le mur arrivait après le travail, et celui qui n'est pas assujetti ne pouvait le comprendre qu'en lisant la LTVA.
+
+  **Trois états, pas deux.** « Non déclaré » n'est pas « non assujetti » : le confondre ferait tomber à 0 % les lignes d'un assujetti qui n'a pas encore saisi son numéro. Tant que la question n'a pas de réponse, rien ne change.
+
+  **« Non assujetti » efface le numéro de TVA**, et ce n'est pas une commodité : ce numéro s'imprime sur la facture, et l'y laisser produirait un document qui affirme le contraire de la fiche — précisément ce que la LTVA art. 27 al. 1 interdit et dont l'al. 2 rend redevable. Le garde-fou de facturation fait passer la déclaration avant le numéro, si bien qu'un numéro résiduel dans une base restaurée ne rouvre pas la porte.
+
+  **Le refus change de phrase selon la cause.** « Aucun numéro n'est enregistré » envoie chercher un numéro ; à qui s'est déclaré non assujetti, il n'y en a pas à chercher, et le message le dit.
+
+  **Les installations existantes qui portent un numéro de TVA** sont marquées assujetties par la migration : ce numéro ne s'obtient qu'en s'inscrivant au registre. Celles qui n'en portent pas restent non déclarées — deviner « non assujetti » corrigerait leur facturation en silence, sur une hypothèse.
+
+- **La marque officielle, telle quelle.** Les fichiers fournis — `LOGO.svg` et `icon.svg` — vivent intacts dans `infrastructure/brand/`. Ce que l'interface affiche en dérive sans intervention manuelle : mêmes tracés, seul le cadrage change (le `viewBox` se cale sur le dessin au lieu de la planche de 1408 × 768) et le fond blanc plein cadre est retiré pour que la marque se pose partout. Les polices étant déjà vectorisées, l'espacement et le style sont dans les coordonnées et rien ne les altère.
+
+  **Où elle apparaît.** Le logotype sur l'écran de connexion — le seul écran où personne n'est encore identifié, donc celui où il faut lire sans ambiguïté quel logiciel demande un mot de passe — et au pied de la barre latérale, à côté du numéro de version. Pas en haut : le haut appartient à l'entreprise de l'utilisateur, et lui disputer cette place serait malpoli. Le monogramme, lui, tient la vignette carrée de la barre quand aucun logo d'entreprise n'est défini.
+
+- **L'icône du bureau est celle de LedgerAlps.** Le raccourci et le menu Démarrer affichaient l'icône générique bleue de Windows : `ledgeralps.exe` ne portait aucune ressource d'icône. Il en porte une désormais — sept tailles, de 16 à 256 px, rendues depuis `icon.svg`. L'installeur et le désinstalleur la portent aussi.
+
+  **Produit sans outil externe.** Go n'a pas de directive pour poser une icône : il lie les fichiers `.syso` du répertoire du paquet. Les outils habituels se récupèrent sur le réseau, et LedgerAlps se construit hors ligne ; la ressource est donc écrite par un script du dépôt, documenté dans `infrastructure/brand/README.md`. Vérifié en extrayant l'icône de l'exécutable construit : `#1C3656` et `#CA2E24`, les deux couleurs exactes du fichier officiel — contre `#0C7CCB` pour un exécutable sans ressource.
+
+- **Un fichier ajouté à `public/` est enfin servi.** Chaque fichier statique avait sa route en dur (`/favicon.ico`, `/logo.svg`). Le piège ne se voit pas à la lecture : une route absente ne répond pas 404, elle tombe dans le repli de l'application et rend `index.html` — le navigateur reçoit du HTML là où il attendait une image et n'affiche rien. C'est exactement ce qui est arrivé aux deux fichiers de la marque. Le serveur sert maintenant ce que le paquet embarqué contient réellement à sa racine.
+
+- **Le logo d'entreprise est ramené à 300 × 300 px.** Il est stocké en base64 dans la fiche société, laquelle part dans les sauvegardes, dans l'archive légale et dans chaque réponse que la barre latérale demande à l'ouverture. Une photo de 4000 px y pesait des mégaoctets pour s'afficher à 32 px de haut.
+
+  Le navigateur réduit l'image **avant** l'envoi — un logo de 2400 × 600 part en 300 × 75, 60 Ko deviennent 6 Ko — et le serveur refait le travail de son côté : la route reste ouverte à qui forge une requête, et c'est elle qui décide de ce qui entre en base. Les deux ne sont pas redondants : l'un sert le confort, l'autre tient la règle.
+
+  **Le rapport est conservé** : un logo horizontal ne devient pas un carré écrasé. **Aucune image n'est agrandie** : un logo de 120 px reste à 120 px, l'étirer ne créerait pas de détail. Et l'écran annonce ce que le SERVEUR a retenu, pas ce que le navigateur a envoyé.
+
+- **Une liste de mise en route sur le tableau de bord.** Une installation neuve s'ouvrait sur quatre compteurs à zéro et un graphique vide : rien n'annonçait que sans adresse structurée le bulletin QR serait refusé au guichet, ni que sans IBAN le PDF sortirait sans section de paiement.
+
+  **L'information existait déjà** — le contrôle de cohérence la produit — mais dans Paramètres → Maintenance → Diagnostic, à trois clics d'un endroit où un débutant ne va jamais. Ce n'était pas un manque de fonction, c'était un manque de placement.
+
+  Cinq étapes : raison sociale et adresse, numéro IDE, IBAN, premier client, première facture. Chaque ligne mène **au champ**, pas à l'écran : `/settings#banking` ouvre l'onglet Banque, et les onglets de Paramètres sont désormais atteignables par ancre.
+
+  **Ce qui bloque est nommé** : « il manque le code postal, la localité », pas « quelque chose est incomplet ». Un IBAN présent mais dont la clé de contrôle est fausse ne coche pas la case — il est pire qu'absent, puisqu'il produit un bulletin d'apparence normale que la banque refusera.
+
+  **Rien n'est mémorisé.** L'état se relit des données à chaque ouverture : effacer l'IBAN décoche sa case et fait revenir la liste. Un assistant aurait retenu « fait » et menti à partir de là. La liste disparaît d'elle-même quand les cinq étapes sont faites, et ne s'affiche pas pour un compte en lecture seule — qui ne peut en accomplir aucune.
+
+- **Un « i » à côté du titre de chaque écran.** Une phrase sous chaque titre aide le premier jour et encombre les mille suivants. La bulle s'ouvre au survol, s'épingle au clic, se ferme par Échap ou un clic ailleurs — le clic n'est pas un luxe : au doigt comme au clavier, il n'y a pas de survol.
+
+  Sept écrans, et le texte dit ce que l'écran fait **et ce qu'il ne fait pas** là où la confusion est fréquente : qu'un brouillon ne compte ni à la balance ni au bilan, qu'un contact facturé s'anonymise au lieu de se supprimer, qu'on n'a rien à faire dans le plan comptable au quotidien.
+
+- **Une attestation d'intégrité se vérifie maintenant** — Paramètres → Maintenance → Conformité → « Vérifier une attestation ». Elle était produite, scellée, remise à un tiers… qui n'avait aucun moyen de la contrôler. Un document invérifiable ne vaut pas mieux qu'une affirmation orale.
+
+  **Trois contrôles, de valeur inégale, et l'écran le dit.** Le SCEAU détecte un fichier retouché à la main, rien de plus : qui a le logiciel recalcule l'empreinte. La CORRESPONDANCE est celle qui compte — l'empreinte de tête de l'attestation est comparée à celle que portent les livres aujourd'hui, au même maillon. L'ÉTAT ACTUEL reparcourt toute la chaîne.
+
+  **Ce qui donne sa force au contrôle n'est pas cryptographique, c'est la garde du fichier.** Une attestation remise en janvier et conservée par la fiduciaire prouve, en juin, qu'aucune écriture couverte n'a été réécrite — parce que le client ne peut plus modifier la copie qu'elle détient.
+
+  **La marche à suivre est écrite dans l'attestation elle-même** (section `how_to_verify`). Le sceau se recalcule avec `certutil` sous Windows ou `shasum` ailleurs : la fiduciaire n'a besoin d'aucun logiciel pour cette partie.
+
+### Corrigé
+
+- **Le journal de l'installeur affichait du charabia.** « Op‚ration r,ussieÿ: le processus […] a ‚t, arr^t,. » — et, juste en dessous, « Erreurÿ: le processus est introuvable », qui est le cas normal quand l'application n'est pas lancée.
+
+  **Deux fautes en une.** `nsExec::ExecToLog` reversait dans le journal ce que `taskkill` écrit sur sa console. Cette sortie est dans la page de codes CONSOLE — CP850 sur un Windows français — que NSIS relit comme de l'ANSI : « é » devient « ‚ », « ê » devient « ^ », et l'espace insécable avant les deux-points ressort en « ÿ ». Et transcoder n'aurait pas suffi : ces lignes n'apprennent rien, et l'une d'elles alarme pour un état parfaitement normal.
+
+  L'installeur ne recopie plus la sortie d'un programme tiers. Il lit le code de retour — `0` arrêté, `128` pas lancé, les deux étant des succès — et écrit ses propres phrases, **dans les quatre langues**. Seul un échec réel (accès refusé) produit désormais une ligne.
+
+  **L'arrêt de l'application a aussi changé de place.** Il était dans `.onInit`, c'est-à-dire au lancement de l'installeur : LedgerAlps était fermé de force chez quelqu'un qui n'avait encore rien accepté et pouvait annuler à la page de licence. Il est maintenant en tête de la section d'installation, une fois celle-ci confirmée — et toujours avant l'écriture des fichiers.
+
+- **Le reste de l'installeur parlait anglais** sur un système français, allemand ou italien : le bouton « Launch LedgerAlps » de la dernière page, les trois lignes de fin d'installation, l'info-bulle des raccourcis et le raccourci « Uninstall LedgerAlps » du menu Démarrer. Tout est traduit ; l'ancien raccourci anglais est effacé à la mise à jour pour ne pas laisser les deux côte à côte.
+
+- **Deux textes de l'onglet Banque étaient écrits en dur en français** — l'aide du numéro de TVA et celle du paiement par virement. Ils s'affichaient tels quels sur un écran allemand.
+
+- **« Créer en brouillon » affichait « Quitter cette page ? »** au lieu d'enregistrer. Le garde de saisie protégeait le formulaire contre une navigation — y compris celle qui suit l'enregistrement réussi. Le message était faux, la facture existait ; et qui le croyait cliquait « Annuler » et restait bloqué sur un écran dont le bouton principal semblait ne rien faire. Le garde se désarme désormais juste avant de naviguer.
+
+- **La facture PDF affichait « NÂ° facture: » et « Ã‰chÃ©ance: ».** `metaRow` écrivait ses arguments sans les convertir : gofpdf attend du cp1252 pour ses polices de base, et l'UTF-8 passait tel quel. Corrigé au point de passage — la fonction convertit, pas ses vingt appelants.
+
+  **Le test qui manquait.** Il en existait un contre le DOUBLE encodage ; aucun contre son ABSENCE. Ma première tentative cherchait les octets dans le fichier brut et passait au vert alors que le défaut était réintroduit exprès : les flux d'un PDF sont compressés. Le test décompresse maintenant, et sa capacité à échouer a été vérifiée.
+
+- **Les critères du mot de passe temporaire et le sous-titre de Maintenance** s'affichaient en français, l'un en dur, l'autre en montrant la clé brute (`mt.conformiteHint`).
+
+- **Le verdict de vérification se contredisait sur une chaîne vide** — cadre rouge, ligne « empreinte divergente », sous la phrase « Attestation vérifiée ». L'écran recalculait « c'est bon » par un ET des trois booléens, alors qu'une attestation émise sur des livres vides n'a aucune empreinte à faire correspondre. C'est le serveur qui tranche désormais : il rédige la phrase, il donne la couleur, et le contrôle sans objet s'affiche comme tel plutôt qu'en rouge.
+
+- **`Lauschadresse`** — l'allemand disait « adresse d'écoute » au sens de l'écoute clandestine. C'est `Netzwerkadresse`.
+
+### Modifié
+
+- **Le menu « Facturation » devient « Ventes »**, en face d'« Achats ». Il nomme ce qu'on y fait, pas l'outil qui le fait, et les deux se lisent en paire.
+
+## [1.5.0] — 2026-08-12
+
+### Ajouté
+
+- **Le serveur et les documents parlent aussi les quatre langues.** Il ne reste plus un mot de français sur une interface allemande : les 360 phrases que LedgerAlps adresse à l'utilisateur — refus, confirmations, facture PDF, bulletin QR, exports CSV, attestation d'intégrité — suivent le sélecteur.
+
+  **Les documents suivent le SÉLECTEUR, pas la fiche du client.** Ce qu'on voit à l'écran est ce qui sort de l'imprimante. La facture PDF change de titre (`RECHNUNG`, `FATTURA`, `INVOICE`), d'en-têtes de colonnes, de libellés du bulletin de versement — et le vocabulaire du bulletin est celui des Implementation Guidelines de SIX, que la banque attend au mot près.
+
+  **La traduction se fait au POINT DE PASSAGE, pas aux deux cents endroits qui refusent.** Un intercepteur relit les réponses JSON en sortie ; le catalogue est indexé par la phrase française elle-même. Trois conséquences : une route ajoutée demain est couverte sans qu'on y pense, les journaux du serveur et la trentaine de tests qui comparent les messages au caractère près ne bougent pas, et une phrase absente du catalogue ressort en français — ce que l'utilisateur voyait déjà, jamais une clé nue.
+
+  **Un refus né dans la comptabilité traverse traduit** sans que le service connaisse la langue : « aucun numéro de TVA n'est enregistré » devient « Es ist keine MWST-Nummer hinterlegt ». Porter la langue de la requête jusqu'au calcul d'une écriture aurait mélangé deux choses qui n'ont rien à voir.
+
+  **Les valeurs restent à leur place.** « le compte 1020 est désactivé » retrouve son moule et rend « Konto 1020 ist deaktiviert ». Un test vérifie que les quatre langues d'une phrase portent exactement les mêmes verbes de format, dans le même ordre : un verbe déplacé afficherait le montant à la place du numéro de compte — une phrase parfaitement lisible et fausse.
+
+  **L'anglais qui atteignait l'utilisateur est corrigé au passage** : « journal entry not found », « invalid status transition », « missing or malformed Authorization header » s'affichaient tels quels sur un écran français.
+
+  **L'installeur Windows parle allemand et italien**, en plus du français et de l'anglais.
+
+  **Le garde-fou.** Un test relit les sources, retrouve tout ce qui part vers l'utilisateur, et échoue sur ce qui n'est pas au catalogue. Sa première version devinait « est-ce du français ? » d'après les accents : « identifiants incorrects » n'en a aucun, et le message le plus vu du produit est passé à travers en silence. La règle est désormais inversée — tout est à traduire, et les vingt exceptions de diagnostic sont déclarées une par une, avec leur raison.
+
+- **L'interface est traduite à 100 % en allemand, italien et anglais (UK).** Les 36 écrans, du tableau de bord au chiffrement de la base : 998 clés dans les quatre langues. L'avertissement « Traduction en cours » a disparu du sélecteur — il n'a plus d'objet.
+
+  **Ce qui suit la langue en plus des mots.** Un texte traduit posé sur des formats suisses reste à moitié étranger :
+
+  - **Les dates** — `11.08.2026` en Suisse, `11/08/2026` pour un Britannique.
+  - **Les montants** — `1'500.00 CHF` avec l'apostrophe suisse, `1,500.00 CHF` en anglais.
+  - **Les noms de mois** du tableau de chiffre d'affaires viennent d'`Intl`, non d'une liste française en dur : « mars 2026 » devient « März 2026 » sans qu'il y ait quatre listes à tenir.
+  - **Les badges de statut** — `Brouillon` / `Entwurf` / `Bozza` / `Draft`. Ils étaient une table figée dans les utilitaires, donc invisible aux relectures d'écran, et s'affichaient en français sur chaque ligne de chaque liste.
+
+  **Les avis de conformité aussi.** Ils viennent du serveur, qui ne les rendait qu'en français et en anglais, et l'interface demandait toujours le français : un bandeau francophone barrait le haut de chaque écran allemand. Les quatre avis portent désormais les quatre langues, et l'écran demande la sienne. Un test refuse un avis auquel il manque une langue — le repli sur le français masquait l'oubli en donnant un affichage parfait.
+
+  **Ce qui garantit que ça tienne.** `internal/frontend/i18n_test.go` relit les quatre catalogues et échoue si une clé manque, si une valeur est vide, si un repère d'interpolation a disparu, ou **si une valeur vaut encore le français**. Ce dernier point est celui qui compte : copier `fr.ts` en `de.ts` compile parfaitement et produit une interface allemande entièrement en français.
+
+  **Ce qui n'est PAS traduit, et pourquoi.** Les messages de refus du serveur — « aucun numéro de TVA n'est enregistré : vous ne pouvez pas facturer de TVA » — restent en français, ainsi que les factures PDF, les exports CSV et l'attestation d'intégrité. Ce sont **97 messages et quatre familles de documents**, un lot distinct : la langue d'une facture PDF doit suivre le CLIENT, pas l'interface de celui qui l'émet.
+
+- **Facturation et Contacts sont traduits** dans les quatre langues — listes, onglets, filtres, en-têtes de colonnes, états vides. La couverture passe de 10 à **13 %** (148 clés).
+
+  **La phrase de lecture seule était une constante figée en français.** Elle s'affichait sur sept écrans par ailleurs traduits : c'est devenu une clé. Le motif est instructif — une chaîne sortie d'un composant pour être partagée échappe à la traduction précisément parce qu'elle n'est plus dans un écran.
+
+  Les **pluriels comptés** passent par le catalogue : « 3 documents » se dit « 3 Dokumente », et le zéro suit la règle de chaque langue — le français le met au singulier, les trois autres au pluriel.
+
+- **Le sélecteur de langue est livré — FR / DE / IT / EN**, dans Paramètres → Mon compte, **visible pour tous les rôles**. La langue n'est pas un réglage d'administration : une fiduciaire tessinoise à qui l'on ouvre les livres en lecture seule doit pouvoir lire en italien sans demander la permission à personne.
+
+  **Pas besoin de se reconnecter** : le catalogue est embarqué, le changement est immédiat. La préférence survit à la déconnexion — sinon il faudrait se connecter en français pour pouvoir choisir l'italien.
+
+  **Ce qui est traduit** : la navigation, les bandeaux de rôle, l'écran de connexion en entier, le second facteur, les statuts et le vocabulaire comptable — soit 111 clés dans les quatre langues. **Environ 10 % des chaînes de l'interface** ; les écrans eux-mêmes suivent, un par un.
+
+  **Le panneau le dit lui-même** plutôt que de laisser découvrir : un avertissement « Traduction en cours » y explique où en est la couverture. Il disparaîtra quand elle sera complète.
+
+  **Les abréviations légales basculent aussi** : le pied de page passe de « CO · nLPD » à « OR · DSG » en allemand, « CO · LPD » en italien, « CO · FADP » en anglais. Vérifié dans les quatre langues sur un serveur réel.
+
+
+### Corrigé
+
+- **Les messages du serveur parlent français.** « fiscal year "2025" is closed: no entry can be created or posted at 2025-12-01 » devient « l'exercice « 2025 » est clôturé : aucune écriture ne peut y être créée ni comptabilisée au 2025-12-01. Passez la correction dans l'exercice ouvert (CO art. 958f) ».
+
+  **82 messages** traduits : l'anglais qui atteignait l'utilisateur — « invalid credentials », « supplier invoice not found », les quinze variantes de « must be YYYY-MM-DD », les pannes internes qui remontaient telles quelles — **et le français sans accents** trouvé au passage : « aucune facture selectionnee », « la date d'execution doit etre au format », « l'IBAN de votre entreprise n'est pas renseigne (Parametres -> Entreprise) ».
+
+  Les erreurs **internes** restent en anglais — « begin transaction », « applying migration ». Elles vont au journal du serveur et servent au diagnostic ; les traduire n'aiderait personne et empêcherait de retrouver un message dans les sources.
+
+### Ajouté
+
+- **Les fondations de la traduction en allemand, italien et anglais.** Le sélecteur de langue **n'est pas encore visible** : un sélecteur qui traduit un tiers de l'écran est une maquette, et sur un logiciel comptable une étiquette non traduite à côté d'un champ de TVA est pire qu'une interface unilingue.
+
+  **[docs/GLOSSAIRE.md](docs/GLOSSAIRE.md)** fixe d'abord le vocabulaire — à valider avant toute traduction d'écran. Une partie du texte n'est pas de l'habillage : « extourne », « impôt préalable », « exercice clôturé » désignent des notions définies par une loi qui existe dans les trois langues officielles. Deux pièges y sont documentés : une facture annulée se dit *storniert* et non *annulliert* — *annullieren* voudrait dire effacer, ce que le CO art. 958f interdit — et *Soll/Haben* n'est pas *Belastung/Gutschrift*, qui désigne des mouvements bancaires. Les abréviations légales basculent aussi : CO devient OR, LTVA devient MWSTG, nLPD devient DSG.
+
+  **Pas de bibliothèque d'internationalisation.** Quatre langues connues à la compilation, un catalogue embarqué, des phrases simples : cent lignes suffisent, et une dépendance se paie en mises à jour et en surface d'attaque. Le revers est assumé et écrit — pas de pluriels slaves ni de formats ICU.
+
+  **Quatre tests refusent une traduction bâclée** : clés identiques d'un catalogue à l'autre, aucune valeur vide, aucune valeur restée en français — avec la liste explicite des termes identiques par nature, comme IBAN ou Saldo — et les repères d'interpolation conservés. Vérifiés en introduisant les trois fautes classiques : ils les attrapent et les nomment.
+
+  Les **formats** suivent la langue : `de-CH` et `fr-CH` séparent les milliers par une apostrophe là où `en-GB` met une virgule, et la position du symbole monétaire change.
+
+
+### Ajouté
+
+- **Retirer une facture de la liste des paiements.** La liste accumulait tout ce qui est comptabilisé et non réglé — factures payées hors LedgerAlps, saisies d'essai, doublons — et surtout les **factures bloquées**, celles qui ne peuvent pas être payées faute de QR-IBAN ou de référence valide : rien ne les en faisait jamais sortir. Une liste qu'on ne peut pas vider cesse d'être lue, et le jour où elle porte une vraie facture en retard, personne ne la voit.
+
+  **Supprimer n'était pas la réponse.** Une facture comptabilisée est une charge dans les livres, avec sa dette au compte créanciers ; l'effacer ferait disparaître la charge d'un exercice tenu, et le CO art. 958f impose de conserver la pièce dix ans. Le geste est donc l'**annulation avec extourne** : la facture reste, marquée annulée, et une écriture inverse neutralise la charge et la TVA déductible. Un réviseur voit une correction, pas un trou.
+
+  Par lot ou une par une, **réservé à l'administrateur et au comptable**. Chaque facture reçoit son propre verdict — un brouillon est supprimé, une facture comptabilisée est extournée, une facture déjà réglée est refusée parce que l'argent est parti — et le détail est rendu ligne par ligne.
+
+- **L'attestation d'intégrité s'émet seule**, au démarrage puis chaque jour, dans `attestations/` à côté des sauvegardes. La chaîne d'empreintes rend une modification détectable **à condition d'avoir un point de comparaison** : qui peut écrire dans la base peut recalculer la chaîne entière, qui reste alors cohérente. L'ancrage est l'empreinte de tête conservée ailleurs, à une date connue — et une garantie qui suppose qu'on pense à cliquer chaque mois n'existe pas. Le fichier part avec les sauvegardes vers le NAS ou la clé USB ; c'est ce déplacement qui vaut ancrage. Rien n'est envoyé nulle part.
+
+- **[docs/REVUE-IA.md](docs/REVUE-IA.md)** — le mode d'emploi et le prompt pour faire auditer le code par un réviseur IA depuis une copie locale, avec le format de rapport attendu pour que les constats se corrigent sans allers-retours.
+
+### Corrigé
+
+- **Annuler une facture comptabilisée ne vidait pas les livres.** Le statut passait à « annulée » et rien d'autre : l'écriture restait, la charge et la TVA déductible continuaient d'alimenter le résultat et la déclaration. L'écart ne se serait vu qu'au décompte trimestriel, des mois plus tard, sans rien qui pointe vers sa cause. Neuf tests portent désormais sur les **soldes des comptes**, pas sur le statut — c'est le seul endroit où le défaut se voyait.
+
+- **Le journal d'audit ne couvrait que trois actions.** La chaîne du CO art. 957a existait, avec sa vérification et son attestation ; y entraient la comptabilisation d'une écriture, la clôture d'un exercice et le changement de statut d'une facture. Les constantes prévues pour les contacts, les paiements et les rapprochements étaient déclarées et jamais appelées. Un journal à trous est pire qu'un journal absent : l'absence d'une ligne se lit comme « cela n'a pas eu lieu » alors qu'elle veut dire « cela n'a jamais été écrit ». Les factures fournisseurs — création, modification, comptabilisation, annulation, suppression — et les changements de coordonnées de l'entreprise y entrent maintenant, **refus compris**.
+
+
+### Sécurité
+
+- **Un compte en lecture seule créait une facture depuis le tableau de bord.** Le bouton « Nouvelle facture » y était un simple lien : aucun appel de mutation dans le fichier, donc absent du recensement qui avait servi à fermer les autres écrans. Chercher les commandes une par une revient à refaire la recherche à chaque écran ajouté, avec la même chance de se tromper.
+
+  **La barrière porte désormais sur l'ADRESSE.** `/invoices/new` et `/invoices/:id/edit` n'existent que pour écrire : elles sont enfermées dans une garde de route qui renvoie au tableau de bord, quel que soit le chemin emprunté — bouton oublié, lien collé, favori, bouton « précédent ».
+
+  **Et trois tests parcourent les sources** pour que l'oubli suivant échoue en intégration continue, pas chez vous : les routes d'écriture sont bien gardées, tout écran qui mène vers l'une d'elles consulte les permissions, et le miroir des rôles existe encore. Le premier test a été vérifié en réintroduisant le défaut : il l'attrape et nomme le fichier.
+
+  Balayage complet des neuf écrans avec un compte en lecture seule : **aucun lien vers une route d'écriture, aucun champ de fichier, aucun champ modifiable** hors recherche, filtres et sélection de documents à télécharger.
+
+- **La lecture seule est désormais une lecture seule à l'écran aussi.** Le serveur refusait déjà toute écriture à ce rôle — un filtre global rejette toute méthode autre que GET, HEAD et OPTIONS, quelle que soit la route. Mais les commandes restaient affichées et cliquables : on remplissait un formulaire entier avant d'apprendre qu'il ne servirait à rien, et la barrière passait pour cosmétique alors qu'elle ne l'est pas.
+
+  **Ce qui disparaît de la page** — pas grisé, pas caché par du style : absent du document, donc rien à réactiver depuis la console. Dépôt d'une facture fournisseur (PDF ou image), import d'un relevé bancaire camt.053, production d'un ordre de paiement pain.001, dépôt et suppression du logo de société, création de facture, d'offre, de contact et d'écriture au journal, modification et comptabilisation d'une facture reçue, rapprochement bancaire.
+
+  **Ce qui reste ouvert** : tout ce qui se consulte et tout ce qui s'exporte — journal, grand livre, balance de vérification, PDF des factures, et **l'archive légale des dix ans** (CO art. 958f). C'est exactement ce qu'une fiduciaire vient chercher : lui fermer ces portes viderait le rôle de son sens.
+
+  **Les formulaires sont neutralisés par `fieldset`**, ce qui désactive nativement chaque champ, liste et bouton qu'ils contiennent — y compris ceux qu'on y ajoutera plus tard. Désactiver champ par champ fonctionne le jour où on l'écrit, puis se périme au premier champ ajouté sans y penser.
+
+  **Trois tests nomment les routes une par une** et vérifient les trois faces de la règle : un lecteur reçoit 403 sans que le gestionnaire tourne, un comptable les atteint toutes, et un lecteur télécharge bien ses exports et son archive. Le filtre global les couvrait déjà par construction ; les nommer dit lesquelles ne pourront jamais faire l'objet d'une exemption.
+
+  Vérifié dans un navigateur avec un vrai compte en lecture seule : aucun champ de fichier dans les pages Achats, Rapports et Paramètres, aucun champ modifiable, et **quatre dépôts forgés à la main — en contournant l'interface avec le jeton de la session — tous refusés en 403**.
+
+### Modifié
+
+- **La veille de conformité nomme les articles dont LedgerAlps dépend.** Elle surveillait la nLPD comme un tout : quand la date de consolidation bouge, l'alerte disait « la nLPD a changé » — ce qui n'oriente personne vers ce qu'il faut relire dans un acte qui compte des dizaines d'articles.
+
+  Le registre porte maintenant, pour la nLPD, les **articles 6, 8, 25, 28 et 32** — relevés dans le code et la documentation, pas choisis de mémoire — chacun avec ce qui en dépend concrètement. L'alerte les affiche.
+
+  **L'art. 6** (licéité, proportionnalité, finalité, exactitude ; al. 4 destruction ou anonymisation dès que les données ne sont plus nécessaires) couvre l'anonymisation des contacts, la purge des adresses IP, la minimisation des états du journal d'audit — et la finalité de toute trace d'activité : traçabilité comptable et sécurité, jamais mesure du comportement des personnes.
+
+  Aucun avis n'est ajouté à l'écran : ces obligations sont satisfaites, et un bandeau toujours faux use la confiance dans ceux qui ne le sont pas.
+
+### Écarté
+
+- **Le Gestionnaire d'identification de Windows pour le coffre à secrets.** Le réflexe d'administration est d'y ranger les secrets d'une application ; la question méritait d'être posée, la réponse est non. Il est lui-même protégé par DPAPI et scellé au même compte : aucun gain de protection, la frontière ne bouge pas. Il introduit en revanche un mode de défaillance nouveau et irréversible — une entrée visible dans un panneau du système se supprime par mégarde, et la clé d'une base chiffrée n'existe qu'à un seul endroit. Enfin elle ne suivrait pas les données lors d'une copie du dossier. LedgerAlps garde donc le fichier scellé par DPAPI, posé à côté de la base. La raison est écrite en tête de `internal/core/secretstore`.
+
+### Modifié
+
+- **Le vocabulaire du second facteur parle d'OTP, plus de téléphone.** « Inscrire mon téléphone » devient « Activer le 2FA » ; l'écran d'activation demande une « application d'authentification 2FA/OTP — sur téléphone ou sur ordinateur » ; le secours à la connexion s'appelle « Application indisponible ? » et non « Téléphone perdu ? ». Le code se calcule aussi bien dans KeePassXC sur un poste fixe, et nommer l'appareil plutôt que la fonction laissait croire qu'un téléphone était nécessaire.
+
+
+### Ajouté
+
+- **La lecture d'une facture déposée remplit maintenant tout ce que le document porte** : montant, fournisseur, IBAN et référence depuis le QR ; **numéro de facture, date, échéance, taux de TVA et numéro IDE** depuis la couche texte du PDF. Vérifié sur une facture réelle — un rappel d'ePost Service AG.
+
+  **Chaque valeur est annoncée avec l'étiquette qui l'a produite** — « n° 538690 (« Numéro de facture ») · échéance 2025-12-31 (« Échu ») ». Un champ pré-rempli dont on voit la provenance se corrige ; un champ pré-rempli anonyme se croit. Comme une facture fournisseur entre dans les livres *et* dans la déclaration de TVA, c'est la différence entre une aide et un piège.
+
+  **Sans mention de TVA, le taux est 0 %** et le montant du QR est aussi le montant hors taxe : l'écriture ne porte alors aucune ligne de TVA déductible, et il n'y a rien à récupérer (LTVA art. 28 al. 1 exige une facture mentionnant l'impôt pour le déduire). Le piège évité : le numéro d'assujetti d'un fournisseur contient les lettres « MWST » ou « TVA » — chercher ces mots ferait croire à de la TVA sur une facture qui n'en porte aucune, et gonflerait l'impôt préalable déclaré. On cherche un **taux**, jamais un mot.
+
+  Le **QR-IBAN est rangé dans le bon champ** de la fiche fournisseur : une référence QR n'est acceptée qu'avec lui (SIX IG v2.4 §4.2.2), et les confondre fait rejeter le virement.
+
+### Corrigé
+
+- **Une QR-facture remplit le QR-IBAN, et laisse l'IBAN vide.** Un IBAN et un QR-IBAN ne sont pas la même chose : une référence QR n'est acceptée qu'avec le second, une Creditor Reference qu'avec le premier (SIX IG v2.4 §4.2.2). La fiche du fournisseur ouverte par le scan porte donc **deux cases distinctes**, et le compte lu sur le bulletin va dans la sienne — décidé sur le code de clearing, positions 5 à 9, plage 30000–31999. Une valeur mise dans la mauvaise case est reclassée avant l'enregistrement, et l'écran le dit plutôt que de la faire refuser après coup.
+
+- **Un QR-IBAN saisi dans le champ « IBAN » de votre entreprise produisait un bulletin invalide.** Les réglages ne proposent qu'une case, et le champ QR-IBAN dédié ne se remplit que par variable d'environnement : qui possède un compte QR le saisissait donc là où il y a de la place. LedgerAlps émettait alors une référence `NON` sur un QR-IBAN — appariement que les banques rejettent. Le compte est maintenant reconnu pour ce qu'il est, la référence QRR est produite, et l'écran annonce ce qui sera imprimé. Quatre tests tiennent la règle, dont le cas d'une facture en euros, où QRR n'existe pas.
+
+- **Un fournisseur payable était annoncé « sans IBAN ».** Le QR-IBAN se range dans son propre champ — une référence QR n'est acceptée qu'avec lui, et le confondre avec un IBAN ordinaire fait rejeter le virement. Mais la liste des fournisseurs ne regardait que l'IBAN ordinaire : tout fournisseur lu depuis une QR-facture se présentait comme impayable, alors que l'ordre de virement partait très bien. L'écran démentait le produit, ce qui coûte plus cher qu'un bouton cassé : on renonce à s'en servir.
+
+- **Le dialogue de comptabilisation annonçait une TVA déductible sur une facture qui n'en porte pas.** « Charge et TVA déductible au débit », « la TVA payée entre dans votre déclaration (chiffre 400) » : sur une facture à 0 %, il décrivait une écriture qui n'allait pas être passée. Un dialogue de confirmation qui dit autre chose que ce qui va se produire ne protège plus de rien — on le lit une fois, puis on l'ignore. Il suit maintenant le montant de TVA de la pièce.
+
+- **Le QR-IBAN était enregistré sans jamais être montré.** La fiche du contact n'affichait que l'IBAN ordinaire. Le compte sur lequel les paiements allaient partir était donc invisible, et ce qui est invisible ne se corrige pas. La fiche porte maintenant les deux champs, avec ce qui les distingue.
+
+- **Deux lectures de travers, invisibles à l'œil, sur un rappel.**
+
+  *La date du rappel était prise pour celle de la facture.* Le document porte deux dates étiquetées « Date » : celle du rappel en tête de page, celle de la facture dans le tableau. On obtenait une pièce dont le numéro et la date ne se rapportaient pas au même document — un défaut qui ne se voit qu'au rapprochement. La lecture porte maintenant sur la **ligne** : le numéro, sa date et son échéance viennent de la même rangée.
+
+  *Les colonnes de nombres, alignées à droite, décalaient toute la ligne d'un cran.* Leur abscisse tombe sous l'en-tête *précédent* : le montant se rangeait sous « Devise », l'échéance sous « Montant ». Chaque valeur restait juste, chaque étiquette était fausse. L'appariement se fait désormais par rang, et un contrôle de cohérence — un nombre sous « Montant », trois lettres sous « Devise » — refuse l'assignation décalée plutôt que de la livrer.
+
+
+### Corrigé
+
+- **Un chargement qui ne finissait jamais, en bas des Paramètres.** Les réglages réseau affichaient un rond qui tourne tant que le formulaire n'était pas chargé — or une requête refusée (403) ne le charge jamais. Sur un compte comptable, l'écran restait donc indéfiniment sur « chargement », soit le pire des états : il annonce que quelque chose arrive.
+
+- **« Comptes et rôles » s'affichait pour le comptable et la lecture seule**, sous un titre qui promettait le contraire de ce que le serveur répondait. La section **Sécurité & réseau** entière est désormais réservée à l'administrateur — clé de signature, adresse d'écoute, réglages de session, comptes.
+
+- **Le second facteur nommait « administrateur » quel que soit le rôle.** Un comptable lisait une phrase fausse sur son propre écran : « Étant administrateur, vous devrez… ». Le message suit maintenant le rôle. Une phrase fausse dans un produit use la confiance dans tout ce qu'il affirme par ailleurs.
+
+- La note « la console de rejeu ISO 20022 et le mode bac à sable arrivent dans une prochaine version » est retirée : elle n'était plus d'actualité.
+
+- **Le rendu des Paramètres lisait `tab` là où le recalage écrivait `effectiveTab`.** Un onglet interdit atteint par un lien affichait donc son panneau malgré tout, dont chaque appel répondait 403.
+
+### Ajouté
+
+- **Onglet « Mon compte »**, visible de tous les rôles : second facteur et ordinateurs de confiance. Il vivait dans la section Sécurité, réservée à l'administrateur — un comptable, à qui le second facteur est pourtant **exigé**, ne pouvait donc pas l'atteindre. Ce qu'on règle pour soi-même n'est pas de l'administration du logiciel.
+
+- **Le montant d'une facture fournisseur se saisit en TTC ou en hors taxe**, au choix, TTC par défaut. Une facture reçue annonce ce qu'il faut **payer**, et c'est aussi ce que porte le QR : exiger du hors taxe demandait une division à chaque saisie, et empêchait le QR de rien pré-remplir.
+
+  **Une facture sans TVA** — fournisseur non assujetti — se saisit à 0 % : les deux montants sont alors égaux, l'écriture ne porte aucune ligne de TVA déductible, et il n'y a rien à récupérer (LTVA art. 28 al. 1 exige une facture mentionnant l'impôt pour le déduire). L'écran le dit, plutôt que de laisser chercher un taux qui n'existe pas.
+
+- **Le QR remplit maintenant le montant et propose le fournisseur.** Le montant TTC part directement dans le champ ; si le créancier n'est pas encore enregistré, sa fiche s'ouvre **pré-remplie** avec son nom et son IBAN — et un QR-IBAN est rangé dans `qr_iban`, un IBAN ordinaire dans `iban`, parce que les confondre fait rejeter le virement.
+
+
+### Corrigé
+
+- **La liste des factures fournisseurs répondait « n'ont pas pu être lues ».** Deux colonnes avaient été ajoutées à la requête sans l'être au balayage des résultats — dix-huit colonnes lues pour seize destinations. L'écran Achats restait donc vide, et le bouton « Comptabiliser », qui n'apparaît que sur un brouillon, avec lui. Le message d'erreur disait « database error », ce qui rend un décalage de colonnes indiscernable d'une base injoignable ; il nomme désormais la cause.
+
+- **L'interface cassait entièrement sur l'écran Paramètres** (React #310, « Rendered more hooks than during the previous render »). Un `useAuthStore` était appelé **après** un `if (isLoading) return null` : au premier rendu la page sortait avant lui, au second elle l'appelait — un hook de plus que la fois précédente, ce que React refuse. La trace minifiée ne désignait rien d'exploitable.
+
+- **Les factures n'étaient visibles que par leur auteur.** Un comptable ne voyait aucune facture émise par l'administrateur, et le total du tableau de bord contredisait la liste. C'est le même filtre `created_by_id` que celui retiré du journal en v1.4.8 — troisième fois que ce motif produit un défaut. Les factures sont les pièces de l'entreprise, pas la boîte de réception de qui les a saisies ; ce qui borne l'accès est le rôle.
+
+- **Neuf gardes lisaient le drapeau administrateur DU JETON**, pas le rôle en base : attestation d'intégrité, journal d'audit (trois routes), anonymisation, exercices comptables (trois routes), contacts désactivés. Le défaut que le contrôle des droits avait été construit pour supprimer subsistait dans les handlers — rétrograder quelqu'un le laissait agir jusqu'à l'expiration de son jeton. La permission est désormais déclarée sur la route ; deux tests vérifient qu'elle y est, sans quoi retirer le middleware ouvrirait ces routes à tout compte connecté.
+
+- **`server.log` répétait à chaque démarrage** « If you're reading this, you're unnecessarily importing github.com/ncruces/go-sqlite3/embed ». Le paquet est déprécié et sa seule action est d'écrire cette ligne ; le binaire WebAssembly de SQLite vient maintenant du module dédié. L'import est retiré — pas le message masqué.
+
+- **Le tableau de bord comptait les clients désactivés** parmi les « clients actifs ». Désactiver un contact n'avait donc aucun effet visible sur le chiffre. Un contact à la fois client et fournisseur compte désormais des deux côtés, au lieu de disparaître des deux.
+
+- Les halos décoratifs de l'écran de connexion sont retirés.
+
+- Le chemin des données dans le README nomme le dossier complet — `C:\Users\<vous>\AppData\Roaming\LedgerAlps\` — plutôt que la seule variable `%APPDATA%`.
+
+### Modifié
+
+- **Le rôle comptable fait désormais tout, sauf la sécurité du logiciel et les comptes utilisateurs.** Il ne pouvait ni clôturer un exercice, ni vérifier la chaîne d'empreintes, ni prendre une sauvegarde, ni répondre à une demande d'effacement, ni régler la fiche entreprise — il devait demander à quelqu'un dont le rôle est de gérer des mots de passe.
+
+  La frontière est maintenant explicite : **`manage` administre la comptabilité, `admin` administre le logiciel et qui y accède.** Restaurer une sauvegarde, la politique de chiffrement, le réseau, la clé de signature, le journal de sécurité et les comptes restent à l'administrateur. Inventaire complet dans [docs/DROITS.md](docs/DROITS.md).
+
+- **Le second facteur est exigé du comptable, plus seulement de l'administrateur.** Un mot de passe volé sur un compte qui écrit dans les livres permet de fabriquer une comptabilité. La **lecture seule en est dispensée** : elle ne peut rien modifier, et c'est le rôle qu'on donne à sa fiduciaire — à qui l'on ne dicte pas son équipement.
+
+### Ajouté
+
+- **« Se souvenir de cet ordinateur », trente jours.** Redemander un code chaque jour sur le poste habituel n'ajoute presque rien à la protection — quelqu'un qui a déjà la main sur la machine n'attend pas la prochaine connexion — et une protection vécue comme une brimade finit désactivée.
+
+  La case est **décochée par défaut** : lever une protection doit être un geste conscient. La date d'expiration est **absolue** — se connecter ne la prolonge pas, sans quoi un poste utilisé chaque semaine ne redemanderait plus jamais de code. Le jeton est haché en base, le navigateur en garde l'unique copie dans un cookie HttpOnly `SameSite=Strict`. Changer de mot de passe, retirer ou réinscrire son second facteur oublie tous les postes, et un écran permet de les oublier depuis un autre ordinateur.
+
+- **[docs/DROITS.md](docs/DROITS.md)** — inventaire de tout ce qui est lisible, modifiable et cliquable, par section et par rôle.
+
+- **Roadmap 13b : lecture automatique des factures fournisseurs.** Trois voies étudiées, toutes locales et libres. Recommandation : décoder le **QR-facture** en premier (`gozxing`, Apache 2.0) — il porte déjà créancier, IBAN, montant et référence, sans aucune reconnaissance de caractères et sans dépendance native. Tout service d'extraction en ligne est écarté : une facture fournisseur contient l'IBAN et l'adresse d'un tiers.
+
+### Ajouté
+
+- **Lire le QR d'une facture fournisseur déposée** (roadmap 13b, voie 1). On dépose le PDF, LedgerAlps décode le QR-facture et pré-remplit le fournisseur, la référence de paiement et le numéro de la pièce.
+
+  **Le QR plutôt que la reconnaissance de caractères** : le code contient déjà, en clair et sans ambiguïté, ce que les Implementation Guidelines SIX définissent champ par champ. Rien n'est deviné — et sur un montant, une décimale devinée de travers entre dans les livres *et* dans la déclaration de TVA. Le contrôle de cohérence référence QR ⇔ QR-IBAN (IG v2.4 §4.2.2, champs 4 et 28) est appliqué à la lecture : un bulletin incohérent est signalé avant de servir à un paiement, plutôt que rejeté par la banque.
+
+  **Rien n'est enregistré.** La route lit et rend ; c'est l'utilisateur qui confirme. Un champ pré-rempli qu'on relit vaut mieux qu'un champ juste qu'on n'a pas vu. Le fournisseur déjà connu est reconnu **par son IBAN** — un nom se saisit de dix façons, un compte non.
+
+  **Rien ne sort de la machine.** Le fichier est lu en mémoire, ses images extraites dans un dossier temporaire effacé aussitôt. Aucun service d'extraction en ligne : une facture fournisseur porte le nom, l'adresse et l'IBAN d'un tiers. Deux dépendances, toutes deux en Go pur, `CGO_ENABLED=0` conservé — `gozxing` (Apache 2.0) et `pdfcpu` (Apache 2.0).
+
+  **Ce qui n'est pas couvert, et le dit** : une facture sans QR, ou dont le QR est tracé en vecteurs plutôt qu'en image, répond « aucun QR trouvé » avec l'explication. Un scan photographié demanderait un rendu de page, donc une dépendance native — ce qui casserait le binaire unique. La saisie manuelle reste le chemin normal, jamais un échec silencieux.
+
+- **Une facture fournisseur au brouillon se modifie.** L'écran permettait de saisir et de comptabiliser, mais pas de corriger : une faute de frappe obligeait à supprimer et à tout ressaisir. Une facture **comptabilisée** reste immuable — son écriture est scellée (CO art. 957a), et la modifier ferait mentir le journal ; le refus le dit et renvoie vers l'écriture de correction. La condition « brouillon » est répétée dans l'écriture elle-même, pour qu'une comptabilisation survenue entre-temps n'écrase pas une pièce déjà scellée.
+
+### Modifié
+
+- **La désactivation manuelle d'un contact est retirée.** L'interrupteur n'apportait rien qu'on ne fasse mieux autrement : un contact qu'on ne veut plus voir s'**anonymise** (nLPD art. 6 al. 4), ce qui l'écarte des listes *et* efface ses données personnelles — un geste qui dit ce qu'il fait. Le serveur refuse aussi la demande, avec le message qui oriente : masquer le bouton sans fermer la route n'aurait rien fermé.
+
+- `PATCH /invoices/:id` et les routes d'achat déclarent désormais leur permission, en plus du filtre global.
+
 ## [1.4.9] — 2026-08-06
 
 ### Corrigé
@@ -64,7 +387,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 - **Un code de secours était impossible à saisir.** L'écran de vérification invitait à en entrer un dans le champ du code à six chiffres — champ plafonné à **sept caractères**, avec clavier numérique et espacement de chiffres. Un code de secours en fait onze : la moitié se perdait à la frappe. La consigne décrivait un mécanisme qui n'existait pas, au moment précis où l'on a le moins envie de chercher.
 
-  Le passage au code de secours est désormais un **bouton** — « Téléphone perdu ? Utiliser un code de secours » — et le champ change réellement de nature : longueur, clavier, casse, espacement, exemple affiché. Le message d'échec correspond à ce qui a été tenté, au lieu de parler de l'horloge d'un téléphone à quelqu'un qui recopie un papier.
+  Le passage au code de secours est désormais un **bouton** — « Application indisponible ? Utiliser un code de secours » — et le champ change réellement de nature : longueur, clavier, casse, espacement, exemple affiché. Le message d'échec correspond à ce qui a été tenté, au lieu de parler de l'horloge d'un appareil à quelqu'un qui recopie un papier.
 
   La saisie est acceptée telle qu'on la tape : majuscules ou minuscules, avec ou sans tiret, avec ou sans espaces. Ces caractères ne portent aucune information, et les exiger transformerait la dernière porte de secours en énigme. L'écran qui remet les codes dit maintenant aussi **où** ils se saisissent.
 
@@ -112,9 +435,9 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
   **Le jeton d'attente ne vaut rien ailleurs.** Après un mot de passe accepté, la connexion ne délivre ni jeton d'accès ni cookie : seulement un jeton d'attente de cinq minutes, refusé par le filtre d'authentification sur **toute** autre route — donc aussi sur celles qui n'existent pas encore. La vérification est derrière la limitation de tentatives existante : cinq échecs et la porte se ferme quinze minutes.
 
-  **Dix codes de secours, montrés une seule fois, hachés en base.** Sans eux, un téléphone perdu enfermerait définitivement le dernier administrateur — plus personne ne pourrait créer de compte, restaurer une sauvegarde ni rendre le droit de le faire : le second facteur créerait la panne qu'il est censé prévenir. Ils sont hachés comme des mots de passe, ne servent qu'une fois, et leur usage est tracé.
+  **Dix codes de secours, montrés une seule fois, hachés en base.** Sans eux, la perte de l'application d'authentification enfermerait définitivement le dernier administrateur — plus personne ne pourrait créer de compte, restaurer une sauvegarde ni rendre le droit de le faire : le second facteur créerait la panne qu'il est censé prévenir. Ils sont hachés comme des mots de passe, ne servent qu'une fois, et leur usage est tracé.
 
-  *À la première connexion après cette mise à jour, l'administrateur sera conduit à inscrire son téléphone avant de pouvoir travailler.* C'est voulu : une protection qu'on peut remettre à plus tard n'est jamais activée. Les autres rôles peuvent l'activer s'ils le souhaitent, sans y être contraints — un comptable écrit dans un journal chaîné et tracé, et n'a pas les clés de l'installation.
+  *À la première connexion après cette mise à jour, l'administrateur devra activer le 2FA avec une application d'authentification OTP avant de pouvoir travailler.* C'est voulu : une protection qu'on peut remettre à plus tard n'est jamais activée. Les autres rôles peuvent l'activer s'ils le souhaitent, sans y être contraints — un comptable écrit dans un journal chaîné et tracé, et n'a pas les clés de l'installation.
 
 - **L'administrateur peut réinitialiser l'accès d'un compte.** Un mot de passe oublié n'avait aucune issue : le produit refuse de supprimer un compte, parce que les écritures portent l'identifiant de leur auteur et que l'effacer casserait la traçabilité du CO art. 957a al. 2 ch. 5.
 

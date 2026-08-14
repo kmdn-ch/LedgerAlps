@@ -1,0 +1,23 @@
+# Ce que git n'a pas le droit de réécrire.
+#
+# Par défaut, git normalise les fins de ligne des fichiers qu'il croit être du
+# texte. Sur un fichier binaire mal détecté, la conversion ne prévient pas :
+# elle remplace des octets, et l'on découvre le dégât à l'exécution.
+#
+# Deux familles sont en jeu ici, et les deux casseraient en silence.
+
+# La ressource d'icône liée à ledgeralps.exe, et l'icône elle-même. Une seule
+# paire d'octets convertie, et Windows n'affiche plus rien — sans erreur de
+# compilation pour le signaler.
+*.syso binary
+*.ico  binary
+
+# Les fichiers officiels de la marque. Ils sont la RÉFÉRENCE : le dépôt doit en
+# rendre exactement les octets reçus, sinon « intact » cesse d'être vrai.
+infrastructure/brand/LOGO.svg -text
+infrastructure/brand/icon.svg -text
+
+# Le script de l'installeur porte un BOM UTF-8 et des CRLF, tous deux porteurs :
+# sans le BOM, NSIS lit le fichier dans la page de codes ANSI et massacre les
+# accents. La CI le vérifie ; autant que git ne s'en mêle pas non plus.
+infrastructure/windows/installer.nsi -text

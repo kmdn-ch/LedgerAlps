@@ -96,7 +96,7 @@ func (h *JournalHandler) ListJournal(c *gin.Context) {
 
 	if dateFrom != "" {
 		if _, err := time.Parse("2006-01-02", dateFrom); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "date_from must be YYYY-MM-DD"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "date_from doit être au format AAAA-MM-JJ"})
 			return
 		}
 		where += " AND e.date >= ?"
@@ -104,7 +104,7 @@ func (h *JournalHandler) ListJournal(c *gin.Context) {
 	}
 	if dateTo != "" {
 		if _, err := time.Parse("2006-01-02", dateTo); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "date_to must be YYYY-MM-DD"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "date_to doit être au format AAAA-MM-JJ"})
 			return
 		}
 		where += " AND e.date <= ?"
@@ -126,7 +126,7 @@ func (h *JournalHandler) ListJournal(c *gin.Context) {
 	countQuery := db.Rebind("SELECT COUNT(*) FROM journal_entries e"+where, h.usePostgres)
 	var total int
 	if err := h.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -153,7 +153,7 @@ func (h *JournalHandler) ListJournal(c *gin.Context) {
 	offset := (page - 1) * pageSize
 	rows, err := h.db.QueryContext(ctx, listQuery, append(args, pageSize, offset)...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -215,7 +215,7 @@ func (h *JournalHandler) GetJournalEntry(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "écriture introuvable"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	e.IsReversal = isReversal == 1
@@ -230,7 +230,7 @@ func (h *JournalHandler) GetJournalEntry(c *gin.Context) {
 		ORDER BY l.sequence, a.code`, h.usePostgres)
 	rows, err := h.db.QueryContext(ctx, linesQ, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()

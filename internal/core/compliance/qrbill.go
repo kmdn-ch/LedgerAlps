@@ -298,10 +298,10 @@ func validateQRBillData(d QRBillData) error {
 	// Amount 0 is the open-amount case and is emitted as an empty field.
 	if d.Amount != 0 {
 		if d.Amount < 0.01 {
-			return fmt.Errorf("amount must be at least 0.01, got %.2f", d.Amount)
+			return fmt.Errorf("le montant doit valoir au moins 0.01, reçu %.2f", d.Amount)
 		}
 		if d.Amount > 999999999.99 {
-			return fmt.Errorf("amount must not exceed 999999999.99, got %.2f", d.Amount)
+			return fmt.Errorf("le montant ne peut pas dépasser 999999999.99, reçu %.2f", d.Amount)
 		}
 	}
 

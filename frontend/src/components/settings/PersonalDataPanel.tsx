@@ -14,10 +14,12 @@ import { Loader2, AlertTriangle } from 'lucide-react'
 import { contactsApi, maintenanceApi } from '@/api/client'
 import { SectionTitle, ErrorBanner } from '@/components/ui'
 import type { Contact, SystemHealth, AnonymiseResult } from '@/types'
+import { useT } from '@/i18n/useT'
 
 // ─── Données personnelles (nLPD) ──────────────────────────────────────────────
 
 export function PersonalDataPanel() {
+  const t = useT()
   const qc = useQueryClient()
   const [selected, setSelected] = useState('')
   const [confirming, setConfirming] = useState(false)
@@ -42,7 +44,7 @@ export function PersonalDataPanel() {
       qc.invalidateQueries({ queryKey: ['contacts'] })
       qc.invalidateQueries({ queryKey: ['maintenance'] })
     },
-    onError: (e: any) => setError(e?.response?.data?.error ?? "L'anonymisation a échoué."),
+    onError: (e: any) => setError(e?.response?.data?.error ?? t('dp.echecAnonymisation')),
   })
 
   const pd = health.data?.personal_data
@@ -50,13 +52,9 @@ export function PersonalDataPanel() {
 
   return (
     <div>
-      <SectionTitle>Données personnelles (nLPD)</SectionTitle>
+      <SectionTitle>{t('dp.titre')}</SectionTitle>
       <p className="text-sm text-alpine-600 mb-3">
-        La nLPD art. 6 al. 4 impose de détruire ou d'anonymiser une donnée personnelle
-        dès qu'elle n'est plus nécessaire, et son art. 32 permet à une personne d'en
-        demander l'effacement. Le CO art. 958f impose en parallèle de conserver vos
-        pièces dix ans. Ce n'est pas contradictoire : ce que la loi commerciale protège,
-        c'est la <strong>pièce</strong>, pas la fiche client.
+        {t('dp.introduction')}
       </p>
 
       {/* Ce que la rétention fait réellement, en chiffres. Annoncer une durée
@@ -64,32 +62,27 @@ export function PersonalDataPanel() {
       {pd && (
         <div className="rounded-md border border-neutral-200 px-4 py-3 text-sm mb-3">
           <p className="text-alpine-500 text-xs uppercase tracking-wider mb-1.5">
-            Rétention appliquée à chaque démarrage
+            {t('dp.retentionTitre')}
           </p>
           <ul className="space-y-1 text-alpine-700">
             <li>
-              Les adresses IP des tentatives de connexion bloquées sont anonymisées après{' '}
-              <strong>{pd.ip_retention_days} jours</strong>, et l'événement supprimé après{' '}
-              <strong>{pd.event_retention_days} jours</strong>.
+              {t('dp.retentionIP', {
+                ip: pd.ip_retention_days, ev: pd.event_retention_days })}
             </li>
             <li className="tabular-nums">
-              {pd.security_events ?? 0} événement(s) de sécurité conservé(s), dont{' '}
-              <strong>{pd.ip_addresses_held ?? 0}</strong> portent encore une adresse IP.
+              {t('dp.evenementsConserves', {
+                n: pd.security_events ?? 0, ip: pd.ip_addresses_held ?? 0 })}
             </li>
             {(pd.contacts_anonymised ?? 0) > 0 && (
               <li className="tabular-nums">
-                {pd.contacts_anonymised} contact(s) anonymisé(s).
+                {t('dp.contactsAnonymises', { n: pd.contacts_anonymised ?? 0 })}
               </li>
             )}
           </ul>
           {(pd.invoices_recipient_reconstructed ?? 0) > 0 && (
             <p className="text-warning-700 mt-2">
-              <strong>{pd.invoices_recipient_reconstructed} facture(s)</strong> portent une
-              identité de destinataire <em>reconstituée</em> depuis la fiche contact, faute
-              d'instantané d'époque : elles sont antérieures à la version 1.4.6, où le PDF
-              relisait le contact vivant. Une reconstitution et une pièce d'origine ne se
-              valent pas devant un réviseur, donc LedgerAlps les distingue plutôt que de
-              les confondre.
+              {t('dp.destinataireReconstitue', {
+                n: pd.invoices_recipient_reconstructed ?? 0 })}
             </p>
           )}
         </div>
@@ -97,11 +90,9 @@ export function PersonalDataPanel() {
 
       {/* Anonymisation */}
       <div className="rounded-md border border-neutral-200 px-4 py-3 text-sm">
-        <p className="font-medium">Anonymiser un contact</p>
+        <p className="font-medium">{t('dp.anonymiserContact')}</p>
         <p className="text-alpine-600 mt-0.5 mb-2">
-          Efface nom, adresse, courriel, téléphone, IBAN et numéro de TVA de la fiche.
-          Les factures déjà émises gardent l'identité qu'elles portaient à l'émission —
-          la LTVA art. 26 exige qu'une facture nomme son destinataire.
+          {t('dp.anonymiserAide')}
         </p>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -110,7 +101,7 @@ export function PersonalDataPanel() {
             value={selected}
             onChange={e => { setSelected(e.target.value); setConfirming(false); setError(null) }}
           >
-            <option value="">Choisir un contact…</option>
+            <option value="">{t('dp.choisirContact')}</option>
             {(contacts.data ?? []).filter(c => c.is_active).map(c => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
@@ -120,7 +111,7 @@ export function PersonalDataPanel() {
             disabled={!selected || confirming}
             className="btn-secondary btn-sm"
           >
-            Anonymiser
+            {t('dp.anonymiser')}
           </button>
         </div>
 
@@ -132,23 +123,16 @@ export function PersonalDataPanel() {
               <AlertTriangle size={15} className="mt-0.5 flex-shrink-0 text-danger-700" />
               <div className="flex-1">
                 <p className="font-medium text-danger-700">
-                  Anonymiser « {chosen.name} » ?
+                  {t('dp.confirmerTitre', { nom: chosen.name })}
                 </p>
                 <p className="text-alpine-700 mt-1">
-                  <strong>C'est irréversible</strong>, et c'est le but : c'est ce qui a été
-                  promis à la personne concernée. Aucune copie de ces coordonnées n'est
-                  conservée dans l'application.
+                  {t('dp.irreversible')}
                 </p>
                 <p className="text-alpine-700 mt-1">
-                  Ses documents comptables, eux, sont conservés : le CO art. 958f l'impose
-                  pendant dix ans.
+                  {t('dp.documentsConserves')}
                 </p>
                 <p className="text-alpine-700 mt-1">
-                  <strong>Les sauvegardes déjà prises gardent ces coordonnées.</strong> Une
-                  sauvegarde est une copie figée ; la réécrire lui retirerait la valeur
-                  qu'elle a pour vos livres. Elles disparaissent d'elles-mêmes à mesure que
-                  de nouvelles sont prises — d'ici là, ne restaurez pas une copie antérieure
-                  pour retrouver ces données.
+                  {t('dp.sauvegardesGardent')}
                 </p>
                 <div className="mt-3 flex gap-2">
                   <button
@@ -157,10 +141,10 @@ export function PersonalDataPanel() {
                     className="btn-primary btn-sm flex items-center gap-1.5"
                   >
                     {anonymise.isPending && <Loader2 size={13} className="animate-spin" />}
-                    Anonymiser définitivement
+                    {t('dp.anonymiserDefinitivement')}
                   </button>
                   <button onClick={() => setConfirming(false)} className="btn-ghost btn-sm">
-                    Annuler
+                    {t('action.annuler')}
                   </button>
                 </div>
               </div>
@@ -171,20 +155,20 @@ export function PersonalDataPanel() {
         {anonymise.data && (
           <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2.5">
             <p className="font-medium text-success-700">
-              {anonymise.data.label} — anonymisé
+              {t('dp.anonymise', { label: anonymise.data.label })}
             </p>
             {anonymise.data.backups_notice && (
               <p className="mt-2 text-alpine-700">{anonymise.data.backups_notice}</p>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 text-alpine-700">
               <div>
-                <p className="text-xs uppercase tracking-wider text-alpine-500 mb-1">Effacé</p>
+                <p className="text-xs uppercase tracking-wider text-alpine-500 mb-1">{t('dp.efface')}</p>
                 <ul className="list-disc list-inside space-y-0.5">
                   {anonymise.data.what_was_erased.map(x => <li key={x}>{x}</li>)}
                 </ul>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wider text-alpine-500 mb-1">Conservé</p>
+                <p className="text-xs uppercase tracking-wider text-alpine-500 mb-1">{t('dp.conserve')}</p>
                 <ul className="list-disc list-inside space-y-0.5">
                   {anonymise.data.what_was_kept.map(x => <li key={x}>{x}</li>)}
                 </ul>

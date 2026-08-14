@@ -2,6 +2,8 @@
 
 import axios, { type AxiosInstance } from 'axios'
 import { useAuthStore } from '@/store/auth'
+import { traduire, useLangueStore } from '@/i18n/useT'
+import { preparerLogo } from '@/utils/logoImage'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1'
 
@@ -15,9 +17,16 @@ export const api: AxiosInstance = axios.create({
 })
 
 // Injecter le token JWT dans chaque requête
+//
+// La langue voyage avec, dans `Accept-Language`. Un en-tête plutôt qu'un
+// paramètre d'URL : il s'applique à TOUTES les routes sans que chacune ait à
+// y penser, et une route ajoutée demain est couverte sans qu'on s'en occupe.
+// C'est le motif qui avait laissé passer des écrans non traduits côté
+// interface — on ne le refait pas côté serveur.
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken
   if (token) config.headers.Authorization = `Bearer ${token}`
+  config.headers['Accept-Language'] = useLangueStore.getState().langue
   return config
 })
 
@@ -101,8 +110,8 @@ export const authApi = {
   // réponse traiterait le 401 d'un code faux comme une session expirée — il
   // tenterait un rafraîchissement, puis déconnecterait et renverrait vers
   // /login. Une faute de frappe sur six chiffres perdrait la connexion en cours.
-  mfaVerify: (mfaToken: string, code: string) =>
-    axios.post(`${BASE_URL}/auth/mfa/verify`, { code }, {
+  mfaVerify: (mfaToken: string, code: string, rememberDevice = false) =>
+    axios.post(`${BASE_URL}/auth/mfa/verify`, { code, remember_device: rememberDevice }, {
       withCredentials: true,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mfaToken}` },
     }),
@@ -110,6 +119,10 @@ export const authApi = {
   mfaSetup:   () => api.post('/auth/mfa/setup', null),
   mfaConfirm: (code: string) => api.post('/auth/mfa/confirm', { code }),
   mfaDisable: (password: string) => api.delete('/auth/mfa', { data: { password } }),
+  // Ordinateurs de confiance : les lister, et les oublier tous depuis un autre
+  // poste quand un ordinateur est perdu ou vendu.
+  devices: () => api.get('/auth/devices'),
+  forgetDevices: () => api.delete('/auth/devices'),
 }
 
 // ─── Comptes ──────────────────────────────────────────────────────────────────
@@ -140,8 +153,24 @@ export const supplierInvoicesApi = {
     api.get('/supplier-invoices', { params }),
   get:    (id: string)   => api.get(`/supplier-invoices/${id}`),
   create: (data: unknown) => api.post('/supplier-invoices', data),
+  update: (id: string, data: unknown) => api.put(`/supplier-invoices/${id}`, data),
   transition: (id: string, status: string) =>
     api.post(`/supplier-invoices/${id}/transition`, { status }),
+  // Vide la liste des paiements sans mentir aux livres : un brouillon est
+  // supprime, une facture comptabilisee est EXTOURNEE puis marquee annulee.
+  // Le serveur rend un verdict PAR facture — un lot partiel est le cas normal.
+  cancel: (ids: string[], reason?: string) =>
+    api.post('/supplier-invoices/cancel', { ids, reason }),
+  // Lit le QR d'une facture deposee. N'enregistre RIEN : le serveur rend ce que
+  // le code contient, l'utilisateur confirme.
+  readQR: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/supplier-invoices/read-qr', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60_000,
+    })
+  },
 }
 
 // ─── Paiements fournisseurs (pain.001) ────────────────────────────────────────
@@ -209,6 +238,13 @@ export const maintenanceApi = {
   putServerSettings: (data: unknown) => api.put('/settings/server', data),
 }
 
+// La mise en route — ce qu'il reste à régler avant qu'une facture tienne
+// debout. Le serveur applique les règles (SIX IG v2.4, ISO 13616) et ne renvoie
+// que des états : les phrases sont au catalogue.
+export const onboardingApi = {
+  get: () => api.get('/onboarding'),
+}
+
 // Piste d'audit — la chaîne d'empreintes du CO art. 957a.
 export const auditApi = {
   list: (params?: { limit?: number; offset?: number; order?: 'asc' | 'desc'; from?: string; to?: string }) =>
@@ -226,6 +262,16 @@ export const auditApi = {
   attestationURL: () => `${BASE_URL}/audit-logs/attestation`,
   attestation: () =>
     api.get('/audit-logs/attestation', { responseType: 'blob', timeout: 120_000 }),
+  // Vérifier une attestation qu'on nous présente. Le serveur seul a les livres :
+  // il compare l'empreinte attestée à celle qu'ils portent au même maillon.
+  verifyAttestation: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/audit-logs/attestation/verify', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120_000,
+    })
+  },
 }
 
 // Chiffre d'affaires groupable. La convention de calcul est renvoyée avec les
@@ -407,16 +453,25 @@ export const healthApi = {
 export const settingsApi = {
   getCompany: () => api.get('/settings/company'),
   putCompany: (data: unknown) => api.put('/settings/company', data),
-  uploadLogo: (file: File): Promise<import('axios').AxiosResponse> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const logoData = e.target?.result as string
-        api.post('/settings/logo', { logo_data: logoData }).then(resolve).catch(reject)
-      }
-      reader.onerror = () => reject(new Error('Impossible de lire le fichier'))
-      reader.readAsDataURL(file)
-    }),
+  // Le logo est réduit à 300 px de côté AVANT l'envoi — voir utils/logoImage.
+  // Le serveur le refait de son côté : c'est lui qui décide de ce qui entre en
+  // base, et cette route reste ouverte à qui forge une requête.
+  uploadLogo: async (file: File): Promise<import('axios').AxiosResponse> => {
+    let prepare: { dataURL: string; reduit: boolean }
+    try {
+      prepare = await preparerLogo(file)
+    } catch {
+      throw new Error(traduire('ui.fichierIllisible'))
+    }
+    const res = await api.post('/settings/logo', { logo_data: prepare.dataURL })
+    // « Réduit » vaut pour l'utilisateur dès que l'image a rétréci quelque
+    // part. Le serveur ne voit que ce qu'on lui envoie : quand le navigateur a
+    // déjà fait le travail, il reçoit une image conforme et répond « rien à
+    // faire » — ce qui est vrai pour lui, et faux pour celui qui vient de
+    // déposer une photo de 1600 px.
+    res.data = { ...res.data, resized: res.data?.resized === true || prepare.reduit }
+    return res
+  },
   deleteLogo: () => api.delete('/settings/logo'),
 }
 

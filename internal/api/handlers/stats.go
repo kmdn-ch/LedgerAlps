@@ -125,7 +125,7 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 			WHERE document_type = 'invoice' AND status = 'sent' AND due_date < ?`, h.usesPG)
 		var overdue int
 		if err := h.db.QueryRowContext(ctx, q, time.Now().Format("2006-01-02")).Scan(&overdue); err != nil {
-			log.Printf("stats: overdue invoices query failed: %v", err)
+			log.Printf("stats: overdue les factures n'ont pas pu être lues : %v", err)
 		} else {
 			resp.Invoices.Overdue = overdue
 			resp.Invoices.Sent -= overdue
@@ -200,7 +200,22 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 
 	// ── Contacts: group by contact_type ──────────────────────────────────────
 	{
-		q := db.Rebind(`SELECT contact_type, COUNT(*) FROM contacts GROUP BY contact_type`, h.usesPG)
+		// Seuls les contacts ACTIFS sont comptes.
+		//
+		// Le tableau de bord annonce « Clients actifs » ; compter les contacts
+		// desactives faisait mentir l'etiquette, et un contact desactive
+		// continuait d'apparaitre dans le total apres qu'on l'ait retire de la
+		// liste. Un contact ne se supprime pas — les factures portent son nom
+		// (CO art. 958f) — donc l'exclure du decompte est la seule facon que
+		// « desactiver » ait un effet visible.
+		//
+		// « both » (client ET fournisseur) compte des deux cotes : sans quoi un
+		// partenaire chez qui l'on achete et a qui l'on vend disparaitrait des
+		// deux chiffres.
+		q := db.Rebind(`
+			SELECT contact_type, COUNT(*) FROM contacts
+			WHERE is_active = 1
+			GROUP BY contact_type`, h.usesPG)
 		rows, err := h.db.QueryContext(ctx, q)
 		if err != nil {
 			log.Printf("stats: contacts group-by query failed: %v", err)
@@ -216,9 +231,12 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 				resp.Contacts.Total += count
 				switch ct {
 				case "customer":
-					resp.Contacts.Customers = count
+					resp.Contacts.Customers += count
 				case "supplier":
-					resp.Contacts.Suppliers = count
+					resp.Contacts.Suppliers += count
+				case "both":
+					resp.Contacts.Customers += count
+					resp.Contacts.Suppliers += count
 				}
 			}
 		}

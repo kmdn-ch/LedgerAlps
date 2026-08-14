@@ -12,7 +12,35 @@
       "kind": "fedlex_sparql",
       "sr_number": "235.1",
       "human_url": "https://www.fedlex.admin.ch/eli/cc/2022/491/fr",
-      "last_seen": "2025-07-07"
+      "last_seen": "2025-07-07",
+      "watched_articles": [
+        {
+          "article": "art. 6",
+          "titre": "Principes : licéité, bonne foi, proportionnalité, finalité, exactitude ; al. 4 destruction ou anonymisation dès que les données ne sont plus nécessaires",
+          "ce_qui_en_depend": "Anonymisation des contacts, purge des adresses IP, minimisation des états avant/après du journal d'audit, et la finalité déclarée de toute trace d'activité — traçabilité comptable et sécurité, jamais mesure du comportement des personnes."
+        },
+        {
+          "article": "art. 8",
+          "titre": "Sécurité des données — mesures techniques et organisationnelles proportionnées au risque",
+          "ce_qui_en_depend": "Chiffrement de la base et des sauvegardes, HTTPS, avis « disque non chiffré »."
+        },
+        {
+          "article": "art. 25",
+          "titre": "Droit d'accès",
+          "ce_qui_en_depend": "Export des données d'un client depuis sa fiche."
+        },
+        {
+          "article": "art. 28",
+          "titre": "Droit à la remise ou à la transmission des données",
+          "ce_qui_en_depend": "Export de réversibilité JSON et CSV."
+        },
+        {
+          "article": "art. 32",
+          "titre": "Rectification et effacement",
+          "ce_qui_en_depend": "Anonymisation d'un contact, bornée par la conservation dix ans du CO art. 958f."
+        }
+      ],
+      "articles_note": "La veille porte sur la date de consolidation de l'acte ENTIER : une modification de n'importe quel article la fait bouger. Cette liste ne déclenche rien par elle-même — elle dit ce qu'il faut relire quand l'alerte tombe, et pourquoi."
     },
     {
       "id": "fedlex-opdo",

@@ -21,9 +21,13 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import {
-  Download, AlertTriangle, Loader2, Building2, CalendarClock, Info,
+  Download, AlertTriangle, Loader2, Building2, CalendarClock, Info, Trash2,
 } from 'lucide-react'
-import { paymentsApi } from '@/api/client'
+import { useQueryClient } from '@tanstack/react-query'
+import { paymentsApi, supplierInvoicesApi } from '@/api/client'
+import { ConfirmDialog } from '@/components/ui'
+import { useCanWrite } from '@/hooks/usePermissions'
+import { useT, useFormats } from '@/i18n/useT'
 import { LoadingSpinner, EmptyState, ErrorBanner, SectionTitle } from '@/components/ui'
 import { formatCHF, formatDate } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
@@ -49,7 +53,15 @@ interface PayableResponse {
 }
 
 export function PaymentRunPanel() {
+  const t = useT()
+  const { pluriel } = useFormats()
+  const qc = useQueryClient()
+  // Tenir les livres : administrateur et comptable. La lecture seule n'a ni la
+  // case à cocher ni le bouton, et le serveur la refuserait deux fois.
+  const peutEcrire = useCanWrite()
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [aRetirer, setARetirer] = useState(false)
+  const [retrait, setRetrait] = useState<string | null>(null)
   const [execDate, setExecDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{ count: number; total: number } | null>(null)
@@ -100,15 +112,45 @@ export function PaymentRunPanel() {
     },
   })
 
+  // Retirer de la liste — un brouillon disparaît, une facture comptabilisée est
+  // EXTOURNÉE puis marquée annulée. La charge quitte donc réellement les livres,
+  // au lieu d'un statut qui dit « annulée » pendant que le résultat et la
+  // déclaration continuent d'en tenir compte.
+  const retirer = useMutation({
+    mutationFn: () => supplierInvoicesApi.cancel([...selected], 'retrait de la liste des paiements'),
+    onSuccess: async (r) => {
+      const d = r.data as {
+        processed: number; total: number
+        results: Array<{ id: string; outcome: string; detail?: string }>
+      }
+      const refus = d.results.filter(x => x.outcome === 'refused')
+      // Le verdict est rendu PAR facture : un lot partiel est le cas normal, et
+      // annoncer un succès global masquerait les lignes qui n'ont pas bougé.
+      setRetrait(
+        t('pay.retraitBilan', { n: d.processed, total: d.total }) +
+        (refus.length
+          ? ' ' + t('pay.retraitNonTraitees',
+              { details: refus.map(x => x.detail).join(' · ') })
+          : ''))
+      setError(null); setARetirer(false); setSelected(new Set())
+      await qc.invalidateQueries({ queryKey: ['payments-payable'] })
+      await qc.invalidateQueries({ queryKey: ['supplier-invoices'] })
+      await qc.invalidateQueries({ queryKey: ['journal'] })
+    },
+    onError: (e) => {
+      setARetirer(false)
+      setError(refusalMessage(e, "Les factures n'ont pas pu être retirées."))
+    },
+  })
+
   const bloque = debtor?.problem ?? ''
   const peutGenerer = chosen.length > 0 && bloque === '' && !generate.isPending
 
   return (
     <div>
-      <SectionTitle>Paiements fournisseurs — ISO 20022 pain.001</SectionTitle>
+      <SectionTitle>{t('pay.titre')}</SectionTitle>
       <p className="text-sm text-alpine-600 mb-4">
-        Sélectionnez les factures à régler : LedgerAlps produit un fichier XML que vous déposez
-        dans votre e-banking. Compatible UBS, PostFinance, Raiffeisen et Banques cantonales.
+        {t('pay.intro')}
       </p>
 
       {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
@@ -119,7 +161,7 @@ export function PaymentRunPanel() {
           bloque ? 'border-danger-500 bg-danger-500/5' : 'border-neutral-200 bg-neutral-50'
         }`}>
           <p className="flex items-center gap-2 font-medium">
-            <Building2 size={15} /> Compte à débiter
+            <Building2 size={15} /> {t('pay.compteADebiter')}
           </p>
           {bloque
             ? <p className="text-danger-700 mt-1">{bloque}</p>
@@ -134,8 +176,8 @@ export function PaymentRunPanel() {
 
       {!payable.isLoading && items.length === 0 && (
         <EmptyState
-          title="Aucune facture à payer"
-          description="Seules les factures fournisseurs comptabilisées apparaissent ici. Une facture encore au brouillon doit d'abord être comptabilisée : la charge doit exister dans les livres avant que la trésorerie bouge."
+          title={t('pay.aucuneAPayer')}
+          description={t('pay.aucuneAPayerAide')}
         />
       )}
 
@@ -147,17 +189,17 @@ export function PaymentRunPanel() {
                 <th style={{ width: '38px' }}>
                   <input
                     type="checkbox"
-                    aria-label="Tout sélectionner"
+                    aria-label={t('pay.toutSelectionner')}
                     checked={chosen.length === payables.length && payables.length > 0}
                     onChange={e => setSelected(
                       e.target.checked ? new Set(payables.map(i => i.id)) : new Set())}
                   />
                 </th>
-                <th>Fournisseur</th>
-                <th>Facture</th>
-                <th>Échéance</th>
-                <th>Référence</th>
-                <th className="text-right">Montant</th>
+                <th>{t('doc.fournisseur')}</th>
+                <th>{t('pay.colFacture')}</th>
+                <th>{t('doc.echeance')}</th>
+                <th>{t('pay.colReference')}</th>
+                <th className="text-right">{t('doc.montant')}</th>
               </tr>
             </thead>
             <tbody>
@@ -177,7 +219,7 @@ export function PaymentRunPanel() {
                     {i.due_date ? formatDate(i.due_date) : '—'}
                     {i.days_late > 0 && (
                       <span className="block text-xs text-danger-700">
-                        {i.days_late} jour{i.days_late > 1 ? 's' : ''} de retard
+                        {t('pay.joursRetard', { n: i.days_late })}
                       </span>
                     )}
                   </td>
@@ -187,7 +229,7 @@ export function PaymentRunPanel() {
                           <span className="block font-mono text-alpine-500 mt-0.5">
                             {i.payment_reference}
                           </span></>
-                      : <span className="text-alpine-400">motif en texte libre</span>}
+                      : <span className="text-alpine-400">{t('pay.motifLibre')}</span>}
                   </td>
                   <td className="text-right font-mono tabular-nums">
                     {formatCHF(i.amount)}
@@ -205,17 +247,56 @@ export function PaymentRunPanel() {
         <div className="mt-4 rounded-md border border-warning-500 bg-warning-100 px-4 py-3">
           <p className="text-sm font-medium flex items-center gap-1.5">
             <AlertTriangle size={15} />
-            {blocked.length} facture{blocked.length > 1 ? 's' : ''} ne peu
-            {blocked.length > 1 ? 'vent' : 't'} pas être payée{blocked.length > 1 ? 's' : ''}
+            {pluriel(blocked.length,
+              t('pay.uneBloquee', { n: blocked.length }),
+              t('pay.desBloquees', { n: blocked.length }))}
           </p>
+          {/* Cochables, elles aussi. Ce sont même celles qui restent le plus
+              longtemps : elles ne peuvent PAS être payées, donc rien ne les
+              fait jamais sortir de la liste. Une liste qui ne se vide pas
+              cesse d'être lue, et le jour où elle porte une vraie facture en
+              retard, personne ne la voit. */}
           <ul className="mt-2 space-y-1 text-sm text-alpine-700">
             {blocked.map(i => (
-              <li key={i.id}>
-                <span className="font-mono text-xs">{i.reference}</span> — {i.supplier_name} :
-                {' '}{i.blocked_reason}
+              <li key={i.id} className="flex items-start gap-2">
+                {peutEcrire && (
+                  <input type="checkbox" className="mt-1" checked={selected.has(i.id)}
+                         aria-label={`Sélectionner ${i.reference}`}
+                         onChange={() => toggle(i.id)} />
+                )}
+                <span>
+                  <span className="font-mono text-xs">{i.reference}</span> — {i.supplier_name} :
+                  {' '}{i.blocked_reason}
+                </span>
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Retirer de la liste — HORS du bloc de paiement, délibérément.
+          Une facture bloquée ne peut pas être payée : rien ne la fera jamais
+          sortir de la liste, et c'est justement celle qu'on veut écarter. Si
+          ce bouton vivait dans le pied de page des paiements, il disparaîtrait
+          dans le seul cas où il sert le plus. */}
+      {peutEcrire && selected.size > 0 && (
+        <div className="mt-4 flex items-center justify-end">
+          <button onClick={() => { setError(null); setARetirer(true) }}
+                  disabled={retirer.isPending}
+                  className="btn-ghost text-danger-700 flex items-center gap-1.5">
+            {retirer.isPending
+              ? <Loader2 size={14} className="animate-spin" />
+              : <Trash2 size={14} />}
+            {pluriel(selected.size,
+              t('pay.retirerUne', { n: selected.size }),
+              t('pay.retirerPlusieurs', { n: selected.size }))}
+          </button>
+        </div>
+      )}
+
+      {retrait && (
+        <div className="mt-4 rounded-md border border-alpine-200 bg-alpine-50 px-4 py-3 text-sm">
+          {retrait}
         </div>
       )}
 
@@ -224,19 +305,20 @@ export function PaymentRunPanel() {
           <div>
             <label className="label" htmlFor="exec-date">
               <CalendarClock size={13} className="inline mr-1" />
-              Date d&rsquo;exécution souhaitée
+              {t('pay.dateExecution')}
             </label>
             <input id="exec-date" type="date" className="input w-52"
                    value={execDate} onChange={e => setExecDate(e.target.value)} />
             <p className="text-xs text-alpine-500 mt-1">
-              La banque exécute à cette date, ou au premier jour ouvrable suivant.
+              {t('pay.dateExecutionAide')}
             </p>
           </div>
 
           <div className="text-right">
             <p className="text-sm text-alpine-600">
-              {chosen.length} facture{chosen.length > 1 ? 's' : ''} sélectionnée
-              {chosen.length > 1 ? 's' : ''}
+              {pluriel(chosen.length,
+                t('pay.uneSelectionnee', { n: chosen.length }),
+                t('pay.desSelectionnees', { n: chosen.length }))}
             </p>
             <p className="text-xl font-semibold font-mono tabular-nums text-alpine-900">
               {formatCHF(total)}
@@ -247,7 +329,7 @@ export function PaymentRunPanel() {
               {generate.isPending
                 ? <Loader2 size={14} className="animate-spin" />
                 : <Download size={15} />}
-              Générer le fichier
+              {t('pay.genererFichier')}
             </button>
           </div>
         </div>
@@ -256,20 +338,41 @@ export function PaymentRunPanel() {
       {done && (
         <div className="mt-4 rounded-md border border-success-500 bg-success-500/5 px-4 py-3 text-sm">
           <p className="font-medium">
-            Fichier produit — {done.count} virement{done.count > 1 ? 's' : ''},
-            {' '}{formatCHF(done.total)}
+            {pluriel(done.count,
+              t('pay.fichierProduitUn', { n: done.count, montant: formatCHF(done.total) }),
+              t('pay.fichierProduitPlusieurs', { n: done.count, montant: formatCHF(done.total) }))}
           </p>
           <p className="text-alpine-700 mt-1 flex items-start gap-1.5">
             <Info size={14} className="mt-0.5 shrink-0" />
             <span>
-              Déposez-le dans votre e-banking pour que les virements partent. Les factures restent
-              <strong> comptabilisées</strong> et non « payées » : c&rsquo;est le relevé bancaire
-              qui l&rsquo;établira, à l&rsquo;import camt.053. Rien n&rsquo;a été envoyé
-              nulle part — LedgerAlps ne parle à aucun service extérieur.
+              {t('pay.deposerEbanking')}
             </span>
           </p>
         </div>
       )}
-    </div>
+    
+      {/* Une annulation PASSE UNE ÉCRITURE : elle ne part pas sur un clic.
+          Le dialogue dit ce qui va se produire dans les livres, pas seulement
+          « êtes-vous sûr ». */}
+      <ConfirmDialog
+        open={aRetirer}
+        title={pluriel(selected.size,
+          t('pay.confirmRetirerUne', { n: selected.size }),
+          t('pay.confirmRetirerPlusieurs', { n: selected.size }))}
+        consequences={[
+          t('pay.confirmBrouillon'),
+          t('pay.confirmExtourne'),
+          t('pay.confirmPayee'),
+        ]}
+        reassurance={t('pay.confirmVerdict')}
+        confirmLabel={pluriel(selected.size,
+          t('pay.retirerUne', { n: selected.size }),
+          t('pay.retirerPlusieurs', { n: selected.size }))}
+        tone="danger"
+        busy={retirer.isPending}
+        onConfirm={() => retirer.mutate()}
+        onCancel={() => setARetirer(false)}
+      />
+</div>
   )
 }

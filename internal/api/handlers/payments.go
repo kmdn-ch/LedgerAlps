@@ -48,7 +48,7 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 
 	paymentDate, err := time.Parse("2006-01-02", req.PaymentDate)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "payment_date must be YYYY-MM-DD"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "payment_la date doit être au format AAAA-MM-JJ"})
 		return
 	}
 
@@ -70,10 +70,10 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 	if err := h.db.QueryRowContext(ctx, invQ, req.InvoiceID).Scan(
 		&inv.ID, &inv.TotalAmount, &inv.Status, &inv.ContactID, &inv.InvoiceNumber,
 	); err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "facture introuvable"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if inv.Status != string(models.InvoiceStatusSent) {
@@ -90,20 +90,20 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 		// Verify the provided account ID exists and is an asset account.
 		baQ := db.Rebind(`SELECT id FROM accounts WHERE id = ? AND account_type = 'asset' AND is_active = 1`, h.usePostgres)
 		if err := h.db.QueryRowContext(ctx, baQ, *req.BankAccountID).Scan(&bankAccountID); err == sql.ErrNoRows {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "bank_account_id not found or is not an active asset account"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "le compte bancaire indiqué est introuvable ou n'est pas un compte d'actif actif"})
 			return
 		} else if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	} else {
 		// Default: Banque compte courant (code 1020).
 		defaultBankQ := db.Rebind(`SELECT id FROM accounts WHERE code = '1020' AND is_active = 1 LIMIT 1`, h.usePostgres)
 		if err := h.db.QueryRowContext(ctx, defaultBankQ).Scan(&bankAccountID); err == sql.ErrNoRows {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "default bank account (code 1020) not found; supply bank_account_id explicitly"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "le compte bancaire par défaut (1020) est absent du plan comptable : indiquez explicitement le compte à débiter"})
 			return
 		} else if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	}
@@ -112,10 +112,10 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 	var arAccountID string
 	arQ := db.Rebind(`SELECT id FROM accounts WHERE code = '1100' AND is_active = 1 LIMIT 1`, h.usePostgres)
 	if err := h.db.QueryRowContext(ctx, arQ).Scan(&arAccountID); err == sql.ErrNoRows {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "accounts receivable account (code 1100) not found"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "le compte clients (1100) est absent du plan comptable"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -132,7 +132,7 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 		req.Method, req.Reference,
 		userID, now, now,
 	); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record payment"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le paiement n'a pas pu être enregistré"})
 		return
 	}
 
@@ -254,7 +254,7 @@ func (h *PaymentsHandler) ListPayments(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, db.Rebind(baseQ, h.usePostgres), args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -300,11 +300,11 @@ func (h *PaymentsHandler) GetPayment(c *gin.Context) {
 		&p.CreatedByID, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "payment not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "paiement introuvable"})
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

@@ -9,6 +9,7 @@ import { X } from 'lucide-react'
 import { contactsApi } from '@/api/client'
 import { ErrorBanner, ConfirmDialog } from '@/components/ui'
 import { useBeforeUnload } from '@/hooks/useUnsavedGuard'
+import { useT, useTv } from '@/i18n/useT'
 
 // Convert empty strings to undefined so optional fields don't trip validation.
 const opt = <T extends z.ZodTypeAny>(s: T) =>
@@ -17,7 +18,7 @@ const opt = <T extends z.ZodTypeAny>(s: T) =>
 const schema = z.object({
   contact_type:      z.enum(['customer', 'supplier', 'both']),
   is_company:        z.boolean().default(false),
-  name:              z.string().min(1, 'Nom requis'),
+  name:              z.string().min(1, 'val.nomRequis'),
   legal_name:        opt(z.string()),
   address:           opt(z.string()),
   postal_code:       opt(z.string()),
@@ -25,7 +26,7 @@ const schema = z.object({
   country:           z.string().min(2).max(2).default('CH'),
   uid_number:        opt(z.string()),
   vat_number:        opt(z.string()),
-  email:             opt(z.string().email('E-mail invalide')),
+  email:             opt(z.string().email('val.emailInvalide')),
   phone:             opt(z.string()),
   payment_term_days: z.coerce.number().int().min(0).max(365).default(30),
   iban:              opt(z.string()),
@@ -37,6 +38,8 @@ type FormData = z.infer<typeof schema>
 interface Props { onClose: () => void }
 
 export function NewContactModal({ onClose }: Props) {
+  const t = useT()
+  const tv = useTv()
   const qc = useQueryClient()
   const {
     register, handleSubmit,
@@ -79,14 +82,10 @@ export function NewContactModal({ onClose }: Props) {
       <ConfirmDialog
         open={confirmingClose}
         tone="danger"
-        title="Abandonner cette fiche ?"
-        consequences={[
-          <>Ce que vous avez saisi sera <strong>perdu</strong>. LedgerAlps
-          n'enregistre pas de brouillon de contact.</>,
-        ]}
-        reassurance={<>Rien d'autre n'est touché : vos contacts existants restent
-        en place.</>}
-        confirmLabel="Abandonner la saisie"
+        title={t('co.abandonnerTitre')}
+        consequences={[t('co.abandonnerCons')]}
+        reassurance={t('co.abandonnerRassur')}
+        confirmLabel={t('co.abandonnerConfirmer')}
         onConfirm={() => { setConfirmingClose(false); onClose() }}
         onCancel={() => setConfirmingClose(false)}
       />
@@ -95,7 +94,7 @@ export function NewContactModal({ onClose }: Props) {
       <div className="relative bg-white rounded-2xl shadow-modal w-full max-w-2xl
                       max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-alpine-100">
-          <h2 className="font-display font-700 text-lg text-alpine-900">Nouveau contact</h2>
+          <h2 className="font-display font-700 text-lg text-alpine-900">{t('ct.nouveau')}</h2>
           <button onClick={requestClose} className="btn-ghost p-1.5">
             <X size={18} />
           </button>
@@ -105,24 +104,24 @@ export function NewContactModal({ onClose }: Props) {
           {create.error && (
             <ErrorBanner message={
               (create.error as any)?.response?.data?.error
-                ?? 'Erreur lors de la création du contact.'
+                ?? t('co.erreurCreation')
             } />
           )}
 
           {/* Type et nature */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Type *</label>
+              <label className="label">{t('co.type')}</label>
               <select className="select" {...register('contact_type')}>
-                <option value="customer">Client</option>
-                <option value="supplier">Fournisseur</option>
-                <option value="both">Les deux</option>
+                <option value="customer">{t('co.client')}</option>
+                <option value="supplier">{t('co.fournisseur')}</option>
+                <option value="both">{t('co.lesDeux')}</option>
               </select>
             </div>
             <div className="flex items-end pb-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" {...register('is_company')} className="rounded border-alpine-300 accent-accent-500" />
-                <span className="text-sm text-alpine-700">Entreprise</span>
+                <span className="text-sm text-alpine-700">{t('co.entreprise')}</span>
               </label>
             </div>
           </div>
@@ -130,41 +129,41 @@ export function NewContactModal({ onClose }: Props) {
           {/* Nom */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Nom / Raison sociale *</label>
+              <label className="label">{t('co.nomRaisonSociale')}</label>
               <input className={`input ${errors.name ? 'input-error' : ''}`}
                 {...register('name')} />
-              {errors.name && <p className="error-msg">{errors.name.message}</p>}
+              {errors.name && <p className="error-msg">{tv(errors.name.message)}</p>}
             </div>
             <div>
-              <label className="label">Raison sociale légale</label>
+              <label className="label">{t('co.raisonSocialeLegale')}</label>
               <input className="input" {...register('legal_name')} />
             </div>
           </div>
 
           {/* Adresse */}
           <div>
-            <label className="label">Adresse</label>
-            <input className="input mb-2" placeholder="Rue et numéro"
+            <label className="label">{t('co.adresse')}</label>
+            <input className="input mb-2" placeholder={t('co.placeholderRue')}
               {...register('address')} />
             <div className="grid grid-cols-3 gap-3">
-              <input className="input" placeholder="NPA" {...register('postal_code')} />
-              <input className="input col-span-2" placeholder="Localité" {...register('city')} />
+              <input className="input" placeholder={t('pr.npa')} {...register('postal_code')} />
+              <input className="input col-span-2" placeholder={t('co.placeholderLocalite')} {...register('city')} />
             </div>
           </div>
 
           {/* Pays + Numéros légaux */}
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="label">Pays</label>
+              <label className="label">{t('co.pays')}</label>
               <input className="input uppercase" maxLength={2} {...register('country')} />
             </div>
             <div>
-              <label className="label">N° IDE (CHE-…)</label>
+              <label className="label">{t('co.ide')}</label>
               <input className="input font-mono" placeholder="CHE-123.456.789"
                 {...register('uid_number')} />
             </div>
             <div>
-              <label className="label">N° TVA</label>
+              <label className="label">{t('co.numeroTVA')}</label>
               <input className="input font-mono" {...register('vat_number')} />
             </div>
           </div>
@@ -172,12 +171,12 @@ export function NewContactModal({ onClose }: Props) {
           {/* Contact */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">E-mail</label>
+              <label className="label">{t('co.email')}</label>
               <input type="email" className={`input ${errors.email ? 'input-error' : ''}`}
                 {...register('email')} />
             </div>
             <div>
-              <label className="label">Téléphone</label>
+              <label className="label">{t('co.telephone')}</label>
               <input type="tel" className="input" {...register('phone')} />
             </div>
           </div>
@@ -185,12 +184,12 @@ export function NewContactModal({ onClose }: Props) {
           {/* Paiement */}
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="label">Délai paiement (jours)</label>
+              <label className="label">{t('co.delaiPaiementJours')}</label>
               <input type="number" min="0" max="365" className="input"
                 {...register('payment_term_days')} />
             </div>
             <div className="col-span-2">
-              <label className="label">IBAN</label>
+              <label className="label">{t('paiement.iban')}</label>
               <input className="input font-mono" placeholder="CH…"
                 {...register('iban')} />
             </div>
@@ -198,17 +197,17 @@ export function NewContactModal({ onClose }: Props) {
 
           {/* Notes */}
           <div>
-            <label className="label">Notes</label>
+            <label className="label">{t('co.notes')}</label>
             <textarea rows={2} className="input resize-none" {...register('notes')} />
           </div>
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-2 border-t border-alpine-100">
             <button type="button" onClick={requestClose} className="btn-secondary">
-              Annuler
+              {t('action.annuler')}
             </button>
             <button type="submit" className="btn-primary" disabled={create.isPending}>
-              {create.isPending ? 'Enregistrement…' : 'Créer le contact'}
+              {create.isPending ? t('etat.enregistrement') : t('co.creerContact')}
             </button>
           </div>
         </form>

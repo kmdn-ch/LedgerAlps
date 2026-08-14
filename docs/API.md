@@ -33,6 +33,19 @@ Toutes les routes applicatives sont préfixées par `/api/v1`.
 | POST | `/auth/mfa/setup` | auth | Préparer une inscription — rend le secret, l'URI `otpauth://` et le QR |
 | POST | `/auth/mfa/confirm` | auth | Confirmer par un premier code — rend les codes de secours, une seule fois |
 | DELETE | `/auth/mfa` | auth | Retirer le second facteur. Mot de passe redemandé |
+| GET | `/auth/devices` | auth | Ordinateurs de confiance de ce compte, et la durée accordée |
+| DELETE | `/auth/devices` | auth | Les oublier tous — un code sera redemandé partout |
+
+### Ordinateurs de confiance
+
+`POST /auth/mfa/verify` accepte `remember_device: true`. Le serveur pose alors un
+cookie HttpOnly `SameSite=Strict` valable **30 jours**, dont seul le haché est
+conservé en base. La date d'expiration est **absolue** : se connecter ne la
+prolonge pas.
+
+La confiance est liée au **compte**, pas au navigateur : un poste de confiance
+pour l'un ne l'est pas pour l'autre. Elle tombe quand le mot de passe change, et
+quand le second facteur est retiré ou réinscrit.
 
 ### Connexion en deux temps
 
@@ -66,6 +79,12 @@ le lire à chaque vérification sans intervention humaine — toute clé qui le
 protégerait vivrait sur la même machine. C'est le chiffrement de la base et du
 disque qui répond à cette menace.
 
+### Qui doit un second facteur
+
+L'**administrateur** et le **comptable** : les deux peuvent modifier quelque
+chose, et un mot de passe volé sur l'un ou l'autre permet de fabriquer une
+comptabilité. La **lecture seule** en est dispensée — elle ne peut rien modifier.
+
 ### Refus propres au second facteur
 
 | Statut | Cause |
@@ -88,7 +107,7 @@ changement s'applique immédiatement, sans attendre l'expiration d'une session.
 | PUT | `/users/:id/role` | admin | Changer le rôle (`admin`, `accountant`, `viewer`) |
 | PUT | `/users/:id/active` | admin | Activer ou désactiver. Un compte ne se supprime pas (CO art. 957a al. 2 ch. 5) |
 | POST | `/users/:id/reset-password` | admin | Remplacer le mot de passe par un temporaire, rendu **une seule fois** |
-| DELETE | `/users/:id/mfa` | admin | Retirer le second facteur d'un compte (téléphone perdu) |
+| DELETE | `/users/:id/mfa` | admin | Retirer le second facteur d'un compte (application 2FA/OTP perdue) |
 
 Les deux dernières routes sont **délibérément séparées**. Réunies en un geste,
 elles permettraient à un administrateur de se substituer entièrement à n'importe
@@ -284,7 +303,52 @@ comptent dans la déclaration TVA.
 | GET | `/supplier-invoices` | lecture | Liste paginée |
 | GET | `/supplier-invoices/:id` | lecture | Détail avec lignes |
 | POST | `/supplier-invoices` | écriture documents | Créer (refus si doublon fournisseur + référence) |
+| PUT | `/supplier-invoices/:id` | écriture documents | Modifier — **brouillons uniquement** (409 sinon) |
+| POST | `/supplier-invoices/read-qr` | écriture documents | Lire le QR d'un PDF ou d'une image déposée. **Ne crée rien** |
 | POST | `/supplier-invoices/:id/transition` | écriture comptable | Changer de statut |
+
+### Lire le QR d'une facture
+
+Multipart, champ `file`, 10 Mo au maximum. La réponse ne crée rien :
+
+```json
+{
+  "found": true,
+  "bill": { "creditor_name": "…", "creditor_iban": "CH44…", "amount": 1621.50,
+            "currency": "CHF", "reference_type": "QRR", "reference": "21000…",
+            "message": "Facture FA-118", "is_qr_iban": true },
+  "supplier": { "id": "…", "name": "…" }
+}
+```
+
+La réponse porte aussi `hints`, lu dans la **couche texte** du PDF — ce que le QR
+ne contient pas :
+
+```json
+{ "invoice_number": "538690", "invoice_number_label": "numéro de facture",
+  "issue_date": "2025-12-01", "issue_date_label": "date",
+  "due_date": "2025-12-31", "due_date_label": "échu",
+  "vat_rate": 0, "vat_mentioned": false, "vat_label": "",
+  "supplier_uid": "CHE-103.727.240" }
+```
+
+Chaque valeur est accompagnée de **l'étiquette qui l'a produite** : c'est ce qui
+permet de repérer une lecture de travers sans rouvrir le document.
+
+`vat_mentioned: false` signifie qu'aucun **taux** n'a été trouvé — le taux vaut
+alors 0 % et le montant du QR est aussi le montant hors taxe. Le mot « TVA » ou
+« MWST » ne suffit pas : il figure dans le numéro d'assujetti du fournisseur.
+
+Un PDF sans couche texte — un scan — rend des `hints` vides. C'est une absence,
+pas une erreur : le QR reste exploitable.
+
+Le fournisseur est reconnu **par son IBAN** — un nom se saisit de dix façons, un
+compte non. `id` vide signifie qu'il reste à créer.
+
+Un document sans QR répond **200** avec `found: false` et un `reason` : beaucoup
+de factures n'en portent pas, et la saisie manuelle reste le chemin normal. Un
+bulletin dont la référence contredit l'IBAN (IG v2.4 §4.2.2) répond **422** en
+nommant l'incohérence.
 | DELETE | `/supplier-invoices/:id` | écriture comptable | Supprimer — brouillons uniquement (CO art. 958f) |
 
 ### Comptabiliser écrit au journal
@@ -358,6 +422,9 @@ jusqu'à réponse avant de recharger la page.
 
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
+| GET | `/onboarding` | auth | Mise en route : les cinq étapes sans lesquelles une facture suisse ne tient pas, et ce qui bloque chacune. Ne rend que des **états** et des noms de champs — les phrases sont au catalogue du frontend |
+| POST | `/settings/logo` | **admin** | Logo de la société, en adresse de données PNG ou JPEG (2 Mo au plus). Toute image dont un côté dépasse **300 px** est réduite, sans déformation, et ré-encodée en PNG. La réponse rend `logo_data`, `width`, `height` et `resized` — ce qui a été RETENU, pas ce qui a été envoyé |
+| PUT | `/settings/company` | **admin** | `vat_status` vaut `""` (non déclaré), `"liable"` ou `"exempt"`. **Absent = ne touche pas** ; toute autre valeur répond `422`. `"exempt"` efface `vat_number` — il s'imprime sur la facture, et le garder contredirait la déclaration (LTVA art. 27 al. 1) |
 | GET | `/maintenance/integrity` | **admin** | Contrôle de cohérence des données |
 | GET | `/maintenance/health` | **admin** | État du système, sauvegardes, exposition réseau |
 | GET | `/settings/server` | **admin** | Réglages réseau en vigueur |
@@ -549,6 +616,7 @@ s'écrit dans `<Cd>`.
 | GET | `/audit-logs/verify-chain` | **admin** | Vérifier **toute** la chaîne : empreintes, chaînage, continuité des numéros. `200` si intacte, `409` avec le rapport sinon |
 | GET | `/audit-logs/attestation` | **admin** | Attestation d'intégrité (Olico art. 9), en pièce jointe JSON : état de la chaîne, empreinte de tête, périmètre, **et ses limites** |
 | GET | `/audit-logs/:id/verify` | **admin** | Vérifier une entrée isolée. Détecte une modification de contenu, **pas une suppression** — voir la note ci-dessous |
+| POST | `/audit-logs/attestation/verify` | **admin** | Vérifier une attestation qu'on nous présente — la sienne, ou celle qu'un client a remise. Le fichier va dans un formulaire (`file`) ou dans le corps. Rend trois contrôles : le sceau du document, la correspondance de l'empreinte de tête avec les livres au même numéro de séquence, et l'état actuel de la chaîne |
 | GET | `/compliance/advisories` | auth | Avis de conformité — voir [compliance](../compliance/README.md) |
 | GET | `/security-events` | **admin** | Verrouillages de connexion (contient des adresses IP — nLPD) |
 | GET | `/exports/legal-archive` | auth | Archive ZIP 10 ans avec manifeste (CO art. 958f). Contient le JSON **et** un dossier `csv/` — export de réversibilité ouvrable dans un tableur, avec les lignes imbriquées extraites dans leurs propres fichiers |

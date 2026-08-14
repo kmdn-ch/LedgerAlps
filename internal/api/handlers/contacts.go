@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
+	"github.com/kmdn-ch/ledgeralps/internal/core/authz"
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
@@ -31,7 +33,12 @@ func (h *ContactsHandler) ListContacts(c *gin.Context) {
 	// Data isolation: non-admin users see only active contacts (shared resource — contacts
 	// are company-wide, not per-user, so all authenticated users may list them).
 	// Admins additionally see inactive contacts via ?include_inactive=true.
-	includeInactive := c.Query("include_inactive") == "true" && isAdmin(c)
+	// Voir les contacts desactives suit le ROLE lu en base, pas le drapeau du
+	// jeton : un comptable en a besoin pour retrouver un ancien client sur une
+	// facture de l'annee passee.
+	role, _ := mw.RoleOf(c)
+	includeInactive := c.Query("include_inactive") == "true" &&
+		authz.Can(role, authz.PermManage)
 	where := " WHERE is_active = 1"
 	if includeInactive {
 		where = " WHERE 1=1"
@@ -63,7 +70,7 @@ func (h *ContactsHandler) ListContacts(c *gin.Context) {
 
 	rows, err := h.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer rows.Close()
@@ -106,11 +113,11 @@ func (h *ContactsHandler) GetContact(c *gin.Context) {
 		&ct.IBAN, &ct.QRIBAN, &ct.VATNumber, &ct.UIDNumber, &ct.PaymentTermDays,
 		&ct.Notes, &isActive, &ct.CreatedAt, &ct.UpdatedAt)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "contact not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "contact introuvable"})
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	ct.IsActive = isActive == 1
@@ -179,7 +186,7 @@ func (h *ContactsHandler) CreateContact(c *gin.Context) {
 		req.Email, req.Phone, req.Address, req.City, req.PostalCode, req.Country,
 		req.IBAN, req.QRIBAN, req.VATNumber, req.UIDNumber, req.PaymentTermDays,
 		req.Notes, now, now); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -238,7 +245,7 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 	existsQ := db.Rebind("SELECT id FROM contacts WHERE id = ?", h.usePostgres)
 	var existing string
 	if err := h.db.QueryRowContext(ctx, existsQ, id).Scan(&existing); err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "contact not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "contact introuvable"})
 		return
 	}
 
@@ -299,11 +306,15 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 		addField("notes", *req.Notes)
 	}
 	if req.IsActive != nil {
-		val := 0
-		if *req.IsActive {
-			val = 1
-		}
-		addField("is_active", val)
+		// Refuse plutot qu'ignore : ignorer laisserait croire la demande prise
+		// en compte. La desactivation manuelle a ete retiree — un contact qu'on
+		// ne veut plus voir s'anonymise, ce qui l'ecarte des listes ET efface
+		// ses donnees personnelles (nLPD art. 6 al. 4). Masquer le bouton sans
+		// fermer la route n'aurait rien ferme du tout.
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "l'activation d'un contact ne se change pas à la main : " +
+				"pour retirer un contact des listes, anonymisez-le"})
+		return
 	}
 
 	args = append(args, id)
@@ -317,7 +328,7 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 	updateSQL += " WHERE id = ?"
 
 	if _, err := h.db.ExecContext(ctx, db.Rebind(updateSQL, h.usePostgres), args...); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 

@@ -53,7 +53,7 @@ func (h *AuthHandler) MFAStatus(c *gin.Context) {
 	}
 	enabled, _, _, err := h.mfaState(c.Request.Context(), claims.UserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	var remaining int
@@ -72,7 +72,8 @@ func (h *AuthHandler) MFAStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"enabled":                enabled,
 		"recovery_codes_left":    remaining,
-		"required_for_this_role": role == string(authz.RoleAdmin),
+		"required_for_this_role": authz.RequiresSecondFactor(authz.Role(role)),
+		"trusted_device_days":    TrustedDeviceDays,
 	})
 }
 
@@ -104,7 +105,7 @@ func (h *AuthHandler) MFASetup(c *gin.Context) {
 	}
 	enabled, _, _, err := h.mfaState(c.Request.Context(), claims.UserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if enabled {
@@ -134,7 +135,7 @@ func (h *AuthHandler) MFASetup(c *gin.Context) {
 		                                   updated_at = excluded.updated_at`, h.cfg.UsePostgres())
 	now := time.Now().UTC()
 	if _, err := h.db.ExecContext(c.Request.Context(), upsert, claims.UserID, secret, now, now); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
@@ -184,14 +185,14 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 			"error": "commencez par l'étape précédente : aucun secret n'a été préparé"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 
 	window, ok := mfa.Verify(secret, body.Code, time.Now(), 0)
 	if !ok {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
-			"error": "ce code ne correspond pas. Vérifiez l'heure de votre téléphone : " +
+			"error": "ce code ne correspond pas. Vérifiez l'heure de l'appareil qui porte votre application : " +
 				"un décalage de plus d'une minute suffit à décaler tous les codes."})
 		return
 	}
@@ -204,7 +205,7 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
@@ -214,14 +215,14 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 		h.cfg.UsePostgres())
 	now := time.Now().UTC()
 	if _, err := tx.ExecContext(ctx, upd, now, window, now, claims.UserID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	// Les anciens codes de secours partent avec l'ancienne inscription.
 	if _, err := tx.ExecContext(ctx,
 		db.Rebind(`DELETE FROM mfa_recovery_codes WHERE user_id = ?`, h.cfg.UsePostgres()),
 		claims.UserID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	ins := db.Rebind(
@@ -229,14 +230,16 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 		h.cfg.UsePostgres())
 	for _, hsh := range hashes {
 		if _, err := tx.ExecContext(ctx, ins, db.NewID(), claims.UserID, hsh, now); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
+
+	forgetDevices(ctx, h.db, h.cfg.UsePostgres(), claims.UserID)
 
 	recordSecurityEvent(ctx, h.db, h.cfg.UsePostgres(),
 		"mfa_enabled", c.ClientIP(), "compte="+claims.UserID)
@@ -244,9 +247,9 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"enabled":        true,
 		"recovery_codes": codes,
-		"warning": "Notez ces codes maintenant, ailleurs que sur ce PC et hors de votre " +
-			"téléphone. Ils ne seront plus jamais affichés. Sans eux, un téléphone perdu " +
-			"vous ferme définitivement l'accès.",
+		"warning": "Notez ces codes maintenant, ailleurs que sur ce PC et hors de l'appareil " +
+			"qui porte votre application. Ils ne seront plus jamais affichés. Sans eux, la " +
+			"perte de cette application vous ferme définitivement l'accès.",
 	})
 }
 
@@ -257,6 +260,10 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 func (h *AuthHandler) MFAVerify(c *gin.Context) {
 	var body struct {
 		Code string `json:"code" binding:"required"`
+		// RememberDevice dispense ce poste de code pendant trente jours. Le
+		// choix appartient à l'utilisateur et n'est jamais coché d'office : une
+		// protection qu'on lève sans le savoir n'en est plus une.
+		RememberDevice bool `json:"remember_device"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
@@ -272,7 +279,7 @@ func (h *AuthHandler) MFAVerify(c *gin.Context) {
 	ctx := c.Request.Context()
 	enabled, secret, lastWindow, err := h.mfaState(ctx, claims.UserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if !enabled {
@@ -294,7 +301,7 @@ func (h *AuthHandler) MFAVerify(c *gin.Context) {
 			_ = err
 		}
 	} else if ok, err := h.consumeRecoveryCode(ctx, claims.UserID, code); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	} else if ok {
 		accepted = true
@@ -330,8 +337,12 @@ func (h *AuthHandler) MFAVerify(c *gin.Context) {
 		return
 	}
 	if isActive != 1 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "account is disabled"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "ce compte est désactivé"})
 		return
+	}
+
+	if body.RememberDevice {
+		h.rememberDevice(c, claims.UserID)
 	}
 
 	h.issueSession(c, claims.UserID, isAdmin, role, mustChange == 1)
@@ -414,7 +425,7 @@ func (h *AuthHandler) MFADisable(c *gin.Context) {
 	var hash string
 	q := db.Rebind(`SELECT password_hash FROM users WHERE id = ?`, h.cfg.UsePostgres())
 	if err := h.db.QueryRowContext(ctx, q, claims.UserID).Scan(&hash); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if !security.CheckPassword(hash, body.Password) {
@@ -425,7 +436,7 @@ func (h *AuthHandler) MFADisable(c *gin.Context) {
 	if _, err := h.db.ExecContext(ctx,
 		db.Rebind(`DELETE FROM user_mfa WHERE user_id = ?`, h.cfg.UsePostgres()),
 		claims.UserID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
 	if _, err := h.db.ExecContext(ctx,
@@ -433,6 +444,8 @@ func (h *AuthHandler) MFADisable(c *gin.Context) {
 		claims.UserID); err != nil {
 		_ = err
 	}
+
+	forgetDevices(ctx, h.db, h.cfg.UsePostgres(), claims.UserID)
 
 	recordSecurityEvent(ctx, h.db, h.cfg.UsePostgres(),
 		"mfa_disabled", c.ClientIP(), "compte="+claims.UserID)

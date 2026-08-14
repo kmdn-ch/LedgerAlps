@@ -273,7 +273,7 @@ func (s *Service) VerifyEntryIntegrity(ctx context.Context, entryID string) erro
 		&beforeState, &afterState, &ipAddress,
 		&auditEntryHash, &createdAt, &hashVersion,
 	); err == sql.ErrNoRows {
-		return fmt.Errorf("audit log not found for posted entry %s", entryID)
+		return fmt.Errorf("aucun maillon d'audit pour l'écriture comptabilisée %s", entryID)
 	} else if err != nil {
 		return fmt.Errorf("load audit log: %w", err)
 	}
@@ -347,7 +347,7 @@ func validateDoubleEntry(lines []LineInput) error {
 		return ErrNotDoubleEntry{Debit: debit, Credit: credit}
 	}
 	if len(lines) < 2 {
-		return fmt.Errorf("a journal entry must have at least two lines")
+		return fmt.Errorf("une écriture comptable porte au moins deux lignes")
 	}
 	return nil
 }

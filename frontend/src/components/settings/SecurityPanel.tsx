@@ -19,9 +19,12 @@ import type { RotateSecretResult } from '@/types'
 import { DatabaseEncryptionPanel } from './DatabaseEncryptionPanel'
 import { SessionSecurityPanel } from './SessionSecurityPanel'
 import { UsersPanel } from './UsersPanel'
-import { MFAPanel } from './MFAPanel'
+import { useAuthStore } from '@/store/auth'
+import { useT } from '@/i18n/useT'
 
 export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
+  const t = useT()
+  const isAdmin = useAuthStore(st => st.role) === 'admin'
   const [confirming, setConfirming] = useState(false)
   const [restarting, setRestarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,7 +32,7 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
   const rotate = useMutation<RotateSecretResult>({
     mutationFn: () => securityApi.rotateSecret().then(r => r.data),
     onSuccess: () => { setConfirming(false); setError(null) },
-    onError: (e: any) => setError(e?.response?.data?.error ?? "La rotation a échoué."),
+    onError: (e: any) => setError(e?.response?.data?.error ?? t('sp.echecRotation')),
   })
 
   async function restartNow() {
@@ -39,7 +42,7 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
       await waitForShutdownThenGo(targetURLAfterRestart(tlsEnabled))
     } catch {
       setRestarting(false)
-      setError("Le redémarrage n'a pas pu être demandé. Fermez et rouvrez LedgerAlps.")
+      setError(t('sp.echecRedemarrage'))
     }
   }
 
@@ -47,12 +50,9 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
     <div>
       <DatabaseEncryptionPanel />
 
-      <SectionTitle>Sécurité</SectionTitle>
+      <SectionTitle>{t('sp.titre')}</SectionTitle>
       <p className="text-sm text-alpine-600 mb-3">
-        LedgerAlps signe vos sessions avec une clé conservée dans son fichier de
-        configuration. Elle est régénérée automatiquement (voir plus bas) ; ce bouton
-        sert au cas que la périodicité ne couvre pas — <strong>vous venez</strong> de vous
-        apercevoir d'une fuite et attendre le prochain cycle serait trop long.
+        {t('sp.introduction')}
       </p>
 
       <div className="rounded-md border border-neutral-200 px-4 py-3 text-sm">
@@ -60,20 +60,16 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
           <div className="flex items-start gap-2">
             <KeyRound size={16} className="mt-0.5 flex-shrink-0 text-alpine-500" />
             <div>
-              <p className="font-medium">Régénérer la clé de signature</p>
+              <p className="font-medium">{t('sp.regenererCle')}</p>
               <p className="text-alpine-600 mt-0.5">
-                À faire si votre fichier de configuration a pu être vu par quelqu'un
-                d'autre : joint à un ticket de support, copié sur une clé USB, ou
-                poussé par erreur dans un dépôt de code. Qui détient cette clé peut
-                se faire passer pour n'importe quel compte{' '}
-                <strong>sans connaître le mot de passe</strong>.
+                {t('sp.regenererAide')}
               </p>
             </div>
           </div>
           {!confirming && !rotate.data && (
             <button onClick={() => { setError(null); setConfirming(true) }}
                     className="btn-secondary btn-sm flex-shrink-0">
-              Régénérer
+              {t('sp.regenerer')}
             </button>
           )}
         </div>
@@ -85,29 +81,24 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
             <div className="flex items-start gap-2">
               <AlertTriangle size={15} className="mt-0.5 flex-shrink-0 text-warning-700" />
               <div className="flex-1">
-                <p className="font-medium text-warning-700">Ce que cela fait, exactement</p>
+                <p className="font-medium text-warning-700">{t('sp.ceQueCelaFait')}</p>
                 <ul className="mt-1.5 space-y-0.5 text-alpine-700 list-disc list-inside">
-                  <li>Toutes les sessions ouvertes se ferment — vous vous reconnecterez.</li>
-                  <li><strong>Et rien d'autre.</strong> Vos mots de passe restent valables.</li>
-                  <li>Aucune donnée comptable n'est touchée.</li>
-                  <li>
-                    Vos sauvegardes restent utilisables : elles ne contiennent pas cette
-                    clé, et leur chiffrement dépend de votre phrase de passe, pas d'elle.
-                  </li>
+                  <li>{t('sp.effet1')}</li>
+                  <li>{t('sp.effet2')}</li>
+                  <li>{t('sp.effet3')}</li>
+                  <li>{t('sp.effet4')}</li>
                 </ul>
                 <p className="mt-2 text-alpine-700">
-                  Cela ne remplace pas le chiffrement du disque : qui peut lire le
-                  fichier de configuration peut aussi lire la base de données, posée
-                  dans le même dossier.
+                  {t('sp.pasLeDisque')}
                 </p>
                 <div className="mt-3 flex gap-2">
                   <button onClick={() => rotate.mutate()} disabled={rotate.isPending}
                           className="btn-primary btn-sm flex items-center gap-1.5">
                     {rotate.isPending && <Loader2 size={13} className="animate-spin" />}
-                    Régénérer la clé
+                    {t('sp.regenererLaCle')}
                   </button>
                   <button onClick={() => setConfirming(false)} className="btn-ghost btn-sm">
-                    Annuler
+                    {t('action.annuler')}
                   </button>
                 </div>
               </div>
@@ -120,28 +111,30 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
             <div className="flex items-start gap-2">
               <ShieldCheck size={15} className="mt-0.5 flex-shrink-0 text-success-700" />
               <div className="flex-1">
-                <p className="font-medium text-success-700">Nouvelle clé enregistrée</p>
+                <p className="font-medium text-success-700">{t('sp.nouvelleCle')}</p>
                 <p className="text-alpine-700 mt-0.5">
                   {rotate.data.sessions_revoked > 0 && (
-                    <>{rotate.data.sessions_revoked} session(s) révoquée(s). </>
+                    <>{t('sp.sessionsRevoquees', { n: rotate.data.sessions_revoked })} </>
                   )}
-                  La nouvelle clé prend effet au redémarrage de LedgerAlps. Jusque-là,
-                  l'ancienne reste en mémoire du serveur en cours d'exécution.
+                  {t('sp.prendEffet')}
                 </p>
                 <button onClick={restartNow} disabled={restarting}
                         className="btn-primary btn-sm mt-2 flex items-center gap-1.5">
                   {restarting
-                    ? <><Loader2 size={13} className="animate-spin" /> Redémarrage…</>
-                    : <><RefreshCw size={13} /> Redémarrer maintenant</>}
+                    ? <><Loader2 size={13} className="animate-spin" /> {t('sv.redemarrage')}</>
+                    : <><RefreshCw size={13} /> {t('rs.redemarrerMaintenant')}</>}
                 </button>
               </div>
             </div>
           </div>
         )}
       </div>
+      {/* Le second facteur a quitté cet écran : il appartient au COMPTE de
+          celui qui le lit, pas à l'administration du logiciel. Le laisser ici
+          l'aurait rendu inatteignable pour un comptable, qui doit pourtant
+          inscrire le sien — il vit désormais dans l'onglet « Mon compte ». */}
       <SessionSecurityPanel />
-      <MFAPanel />
-      <UsersPanel />
+      {isAdmin && <UsersPanel />}
     </div>
   )
 }

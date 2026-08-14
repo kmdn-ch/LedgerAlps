@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, AlertTriangle, ExternalLink, X } from 'lucide-react'
 import { cn } from '@/utils'
+import { useT } from '@/i18n/useT'
 
 interface PDFPreviewProps {
   /** Fonction qui retourne le blob PDF (appelée uniquement si visible) */
@@ -13,6 +14,7 @@ interface PDFPreviewProps {
 }
 
 export function PDFPreview({ fetchPDF, filename, className, onClose }: PDFPreviewProps) {
+  const t = useT()
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -52,7 +54,7 @@ export function PDFPreview({ fetchPDF, filename, className, onClose }: PDFPrevie
       {/* Barre d'outils */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-alpine-100 bg-alpine-50">
         <span className="text-xs font-medium text-alpine-600 truncate">
-          {filename ?? 'Aperçu PDF'}
+          {filename ?? t('pv.apercuPDF')}
         </span>
         <div className="flex items-center gap-1 flex-shrink-0">
           {blobUrl && (
@@ -61,7 +63,7 @@ export function PDFPreview({ fetchPDF, filename, className, onClose }: PDFPrevie
               target="_blank"
               rel="noreferrer"
               className="p-1 rounded hover:bg-alpine-200 text-alpine-500 hover:text-alpine-700 transition-colors"
-              title="Ouvrir dans un nouvel onglet"
+              title={t('pv.ouvrirNouvelOnglet')}
             >
               <ExternalLink size={14} />
             </a>
@@ -70,7 +72,7 @@ export function PDFPreview({ fetchPDF, filename, className, onClose }: PDFPrevie
             <button
               onClick={onClose}
               className="p-1 rounded hover:bg-alpine-200 text-alpine-500 hover:text-alpine-700 transition-colors"
-              title="Fermer l'aperçu"
+              title={t('pv.fermerApercu')}
             >
               <X size={14} />
             </button>
@@ -94,7 +96,7 @@ export function PDFPreview({ fetchPDF, filename, className, onClose }: PDFPrevie
         {blobUrl && !loading && (
           <iframe
             src={blobUrl}
-            title="Aperçu PDF"
+            title={t('pv.apercuPDF')}
             className="w-full h-full border-0"
           />
         )}

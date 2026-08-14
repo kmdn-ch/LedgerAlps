@@ -8,10 +8,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/core/authz"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
@@ -343,21 +346,41 @@ func TestVerifySingleLegacyEntryReportsNotVerifiable(t *testing.T) {
 
 // ─── Accès ───────────────────────────────────────────────────────────────────
 
-func TestVerifyChainRequiresAdmin(t *testing.T) {
-	h, database := newAuditDB(t)
-	seedChain(t, database, 2)
+// La barriere du journal d'audit vit sur la ROUTE, plus dans le handler.
+//
+// L'ancienne garde lisait le drapeau administrateur DU JETON — fige a la
+// connexion, donc encore valide une heure apres une retrogradation — et elle
+// ecartait le comptable, alors que controler la chaine d'empreintes est
+// precisement son metier (CO art. 957a).
+//
+// Ce test verifie que la permission est bien declaree sur la route. Sans lui,
+// retirer le middleware laisserait ces routes ouvertes a tout compte connecte,
+// et rien ne le signalerait : le handler ne se protege plus lui-meme.
+func TestLesRoutesDAuditDeclarentLeurPermission(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "cmd", "server", "main.go"))
+	if err != nil {
+		t.Skipf("source des routes illisible: %v", err)
+	}
+	for _, route := range []string{
+		`api.GET("/audit-logs", authorizer.Require(authz.PermManage)`,
+		`api.GET("/audit-logs/verify-chain", authorizer.Require(authz.PermManage)`,
+		`api.GET("/audit-logs/attestation", authorizer.Require(authz.PermManage)`,
+		`api.GET("/audit-logs/:id/verify", authorizer.Require(authz.PermManage)`,
+	} {
+		if !strings.Contains(string(src), route) {
+			t.Errorf("route sans permission declaree : %s", route)
+		}
+	}
+}
 
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	r.GET("/verify-chain", func(c *gin.Context) {
-		c.Set("claims", &security.Claims{UserID: "u1", IsAdmin: false})
-		h.VerifyAuditChain(c)
-	})
-
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/verify-chain", nil))
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("un non-administrateur a obtenu %d : %s", w.Code, w.Body.String())
+// La lecture seule n'a pas acces au journal d'audit : ce registre nomme qui a
+// fait quoi, et le consulter est deja sensible.
+func TestLaLectureSeuleNAPasAccesAuJournalDAudit(t *testing.T) {
+	if authz.Can(authz.RoleViewer, authz.PermManage) {
+		t.Fatal("la lecture seule detient la permission de gestion")
+	}
+	if !authz.Can(authz.RoleAccountant, authz.PermManage) {
+		t.Fatal("le comptable ne peut pas controler les livres")
 	}
 }
 

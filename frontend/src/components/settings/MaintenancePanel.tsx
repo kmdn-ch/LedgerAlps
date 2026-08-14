@@ -29,26 +29,45 @@ import { AuditTrailPanel } from '@/components/settings/AuditTrailPanel'
 import { PersonalDataPanel } from '@/components/settings/PersonalDataPanel'
 import { SecurityPanel } from '@/components/settings/SecurityPanel'
 import { NetworkSettings } from '@/components/settings/NetworkSettings'
+import { useAuthStore } from '@/store/auth'
 import type { IntegrityReport, SystemHealth } from '@/types'
+import { useT } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
 
 type SectionKey = 'diagnostic' | 'compliance' | 'audit' | 'personal' | 'security'
 
 const SECTIONS: {
   key: SectionKey
-  label: string
+  cle: Cle
   icon: typeof Stethoscope
-  hint: string
+  hint: Cle
 }[] = [
-  { key: 'diagnostic', label: 'Diagnostic',          icon: Stethoscope, hint: 'Cohérence des données et état du système' },
-  { key: 'compliance', label: 'Conformité',          icon: ShieldCheck, hint: 'Exercices, clôture, attestation et archives' },
-  { key: 'audit',      label: "Piste d'audit",       icon: ScrollText,  hint: "Chaîne d'intégrité des écritures (CO art. 957a)" },
-  { key: 'personal',   label: 'Données personnelles', icon: UserRoundX, hint: 'Rétention et anonymisation (nLPD)' },
-  { key: 'security',   label: 'Sécurité & réseau',   icon: Network,     hint: "Clé de signature et adresse d'écoute" },
+  { key: 'diagnostic', cle: 'mt.diagnostic',          icon: Stethoscope, hint: 'mt.diagnosticHint' },
+  { key: 'compliance', cle: 'mt.conformite',          icon: ShieldCheck, hint: 'mt.conformiteHint' },
+  { key: 'audit',      cle: 'at.titre',               icon: ScrollText,  hint: 'mt.auditHint' },
+  { key: 'personal',   cle: 'mt.donneesPersonnelles', icon: UserRoundX,  hint: 'mt.donneesPersonnellesHint' },
+  { key: 'security',   cle: 'mt.securiteReseau',      icon: Network,     hint: 'mt.securiteReseauHint' },
 ]
 
 export function MaintenancePanel() {
+  const t = useT()
   const qc = useQueryClient()
   const [section, setSection] = useState<SectionKey>('diagnostic')
+
+  // « Sécurité & réseau » n'est pas du ressort du comptable : clé de signature,
+  // adresse d'écoute, réglages de session et comptes utilisateurs. Le serveur
+  // refuse déjà ces routes, mais afficher l'entrée produisait pire qu'un
+  // refus — un panneau dont chaque requête échouait, dont une restait bloquée
+  // sur « chargement » indéfiniment.
+  const role = useAuthStore(st => st.role)
+  const isAdmin = role === 'admin'
+  const sections = SECTIONS.filter(sec => isAdmin || sec.key !== 'security')
+
+  // Une adresse ou un rechargement pointant sur une section devenue interdite
+  // ne doit pas laisser l'écran vide.
+  const active: SectionKey = sections.some(sec => sec.key === section)
+    ? section
+    : sections[0].key
 
   // L'état de santé sert à deux endroits : la pastille du Diagnostic et le
   // réglage TLS de la section Sécurité. Une seule requête, partagée par la clé.
@@ -72,14 +91,14 @@ export function MaintenancePanel() {
     <div>
       {/* ── Navigation ───────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-1 border-b border-neutral-200 mb-4">
-        {SECTIONS.map(s => {
+        {sections.map(s => {
           const active = s.key === section
           const badge = s.key === 'diagnostic' && (errors > 0 || warnings > 0)
           return (
             <button
               key={s.key}
               onClick={() => setSection(s.key)}
-              title={s.hint}
+              title={t(s.hint)}
               className={`relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium
                 border-b-2 -mb-px transition-colors ${
                 active
@@ -88,7 +107,7 @@ export function MaintenancePanel() {
               }`}
             >
               <s.icon size={14} />
-              {s.label}
+              {t(s.cle)}
               {badge && (
                 <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-xs tabular-nums ${
                   errors > 0 ? 'bg-danger-100 text-danger-700' : 'bg-warning-100 text-warning-700'
@@ -103,14 +122,14 @@ export function MaintenancePanel() {
 
       {/* Une ligne qui rappelle à quoi sert la section ouverte. Les titres seuls
           — « Conformité », « Diagnostic » — ne disent pas ce qu'on y fait. */}
-      <p className="text-sm text-alpine-500 mb-4">{current.hint}</p>
+      <p className="text-sm text-alpine-500 mb-4">{t(current.hint)}</p>
 
       {/* ── Contenu ──────────────────────────────────────────────────────── */}
-      {section === 'diagnostic' && <DiagnosticPanel />}
-      {section === 'compliance' && <CompliancePanel />}
-      {section === 'audit' && <AuditTrailPanel />}
-      {section === 'personal' && <PersonalDataPanel />}
-      {section === 'security' && (
+      {active === 'diagnostic' && <DiagnosticPanel />}
+      {active === 'compliance' && <CompliancePanel />}
+      {active === 'audit' && <AuditTrailPanel />}
+      {active === 'personal' && <PersonalDataPanel />}
+      {active === 'security' && (
         <div className="space-y-6">
           <SecurityPanel tlsEnabled={health.data?.network.tls ?? false} />
           <NetworkSettings
@@ -119,10 +138,7 @@ export function MaintenancePanel() {
         </div>
       )}
 
-      <p className="mt-6 text-xs text-alpine-500">
-        La console de rejeu ISO 20022 et le mode bac à sable arrivent dans une
-        prochaine version — voir la roadmap.
-      </p>
+
     </div>
   )
 }

@@ -34,15 +34,18 @@ import {
 } from '@/components/ui'
 import { formatDate, formatCHF } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
+import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
+import { useT } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
 import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 import type {
   Account, JournalEntry, JournalEntryDetail, JournalLineCreate,
 } from '@/types'
 
-const STATUS_LABEL: Record<string, string> = {
-  draft:    'Brouillon',
-  posted:   'Comptabilisée',
-  reversed: 'Contrepassée',
+const STATUS_CLE: Record<string, Cle> = {
+  draft:    'statut.brouillon',
+  posted:   'statut.comptabilisee',
+  reversed: 'jr.statutContrepassee',
 }
 const STATUS_CLASS: Record<string, string> = {
   draft:    'badge-draft',
@@ -90,6 +93,8 @@ function toLines(rows: Row[]): JournalLineCreate[] {
 }
 
 export function JournalPage() {
+  const t = useT()
+  const peutEcrire = useCanWrite()
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [page, setPage] = useState(1)
@@ -194,12 +199,17 @@ export function JournalPage() {
   return (
     <div>
       <PageHeader
-        title="Journal"
-        subtitle="Écritures comptables — CO art. 957a"
+        title={t('nav.journal')}
+        aide={t('aide.journal')}
+        subtitle={t('jr.sousTitre')}
         actions={
+          peutEcrire ? (
           <button onClick={() => { setShowForm(v => !v); setError(null) }} className="btn-primary">
-            <Plus size={15} /> Nouvelle écriture
+            <Plus size={15} /> {t('jr.nouvelle')}
           </button>
+          ) : (
+            <span className="text-xs text-alpine-500">{t(RAISON_LECTURE_SEULE)}</span>
+          )
         }
       />
 
@@ -209,7 +219,7 @@ export function JournalPage() {
         <div className="mb-4 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
           <p className="font-medium flex items-center gap-1.5">
             <Info size={15} className="text-alpine-500" />
-            Les factures envoyées ne s&rsquo;inscrivent pas ici automatiquement
+            {t('jn.pasAutomatique')}
           </p>
           <p className="text-alpine-600 mt-1">
             La comptabilisation automatique est éteinte sur cette installation : envoyer une
@@ -224,7 +234,7 @@ export function JournalPage() {
       {showForm && (
         <div className="card mb-5">
           <div className="card-header">
-            <h2 className="text-sm font-semibold text-alpine-800">Écriture manuelle</h2>
+            <h2 className="text-sm font-semibold text-alpine-800">{t('jn.ecritureManuelle')}</h2>
             <span className="text-xs text-alpine-400">
               Le serveur vérifie la partie double : total débit = total crédit
             </span>
@@ -232,13 +242,13 @@ export function JournalPage() {
 
           <div className="card-body grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4">
             <div className="sm:col-span-2">
-              <label className="label" htmlFor="je-desc">Description *</label>
+              <label className="label" htmlFor="je-desc">{t('jr.description')}</label>
               <input id="je-desc" className="input" value={description}
                      onChange={e => setDescription(e.target.value)}
-                     placeholder="Vente comptant, achat de fournitures…" />
+                     placeholder={t('jr.descExemple')} />
             </div>
             <div>
-              <label className="label" htmlFor="je-date">Date *</label>
+              <label className="label" htmlFor="je-date">{t('jr.date')}</label>
               <input id="je-date" type="date" className="input" value={date}
                      onChange={e => setDate(e.target.value)} />
             </div>
@@ -246,10 +256,10 @@ export function JournalPage() {
 
           <div className="px-6 pb-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="label mb-0">Lignes</span>
+              <span className="label mb-0">{t('jr.lignes')}</span>
               <button type="button" className="btn-ghost btn-sm"
                       onClick={() => setRows(rs => [...rs, emptyRow()])}>
-                <Plus size={13} /> Ligne
+                <Plus size={13} /> {t('jn.ajouterLigne')}
               </button>
             </div>
 
@@ -265,10 +275,10 @@ export function JournalPage() {
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="bg-alpine-50 border-b border-alpine-200">
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-alpine-600">Compte débité</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-alpine-600">Compte crédité</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-alpine-600">Montant CHF</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-alpine-600">Libellé</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-alpine-600">{t('jr.compteDebite')}</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-alpine-600">{t('jr.compteCredite')}</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-alpine-600">{t('jr.montantCHF')}</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-alpine-600">{t('jr.libelle')}</th>
                     <th />
                   </tr>
                 </thead>
@@ -291,7 +301,7 @@ export function JournalPage() {
                                value={r.amount} onChange={e => setRow(i, { amount: e.target.value })} />
                       </td>
                       <td className="px-2 py-2">
-                        <input className="input" placeholder="Facultatif"
+                        <input className="input" placeholder={t('jr.facultatif')}
                                value={r.label} onChange={e => setRow(i, { label: e.target.value })} />
                       </td>
                       <td className="px-2 py-2 w-10">
@@ -317,9 +327,9 @@ export function JournalPage() {
                     </td>
                     <td className="px-3 py-2 text-xs" colSpan={2}>
                       {equilibree
-                        ? <span className="text-success-700">Équilibrée</span>
+                        ? <span className="text-success-700">{t('jn.equilibree')}</span>
                         : lines.length === 0
-                          ? <span className="text-alpine-500">Renseignez au moins un compte et un montant.</span>
+                          ? <span className="text-alpine-500">{t('jr.renseignez')}</span>
                           : <span className="text-warning-700">
                               Écart de {formatCHF(Math.abs(ecart))} — l&rsquo;écriture ne sera pas acceptée.
                             </span>}
@@ -330,9 +340,7 @@ export function JournalPage() {
             </div>
 
             <p className="text-xs text-alpine-500 mt-2">
-              Un débit et un crédit sur la même ligne forment une écriture simple. Pour une
-              ventilation, laissez un côté vide et ajoutez une ligne : les totaux doivent
-              s&rsquo;équilibrer.
+              {t('jn.ventilationAide')}
             </p>
 
             {inconnus.length > 0 && (
@@ -348,7 +356,7 @@ export function JournalPage() {
           <div className="card-footer flex justify-end gap-3">
             <button type="button" className="btn-secondary"
                     onClick={() => { setShowForm(false); resetForm() }}>
-              Annuler
+              {t('action.annuler')}
             </button>
             <button type="button" className="btn-primary flex items-center gap-1.5"
                     disabled={!peutEnregistrer} onClick={() => { setError(null); create.mutate() }}>
@@ -365,12 +373,12 @@ export function JournalPage() {
           <thead>
             <tr>
               <th style={{ width: '34px' }} />
-              <th>Réf.</th>
-              <th>Date</th>
-              <th>Description</th>
-              <th>Auteur</th>
-              <th className="text-right">Montant CHF</th>
-              <th>Statut</th>
+              <th>{t('jr.colRef')}</th>
+              <th>{t('fact.colDate')}</th>
+              <th>{t('jr.colDescription')}</th>
+              <th>{t('jr.colAuteur')}</th>
+              <th className="text-right">{t('jr.montantCHF')}</th>
+              <th>{t('fact.colStatut')}</th>
               <th />
             </tr>
           </thead>
@@ -384,8 +392,8 @@ export function JournalPage() {
             {!list.isLoading && !list.isError && items.length === 0 && (
               <tr><td colSpan={8}>
                 <EmptyState
-                  title="Journal vide"
-                  description="Les écritures apparaîtront ici. Les factures émises s'y inscrivent automatiquement si la comptabilisation automatique est activée."
+                  title={t('jr.vide')}
+                  description={t('jr.videAide')}
                 />
               </td></tr>
             )}
@@ -411,24 +419,23 @@ export function JournalPage() {
           </span>
           <div className="flex gap-2">
             <button className="btn-secondary btn-sm" disabled={page <= 1}
-                    onClick={() => setPage(p => p - 1)}>Précédente</button>
+                    onClick={() => setPage(p => p - 1)}>{t('jr.precedente')}</button>
             <button className="btn-secondary btn-sm" disabled={page >= (list.data?.pages ?? 1)}
-                    onClick={() => setPage(p => p + 1)}>Suivante</button>
+                    onClick={() => setPage(p => p + 1)}>{t('jr.suivante')}</button>
           </div>
         </div>
       )}
 
       <ConfirmDialog
         open={toPost !== null}
-        title={`Comptabiliser ${toPost?.reference ?? ''} ?`}
+        title={t('jr.confirmTitre', { ref: toPost?.reference ?? '' })}
         consequences={[
-          <>L&rsquo;écriture est <strong>scellée</strong> par une empreinte chaînée
-             (CO art. 957a al. 2 ch. 5) et ne peut plus être modifiée.</>,
-          <>Elle entre dans la balance, le bilan et le compte de résultat.</>,
-          <>Une correction se fait ensuite par contrepassation, jamais par retouche.</>,
+          t('jr.confirmScellee'),
+          t('jr.confirmEntre'),
+          t('jr.confirmCorrection'),
         ]}
-        reassurance="Tant qu'elle reste un brouillon, elle ne compte nulle part."
-        confirmLabel="Comptabiliser"
+        reassurance={t('jr.confirmBrouillon')}
+        confirmLabel={t('ach.comptabiliser')}
         tone="danger"
         busy={post.isPending}
         onConfirm={() => toPost && post.mutate(toPost.id)}
@@ -460,6 +467,7 @@ interface EntryRowProps {
 }
 
 function EntryRow({ entry, open, detail, loadingDetail, onToggle, onPost }: EntryRowProps) {
+  const t = useT()
   return (
     <>
       <tr className="cursor-pointer hover:bg-alpine-50" onClick={onToggle}>
@@ -473,14 +481,14 @@ function EntryRow({ entry, open, detail, loadingDetail, onToggle, onPost }: Entr
         <td className="text-right font-mono tabular-nums">{formatCHF(entry.total)}</td>
         <td>
           <span className={`badge ${STATUS_CLASS[entry.status] ?? 'badge-draft'}`}>
-            {STATUS_LABEL[entry.status] ?? entry.status}
+            {t(STATUS_CLE[entry.status] ?? 'statut.brouillon')}
           </span>
         </td>
         <td className="text-right">
           {entry.status === 'draft' && (
             <button onClick={ev => { ev.stopPropagation(); onPost() }}
                     className="btn-ghost btn-sm text-success-700">
-              Comptabiliser
+              {t('ach.comptabiliser')}
             </button>
           )}
         </td>
@@ -495,10 +503,10 @@ function EntryRow({ entry, open, detail, loadingDetail, onToggle, onPost }: Entr
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="text-xs text-alpine-500">
-                      <th className="text-left font-medium py-1">Compte</th>
-                      <th className="text-left font-medium py-1">Libellé</th>
-                      <th className="text-right font-medium py-1">Débit</th>
-                      <th className="text-right font-medium py-1">Crédit</th>
+                      <th className="text-left font-medium py-1">{t('jr.compte')}</th>
+                      <th className="text-left font-medium py-1">{t('jr.libelle')}</th>
+                      <th className="text-right font-medium py-1">{t('compta.debit')}</th>
+                      <th className="text-right font-medium py-1">{t('compta.credit')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -531,8 +539,7 @@ function EntryRow({ entry, open, detail, loadingDetail, onToggle, onPost }: Entr
                         <span className="font-mono break-all">{detail.integrity_hash}</span>
                       </span>
                     : <span>
-                        Brouillon : aucune empreinte. Rien ne la scelle et elle ne compte ni à la
-                        balance, ni au bilan, ni au compte de résultat.
+                        {t('jn.brouillonSansEmpreinte')}
                       </span>}
                 </p>
               </>

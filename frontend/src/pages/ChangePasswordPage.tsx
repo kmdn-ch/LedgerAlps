@@ -17,22 +17,28 @@ import { authApi } from '@/api/client'
 import { ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import { useAuthStore } from '@/store/auth'
+import { useT } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
 
 // La même règle que le serveur (internal/api/handlers/password_change.go).
 // Reproduite pour être visible pendant la frappe plutôt que révélée par un
 // refus après coup ; le serveur reste l'autorité.
 const MIN_LEN = 12
 
-function checks(p: string) {
+// Les critères portent leur CLÉ : la fonction est appelée hors composant, et
+// c'est le rendu qui traduit. Les mêmes clés que PassphraseField, parce que
+// ce sont les mêmes critères — les dupliquer les ferait diverger.
+function checks(p: string): { cle: Cle; met: boolean }[] {
   return [
-    { label: `${MIN_LEN} caractères ou plus`, met: [...p].length >= MIN_LEN },
-    { label: 'une minuscule',                 met: /\p{Ll}/u.test(p) },
-    { label: 'une majuscule',                 met: /\p{Lu}/u.test(p) },
-    { label: 'un chiffre',                    met: /\p{Nd}/u.test(p) },
+    { cle: 'pf.longueurMini', met: [...p].length >= MIN_LEN },
+    { cle: 'pf.uneMinuscule', met: /\p{Ll}/u.test(p) },
+    { cle: 'pf.uneMajuscule', met: /\p{Lu}/u.test(p) },
+    { cle: 'pf.unChiffre',    met: /\p{Nd}/u.test(p) },
   ]
 }
 
 export function ChangePasswordPage() {
+  const t = useT()
   const navigate = useNavigate()
   const clearMustChange = useAuthStore(s => s.clearMustChange)
   const [current, setCurrent] = useState('')
@@ -48,7 +54,7 @@ export function ChangePasswordPage() {
   const change = useMutation({
     mutationFn: () => authApi.changePassword(current, next),
     onSuccess: () => { clearMustChange(); navigate('/', { replace: true }) },
-    onError: (e) => setError(refusalMessage(e, "Le mot de passe n'a pas pu être changé.")),
+    onError: (e) => setError(refusalMessage(e, t('mdp.echecChangement'))),
   })
 
   return (
@@ -65,34 +71,31 @@ export function ChangePasswordPage() {
         <div className="bg-alpine-900 border border-alpine-700 rounded-2xl p-6">
           <h1 className="font-display font-700 text-lg text-white flex items-center gap-2">
             <KeyRound size={18} className="text-accent-500" />
-            Choisissez votre mot de passe
+            {t('mdp.titre')}
           </h1>
           <p className="text-sm text-alpine-400 mt-2">
-            Celui qui vous a été communiqué est <strong className="text-alpine-200">temporaire</strong> :
-            la personne qui a créé votre compte le connaît, et il a circulé par un canal qui
-            n'est pas fait pour ça. Tant qu'il vaut, ce qui serait fait sous votre nom ne
-            prouverait pas que c'est vous.
+            {t('mdp.introduction')}
           </p>
 
           <div className="mt-5 space-y-4">
             <div>
-              <label className="label text-alpine-300" htmlFor="cur">Mot de passe temporaire</label>
+              <label className="label text-alpine-300" htmlFor="cur">{t('mdp.champTemporaire')}</label>
               <input id="cur" type="password" className="input" autoComplete="current-password"
                      value={current} onChange={e => setCurrent(e.target.value)} autoFocus />
             </div>
 
             <div>
-              <label className="label text-alpine-300" htmlFor="new">Nouveau mot de passe</label>
+              <label className="label text-alpine-300" htmlFor="new">{t('mdp.champNouveau')}</label>
               <input id="new" type="password" className="input" autoComplete="new-password"
                      value={next} onChange={e => setNext(e.target.value)} />
               {next !== '' && (
                 <ul className="mt-2 space-y-0.5">
                   {list.map(c => (
-                    <li key={c.label} className={`text-xs flex items-center gap-1.5 ${
+                    <li key={c.cle} className={`text-xs flex items-center gap-1.5 ${
                       c.met ? 'text-success-500' : 'text-alpine-500'
                     }`}>
                       {c.met ? <Check size={12} /> : <Minus size={12} />}
-                      {c.label}
+                      {t(c.cle, { n: MIN_LEN })}
                     </li>
                   ))}
                 </ul>
@@ -100,16 +103,15 @@ export function ChangePasswordPage() {
             </div>
 
             <div>
-              <label className="label text-alpine-300" htmlFor="cfm">Confirmer</label>
+              <label className="label text-alpine-300" htmlFor="cfm">{t('mdp.champConfirmer')}</label>
               <input id="cfm" type="password" className="input" autoComplete="new-password"
                      value={confirm} onChange={e => setConfirm(e.target.value)} />
               {confirm !== '' && !matches && (
-                <p className="text-xs text-danger-500 mt-1">Les deux saisies diffèrent.</p>
+                <p className="text-xs text-danger-500 mt-1">{t('mdp.saisiesDifferent')}</p>
               )}
               {next !== '' && !different && (
                 <p className="text-xs text-danger-500 mt-1">
-                  Ce doit être un mot de passe différent : celui-là est justement celui que
-                  quelqu'un d'autre connaît.
+                  {t('mdp.doitEtreDifferent')}
                 </p>
               )}
             </div>
@@ -122,11 +124,11 @@ export function ChangePasswordPage() {
               className="btn-primary w-full flex items-center justify-center gap-2"
             >
               {change.isPending && <Loader2 size={14} className="animate-spin" />}
-              Changer mon mot de passe
+              {t('mdp.changerBouton')}
             </button>
 
             <p className="text-xs text-alpine-500">
-              Les autres sessions ouvertes sur ce compte seront fermées.
+              {t('mdp.autresSessions')}
             </p>
           </div>
         </div>

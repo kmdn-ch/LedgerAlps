@@ -5,11 +5,15 @@ import { useQuery } from '@tanstack/react-query'
 import { Plus, Building2, User, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { contactsApi } from '@/api/client'
+import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
+import { useT } from '@/i18n/useT'
 import { PageHeader, LoadingSpinner, EmptyState } from '@/components/ui'
 import type { Contact } from '@/types'
 import { NewContactModal } from '@/components/contact/NewContactModal'
 
 export function ContactsPage() {
+  const t = useT()
+  const peutEcrire = useCanWrite()
   const [search,     setSearch]     = useState('')
   const [showModal,  setShowModal]  = useState(false)
   const [typeFilter, setTypeFilter] = useState<'customer' | 'supplier' | ''>('')
@@ -27,12 +31,17 @@ export function ContactsPage() {
   return (
     <div>
       <PageHeader
-        title="Contacts"
+        title={t('nav.contacts')}
+        aide={t('aide.contacts')}
         subtitle={`${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`}
         actions={
+          peutEcrire ? (
           <button className="btn-primary" onClick={() => setShowModal(true)}>
-            <Plus size={15} /> Nouveau contact
+            <Plus size={15} /> {t('ct.nouveau')}
           </button>
+          ) : (
+            <span className="text-xs text-alpine-500">{t(RAISON_LECTURE_SEULE)}</span>
+          )
         }
       />
 
@@ -42,22 +51,24 @@ export function ContactsPage() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-alpine-400" />
           <input
             className="input pl-8 w-56"
-            placeholder="Rechercher…"
+            placeholder={t('action.rechercher')}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        {(['', 'customer', 'supplier'] as const).map(t => (
+        {/* `type` et non `t` : ce dernier est la fonction de traduction, et
+            l'ombrer ici la rendrait inaccessible dans la boucle. */}
+        {(['', 'customer', 'supplier'] as const).map(type => (
           <button
-            key={t}
-            onClick={() => setTypeFilter(t)}
+            key={type}
+            onClick={() => setTypeFilter(type)}
             className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
-              typeFilter === t
+              typeFilter === type
                 ? 'bg-alpine-800 text-white'
                 : 'bg-white border border-alpine-200 text-alpine-600 hover:bg-alpine-50'
             }`}
           >
-            {t === '' ? 'Tous' : t === 'customer' ? 'Clients' : 'Fournisseurs'}
+            {type === '' ? t('ct.tous') : type === 'customer' ? t('ct.clients') : t('ct.fournisseurs')}
           </button>
         ))}
       </div>
@@ -66,13 +77,13 @@ export function ContactsPage() {
       {isLoading && <LoadingSpinner />}
       {!isLoading && filtered.length === 0 && (
         <EmptyState
-          title="Aucun contact"
-          description="Ajoutez vos clients et fournisseurs."
-          action={
+          title={t('ct.aucun')}
+          description={t('ct.ajoutezClientsFournisseurs')}
+          action={peutEcrire ? (
             <button className="btn-primary btn-sm" onClick={() => setShowModal(true)}>
-              <Plus size={13} /> Ajouter
+              <Plus size={13} /> {t('ct.ajouter')}
             </button>
-          }
+          ) : undefined}
         />
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -99,7 +110,7 @@ export function ContactsPage() {
             )}
             <div className="mt-3 flex items-center justify-between">
               <span className={`badge ${c.contact_type === 'customer' ? 'badge-sent' : 'badge-draft'}`}>
-                {c.contact_type === 'customer' ? 'Client' : 'Fournisseur'}
+                {t(c.contact_type === 'customer' ? 'co.client' : 'co.fournisseur')}
               </span>
               <span className="text-xs text-alpine-400">
                 {c.payment_term_days}j
@@ -109,7 +120,11 @@ export function ContactsPage() {
         ))}
       </div>
 
-      {showModal && <NewContactModal onClose={() => setShowModal(false)} />}
+      {/* Le `peutEcrire` est répété ici : plus aucun bouton n'ouvre la modale,
+          mais un état laissé accessible finit par être atteint autrement — un
+          lien, un rechargement, une refonte de l'écran. La condition vit donc au
+          plus près de ce qu'elle protège. */}
+      {showModal && peutEcrire && <NewContactModal onClose={() => setShowModal(false)} />}
     </div>
   )
 }

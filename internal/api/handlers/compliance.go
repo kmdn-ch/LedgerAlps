@@ -50,7 +50,7 @@ func (h *ComplianceHandler) ListAdvisories(c *gin.Context) {
 	feed, err := compliance.BundledFeed()
 	if err != nil {
 		// Never surface a half-parsed legal notice; report the fault instead.
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "compliance feed unavailable"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "le flux de conformité est indisponible"})
 		return
 	}
 

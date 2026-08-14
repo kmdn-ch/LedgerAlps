@@ -15,8 +15,20 @@ func currentUserID(c *gin.Context) string {
 	return claims.UserID
 }
 
-// isAdmin returns true if the authenticated user has admin privileges.
-func isAdmin(c *gin.Context) bool {
-	claims := mw.GetClaims(c)
-	return claims != nil && claims.IsAdmin
-}
+// isAdmin a été SUPPRIMÉE.
+//
+// Elle lisait le drapeau administrateur DANS LE JETON — figé à la connexion.
+// Rétrograder ou désactiver quelqu'un le laissait donc agir avec ses anciens
+// droits jusqu'à l'expiration du jeton, une heure durant laquelle on croit
+// avoir coupé l'accès. Neuf handlers l'appelaient encore : attestation
+// d'intégrité, journal d'audit, anonymisation, exercices comptables, contacts.
+//
+// Elle écartait en outre le comptable de son propre métier : clôturer un
+// exercice ou vérifier la chaîne d'empreintes n'a rien d'une fonction
+// d'administration du logiciel.
+//
+// Le contrôle vit dans middleware.Authorizer, déclaré par route et lu dans la
+// base à chaque requête. La fonction est supprimée et non dépréciée : laissée
+// disponible, elle serait reprise par réflexe sur le prochain handler, et le
+// défaut reviendrait sans que rien ne le signale — c'est exactement ce qui
+// s'est produit après la suppression de RequireAdmin.
