@@ -1269,4 +1269,17 @@ export const fr = {
   // ─── Logo d'entreprise — ce que le serveur a retenu ───
   'pr.logoEnregistre': 'Enregistré en {l} × {h} px.',
   'pr.logoReduit': 'Réduit à {l} × {h} px pour tenir dans le format de l’interface.',
+
+  // ─── Écran de connexion — gabarit à deux panneaux ───
+  'cx.portailSecurise': 'Portail sécurisé',
+  'cx.systemeOperationnel': 'Système opérationnel',
+  'cx.serveurInjoignable': 'Serveur injoignable',
+  'cx.accrocheTitre': 'Vos livres, sur votre machine',
+  'cx.accrocheSousTitre': 'La facturation et la comptabilité que la loi suisse exige d’un indépendant, sans que rien ne quitte votre poste.',
+  'cx.garantieLocalTitre': 'Données locales',
+  'cx.garantieLocalAide': 'Aucun nuage, aucun tiers, aucune connexion sortante',
+  'cx.garantieLegaleTitre': 'Conformité CO et nLPD',
+  'cx.garantieLegaleAide': 'Traçabilité des écritures, conservation dix ans',
+  'cx.afficherMotDePasse': 'Afficher le mot de passe',
+  'cx.masquerMotDePasse': 'Masquer le mot de passe',
 } as const

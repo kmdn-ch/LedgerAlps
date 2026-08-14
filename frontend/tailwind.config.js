@@ -31,6 +31,23 @@ export default {
           800: '#9a4510',
           900: '#7c3a12',
         },
+        // ── L'écran de connexion ──────────────────────────────────────────
+        //
+        // Une palette à part, employée sur ce seul écran. C'est la première
+        // chose qu'un client voit, et elle vient telle quelle du gabarit
+        // validé — l'approcher avec `alpine` et `accent` aurait donné un
+        // à-peu-près que personne n'aurait su corriger ensuite.
+        //
+        // Pas de rouge ici : le drapeau du logo porte le rouge fédéral
+        // #D52B1E, et en poser un second, différent, ferait deux marques.
+        brand: {
+          orange:      '#FF6B1A',
+          orangeHover: '#E85A0D',
+          navyBg:      '#090F18',
+          navyCard:    '#111C2D',
+          navyBorder:  '#1E2D42',
+          navyInput:   '#162338',
+        },
         success: { 500: '#22c55e', 100: '#dcfce7', 700: '#15803d' },
         danger:  { 500: '#ef4444', 100: '#fee2e2', 700: '#b91c1c' },
         warning: { 500: '#f59e0b', 100: '#fef3c7', 700: '#b45309' },

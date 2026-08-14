@@ -26,8 +26,11 @@ choses seulement changent, et aucune ne touche au dessin :
 
 - le `viewBox` cadre sur les limites réelles du dessin, au lieu de la planche de
   1408 × 768 qui l'entoure de blanc ;
-- le rectangle de fond blanc est retiré, pour que la marque se pose sur
-  n'importe quel support.
+- pour le LOGOTYPE, le rectangle de fond blanc est retiré : il se pose sur une
+  plaque claire que la page fournit elle-même ;
+- pour l'ICÔNE, le fond blanc RESTE, étendu au cadre carré. Une icône se pose
+  sur un bureau, une barre des tâches, un fond dont on ne sait rien, et un
+  monogramme bleu nuit sur fond transparent y disparaîtrait.
 
 Les polices sont **déjà vectorisées** dans les originaux : l'espacement et le
 style sont dans les coordonnées, et rien ne les altère.

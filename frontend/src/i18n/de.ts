@@ -1226,4 +1226,17 @@ export const de: Catalogue = {
   // ─── Logo d'entreprise — ce que le serveur a retenu ───
   'pr.logoEnregistre': 'Gespeichert mit {l} × {h} px.',
   'pr.logoReduit': 'Auf {l} × {h} px verkleinert, damit es ins Format der Oberfläche passt.',
+
+  // ─── Écran de connexion — gabarit à deux panneaux ───
+  'cx.portailSecurise': 'Gesichertes Portal',
+  'cx.systemeOperationnel': 'System betriebsbereit',
+  'cx.serveurInjoignable': 'Server nicht erreichbar',
+  'cx.accrocheTitre': 'Ihre Bücher, auf Ihrem Rechner',
+  'cx.accrocheSousTitre': 'Die Fakturierung und die Buchhaltung, die das Schweizer Recht von einer selbstständigen Person verlangt — ohne dass etwas Ihren Arbeitsplatz verlässt.',
+  'cx.garantieLocalTitre': 'Lokale Daten',
+  'cx.garantieLocalAide': 'Keine Cloud, keine Dritten, keine ausgehende Verbindung',
+  'cx.garantieLegaleTitre': 'Konformität OR und DSG',
+  'cx.garantieLegaleAide': 'Nachvollziehbarkeit der Buchungen, zehn Jahre Aufbewahrung',
+  'cx.afficherMotDePasse': 'Kennwort anzeigen',
+  'cx.masquerMotDePasse': 'Kennwort verbergen',
 }

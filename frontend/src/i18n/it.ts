@@ -1225,4 +1225,17 @@ export const it: Catalogue = {
   // ─── Logo d'entreprise — ce que le serveur a retenu ───
   'pr.logoEnregistre': 'Registrato in {l} × {h} px.',
   'pr.logoReduit': 'Ridotto a {l} × {h} px per entrare nel formato dell’interfaccia.',
+
+  // ─── Écran de connexion — gabarit à deux panneaux ───
+  'cx.portailSecurise': 'Portale sicuro',
+  'cx.systemeOperationnel': 'Sistema operativo',
+  'cx.serveurInjoignable': 'Server irraggiungibile',
+  'cx.accrocheTitre': 'I vostri libri, sulla vostra macchina',
+  'cx.accrocheSousTitre': 'La fatturazione e la contabilità che la legge svizzera esige da un indipendente, senza che nulla lasci la vostra postazione.',
+  'cx.garantieLocalTitre': 'Dati locali',
+  'cx.garantieLocalAide': 'Nessun cloud, nessun terzo, nessuna connessione in uscita',
+  'cx.garantieLegaleTitre': 'Conformità CO e LPD',
+  'cx.garantieLegaleAide': 'Tracciabilità delle registrazioni, conservazione dieci anni',
+  'cx.afficherMotDePasse': 'Mostrare la password',
+  'cx.masquerMotDePasse': 'Nascondere la password',
 }

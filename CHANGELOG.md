@@ -5,6 +5,26 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
+## [Unreleased]
+
+### Ajouté
+
+- **Un nouvel écran de connexion, à deux panneaux.** À gauche la marque et ce que le produit garantit — données locales, conformité CO et nLPD ; à droite les identifiants. La mise en page et les couleurs viennent du gabarit validé, posées comme telles dans la configuration Tailwind plutôt qu'approchées avec la palette du reste de l'application.
+
+  **Trois éléments du gabarit n'ont pas été repris.** Les CDN (Tailwind, Font Awesome, Google Fonts) : la politique de sécurité les bloque, et surtout chaque appel transmettrait l'adresse IP de l'utilisateur à un tiers, ce qui contredit « vos données restent sur votre machine ». Le logo redessiné en HTML : le fichier officiel existe, c'est lui qui s'affiche. Et « Oublié ? » avec « Rester connecté » : LedgerAlps n'envoie aucun courriel — un lien de réinitialisation ne mènerait nulle part — et il n'existe pas de session longue au niveau du mot de passe, la seule mémoire réelle étant celle du second facteur, qui a son propre réglage à l'étape suivante.
+
+  **Le témoin « système opérationnel » interroge vraiment le serveur**, à l'ouverture puis toutes les trente secondes. Une pastille verte peinte en dur serait une décoration ; celle-ci passe au rouge quand l'API ne répond plus, ce qui distingue « mauvais mot de passe » de « serveur arrêté » au moment précis où la question se pose.
+
+- **Le choix de la langue en pied de l'écran de connexion.** Il vivait dans Paramètres → Mon compte, c'est-à-dire derrière la connexion : un employé germanophone ou une fiduciaire tessinoise devait lire le français pour trouver comment ne plus lire le français.
+
+### Corrigé
+
+- **Un mot de passe faux rechargeait la page sans rien dire.** Le 401 de `/auth/login` déclenchait le mécanisme de session expirée : appel à `/auth/refresh`, échec, puis `window.location.href = '/login'` — un rechargement complet qui effaçait « identifiants incorrects » avant qu'on ait pu le lire. L'écran clignotait et rendait un formulaire vide, sans dire si l'on s'était trompé ou si le logiciel avait planté. Les routes d'authentification sont maintenant écartées de ce mécanisme : sur elles, un 401 veut dire « ce n'est pas le bon mot de passe », pas « votre session a expiré ».
+
+### Modifié
+
+- **L'icône du bureau garde son fond blanc.** Elle se pose sur un bureau, une barre des tâches, un fond dont on ne sait rien : un monogramme bleu nuit sur fond transparent y disparaîtrait. Le fond du fichier officiel est donc conservé et étendu au cadre carré de l'icône.
+
 ## [1.5.1] — 2026-08-14
 
 ### Ajouté
