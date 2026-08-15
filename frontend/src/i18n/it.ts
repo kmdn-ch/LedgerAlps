@@ -1226,8 +1226,6 @@ export const it: Catalogue = {
   'pr.logoReduit': 'Ridotto a {l} × {h} px per entrare nel formato dell’interfaccia.',
 
   // ─── Écran de connexion — gabarit à deux panneaux ───
-  'cx.accrocheTitre': 'I vostri libri, sulla vostra macchina',
-  'cx.accrocheSousTitre': 'La fatturazione e la contabilità che la legge svizzera esige da un indipendente, senza che nulla lasci la vostra postazione.',
   'cx.garantieLocalTitre': 'Dati locali',
   'cx.garantieLocalAide': 'Nessun cloud, nessun terzo, nessuna connessione in uscita',
   'cx.garantieLegaleTitre': 'Conformità CO e LPD',

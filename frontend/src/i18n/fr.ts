@@ -1270,8 +1270,6 @@ export const fr = {
   'pr.logoReduit': 'Réduit à {l} × {h} px pour tenir dans le format de l’interface.',
 
   // ─── Écran de connexion — gabarit à deux panneaux ───
-  'cx.accrocheTitre': 'Vos livres, sur votre machine',
-  'cx.accrocheSousTitre': 'La facturation et la comptabilité que la loi suisse exige d’un indépendant, sans que rien ne quitte votre poste.',
   'cx.garantieLocalTitre': 'Données locales',
   'cx.garantieLocalAide': 'Aucun nuage, aucun tiers, aucune connexion sortante',
   'cx.garantieLegaleTitre': 'Conformité CO et nLPD',

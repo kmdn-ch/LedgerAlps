@@ -116,11 +116,23 @@ export function ConseilSecurite({ className = '' }: { className?: string }) {
           version en cours de frappe — sinon elle serait relue lettre après
           lettre, trente fois de suite. */}
       <p className="sr-only" aria-live="polite">{phrase}</p>
+      {/* Le double de la taille précédente, en gras : le conseil n'est plus un
+          bas de page, c'est ce que le panneau donne à lire.
+
+          `min-h` réserve la hauteur du plus long des trente-deux conseils. Sans
+          elle, le panneau se détend et se contracte à chaque phrase, et tout
+          ce qui est en dessous — les deux garanties — sautille pendant la
+          frappe.
+
+          La réserve est calée sur l'ALLEMAND, mesuré dans le navigateur à
+          165 px là où le français plafonne à 132 : les mots composés y passent
+          rarement à la ligne au même endroit, et une réserve taillée pour le
+          français aurait sauté sur deux conseils allemands. */}
       <p aria-hidden="true"
-         className="text-xs text-slate-400 leading-relaxed min-h-[3.5rem]">
+         className="text-2xl font-bold text-slate-300 leading-snug min-h-[11rem]">
         {ecrit}
-        {!fini && <span className="inline-block w-[2px] h-[0.95em] -mb-[0.1em]
-                                   ml-[1px] bg-brand-orange animate-pulse" />}
+        {!fini && <span className="inline-block w-[3px] h-[0.9em] -mb-[0.05em]
+                                   ml-[2px] bg-brand-orange animate-pulse" />}
       </p>
     </div>
   )

@@ -1226,8 +1226,6 @@ export const en: Catalogue = {
   'pr.logoReduit': 'Scaled down to {l} × {h} px to fit the interface format.',
 
   // ─── Écran de connexion — gabarit à deux panneaux ───
-  'cx.accrocheTitre': 'Your books, on your machine',
-  'cx.accrocheSousTitre': 'The invoicing and the accounts Swiss law requires of a self-employed person, without anything leaving your desk.',
   'cx.garantieLocalTitre': 'Local data',
   'cx.garantieLocalAide': 'No cloud, no third party, no outbound connection',
   'cx.garantieLegaleTitre': 'CO and FADP compliance',

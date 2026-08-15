@@ -17,7 +17,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 - **Le choix de la langue en pied de l'écran de connexion.** Il vivait dans Paramètres → Mon compte, c'est-à-dire derrière la connexion : un employé germanophone ou une fiduciaire tessinoise devait lire le français pour trouver comment ne plus lire le français.
 
-- **Un conseil de sécurité sur l'écran de connexion**, tiré au sort parmi trente-deux et frappé à la machine. C'est le seul moment de la journée où l'utilisateur n'a rien d'autre à faire que regarder ; la même consigne dans un manuel n'est jamais lue. Le tirage évite celui de la dernière fois, et l'effet respecte `prefers-reduced-motion` — qui a demandé à son système de calmer les animations reçoit la phrase entière, d'un coup. Les trente-deux conseils existent dans les quatre langues.
+- **Un conseil de sécurité sur l'écran de connexion**, tiré au sort parmi trente-deux et frappé à la machine, en gros et en gras — il occupe désormais seul le panneau de gauche, l'accroche qui s'y trouvait ayant été retirée : deux textes qui se disputent le même panneau, et on ne lit ni l'un ni l'autre. C'est le seul moment de la journée où l'utilisateur n'a rien d'autre à faire que regarder ; la même consigne dans un manuel n'est jamais lue. Le tirage évite celui de la dernière fois, et l'effet respecte `prefers-reduced-motion` — qui a demandé à son système de calmer les animations reçoit la phrase entière, d'un coup. Les trente-deux conseils existent dans les quatre langues.
 
 - **Le verrouillage de connexion devient progressif.** Dix échecs verrouillent l'adresse, et chaque nouvelle série coûte plus cher : 30 s, 1 min, 5 min, 15 min, 1 h — le dernier barreau se répétant ensuite. Trente secondes ne gênent presque pas un humain et divisent déjà par mille la cadence d'un automate ; les barreaux suivants achèvent de rendre l'exercice sans intérêt. Une heure de silence après la fin d'un verrou ramène l'échelle à son premier barreau, et une connexion réussie l'efface entièrement.
 
@@ -25,7 +25,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Modifié
 
-- **L'écran de connexion s'allège.** Le bandeau supérieur — « portail sécurisé » et le témoin d'état — disparaît, et le pied du formulaire ne porte plus que **la version installée**, lue au serveur. C'est la première chose qu'on demande dans un ticket de support, et la dernière qu'on trouve.
+- **L'écran de connexion s'allège.** Le bandeau supérieur — « portail sécurisé » et le témoin d'état — disparaît, l'accroche « Vos livres, sur votre machine » aussi, et le pied du formulaire ne porte plus que **la version installée**, lue au serveur. C'est la première chose qu'on demande dans un ticket de support, et la dernière qu'on trouve.
 
 ### Corrigé
 

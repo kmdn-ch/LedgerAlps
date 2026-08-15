@@ -241,20 +241,10 @@ export function LoginPage() {
                   <LedgerAlpsLogo className="h-7 w-auto" />
                 </div>
 
-                <div className="space-y-3">
-                  <h1 className="text-2xl sm:text-3xl font-display font-700 text-white
-                                 tracking-tight leading-snug">
-                    {t('cx.accrocheTitre')}
-                  </h1>
-                  <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
-                    {t('cx.accrocheSousTitre')}
-                  </p>
-                </div>
-
-                {/* Le conseil du jour. Placé sous la marque, dans l'espace qui
-                    restait vide : c'est le seul moment où l'utilisateur n'a
-                    rien d'autre à faire que regarder. */}
-                <ConseilSecurite className="pt-2 border-t border-slate-800/60" />
+                {/* Le conseil, seul sous la marque. L'accroche qui occupait
+                    cette place a été retirée : deux textes qui se disputent le
+                    même panneau, et on ne lit ni l'un ni l'autre. */}
+                <ConseilSecurite />
               </div>
 
               <div className="space-y-3.5 pt-8 z-10 relative border-t border-slate-800/80
