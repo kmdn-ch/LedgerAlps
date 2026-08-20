@@ -5,6 +5,44 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
+## [1.5.2] — 2026-08-20
+
+### Ajouté
+
+- **Un nouvel écran de connexion, à deux panneaux.** À gauche la marque et ce que le produit garantit — données locales, conformité CO et nLPD ; à droite les identifiants. La mise en page et les couleurs viennent du gabarit validé, posées comme telles dans la configuration Tailwind plutôt qu'approchées avec la palette du reste de l'application.
+
+  **Trois éléments du gabarit n'ont pas été repris.** Les CDN (Tailwind, Font Awesome, Google Fonts) : la politique de sécurité les bloque, et surtout chaque appel transmettrait l'adresse IP de l'utilisateur à un tiers, ce qui contredit « vos données restent sur votre machine ». Le logo redessiné en HTML : le fichier officiel existe, c'est lui qui s'affiche. Et « Oublié ? » avec « Rester connecté » : LedgerAlps n'envoie aucun courriel — un lien de réinitialisation ne mènerait nulle part — et il n'existe pas de session longue au niveau du mot de passe, la seule mémoire réelle étant celle du second facteur, qui a son propre réglage à l'étape suivante.
+
+  **Le témoin « système opérationnel » interroge vraiment le serveur**, à l'ouverture puis toutes les trente secondes. Une pastille verte peinte en dur serait une décoration ; celle-ci passe au rouge quand l'API ne répond plus, ce qui distingue « mauvais mot de passe » de « serveur arrêté » au moment précis où la question se pose.
+
+- **Le choix de la langue en pied de l'écran de connexion.** Il vivait dans Paramètres → Mon compte, c'est-à-dire derrière la connexion : un employé germanophone ou une fiduciaire tessinoise devait lire le français pour trouver comment ne plus lire le français.
+
+- **Un conseil de sécurité sur l'écran de connexion**, tiré au sort parmi trente-deux et frappé à la machine, en gros et en gras — il occupe désormais seul le panneau de gauche, l'accroche qui s'y trouvait ayant été retirée : deux textes qui se disputent le même panneau, et on ne lit ni l'un ni l'autre. C'est le seul moment de la journée où l'utilisateur n'a rien d'autre à faire que regarder ; la même consigne dans un manuel n'est jamais lue. Le tirage évite celui de la dernière fois, et l'effet respecte `prefers-reduced-motion` — qui a demandé à son système de calmer les animations reçoit la phrase entière, d'un coup. Les trente-deux conseils existent dans les quatre langues.
+
+- **Le verrouillage de connexion devient progressif.** Dix échecs verrouillent l'adresse, et chaque nouvelle série coûte plus cher : 30 s, 1 min, 5 min, 15 min, 1 h — le dernier barreau se répétant ensuite. Trente secondes ne gênent presque pas un humain et divisent déjà par mille la cadence d'un automate ; les barreaux suivants achèvent de rendre l'exercice sans intérêt. Une heure de silence après la fin d'un verrou ramène l'échelle à son premier barreau, et une connexion réussie l'efface entièrement.
+
+  **L'écran dit maintenant combien de temps il reste** au lieu de « identifiants incorrects » : quelqu'un qui ne sait pas qu'il est verrouillé réessaie, et allonge l'attente à chaque série.
+
+### Modifié
+
+- **L'écran de connexion s'allège.** Le bandeau supérieur — « portail sécurisé » et le témoin d'état — disparaît, l'accroche « Vos livres, sur votre machine » aussi, et le pied du formulaire ne porte plus que **la version installée**, lue au serveur. C'est la première chose qu'on demande dans un ticket de support, et la dernière qu'on trouve.
+
+### Corrigé
+
+- **Le barreau le plus long du verrouillage effaçait sa propre mémoire.** Le balayage des enregistrements ne regardait que l'inactivité : après une heure de verrou, la dernière tentative datait de plus d'une heure, l'enregistrement partait, et l'échelle repartait de trente secondes. Un automate n'aurait donc jamais dépassé la première minute. Trouvé par le test de l'échelle, pas à la relecture.
+
+- **L'écran de mise à jour partait avant qu'on ait pu le lire.** Il portait « Ouverture de LedgerAlps dans 5 secondes… » et se remplaçait tout seul. Or c'est le seul moment où le produit dit « vos données comptables ont été conservées » — la phrase que quelqu'un qui vient de remplacer un logiciel de comptabilité veut lire avant tout. Cinq secondes ne suffisent pas à la lire, et personne ne peut la relire ensuite : le message part avec la page.
+
+  L'écran **attend maintenant le clic**, comme un installeur Windows attend « Terminer ». Le bouton est un simple lien vers `/ok`, qui redirige vers l'application : le chemin ne dépend ni d'un script, ni d'une minuterie, ni de l'ordre dans lequel le navigateur exécute les choses. La page ne contient plus une ligne de JavaScript.
+
+  **Le garde-fou** : si la fenêtre est fermée sans cliquer, une limite d'une demi-heure ramasse le lanceur — assez longue pour que personne ne la rencontre, assez courte pour ne pas laisser un processus orphelin. Le témoin de réinstallation étant effacé dès l'entrée, l'écran ne réapparaît pas au lancement suivant.
+
+- **Un mot de passe faux rechargeait la page sans rien dire.** Le 401 de `/auth/login` déclenchait le mécanisme de session expirée : appel à `/auth/refresh`, échec, puis `window.location.href = '/login'` — un rechargement complet qui effaçait « identifiants incorrects » avant qu'on ait pu le lire. L'écran clignotait et rendait un formulaire vide, sans dire si l'on s'était trompé ou si le logiciel avait planté. Les routes d'authentification sont maintenant écartées de ce mécanisme : sur elles, un 401 veut dire « ce n'est pas le bon mot de passe », pas « votre session a expiré ».
+
+### Modifié
+
+- **L'icône du bureau garde son fond blanc.** Elle se pose sur un bureau, une barre des tâches, un fond dont on ne sait rien : un monogramme bleu nuit sur fond transparent y disparaîtrait. Le fond du fichier officiel est donc conservé et étendu au cadre carré de l'icône.
+
 ## [1.5.1] — 2026-08-14
 
 ### Ajouté

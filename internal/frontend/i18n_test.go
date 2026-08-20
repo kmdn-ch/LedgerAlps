@@ -23,8 +23,10 @@ import (
 
 var reCle = regexp.MustCompile(`(?m)^\s*'([\w.]+)':\s*'((?:[^'\\]|\\.)*)'`)
 
-// Un nombre suivi d'un seul mot : une durée, pas une phrase.
-var reDuree = regexp.MustCompile(`^\d+\s+\p{L}+$`)
+// Un nombre — ou son repère d'interpolation — suivi d'un seul mot : une durée,
+// pas une phrase. « 5 minutes » et « {n} minutes » s'écrivent de la même façon
+// en français et en anglais, et le repère ne change rien à ce constat.
+var reDuree = regexp.MustCompile(`^(\d+|\{\w+\})\s+\p{L}+$`)
 
 func catalogue(t *testing.T, code string) map[string]string {
 	t.Helper()

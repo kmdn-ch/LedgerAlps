@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kmdn-ch/ledgeralps/internal/core/zefix"
@@ -327,9 +328,15 @@ const notifyHTML = `<!DOCTYPE html>
     border-radius: 8px; padding: .75rem 1rem; font-size: .85rem;
     margin-bottom: 1.5rem; text-align: left;
   }
-  .countdown { font-size: .82rem; color: #94a3b8; }
-  .bar-wrap { background: #e2e8f0; border-radius: 99px; height: 4px; margin-top: .75rem; overflow: hidden; }
-  .bar { height: 4px; background: #2563eb; border-radius: 99px; width: 100%; transition: width linear; }
+  .btn {
+    display: inline-block; width: 100%;
+    background: #2563eb; color: #fff; text-decoration: none;
+    font-size: .92rem; font-weight: 600;
+    padding: .8rem 1rem; border-radius: 8px;
+    transition: background .15s;
+  }
+  .btn:hover  { background: #1d4ed8; }
+  .btn:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -340,32 +347,44 @@ const notifyHTML = `<!DOCTYPE html>
   <div class="notice">
     &#x1F4BE; Configuration existante détectée — vos données comptables ont été conservées.
   </div>
-  <p class="countdown">Ouverture de LedgerAlps dans <span id="n">5</span> secondes…</p>
-  <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+  <a class="btn" href="/ok" autofocus>Ouvrir LedgerAlps</a>
 </div>
-<script>
-  const appURL = {{.AppURL}};
-  const total  = 5000;
-  const bar    = document.getElementById('bar');
-  const n      = document.getElementById('n');
-  const start  = Date.now();
-  bar.style.transitionDuration = total + 'ms';
-  requestAnimationFrame(() => { bar.style.width = '0%'; });
-  const iv = setInterval(() => {
-    const left = Math.ceil((total - (Date.now() - start)) / 1000);
-    n.textContent = Math.max(left, 0);
-    if (Date.now() - start >= total) {
-      clearInterval(iv);
-      window.location.href = appURL;
-    }
-  }, 250);
-</script>
 </body>
 </html>`
 
-// runReinstallNotification serves a brief "configuration preserved" page, opens
-// the browser, waits for the countdown to expire, then returns so main() opens
-// the app normally.
+// runReinstallNotification annonce qu'une mise à jour a eu lieu et que les
+// données sont intactes, PUIS ATTEND que l'utilisateur clique.
+//
+// # Pourquoi l'attente, et pas un compte à rebours
+//
+// Cet écran portait « Ouverture de LedgerAlps dans 5 secondes… » et se
+// remplaçait tout seul. Or c'est le seul moment où le produit dit « vos données
+// comptables ont été conservées » — la phrase que quelqu'un qui vient de
+// remplacer un logiciel de comptabilité veut lire avant tout. Cinq secondes ne
+// suffisent pas à la lire, encore moins à s'en souvenir, et personne ne peut la
+// relire ensuite : le message est parti avec la page.
+//
+// L'écran reste donc jusqu'au clic. C'est aussi ce que fait un installeur
+// Windows, qui attend « Terminer ».
+//
+// # Pourquoi le bouton est un LIEN, sans une ligne de JavaScript
+//
+// `/ok` ferme l'attente et redirige vers l'application. Le chemin ne dépend
+// donc ni d'un script, ni d'une minuterie, ni de l'ordre dans lequel le
+// navigateur exécute les choses — il dépend d'une requête HTTP, qui arrive ou
+// n'arrive pas.
+//
+// # Le garde-fou
+//
+// Si la fenêtre est fermée sans cliquer, plus rien ne viendra : le lanceur
+// resterait en mémoire indéfiniment. Une limite le ramasse au bout d'une
+// demi-heure — assez longue pour que personne ne la rencontre en revenant
+// chercher un café, assez courte pour ne pas laisser un processus orphelin.
+//
+// Le témoin de réinstallation est effacé DÈS L'ENTRÉE : la fenêtre fermée sans
+// clic ne doit pas faire réapparaître cet écran au lancement suivant.
+const attenteMaxNotification = 30 * time.Minute
+
 func runReinstallNotification(appURL string) {
 	// Delete the sentinel immediately so a normal re-launch won't re-show it.
 	_ = os.Remove(reinstalledMarkerPath())
@@ -377,6 +396,8 @@ func runReinstallNotification(appURL string) {
 	}
 	notifyURL := fmt.Sprintf("http://127.0.0.1:%d", ln.Addr().(*net.TCPAddr).Port)
 	done := make(chan struct{})
+	var uneFois sync.Once
+	terminer := func() { uneFois.Do(func() { close(done) }) }
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -384,17 +405,23 @@ func runReinstallNotification(appURL string) {
 		t, _ := template.New("notify").Parse(notifyHTML)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = t.Execute(w, data{AppURL: template.JS(`"` + appURL + `"`)})
-		// Signal done after first render so we shut down shortly after the
-		// browser has loaded the page (the JS will redirect itself).
+	})
+
+	// Le clic. La redirection part AVANT la fermeture du serveur, sans quoi le
+	// navigateur recevrait une connexion coupée au lieu de la page suivante.
+	mux.HandleFunc("/ok", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, appURL, http.StatusFound)
 		go func() {
-			time.Sleep(7 * time.Second)
-			select {
-			case <-done:
-			default:
-				close(done)
-			}
+			time.Sleep(500 * time.Millisecond)
+			terminer()
 		}()
 	})
+
+	go func() {
+		time.Sleep(attenteMaxNotification)
+		logInfo("Notification de mise à jour : aucun clic, fermeture du lanceur")
+		terminer()
+	}()
 
 	srv := &http.Server{Handler: mux}
 	go func() {

@@ -39,11 +39,25 @@ function processQueue(error: unknown, token: string | null = null) {
   failedQueue = []
 }
 
+// Les routes où un 401 veut dire « ce n'est pas le bon mot de passe », et NON
+// « votre session a expiré ».
+//
+// La distinction n'est pas théorique. Sans elle, un mot de passe faux déclenchait
+// tout le mécanisme de rafraîchissement : appel à /auth/refresh, échec, puis
+// `window.location.href = '/login'` — un rechargement complet de la page qui
+// EFFAÇAIT le message « identifiants incorrects » avant qu'on ait pu le lire.
+// L'utilisateur voyait l'écran clignoter et se retrouvait devant un formulaire
+// vide, sans savoir s'il s'était trompé ou si le logiciel avait planté.
+const ROUTES_AUTH = ['/auth/login', '/auth/refresh', '/auth/mfa/verify', '/auth/change-password']
+
 api.interceptors.response.use(
   (r) => r,
   async (error) => {
     const original = error.config
     if (error.response?.status !== 401 || original._retry) {
+      return Promise.reject(error)
+    }
+    if (ROUTES_AUTH.some(r => (original.url ?? '').startsWith(r))) {
       return Promise.reject(error)
     }
 

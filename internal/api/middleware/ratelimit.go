@@ -12,15 +12,42 @@ import (
 // Defaults for authentication endpoints. Chosen to stop credential stuffing
 // without locking out a legitimate user who mistypes a password a few times.
 const (
-	DefaultLoginMaxAttempts = 5
+	DefaultLoginMaxAttempts = 10
 	DefaultLoginWindow      = 15 * time.Minute
-	DefaultLoginLockout     = 15 * time.Minute
 
 	// staleAfter is how long an idle record is kept before being purged.
 	staleAfter = time.Hour
 	// purgeEvery bounds how often the opportunistic sweep runs.
 	purgeEvery = 10 * time.Minute
+
+	// escaladeOubli : après ce temps sans nouvel échec, l'échelle redescend à
+	// son premier barreau. Sans cet oubli, quelqu'un qui s'est trompé dix fois
+	// un mardi retrouverait une heure d'attente au premier faux pas du mois
+	// suivant — une punition que rien ne justifie.
+	escaladeOubli = time.Hour
 )
+
+// DefaultLoginPaliers est l'échelle des verrouillages successifs.
+//
+// # Pourquoi une échelle plutôt qu'une durée fixe
+//
+// Une durée fixe traite de la même façon les deux populations qui se trompent :
+// celle qui a mal tapé son mot de passe, et celle qui en essaie des milliers.
+// La première se reconnaît à ce qu'elle s'arrête ; la seconde revient. Trente
+// secondes ne gênent presque pas un humain et ruinent déjà un automate, qui
+// passe de quelques milliers d'essais par minute à vingt par dix minutes. Les
+// barreaux suivants achèvent de rendre l'exercice sans intérêt.
+//
+// Le dernier barreau se répète indéfiniment : au-delà d'une heure, allonger
+// encore ne protège plus de rien et enfermerait dehors quelqu'un qui a
+// simplement oublié son mot de passe.
+var DefaultLoginPaliers = []time.Duration{
+	30 * time.Second,
+	1 * time.Minute,
+	5 * time.Minute,
+	15 * time.Minute,
+	1 * time.Hour,
+}
 
 // LoginRateLimiter throttles repeated failed authentication attempts from the
 // same client address.
@@ -39,8 +66,10 @@ type LoginRateLimiter struct {
 
 	maxAttempts int
 	window      time.Duration
-	lockout     time.Duration
-	now         func() time.Time // injectable for tests
+	// paliers : la durée du 1er, 2e, … verrouillage d'un même client. Le
+	// dernier vaut pour tous les suivants.
+	paliers []time.Duration
+	now     func() time.Time // injectable for tests
 
 	// onLockout, when set, is invoked once each time a client crosses the
 	// threshold. It lets the caller persist the event without giving this
@@ -61,25 +90,29 @@ type attemptRecord struct {
 	windowStart time.Time
 	lockedUntil time.Time
 	lastSeen    time.Time
+	// verrous compte les verrouillages déjà subis : c'est lui qui choisit le
+	// barreau de l'échelle. Remis à zéro par une connexion réussie, ou par
+	// `escaladeOubli` de calme.
+	verrous int
 }
 
-// NewLoginRateLimiter builds a limiter. Non-positive arguments fall back to the
-// package defaults.
-func NewLoginRateLimiter(maxAttempts int, window, lockout time.Duration) *LoginRateLimiter {
+// NewLoginRateLimiter builds a limiter. Non-positive or empty arguments fall
+// back to the package defaults.
+func NewLoginRateLimiter(maxAttempts int, window time.Duration, paliers ...time.Duration) *LoginRateLimiter {
 	if maxAttempts <= 0 {
 		maxAttempts = DefaultLoginMaxAttempts
 	}
 	if window <= 0 {
 		window = DefaultLoginWindow
 	}
-	if lockout <= 0 {
-		lockout = DefaultLoginLockout
+	if len(paliers) == 0 {
+		paliers = DefaultLoginPaliers
 	}
 	return &LoginRateLimiter{
 		records:     make(map[string]*attemptRecord),
 		maxAttempts: maxAttempts,
 		window:      window,
-		lockout:     lockout,
+		paliers:     paliers,
 		now:         time.Now,
 	}
 }
@@ -153,6 +186,18 @@ func (l *LoginRateLimiter) recordFailure(key string) {
 		rec.failures = 0
 		rec.windowStart = now
 	}
+	// L'échelle redescend après une longue accalmie, mesurée depuis la FIN DU
+	// VERROU et non depuis le dernier échec.
+	//
+	// La nuance décide de tout. Mesurée depuis le dernier échec, l'attente
+	// passée dans le verrou compterait comme du calme : un automate verrouillé
+	// une heure reviendrait à trente secondes, et l'échelle ne monterait
+	// jamais au-delà du deuxième barreau. Il faut une heure de SILENCE APRÈS la
+	// fin du verrou pour repartir de zéro.
+	if rec.verrous > 0 && !rec.lockedUntil.IsZero() &&
+		now.After(rec.lockedUntil) && now.Sub(rec.lockedUntil) > escaladeOubli {
+		rec.verrous = 0
+	}
 	rec.failures++
 	rec.lastSeen = now
 
@@ -162,7 +207,8 @@ func (l *LoginRateLimiter) recordFailure(key string) {
 		notify    = l.onLockout
 	)
 	if rec.failures >= l.maxAttempts {
-		rec.lockedUntil = now.Add(l.lockout)
+		rec.lockedUntil = now.Add(l.palier(rec.verrous))
+		rec.verrous++
 		rec.failures = 0
 		rec.windowStart = now
 		lockedNow, until = true, rec.lockedUntil
@@ -176,6 +222,15 @@ func (l *LoginRateLimiter) recordFailure(key string) {
 	}
 }
 
+// palier rend la durée du n-ième verrouillage (n commence à 0). Au-delà de
+// l'échelle, le dernier barreau se répète.
+func (l *LoginRateLimiter) palier(n int) time.Duration {
+	if n >= len(l.paliers) {
+		n = len(l.paliers) - 1
+	}
+	return l.paliers[n]
+}
+
 // reset clears any record for the key after a successful authentication.
 func (l *LoginRateLimiter) reset(key string) {
 	l.mu.Lock()
@@ -185,13 +240,30 @@ func (l *LoginRateLimiter) reset(key string) {
 
 // purgeLocked drops idle records so the map cannot grow without bound. The
 // caller must hold l.mu.
+//
+// # Le piège, et il a coûté un test
+//
+// Un enregistrement porte AUSSI l'échelle des verrouillages déjà subis. Le
+// balayage ne regardait que l'inactivité : après une heure de verrou, la
+// dernière tentative datait de plus d'une heure, l'enregistrement partait, et
+// l'échelle repartait de trente secondes. Autrement dit, le barreau le plus
+// long effaçait lui-même la mémoire qui l'avait produit — un automate n'aurait
+// jamais dépassé la première minute.
+//
+// On ne jette donc un enregistrement que lorsqu'il ne peut plus rien décider :
+// verrou expiré, plus aucune tentative depuis longtemps, ET échelle déjà
+// oubliée.
 func (l *LoginRateLimiter) purgeLocked(now time.Time) {
 	if now.Sub(l.lastPurge) < purgeEvery {
 		return
 	}
 	l.lastPurge = now
 	for k, rec := range l.records {
-		if now.After(rec.lockedUntil) && now.Sub(rec.lastSeen) > staleAfter {
+		if !now.After(rec.lockedUntil) || now.Sub(rec.lastSeen) <= staleAfter {
+			continue
+		}
+		echelleOubliee := rec.verrous == 0 || now.Sub(rec.lockedUntil) > escaladeOubli
+		if echelleOubliee {
 			delete(l.records, k)
 		}
 	}

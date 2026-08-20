@@ -83,9 +83,9 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 9c | Droits du comptable, second facteur par rôle, lecture seule | ✅ | [↓](#9c--droits-du-comptable-et-second-facteur-par-rôle) |
 | 13 | Veille de conformité automatisée | ✅ | — |
 | 13b | Lecture d'une facture fournisseur (QR + texte) | ✅ | [↓](#13b--lecture-automatique-des-factures-fournisseurs-pdf) |
-| 13c | Traçabilité : couverture du journal, attestation automatique **et vérifiable** | 🔎 livré | [↓](#13c--traçabilité) |
-| 13d | Retirer une facture de la liste des paiements | 🔎 livré | [↓](#13d--vider-la-liste-des-paiements) |
-| 15 | Trouver ses marques : mise en route, statut TVA, aide par écran | 🔎 livré | [↓](#15--trouver-ses-marques) |
+| 13c | Traçabilité : couverture du journal, attestation automatique **et vérifiable** | ✅ | [↓](#13c--traçabilité) |
+| 13d | Retirer une facture de la liste des paiements | ✅ | [↓](#13d--vider-la-liste-des-paiements) |
+| 15 | Trouver ses marques : mise en route, statut TVA, aide par écran | ✅ | [↓](#15--trouver-ses-marques) |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
 ---
