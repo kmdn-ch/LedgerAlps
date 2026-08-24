@@ -42,9 +42,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
-	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 )
 
 // MaxCancelBatch borne un lot.
@@ -70,6 +70,16 @@ type cancelResult struct {
 	Outcome string `json:"outcome"` // "deleted", "cancelled", "skipped", "refused"
 	Detail  string `json:"detail,omitempty"`
 	EntryID string `json:"reversal_entry_id,omitempty"`
+
+	// StatutAvant et StatutApres alimentent la piste d'audit, pas la réponse
+	// HTTP : ils disent ce que la facture ÉTAIT et ce qu'elle est devenue.
+	//
+	// Sur un refus, les deux sont égaux — et c'est l'information utile : elle
+	// nomme le statut qui a résisté. Une trace qui ne dirait que « refusé »
+	// laisserait sans réponse la question qui se pose ensuite, à savoir
+	// pourquoi la pièce est encore là.
+	StatutAvant string `json:"-"`
+	StatutApres string `json:"-"`
 }
 
 // CancelSupplierInvoices POST /api/v1/supplier-invoices/cancel
@@ -112,13 +122,25 @@ func (h *SupplierInvoicesHandler) CancelSupplierInvoices(c *gin.Context) {
 		// La trace porte le VERDICT, refus compris. Ne tracer que les succès
 		// laisserait sans réponse la question qui se pose après coup : « on a
 		// bien essayé de la retirer, pourquoi est-elle encore là ? »
+		// Une annulation ne supprime rien — la pièce est conservée
+		// (CO art. 958f) — mais elle change son statut. La transition est donc
+		// écrite comme telle : ce que la facture était, ce qu'elle devient.
+		//
+		// Un REFUS est tracé aussi, et son état « après » porte alors le statut
+		// inchangé : la question qui se pose après coup est « on a bien essayé
+		// de la retirer, pourquoi est-elle encore là ? », et une trace qui ne
+		// garderait que les succès y resterait muette.
 		trace(c, h.db, h.usePostgres, TableSupplierInvoices,
-			ActionSupplierInvoiceCancelled, id, map[string]any{
-				"outcome":           r.Outcome,
-				"detail":            r.Detail,
-				"reversal_entry_id": r.EntryID,
-				"reason":            req.Reason,
-			})
+			ActionSupplierInvoiceCancelled, id, accounting.Modification(
+				map[string]any{"status": r.StatutAvant},
+				map[string]any{
+					"status":            r.StatutApres,
+					"outcome":           r.Outcome,
+					"detail":            r.Detail,
+					"reversal_entry_id": r.EntryID,
+					"reason":            req.Reason,
+				},
+			))
 		results = append(results, r)
 	}
 
@@ -164,7 +186,8 @@ func (h *SupplierInvoicesHandler) cancelOne(
 	switch status {
 	case "cancelled":
 		// Idempotent : recocher une ligne déjà annulée n'est pas une erreur.
-		return cancelResult{ID: id, Outcome: "skipped", Detail: "déjà annulée"}
+		return cancelResult{ID: id, Outcome: "skipped", Detail: "déjà annulée",
+			StatutAvant: status, StatutApres: status}
 
 	case "draft":
 		// Rien n'est entré dans les livres : la pièce peut disparaître.
@@ -174,23 +197,27 @@ func (h *SupplierInvoicesHandler) cancelOne(
 			return cancelResult{ID: id, Outcome: "refused", Detail: "suppression impossible"}
 		}
 		return cancelResult{ID: id, Outcome: "deleted",
-			Detail: "brouillon supprimé — rien n'était entré dans les livres"}
+			Detail:      "brouillon supprimé — rien n'était entré dans les livres",
+			StatutAvant: status, StatutApres: "(supprimée)"}
 
 	case "paid":
 		return cancelResult{ID: id, Outcome: "refused",
 			Detail: "facture déjà payée : l'argent est parti, l'annuler laisserait " +
-				"un décaissement sans dette en face. Saisissez le remboursement du fournisseur."}
+				"un décaissement sans dette en face. Saisissez le remboursement du fournisseur.",
+			StatutAvant: status, StatutApres: status}
 	}
 
 	// Reste « booked ». Un règlement partiel compte comme un paiement.
 	if round2(paid) != 0 {
 		return cancelResult{ID: id, Outcome: "refused",
-			Detail: fmt.Sprintf("un règlement de %.2f a déjà été enregistré", paid)}
+			Detail:      fmt.Sprintf("un règlement de %.2f a déjà été enregistré", paid),
+			StatutAvant: status, StatutApres: status}
 	}
 
 	reversal, err := h.reverseSupplierEntry(ctx, id, entryID, userID, ip, reason, reference)
 	if err != nil {
-		return cancelResult{ID: id, Outcome: "refused", Detail: err.Error()}
+		return cancelResult{ID: id, Outcome: "refused", Detail: err.Error(),
+			StatutAvant: status, StatutApres: status}
 	}
 
 	// Le statut ne bascule qu'APRÈS l'extourne. Dans l'autre ordre, un échec de
@@ -201,10 +228,12 @@ func (h *SupplierInvoicesHandler) cancelOne(
 		h.usePostgres)
 	if _, err := h.db.ExecContext(ctx, updQ, time.Now().UTC(), id); err != nil {
 		return cancelResult{ID: id, Outcome: "refused",
-			Detail: "l'extourne " + reversal + " est passée mais le statut n'a pas pu être changé"}
+			Detail:      "l'extourne " + reversal + " est passée mais le statut n'a pas pu être changé",
+			StatutAvant: status, StatutApres: status}
 	}
 	return cancelResult{ID: id, Outcome: "cancelled", EntryID: reversal,
-		Detail: "extournée — charge et TVA déductible neutralisées"}
+		Detail:      "extournée — charge et TVA déductible neutralisées",
+		StatutAvant: status, StatutApres: "cancelled"}
 }
 
 // reverseSupplierEntry passe l'écriture inverse de la comptabilisation.

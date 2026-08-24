@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
 // ─── SettingsHandler ──────────────────────────────────────────────────────────
@@ -131,10 +132,53 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	// Check whether a row already exists so we can decide INSERT vs UPDATE.
+	// Relire la fiche AVANT de l'écraser, dans la requête qui décide déjà
+	// INSERT ou UPDATE.
+	//
+	// L'IBAN de l'entreprise est le compte qui recevra les virements de TOUS
+	// les clients : le changer en douce redirige les encaissements sans que
+	// rien n'apparaisse nulle part. La trace posait jusqu'ici un drapeau
+	// `iban_modifie: true` écrit à la main — vrai à chaque enregistrement,
+	// même quand l'IBAN n'avait pas bougé, et muet sur les autres champs.
+	//
+	// Les valeurs personnelles (raison sociale, adresse, IBAN, courriel) sont
+	// masquées à l'écriture ; ce qui subsiste est la LISTE des champs qui ont
+	// réellement changé, calculée avant masquage. On sait donc que l'IBAN a
+	// changé, et qui l'a changé, sans conserver aucun des deux IBAN.
 	var existingID string
-	selectQ := db.Rebind(`SELECT id FROM company_settings LIMIT 1`, h.usePostgres)
-	err := h.db.QueryRowContext(ctx, selectQ).Scan(&existingID)
+	avant := map[string]any{}
+	selectQ := db.Rebind(`
+		SELECT id, COALESCE(company_name,''), COALESCE(legal_form,''),
+		       COALESCE(address_street,''), COALESCE(address_postal_code,''),
+		       COALESCE(address_city,''), COALESCE(address_country,''),
+		       COALESCE(che_number,''), COALESCE(vat_number,''),
+		       COALESCE(phone,''), COALESCE(email,''),
+		       COALESCE(bank_name,''), COALESCE(bank_bic,''), COALESCE(iban,''),
+		       COALESCE(fiscal_year_start_month,1), COALESCE(currency,'')
+		  FROM company_settings LIMIT 1`, h.usePostgres)
+	var (
+		avCompanyName, avLegalForm, avStreet, avNPA, avCity, avCountry string
+		avCHE, avVAT, avPhone, avEmail, avBankName, avBIC, avIBAN      string
+		avCurrency                                                     string
+		avFiscalMonth                                                  int
+	)
+	err := h.db.QueryRowContext(ctx, selectQ).Scan(
+		&existingID, &avCompanyName, &avLegalForm,
+		&avStreet, &avNPA, &avCity, &avCountry,
+		&avCHE, &avVAT, &avPhone, &avEmail,
+		&avBankName, &avBIC, &avIBAN,
+		&avFiscalMonth, &avCurrency)
+	if err == nil {
+		avant = map[string]any{
+			"company_name": avCompanyName, "legal_form": avLegalForm,
+			"address_street": avStreet, "address_postal_code": avNPA,
+			"address_city": avCity, "address_country": avCountry,
+			"che_number": avCHE, "vat_number": avVAT,
+			"phone": avPhone, "email": avEmail,
+			"bank_name": avBankName, "bank_bic": avBIC, "iban": avIBAN,
+			"fiscal_year_start_month": avFiscalMonth, "currency": avCurrency,
+		}
+	}
 
 	now := time.Now().UTC()
 
@@ -273,13 +317,25 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	}
 	s.AutoPostInvoices = autoPostOut == 1
 
-	// Qui a changé l'IBAN de l'entreprise, et quand : c'est ce compte qui
-	// recevra les virements de tous les clients. Un changement non tracé y
-	// serait indétectable.
+	// L'état « après » porte les MÊMES clés que l'état « avant » : c'est ce qui
+	// rend la comparaison possible, et ce qui borne les données conservées à ce
+	// qui a servi à la calculer.
+	apres := map[string]any{
+		"company_name": req.CompanyName, "legal_form": req.LegalForm,
+		"address_street": req.AddressStreet, "address_postal_code": req.AddressPostalCode,
+		"address_city": req.AddressCity, "address_country": req.AddressCountry,
+		"che_number": req.CheNumber, "vat_number": req.VatNumber,
+		"phone": req.Phone, "email": req.Email,
+		"bank_name": req.BankName, "bank_bic": req.BankBIC, "iban": req.IBAN,
+		"fiscal_year_start_month": req.FiscalYearStartMonth, "currency": req.Currency,
+	}
+	// Première écriture de la fiche : rien ne précédait, donc une création.
+	transition := accounting.Creation(apres)
+	if existingID != "" {
+		transition = accounting.Modification(avant, apres)
+	}
 	trace(c, h.db, h.usePostgres, TableCompanySettings,
-		ActionCompanySettingsUpdated, "company", map[string]any{
-			"iban_modifie": true,
-		})
+		ActionCompanySettingsUpdated, "company", transition)
 
 	c.JSON(http.StatusOK, s)
 }

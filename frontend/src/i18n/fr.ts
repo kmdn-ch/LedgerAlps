@@ -904,6 +904,7 @@ export const fr = {
   'at.colAction': 'Action',
   'at.colDocument': 'Document',
   'at.colAuteur': 'Auteur',
+  'at.colChamps': 'Champs modifiés',
   'at.colEmpreinte': 'Empreinte',
   'at.pagination': 'Page {page} sur {total} — {n} entrée(s)',
   'at.precedent': 'Précédent',

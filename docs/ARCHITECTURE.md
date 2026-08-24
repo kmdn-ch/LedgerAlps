@@ -167,6 +167,36 @@ rétroactive casse la chaîne de façon détectable, comme l'exige le CO art. 95
 `GET /audit-logs/verify-chain` parcourt l'ensemble et distingue quatre ruptures ;
 l'écran **Paramètres → Maintenance → Piste d'audit** l'expose.
 
+**Audit différentiel — ce qu'une action a remplacé.** Le maillon portait l'état
+APRÈS chaque action, jamais celui d'avant : `before_state` était systématiquement
+nul. On savait qu'une facture valait 1500.- après modification, sans pouvoir dire
+qu'elle valait 1000.- avant.
+
+Les appelants transmettent désormais une `accounting.Transition` — `Creation`,
+`Modification` ou `Suppression`. Des champs nommés plutôt que deux
+`map[string]any` côte à côte : les intervertir produirait une piste qui affirme
+le contraire de ce qui s'est passé, avec l'autorité d'une chaîne valide.
+
+*Le masquage change la donne.* `maskPersonalData` remplace la valeur des champs
+personnels (nLPD art. 6) : un IBAN modifié donnerait `[MASKED]` des deux côtés,
+et le changement disparaîtrait — précisément le cas qui motive la
+fonctionnalité, puisque cet IBAN est le compte qui reçoit les virements de tous
+les clients. La liste des champs qui ont bougé est donc calculée sur les valeurs
+**brutes, avant masquage**, et jointe à l'état suivant sous `champs_modifies`.
+On sait que l'IBAN a changé, et qui l'a changé, **sans conserver aucun des deux
+IBAN** — plus utile que deux valeurs masquées, et moins de données personnelles
+retenues.
+
+Cette liste entre dans l'empreinte : l'effacer pour cacher qu'un IBAN a bougé
+casse la chaîne. Une trace des changements réinscriptible ne prouverait rien.
+
+*Rétrocompatible sans migration.* Une création écrit `NULL`, la vérification
+relit `COALESCE(before_state, '')`, et les maillons antérieurs se recalculent
+donc à l'identique. Le masquage a par ailleurs été élargi aux variantes
+composées (`company_name`, `address_street`, `supplier_name`…) : la règle
+n'acceptait que les clés exactes et laissait en clair, chez un indépendant, son
+propre nom et son adresse privée.
+
 *Règle apprise à ses dépens :* l'empreinte doit couvrir **exactement les valeurs
 enregistrées**. Jusqu'à la v1.4.6 elle était calculée sur un `after_state` rédigé
 séparément de celui inséré et sur un horodatage venu de Go alors que la colonne

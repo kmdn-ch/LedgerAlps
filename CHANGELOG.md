@@ -5,6 +5,24 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ---
 
+## [Unreleased]
+
+### Ajouté
+
+- **L'audit différentiel : la piste dit maintenant ce qu'une action a REMPLACÉ.** Le journal capturait l'état après chaque modification, jamais celui d'avant — on savait qu'une facture valait 1500.- après coup, sans pouvoir dire qu'elle valait 1000.- avant. Les six points de trace transmettent désormais une transition explicite (création, modification, suppression), et l'écran **Paramètres → Maintenance → Piste d'audit** porte une colonne **« Champs modifiés »** qui nomme ce qui a bougé.
+
+  **Le masquage rendait le cas principal invisible, et c'est ce qui a guidé la conception.** Les champs personnels sont remplacés par `[MASKED]` (nLPD art. 6) : un IBAN modifié aurait donné `[MASKED]` avant *et* après, faisant disparaître exactement le changement qui motive la fonctionnalité — cet IBAN est le compte qui reçoit les virements de tous les clients. La liste des champs modifiés est donc calculée sur les valeurs **brutes, avant masquage**. On sait que l'IBAN a changé, et qui l'a changé, **sans conserver aucun des deux IBAN** : plus utile que deux valeurs masquées, et moins de données personnelles retenues — la minimisation de la nLPD va ici dans le même sens que l'utilité.
+
+  **La liste entre dans l'empreinte.** L'effacer pour cacher qu'un IBAN a bougé casse la chaîne, comme le fait de réécrire l'état antérieur. Une trace des changements que l'on pourrait réinscrire ne prouverait rien. Deux tests le vérifient en falsifiant réellement la base.
+
+  **Aucune migration, aucune rupture.** Une création écrit `NULL` et la vérification relit `COALESCE(before_state, '')` : les maillons écrits avant cette version se recalculent à l'identique, et se vérifient à côté des nouveaux. Vérifié de bout en bout sur un serveur réel — deux modifications de la fiche entreprise, chaîne `verified: true`, et la colonne affiche `iban` puis `address_city, company_name`.
+
+  `from`/`to` écrits à la main dans l'état suivant disparaissent au passage : la transition a désormais un endroit pour se dire.
+
+### Sécurité
+
+- **Le masquage des données personnelles couvre les variantes composées.** Il ne reconnaissait que les clés exactes — `name`, `address`, `iban` — et laissait donc passer `company_name`, `legal_name`, `supplier_name`, `address_street`, `address_city` : chez un indépendant, son propre nom et son adresse privée, écrits en clair dans une table conservée dix ans (CO art. 958f). Le terme sensible est maintenant reconnu comme mot, préfixé ou suffixé. Les clés voisines restent lisibles — `number` ne contient pas `name` —, sans quoi une piste entièrement masquée n'apprendrait plus rien. Les maillons existants gardent leurs valeurs et leur empreinte ; seuls les suivants sont plus discrets.
+
 ## [1.5.3] — 2026-08-24
 
 ### Sécurité

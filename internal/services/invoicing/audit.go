@@ -45,7 +45,7 @@ type Actor struct {
 // coup pour un défaut de journalisation laisserait le document dans un état que
 // personne n'a voulu. L'échec est journalisé — c'est lui qui alerte, pas une
 // erreur rendue à l'utilisateur qui n'y peut rien.
-func (s *Service) record(ctx context.Context, a Actor, action, recordID string, state map[string]any) {
+func (s *Service) record(ctx context.Context, a Actor, action, recordID string, t accsvc.Transition) {
 	if a.UserID == "" {
 		return
 	}
@@ -61,7 +61,7 @@ func (s *Service) record(ctx context.Context, a Actor, action, recordID string, 
 	defer func() { _ = tx.Rollback() }()
 
 	if err := accsvc.RecordDocumentAction(ctx, tx, s.usePostgres,
-		accsvc.TableInvoices, a.UserID, action, recordID, a.IP, state); err != nil {
+		accsvc.TableInvoices, a.UserID, action, recordID, a.IP, t); err != nil {
 		log.Printf("WARNING: action %s sur le document %s non tracée: %v", action, recordID, err)
 		return
 	}

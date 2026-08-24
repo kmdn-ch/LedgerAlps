@@ -433,12 +433,23 @@ func (s *Service) TransitionBy(ctx context.Context, invoiceID string, to models.
 				}
 			}
 
-			s.record(ctx, actor, accsvc.ActionDocumentTransition, invoiceID, map[string]any{
-				"document_type": documentType,
-				"number":        invoiceNumber,
-				"from":          current,
-				"to":            string(to),
-			})
+			// Une transition de statut est une MODIFICATION : elle remplace un
+			// état par un autre. Elle était écrite « from / to » à la main dans
+			// l'état suivant, faute d'un endroit pour dire ce qui précédait ;
+			// elle le dit maintenant là où la vérification le relit.
+			s.record(ctx, actor, accsvc.ActionDocumentTransition, invoiceID,
+				accsvc.Modification(
+					map[string]any{
+						"document_type": documentType,
+						"number":        invoiceNumber,
+						"status":        current,
+					},
+					map[string]any{
+						"document_type": documentType,
+						"number":        invoiceNumber,
+						"status":        string(to),
+					},
+				))
 
 			// Automatic reversal: sent → cancelled with a linked journal entry.
 			if models.InvoiceStatus(current) == models.InvoiceStatusSent &&

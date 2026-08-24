@@ -860,6 +860,7 @@ export const it: Catalogue = {
   'at.colAction': 'Azione',
   'at.colDocument': 'Documento',
   'at.colAuteur': 'Autore',
+  'at.colChamps': 'Campi modificati',
   'at.colEmpreinte': 'Impronta',
   'at.pagination': 'Pagina {page} di {total} — {n} voce/voci',
   'at.precedent': 'Precedente',

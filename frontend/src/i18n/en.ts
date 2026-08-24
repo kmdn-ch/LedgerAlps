@@ -860,6 +860,7 @@ export const en: Catalogue = {
   'at.colAction': 'Action',
   'at.colDocument': 'Document',
   'at.colAuteur': 'Author',
+  'at.colChamps': 'Changed fields',
   'at.colEmpreinte': 'Hash',
   'at.pagination': 'Page {page} of {total} — {n} entry/entries',
   'at.precedent': 'Previous',

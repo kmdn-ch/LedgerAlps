@@ -76,19 +76,19 @@ const (
 // démarrage : une trace sans auteur ne trace rien, et en accepter ferait croire
 // à une couverture qui n'existe pas.
 func trace(c *gin.Context, database *sql.DB, usePostgres bool,
-	table, action, recordID string, state map[string]any) {
+	table, action, recordID string, t accounting.Transition) {
 	claims := mw.GetClaims(c)
 	if claims == nil || claims.UserID == "" {
 		return
 	}
 	traceFor(c.Request.Context(), database, usePostgres,
-		claims.UserID, c.ClientIP(), table, action, recordID, state)
+		claims.UserID, c.ClientIP(), table, action, recordID, t)
 }
 
 // traceFor est la même chose sans gin, pour les chemins qui n'ont qu'un
 // contexte.
 func traceFor(ctx context.Context, database *sql.DB, usePostgres bool,
-	userID, ip, table, action, recordID string, state map[string]any) {
+	userID, ip, table, action, recordID string, t accounting.Transition) {
 	if userID == "" {
 		return
 	}
@@ -113,7 +113,7 @@ func traceFor(ctx context.Context, database *sql.DB, usePostgres bool,
 	defer func() { _ = tx.Rollback() }()
 
 	if err := accounting.RecordDocumentAction(ctx, tx, usePostgres,
-		table, userID, action, recordID, ip, state); err != nil {
+		table, userID, action, recordID, ip, t); err != nil {
 		// Journalisé, pas remonté : l'action a eu lieu et l'utilisateur n'y peut
 		// rien. C'est l'exploitant qui doit voir cette ligne, pas l'utilisateur
 		// qui vient d'envoyer une facture.

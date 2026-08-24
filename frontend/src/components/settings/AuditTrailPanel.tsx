@@ -34,6 +34,29 @@ const BREAK_LABEL: Record<ChainBreak['kind'], { icon: typeof ShieldAlert; cle: C
   anchor_invalid: { icon: Anchor,      cle: 'at.debutManquant' },
 }
 
+/**
+ * Les champs qu'une action a réellement modifiés.
+ *
+ * Ils voyagent dans l'état « après » du maillon, sous `champs_modifies`, et y
+ * sont calculés côté serveur AVANT le masquage des données personnelles. C'est
+ * ce qui permet d'afficher « l'IBAN a changé » alors que les deux IBAN sont
+ * masqués et donc identiques dans la piste : sans cette liste, la modification
+ * la plus sensible du produit serait la seule invisible.
+ *
+ * Un état illisible ne doit pas casser la ligne : la piste reste consultable
+ * même si un maillon a été écrit par une version qui n'existe plus.
+ */
+function champsModifies(apres?: string): string[] {
+  if (!apres) return []
+  try {
+    const etat = JSON.parse(apres) as Record<string, unknown>
+    const liste = etat['champs_modifies']
+    return Array.isArray(liste) ? liste.filter(v => typeof v === 'string') as string[] : []
+  } catch {
+    return []
+  }
+}
+
 export function AuditTrailPanel() {
   const t = useT()
   const [page, setPage] = useState(0)
@@ -198,6 +221,7 @@ export function AuditTrailPanel() {
                     <th className="py-2 pr-3 font-medium">{t('at.colAction')}</th>
                     <th className="py-2 pr-3 font-medium">{t('at.colDocument')}</th>
                     <th className="py-2 pr-3 font-medium">{t('at.colAuteur')}</th>
+                    <th className="py-2 pr-3 font-medium">{t('at.colChamps')}</th>
                     <th className="py-2 font-medium">{t('at.colEmpreinte')}</th>
                   </tr>
                 </thead>
@@ -209,6 +233,27 @@ export function AuditTrailPanel() {
                       <td className="py-2 pr-3">{l.action}</td>
                       <td className="py-2 pr-3 font-mono text-xs">{l.record_id}</td>
                       <td className="py-2 pr-3">{l.user_name || <span className="text-alpine-400">—</span>}</td>
+                      <td className="py-2 pr-3">
+                        {(() => {
+                          const champs = champsModifies(l.after_state)
+                          // Une création ne remplace rien : afficher « aucun
+                          // champ modifié » y serait faux, un tiret dit
+                          // « sans objet » sans rien affirmer.
+                          if (champs.length === 0) {
+                            return <span className="text-alpine-400">—</span>
+                          }
+                          return (
+                            <span className="flex flex-wrap gap-1">
+                              {champs.map(c => (
+                                <span key={c}
+                                      className="rounded bg-alpine-100 px-1.5 py-0.5 font-mono text-[11px] text-alpine-700">
+                                  {c}
+                                </span>
+                              ))}
+                            </span>
+                          )
+                        })()}
+                      </td>
                       <td className="py-2 font-mono text-xs text-alpine-500" title={l.entry_hash}>
                         {l.entry_hash.slice(0, 12)}…
                       </td>

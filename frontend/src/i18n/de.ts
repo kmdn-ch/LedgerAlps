@@ -861,6 +861,7 @@ export const de: Catalogue = {
   'at.colAction': 'Aktion',
   'at.colDocument': 'Beleg',
   'at.colAuteur': 'Urheber',
+  'at.colChamps': 'Geänderte Felder',
   'at.colEmpreinte': 'Hashwert',
   'at.pagination': 'Seite {page} von {total} — {n} Eintrag/Einträge',
   'at.precedent': 'Zurück',
