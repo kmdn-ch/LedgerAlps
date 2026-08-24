@@ -93,27 +93,72 @@ function Resolve-Version {
 function Install-Binaries {
     param([string]$Tag, [string]$Arch)
 
-    $archive   = "ledgeralps_${Tag}_windows_${Arch}.zip"
+    # Le tag porte un « v », le nom d'archive produit par GoReleaser non ; le
+    # chemin de l'URL, lui, veut le tag entier. Utiliser $Tag pour les deux
+    # demandait un fichier jamais publie, et l'echec sortait en
+    # « Download failed » sans jamais nommer la cause. Voir release.yml:165.
+    $versionNum = $Tag -replace '^v', ''
+    $archive   = "ledgeralps_${versionNum}_windows_${Arch}.zip"
     $url       = "https://github.com/$Repo/releases/download/$Tag/$archive"
-    $tmpDir    = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "ledgeralps-install")
-    $zipPath   = [System.IO.Path]::Combine($tmpDir, $archive)
+    $sums      = "ledgeralps_${versionNum}_checksums.txt"
+    $sumsUrl   = "https://github.com/$Repo/releases/download/$Tag/$sums"
 
-    New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+    # Nom NEUF a chaque execution, et pas de -Force.
+    #
+    # Un nom fixe reutilise par -Force accepte ce qu'un compte de moindre
+    # privilege a prepare : dossier aux ACL ouvertes, ou jonction que le
+    # Remove-Item final suivrait. Cela compte double quand ce script tourne en
+    # SYSTEM (Intune, SCCM, agent de parc), car GetTempPath() vaut alors
+    # C:\Windows\Temp, ou le groupe Users peut creer des dossiers.
+    $tmpDir    = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(),
+                   "ledgeralps-install-" + [System.Guid]::NewGuid().ToString('N'))
+    $zipPath   = [System.IO.Path]::Combine($tmpDir, $archive)
+    $sumsPath  = [System.IO.Path]::Combine($tmpDir, $sums)
+
+    New-Item -ItemType Directory -Path $tmpDir -ErrorAction Stop | Out-Null
 
     Write-Info "Downloading $archive..."
     try {
         $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+        Invoke-WebRequest -Uri $url     -OutFile $zipPath  -UseBasicParsing
+        Invoke-WebRequest -Uri $sumsUrl -OutFile $sumsPath -UseBasicParsing
     } catch {
         Write-Fail "Download failed: $_`n  URL: $url"
     }
+
+    # Verifier l'empreinte AVANT d'extraire et d'installer.
+    #
+    # GoReleaser publie deja ces empreintes. Les ignorer revenait a copier dans
+    # C:\Program Files, puis a enregistrer en service a demarrage automatique,
+    # ce que le reseau avait bien voulu rendre. Le mode d'emploi documente est
+    # « irm ... | iex » : il n'y a aucune autre occasion d'inspecter.
+    Write-Info "Verifying checksum..."
+    $ligne = Select-String -Path $sumsPath -Pattern ([regex]::Escape($archive)) |
+             Select-Object -First 1
+    if (-not $ligne) {
+        Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Fail "Aucune empreinte publiee pour $archive - installation abandonnee."
+    }
+    $attendu = ($ligne.Line -split '\s+')[0]
+    $obtenu  = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash
+    if ($obtenu -ne $attendu.ToUpper()) {
+        Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Fail ("Empreinte SHA-256 incorrecte pour $archive.`n" +
+                    "  attendue : $($attendu.ToUpper())`n" +
+                    "  obtenue  : $obtenu`n" +
+                    "  L'archive a ete modifiee ou le telechargement est corrompu. NE PAS INSTALLER.")
+    }
+    Write-Success "Checksum verified"
 
     Write-Info "Extracting to $InstallDir..."
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     Expand-Archive -Path $zipPath -DestinationPath $tmpDir -Force
 
-    $serverExe = Get-ChildItem -Path $tmpDir -Recurse -Filter "ledgeralps-server.exe" | Select-Object -First 1
-    $cliExe    = Get-ChildItem -Path $tmpDir -Recurse -Filter "ledgeralps-cli.exe"    | Select-Object -First 1
+    # Chemins ATTENDUS, pas une fouille recursive : -Recurse ramasserait le
+    # premier fichier de ce nom trouve, quelle qu'en soit l'origine, pour aller
+    # l'installer en service.
+    $serverExe = Get-Item (Join-Path $tmpDir "ledgeralps-server.exe") -ErrorAction SilentlyContinue
+    $cliExe    = Get-Item (Join-Path $tmpDir "ledgeralps-cli.exe")    -ErrorAction SilentlyContinue
 
     if (-not $serverExe) { Write-Fail "ledgeralps-server.exe not found in archive." }
     if (-not $cliExe)    { Write-Fail "ledgeralps-cli.exe not found in archive." }
@@ -150,6 +195,21 @@ function Add-ToPath {
 # --------------------------------------------------------------------------- #
 function Write-EnvTemplate {
     New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
+
+    # Ce repertoire recoit ledgeralps.env - donc JWT_SECRET, la cle qui SIGNE
+    # les jetons de session - et la base SQLite, donc la comptabilite entiere.
+    #
+    # Les ACL heritees de C:\ProgramData donnent la lecture au groupe Users :
+    # tout compte local de la machine lisait la cle et pouvait forger un jeton
+    # administrateur. On coupe l'heritage et on ne laisse que SYSTEM et les
+    # administrateurs ; le compte de service recoit son acces plus tard, a
+    # l'enregistrement du service, et lui seul.
+    icacls $DataDir /inheritance:r `
+        /grant "*S-1-5-18:(OI)(CI)F" `
+        /grant "*S-1-5-32-544:(OI)(CI)F" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Impossible de restreindre les ACL de $DataDir (code $LASTEXITCODE). JWT_SECRET y serait lisible par tout compte local."
+    }
 
     $envExample = "$DataDir\ledgeralps.env.example"
     if (-not (Test-Path $envExample)) {
@@ -202,30 +262,89 @@ function Register-Service {
             Start-Sleep -Seconds 2
         }
         sc.exe delete $serviceName | Out-Null
-        Start-Sleep -Seconds 1
+        if ($LASTEXITCODE -ne 0) { Write-Fail "sc.exe delete a echoue (code $LASTEXITCODE)" }
+        # Un service reste « marque pour suppression » tant qu'un handle est
+        # ouvert dessus. Attendre sa disparition REELLE, plutot qu'une seconde
+        # au hasard : sinon sc.exe create echoue avec 1072 et le script
+        # annoncait quand meme « registered ».
+        for ($i = 0; $i -lt 60; $i++) {
+            if (-not (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)) { break }
+            Start-Sleep -Milliseconds 500
+        }
+        if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+            Write-Fail "Le service '$serviceName' est toujours marque pour suppression. Fermez services.msc et relancez."
+        }
     }
 
     Write-Info "Registering Windows Service '$serviceName'..."
 
-    # sc.exe does not support environment variables natively.
-    # We wrap the server in a batch file that loads the env file first.
-    $wrapperBat = "$InstallDir\start-service.bat"
-    @"
-@echo off
-for /f "usebackq tokens=1* delims==" %%A in ("$envFile") do (
-    if not "%%A"=="" if not "%%A:~0,1%"=="#" set "%%A=%%B"
-)
-"$exePath"
-"@ | Set-Content -Path $wrapperBat -Encoding ASCII
+    # PAS de fichier .bat intermediaire.
+    #
+    # Le SCM attend que le processus qu'il lance appelle StartServiceCtrlDispatcher
+    # dans le delai imparti. cmd.exe executant un script batch ne le fait jamais :
+    # le service echouait donc au demarrage avec l'erreur 1053, systematiquement,
+    # quel qu'ait ete le contenu du .bat. Celui-ci avait par ailleurs deux
+    # defauts propres — « %%A:~0,1% » n'est pas une syntaxe valide sur une
+    # metavariable for, donc le filtre de commentaires ne filtrait rien, et
+    # set "%%A=%%B" sortait de ses guillemets sur une valeur contenant " et &.
+    #
+    # Le SCM sait charger un environnement lui-meme, via la valeur REG_MULTI_SZ
+    # « Environment » sous la cle du service. Plus d'interpreteur au milieu.
+    $ancien = "$InstallDir\start-service.bat"
+    if (Test-Path $ancien) {
+        Write-Info "Removing obsolete start-service.bat wrapper..."
+        Remove-Item $ancien -Force
+    }
 
-    $binPath = "`"$wrapperBat`""
-    sc.exe create $serviceName binPath= $binPath DisplayName= "LedgerAlps Accounting Server" start= auto | Out-Null
-    sc.exe description $serviceName "LedgerAlps Swiss SME Accounting — double-entry bookkeeping with QR-bill and ISO 20022 support." | Out-Null
+    # Compte de service dedie, pas LocalSystem.
+    #
+    # Sans obj=, sc.exe retombe sur LocalSystem : un serveur HTTP servant une
+    # base comptable tournerait avec les droits de la machine, et toute
+    # execution de code dans le processus deviendrait un controle total du
+    # poste. Le pendant Linux de ce service tourne deja sous un compte dedie
+    # avec NoNewPrivileges et ProtectSystem=strict — le raisonnement de moindre
+    # privilege avait ete fait une fois, puis pas porte sur Windows.
+    #
+    # « NT SERVICE\<nom> » est un compte de service virtuel : cree par le SCM a
+    # l'enregistrement, sans mot de passe a stocker nulle part, et sans aucun
+    # droit herite.
+    $svcAccount = "NT SERVICE\$serviceName"
+
+    sc.exe create $serviceName binPath= "`"$exePath`"" `
+        DisplayName= "LedgerAlps Accounting Server" start= auto obj= $svcAccount | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Fail "sc.exe create a echoue (code $LASTEXITCODE)" }
+
+    sc.exe description $serviceName "LedgerAlps Swiss SME Accounting - double-entry bookkeeping with QR-bill and ISO 20022 support." | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Warn "sc.exe description a echoue (code $LASTEXITCODE)" }
+
     sc.exe failure $serviceName reset= 60 actions= restart/5000/restart/10000/restart/30000 | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Warn "sc.exe failure a echoue (code $LASTEXITCODE)" }
 
-    Write-Success "Windows Service '$serviceName' registered"
+    # L'environnement, lu par le SCM au demarrage. Seules les lignes NOM=VALEUR
+    # sont retenues : les commentaires et les lignes vides du fichier .env
+    # n'ont rien a faire ici, et c'est le filtre que le .bat croyait appliquer.
+    if (Test-Path $envFile) {
+        $envLines = @(Get-Content $envFile |
+            Where-Object { $_ -match '^\s*[A-Za-z_][A-Za-z0-9_]*=' } |
+            ForEach-Object { $_.Trim() })
+        if ($envLines.Count -gt 0) {
+            New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName" `
+                -Name Environment -PropertyType MultiString -Value $envLines -Force | Out-Null
+            Write-Info "Service environment loaded from $envFile ($($envLines.Count) variables)"
+        }
+    } else {
+        Write-Warn "$envFile absent : le service demarrera sans configuration. Creez-le, puis relancez cet installeur."
+    }
+
+    # Le compte de service virtuel n'herite d'aucun droit : lui accorder
+    # explicitement l'acces a ses seules donnees, et rien d'autre.
+    icacls $DataDir /grant "${svcAccount}:(OI)(CI)M" /T | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Warn "icacls sur $DataDir a echoue (code $LASTEXITCODE) - verifiez les droits du service" }
+
+    Write-Success "Windows Service '$serviceName' registered (running as $svcAccount)"
     Write-Info "Start with: Start-Service -Name '$serviceName'"
     Write-Info "  or:       sc.exe start $serviceName"
+    Write-Info "Note: apres modification de $envFile, relancez cet installeur pour recharger l'environnement du service."
 }
 
 # --------------------------------------------------------------------------- #

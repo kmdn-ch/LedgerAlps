@@ -179,6 +179,31 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
+
+	// Ne croire AUCUN en-tête d'adresse, sauf mandataire déclaré.
+	//
+	// gin fait l'inverse par défaut : ses mandataires de confiance valent
+	// 0.0.0.0/0 et ::/0, si bien que `c.ClientIP()` rend la valeur de
+	// X-Forwarded-For posée par l'appelant. Trois choses en dépendent, et les
+	// trois se cassent en silence :
+	//
+	//   - le verrouillage des connexions, dont la clé est l'adresse : une valeur
+	//     différente à chaque requête est une clé différente, et l'échelle
+	//     30 s → 1 h ne se déclenche jamais ;
+	//   - le verrouillage CIBLÉ d'un tiers : dix requêtes portant l'adresse du
+	//     comptable le tiennent hors de son propre logiciel ;
+	//   - l'adresse scellée dans la chaîne d'audit (CO art. 957a), qui devient
+	//     celle que l'attaquant a choisie — la chaîne reste cohérente, elle
+	//     scelle simplement un mensonge.
+	//
+	// LedgerAlps écoute en direct. Une installation derrière un reverse proxy
+	// déclare le sien dans TRUSTED_PROXIES.
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatalf("FATAL: TRUSTED_PROXIES illisible (%v). "+
+			"Attendu : des adresses ou des CIDR séparés par des virgules, "+
+			"par exemple « 10.0.0.1, 192.168.1.0/24 ».", err)
+	}
+
 	r.Use(gin.CustomRecovery(func(c *gin.Context, err any) {
 		log.Printf("PANIC recovered: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -256,7 +281,10 @@ func main() {
 	v1.GET("/auth/devices", middleware.RequireAuth(cfg.JWTSecret), authHandler.ListTrustedDevices)
 	v1.DELETE("/auth/devices", middleware.RequireAuth(cfg.JWTSecret), authHandler.ForgetTrustedDevices)
 
-	v1.POST("/auth/register", loginLimiter.Middleware(), authHandler.Register)
+	// `POST /auth/register` a été RETIRÉE : elle créait un compte « comptable »
+	// actif — donc PermManage, donc l'IBAN de l'entreprise — sans qu'aucun
+	// administrateur l'ait voulu, et contournait entièrement POST /users.
+	// Voir internal/api/handlers/auth.go pour le détail.
 	v1.POST("/auth/bootstrap", loginLimiter.Middleware(), authHandler.Bootstrap) // one-shot: creates first admin user
 
 	// Swiss registry proxy — public (called from setup wizard, no auth yet)

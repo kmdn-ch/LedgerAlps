@@ -90,20 +90,64 @@ resolve_version() {
 # Download and install binaries                                               #
 # --------------------------------------------------------------------------- #
 install_binaries() {
-  local archive="ledgeralps_${VERSION}_${OS}_${ARCH}.tar.gz"
+  # Deux formes du même numéro, et il faut les deux.
+  #
+  # GoReleaser nomme l'archive avec {{ .Version }}, qui est le tag SANS son
+  # « v » ; le chemin de téléchargement, lui, est le tag AVEC. Utiliser $VERSION
+  # pour les deux demandait « ledgeralps_v1.5.2_… », un fichier qui n'a jamais
+  # été publié — donc un 404 à chaque exécution, depuis toujours. Le workflow de
+  # publication fait déjà ce retrait (release.yml : VERSION_NUM="${VERSION#v}").
+  local version_num="${VERSION#v}"
+  local archive="ledgeralps_${version_num}_${OS}_${ARCH}.tar.gz"
   local url="https://github.com/${REPO}/releases/download/${VERSION}/${archive}"
   local tmp_dir
   tmp_dir="$(mktemp -d)"
 
+  local sums="ledgeralps_${version_num}_checksums.txt"
+  local sums_url="https://github.com/${REPO}/releases/download/${VERSION}/${sums}"
+
   info "Downloading $archive…"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$url" -o "$tmp_dir/$archive"
+    curl -fsSL "$url"      -o "$tmp_dir/$archive"
+    curl -fsSL "$sums_url" -o "$tmp_dir/$sums"
   else
     wget -qO "$tmp_dir/$archive" "$url"
+    wget -qO "$tmp_dir/$sums"    "$sums_url"
   fi
 
+  # Vérifier l'empreinte AVANT d'extraire, et avant d'installer en root.
+  #
+  # GoReleaser publie déjà ces empreintes ; ne pas les lire revenait à installer
+  # dans /usr/local/bin, avec les droits du superutilisateur, ce que le réseau
+  # avait bien voulu rendre. Le mode d'emploi documenté est « curl … | bash » :
+  # il n'y a aucune autre occasion de regarder ce qui arrive.
+  info "Verifying checksum…"
+  local sha=""
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha="sha256sum"
+  elif command -v shasum >/dev/null 2>&1; then
+    sha="shasum -a 256"
+  else
+    error "Ni sha256sum ni shasum n'est disponible : impossible de vérifier l'archive. Installez coreutils et relancez."
+  fi
+
+  local attendu obtenu
+  attendu="$(awk -v f="$archive" '$2 == f || $2 == "*"f { print $1 }' "$tmp_dir/$sums" | head -1)"
+  [ -n "$attendu" ] || error "Aucune empreinte publiée pour $archive — installation abandonnée."
+  obtenu="$($sha "$tmp_dir/$archive" | awk '{print $1}')"
+  if [ "$attendu" != "$obtenu" ]; then
+    rm -rf "$tmp_dir"
+    error "Empreinte SHA-256 incorrecte pour $archive.
+  attendue : $attendu
+  obtenue  : $obtenu
+  L'archive a été modifiée ou le téléchargement est corrompu. NE PAS INSTALLER."
+  fi
+  success "Checksum verified"
+
   info "Extracting…"
-  tar -xzf "$tmp_dir/$archive" -C "$tmp_dir"
+  # --no-same-owner : l'extraction tourne en root, et une archive n'a pas à
+  # choisir le propriétaire des fichiers qu'elle dépose.
+  tar -xzf "$tmp_dir/$archive" -C "$tmp_dir" --no-same-owner
 
   info "Installing binaries to $INSTALL_DIR…"
   install -m 0755 "$tmp_dir/ledgeralps-server" "$INSTALL_DIR/ledgeralps-server"
@@ -118,8 +162,31 @@ install_binaries() {
 # --------------------------------------------------------------------------- #
 write_env_template() {
   mkdir -p "$DATA_DIR"
-  if [ ! -f "$DATA_DIR/ledgeralps.env" ]; then
-    cat > "$DATA_DIR/ledgeralps.env.example" <<'EOF'
+
+  # Ce répertoire reçoit ledgeralps.env, donc JWT_SECRET : la clé qui SIGNE les
+  # jetons de session. En 0755/0644, tout compte local de la machine la lisait
+  # et pouvait forger un jeton administrateur — le durcissement systemd plus bas
+  # (NoNewPrivileges, ProtectSystem=strict) protégeait alors tout sauf la clé
+  # qui ouvre l'application.
+  #
+  # Le groupe « ledgeralps » n'existe que si install_systemd est passé avant :
+  # sur une machine sans systemd, on se rabat sur root seul, plus restrictif
+  # encore. Dans les deux cas, un utilisateur ordinaire ne lit rien.
+  if getent group ledgeralps >/dev/null 2>&1; then
+    chown root:ledgeralps "$DATA_DIR"
+    chmod 750 "$DATA_DIR"
+  else
+    chown root:root "$DATA_DIR"
+    chmod 700 "$DATA_DIR"
+  fi
+
+  # La garde testait « ledgeralps.env » alors que le corps écrit
+  # « ledgeralps.env.example » : le gabarit n'était donc jamais rafraîchi une
+  # fois la configuration créée, et réécrit sans condition tant qu'elle ne
+  # l'était pas. On teste le fichier qu'on écrit.
+  if [ ! -f "$DATA_DIR/ledgeralps.env.example" ]; then
+    ( umask 077
+      cat > "$DATA_DIR/ledgeralps.env.example" <<'EOF'
 # LedgerAlps environment configuration
 # Copy this file to ledgeralps.env and fill in the values.
 
@@ -142,6 +209,11 @@ ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
 LOG_LEVEL=INFO
 DEBUG=false
 EOF
+    )
+    if getent group ledgeralps >/dev/null 2>&1; then
+      chown root:ledgeralps "$DATA_DIR/ledgeralps.env.example"
+      chmod 640 "$DATA_DIR/ledgeralps.env.example"
+    fi
     info "Created env template at $DATA_DIR/ledgeralps.env.example"
   fi
 }
@@ -216,7 +288,8 @@ print_next_steps() {
   echo "       export JWT_SECRET=\$(openssl rand -hex 32)"
   echo ""
   echo "  2. Create your config file:"
-  echo "       cp $DATA_DIR/ledgeralps.env.example $DATA_DIR/ledgeralps.env"
+  echo "       install -o root -g ledgeralps -m 640 \\"
+  echo "         $DATA_DIR/ledgeralps.env.example $DATA_DIR/ledgeralps.env"
   echo "       # Edit $DATA_DIR/ledgeralps.env and set JWT_SECRET"
   echo ""
   if [ "$OS" = "linux" ] && command -v systemctl >/dev/null 2>&1; then
@@ -252,8 +325,10 @@ main() {
   detect_platform
   resolve_version
   install_binaries
-  write_env_template
+  # install_systemd AVANT write_env_template : c'est lui qui cree le compte
+  # « ledgeralps », dont le gabarit a besoin pour restreindre ses droits.
   install_systemd
+  write_env_template
   print_next_steps
 }
 

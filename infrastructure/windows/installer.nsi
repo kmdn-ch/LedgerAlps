@@ -182,7 +182,14 @@ LangString UninstallDone ${LANG_ITALIAN} "LedgerAlps è stato disinstallato."
 ; sont des succès ici ; le reste (accès refusé, par exemple) mérite un mot.   ;
 ; --------------------------------------------------------------------------- ;
 !macro ArreterProcessus exe
-  nsExec::Exec 'taskkill /f /im "${exe}"'
+  ; Chemin ABSOLU obligatoire. Sans lui, CreateProcess (lpApplicationName=NULL)
+  ; cherche d'abord dans le repertoire de l'installeur -- le dossier
+  ; Telechargements, dans la quasi-totalite des cas --, puis dans le repertoire
+  ; courant, et n'atteint System32 qu'en troisieme. Or cette macro est inseree
+  ; AVANT le SetOutPath de la section, et le script demande l'elevation
+  ; (RequestExecutionLevel admin) : un taskkill.exe depose a cote du setup
+  ; s'executerait donc en Administrateur.
+  nsExec::Exec '"$SYSDIR\taskkill.exe" /f /im "${exe}"'
   Pop $0
   StrCmp $0 "0" +3 0
   StrCmp $0 "128" +2 0

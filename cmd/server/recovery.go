@@ -23,17 +23,69 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
 
+// essaisRecuperation borne les tentatives de phrase de récupération.
+//
+// Une phrase se tape à la main, une fois. Trois essais par minute ne gênent
+// personne et ferment la porte à l'essai automatisé — que RIEN ne bornait ici,
+// contrairement à la connexion ordinaire. Chaque essai coûte en outre 64 Mio
+// via Argon2id : sans borne, cent essais concurrents réclament 6,4 Go sur un
+// poste de bureau, et le refus vient de l'OS plutôt que du code.
+type essaisRecuperation struct {
+	mu     sync.Mutex
+	essais map[string][]time.Time
+}
+
+const (
+	essaisMax      = 3
+	fenetreEssais  = time.Minute
+	messageTropTot = "Trop de tentatives. Attendez une minute avant de réessayer."
+)
+
+// autorise dit si cette adresse peut retenter, et enregistre la tentative.
+func (e *essaisRecuperation) autorise(adresse string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	maintenant := time.Now()
+	var recents []time.Time
+	for _, t := range e.essais[adresse] {
+		if maintenant.Sub(t) < fenetreEssais {
+			recents = append(recents, t)
+		}
+	}
+	if len(recents) >= essaisMax {
+		e.essais[adresse] = recents
+		return false
+	}
+	e.essais[adresse] = append(recents, maintenant)
+	return true
+}
+
 // runRecoveryServer serves the recovery page until the key is restored, then
 // relaunches. It never returns while it succeeds in serving.
 func runRecoveryServer(cfg *config.Config, cause error) {
 	addr := net.JoinHostPort(cfg.Host, fmt.Sprint(cfg.Port))
 	keys := db.NewDatabaseKeys(config.AppDataDir())
+
+	// Le transport suit la MÊME règle que le serveur normal.
+	//
+	// Ce formulaire demande la phrase qui enveloppe la clé de dix ans de
+	// comptabilité. La servir en clair sur une installation réseau donne à qui
+	// écoute le câble exactement ce que le chiffrement de la base devait lui
+	// refuser. resolveTLS laisse le loopback en clair — là, il n'y a pas de
+	// câble — et impose TLS dès que l'hôte est joignable.
+	certFile, keyFile, tlsErr := resolveTLS(cfg)
+	if tlsErr != nil {
+		log.Fatalf("FATAL: %v (cause initiale: %v)", tlsErr, cause)
+	}
+
+	limiteur := &essaisRecuperation{essais: map[string][]time.Time{}}
 
 	mux := http.NewServeMux()
 	render := func(w http.ResponseWriter, status int, message, kind string) {
@@ -52,6 +104,16 @@ func runRecoveryServer(cfg *config.Config, cause error) {
 		if r.Method == http.MethodPost {
 			if err := r.ParseForm(); err != nil {
 				render(w, http.StatusBadRequest, "Formulaire illisible.", "error")
+				return
+			}
+			// La borne est posée AVANT de dériver la clé : c'est la dérivation
+			// qui coûte 64 Mio, et la compter après reviendrait à la payer.
+			adresse := r.RemoteAddr
+			if h, _, err := net.SplitHostPort(adresse); err == nil {
+				adresse = h
+			}
+			if !limiteur.autorise(adresse) {
+				render(w, http.StatusTooManyRequests, messageTropTot, "error")
 				return
 			}
 			phrase := r.PostFormValue("passphrase")
@@ -98,10 +160,20 @@ func runRecoveryServer(cfg *config.Config, cause error) {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	schema := "http"
+	if certFile != "" {
+		schema = "https"
+	}
 	fmt.Printf("\nLedgerAlps: la base de données est chiffrée et sa clé n'est pas lisible sur ce compte.\n")
-	fmt.Printf("LedgerAlps: ouvrez http://%s pour saisir votre phrase de récupération.\n\n", addr)
+	fmt.Printf("LedgerAlps: ouvrez %s://%s pour saisir votre phrase de récupération.\n\n", schema, addr)
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	var err error
+	if certFile != "" {
+		err = srv.ListenAndServeTLS(certFile, keyFile)
+	} else {
+		err = srv.ListenAndServe()
+	}
+	if err != nil && err != http.ErrServerClosed {
 		log.Fatalf("FATAL: %v (cause initiale: %v)", err, cause)
 	}
 }

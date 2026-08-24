@@ -13,8 +13,16 @@ Toutes les routes applicatives sont préfixées par `/api/v1`.
 | admin | jeton d'accès d'un utilisateur administrateur |
 
 > Les routes d'authentification sont protégées par une limitation de débit :
-> 5 échecs par IP en 15 minutes déclenchent un verrouillage temporaire
-> (`429` + en-tête `Retry-After`).
+> **10 échecs** par IP en 15 minutes déclenchent un verrouillage
+> (`429` + en-tête `Retry-After`), dont la durée **s'allonge à chaque série** :
+> 30 s, 1 min, 5 min, 15 min, 1 h — le dernier palier se répétant ensuite.
+> Une heure de silence après la fin d'un verrou ramène l'échelle à son premier
+> palier ; une connexion réussie l'efface entièrement.
+>
+> L'adresse retenue est celle de la connexion elle-même. Les en-têtes
+> `X-Forwarded-For` / `X-Real-IP` ne sont pris en compte que si le mandataire
+> qui les pose est déclaré dans `TRUSTED_PROXIES` — sans quoi n'importe qui
+> choisirait l'identité que le compteur observe.
 
 ---
 
@@ -23,7 +31,6 @@ Toutes les routes applicatives sont préfixées par `/api/v1`.
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
 | POST | `/auth/bootstrap` | public | Créer le premier administrateur (une seule fois) |
-| POST | `/auth/register` | public | Inscription |
 | POST | `/auth/login` | public | Connexion → jetons |
 | POST | `/auth/refresh` | public | Renouveler le jeton d'accès |
 | POST | `/auth/logout` | public | Révoquer le jeton de rafraîchissement |

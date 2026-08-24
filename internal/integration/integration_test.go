@@ -68,7 +68,6 @@ func newTestServer(t *testing.T) (*gin.Engine, *sql.DB, *config.Config) {
 	// Auth
 	authH := handlers.NewAuthHandler(database, cfg)
 	v1.POST("/auth/bootstrap", authH.Bootstrap)
-	v1.POST("/auth/register", authH.Register)
 	v1.POST("/auth/login", authH.Login)
 	v1.POST("/auth/refresh", authH.Refresh)
 	v1.POST("/auth/logout", authH.Logout)
@@ -179,34 +178,34 @@ func TestBootstrap(t *testing.T) {
 	assertStatus(t, w2, http.StatusConflict)
 }
 
-func TestRegister(t *testing.T) {
+// L'inscription publique ne doit JAMAIS revenir.
+//
+// Elle a existé, et elle donnait à qui atteignait le port un compte comptable
+// actif : PermManage, donc la fiche entreprise, donc l'IBAN imprimé sur toutes
+// les factures suivantes. Elle était morte côté interface, ce qui est
+// exactement pourquoi personne ne la voyait.
+//
+// Ce test ne vérifie pas un comportement, il tient une DÉCISION. Si quelqu'un
+// remonte la route un jour — par copie d'un ancien fichier, par retour de
+// branche —, il échoue.
+func TestLInscriptionPubliqueNExistePlus(t *testing.T) {
 	r, _, _ := newTestServer(t)
 
-	// Bootstrap admin first
 	doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
 		"email": "admin@test.com", "name": "Admin", "password": "adminpass1234",
 	}), "")
 
-	// Register a new user
 	w := doJSON(t, r, "POST", "/api/v1/auth/register", mustJSON(t, map[string]any{
-		"email":    "user@test.com",
-		"name":     "Regular User",
+		"email":    "intrus@test.com",
+		"name":     "Intrus",
 		"password": "userpass1234",
 	}), "")
-	assertStatus(t, w, http.StatusCreated)
 
-	body := parseBody(t, w)
-	if body["is_admin"] != false {
-		t.Errorf("registered user should not be admin, got is_admin=%v", body["is_admin"])
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("POST /auth/register rend %d — la route publique d'inscription est revenue. "+
+			"Elle crée un compte « comptable » actif sans qu'aucun administrateur l'ait voulu : "+
+			"un compte se crée par POST /users, ou par bootstrap pour le tout premier.", w.Code)
 	}
-
-	// Duplicate email → 409
-	w2 := doJSON(t, r, "POST", "/api/v1/auth/register", mustJSON(t, map[string]any{
-		"email":    "user@test.com",
-		"name":     "Dup",
-		"password": "userpass1234",
-	}), "")
-	assertStatus(t, w2, http.StatusConflict)
 }
 
 func TestLogin(t *testing.T) {

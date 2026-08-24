@@ -15,16 +15,10 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
 
-// registerRequest is used for POST /auth/register.
-type registerRequest struct {
-	Email    string `json:"email"    binding:"required,email"`
-	Name     string `json:"name"     binding:"required,min=1,max=255"`
-	Password string `json:"password" binding:"required,min=8"`
-}
-
 // bootstrapRequest is used for POST /auth/bootstrap.
-// It extends registerRequest with optional company fields so the first admin
-// can seed the company profile in a single request.
+// Il porte les mêmes champs d'identité qu'une création de compte, plus les
+// champs d'entreprise facultatifs, pour que le premier administrateur amorce sa
+// fiche en une seule requête.
 type bootstrapRequest struct {
 	Email    string `json:"email"    binding:"required,email"`
 	Name     string `json:"name"     binding:"required,min=1,max=255"`
@@ -312,48 +306,22 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// Register godoc
-// POST /api/v1/auth/register
-// Creates a new non-admin user. Open endpoint — no auth required.
-func (h *AuthHandler) Register(c *gin.Context) {
-	var req registerRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-		return
-	}
-
-	hash, err := security.HashPassword(req.Password)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "le mot de passe n'a pas pu être haché"})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-
-	id := db.NewID()
-	now := time.Now().UTC()
-	q := db.Rebind(`
-		INSERT INTO users (id, email, name, password_hash, role, is_admin, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 'accountant', 0, 1, ?, ?)`, h.cfg.UsePostgres())
-	if _, err := h.db.ExecContext(ctx, q, id, req.Email, req.Name, hash, now, now); err != nil {
-		// UNIQUE constraint on email
-		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
-			c.JSON(http.StatusConflict, gin.H{"error": "cette adresse e-mail est déjà enregistrée"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"id":         id,
-		"email":      req.Email,
-		"name":       req.Name,
-		"is_admin":   false,
-		"created_at": now,
-	})
-}
+// L'INSCRIPTION PUBLIQUE A ÉTÉ RETIRÉE — et ce n'est pas un nettoyage.
+//
+// `POST /auth/register` créait un compte « comptable » ACTIF, sans mot de passe
+// temporaire, sans qu'aucun administrateur l'ait voulu. Or le comptable détient
+// PermManage : il règle la fiche entreprise — donc l'IBAN qui s'imprime sur
+// toutes les factures émises ensuite —, écrit au journal, clôture un exercice.
+// N'importe qui atteignant le port obtenait cela en cinq requêtes, en
+// s'inscrivant lui-même son propre second facteur au passage.
+//
+// La route était par ailleurs MORTE côté interface : aucune page ne l'appelait.
+// C'était un vestige d'avant les rôles, que `POST /users` (PermAdmin, mot de
+// passe temporaire obligatoire) remplace depuis. Un vestige que personne ne voit
+// dans l'écran est justement celui auquel personne ne pense.
+//
+// Un compte se crée maintenant par un administrateur, et seulement ainsi. Le
+// tout premier passe par `POST /auth/bootstrap`, qui ne fonctionne qu'une fois.
 
 // Bootstrap godoc
 // POST /api/v1/auth/bootstrap

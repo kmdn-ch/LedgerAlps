@@ -482,6 +482,7 @@ export UPDATE_CHECK=false
 | `HOST` | `127.0.0.1` | Interface d'écoute. Toute valeur non-loopback impose TLS |
 | `TLS_CERT` / `TLS_KEY` | vide | Certificat et clé. À fournir ensemble |
 | `ALLOW_INSECURE_HTTP` | `false` | Sert en clair sur le réseau. Uniquement derrière un proxy TLS local |
+| `TRUSTED_PROXIES` | vide | Mandataires (adresses ou CIDR) dont `X-Forwarded-For` est cru. Vide = l'adresse observée est celle de la connexion |
 
 > **Attention à la précédence.** Si un fichier `config.json` existe dans le
 > répertoire de données applicatives, il **prime sur ces variables**. C'est

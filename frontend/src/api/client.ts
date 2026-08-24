@@ -102,8 +102,10 @@ api.interceptors.response.use(
 export const authApi = {
   login:    (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
-  register: (data: { email: string; name: string; password: string }) =>
-    api.post('/auth/register', data),
+  // Pas de `register` : l'inscription publique n'existe plus côté serveur. Elle
+  // créait un compte comptable actif sans qu'aucun administrateur l'ait voulu.
+  // Un compte se crée par un administrateur (POST /users) ; le premier passe par
+  // `bootstrap`, qui ne fonctionne qu'une fois.
   bootstrap:(data: { email: string; name: string; password: string }) =>
     api.post('/auth/bootstrap', data),
   // Ni refresh ni logout ne prennent de jeton : le cookie HttpOnly le porte,
