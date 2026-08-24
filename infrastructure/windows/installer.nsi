@@ -219,7 +219,11 @@ InstallDir       "${INSTALL_DIR}"
 ; vivre dans la vue 64 bits. Sans cela, makensis produisant un executable
 ; 32 bits, le redirecteur WOW64 l'ecrit sous WOW6432Node -- invisible pour les
 ; outils d'inventaire, et deplacee le jour ou l'on passerait en Target amd64.
-SetRegView 64
+;
+; SetRegView n'est PAS valide ici : c'est une instruction d'execution, pas une
+; directive de compilation, et NSIS la refuse hors Section ou Function. Elle est
+; donc posee dans .onInit, dans la section d'installation et dans celle de
+; desinstallation -- les trois portees qui touchent au registre.
 InstallDirRegKey HKLM "${UNINSTALL_KEY}" "InstallLocation"
 RequestExecutionLevel admin
 ShowInstDetails show
@@ -238,6 +242,10 @@ ShowUnInstDetails show
 ; Au passage, `DetailPrint` n'écrit nulle part depuis `.onInit` : la vue de
 ; détail n'existe pas encore.
 Function .onInit
+  ; Vue 64 bits des le depart : InstallDirRegKey relit la cle posee par une
+  ; installation precedente, et la lire dans l'autre vue rendrait le chemin
+  ; introuvable.
+  SetRegView 64
   ; Detect reinstall: if config.json already exists, write a sentinel so the
   ; launcher can show a "configuration preserved" notification on next launch.
   IfFileExists "$APPDATA\LedgerAlps\config.json" 0 lbl_no_reinstall
@@ -251,6 +259,7 @@ FunctionEnd
 ; --------------------------------------------------------------------------- ;
 Section "LedgerAlps (required)" SecMain
   SectionIn RO
+  SetRegView 64
 
   ; Arrêter le serveur et le lanceur pour que leurs fichiers soient
   ; remplaçables. Avant les commandes File ci-dessous, donc à temps.
@@ -328,6 +337,9 @@ SectionEnd
 ; Uninstaller                                                                 ;
 ; --------------------------------------------------------------------------- ;
 Section "Uninstall"
+  ; Meme vue que celle qui a ecrit : sans cela, DeleteRegKey viserait la vue
+  ; 32 bits et laisserait l'entree « Applications et fonctionnalites » derriere.
+  SetRegView 64
   ; Stop any running server
   DetailPrint "$(StoppingApp)"
   !insertmacro ArreterProcessus "${SERVER_EXE}"
