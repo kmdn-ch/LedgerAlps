@@ -63,12 +63,26 @@ func EnsureSelfSigned(dir string, hosts []string) (certPath, keyPath string, err
 			Organization: []string{"LedgerAlps"},
 			CommonName:   "LedgerAlps (certificat auto-signé)",
 		},
-		NotBefore:             time.Now().Add(-time.Hour), // tolerate a skewed clock
-		NotAfter:              time.Now().Add(Validity),
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,
+		NotBefore: time.Now().Add(-time.Hour), // tolerate a skewed clock
+		NotAfter:  time.Now().Add(Validity),
+		// PAS de KeyUsageCertSign, PAS de IsCA.
+		//
+		// Ce certificat sert UNE machine. Le rendre capable de signer en
+		// faisait une autorité de certification sans contrainte de nom : le
+		// geste évident pour faire taire l'avertissement du navigateur est de
+		// l'importer dans « Autorités de certification racines de confiance »,
+		// et à partir de là, la clé posée dans %APPDATA% — en 0600, droit
+		// consultatif sur Windows, donc lisible par tout processus du même
+		// compte — permettait de fabriquer un certificat valable pour
+		// n'importe quel domaine. Le rayon d'action passait d'un fichier local
+		// à l'interception de toute la navigation.
+		//
+		// Une feuille signée par elle-même produit exactement le même
+		// avertissement et la même exception à poser, sans ce pouvoir-là.
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		IsCA:                  true,
+		IsCA:                  false,
 	}
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {

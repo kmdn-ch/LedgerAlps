@@ -106,6 +106,15 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
 
+      # syft produit le SBOM déclaré dans .goreleaser.yaml (bloc `sboms`).
+      # Sans lui sur le runner, goreleaser échoue au moment de l'écrire.
+      # Version épinglée : un outil qui fabrique l'inventaire de ce qu'on
+      # publie ne doit pas changer sous nos pieds d'une release à l'autre.
+      - name: Install syft (SBOM)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh             | sh -s -- -b /usr/local/bin v1.18.1
+          syft --version
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:

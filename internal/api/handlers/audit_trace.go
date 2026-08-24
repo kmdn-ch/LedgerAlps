@@ -92,12 +92,36 @@ func traceFor(ctx context.Context, database *sql.DB, usePostgres bool,
 	if userID == "" {
 		return
 	}
-	err := accounting.RecordDocumentAction(ctx, database, usePostgres,
-		table, userID, action, recordID, ip, state)
+	// DANS une transaction, et pas sur *sql.DB.
+	//
+	// AppendAuditEntryFor lit le maillon précédent puis insère le suivant, et
+	// documente lui-même exiger une transaction. Hors transaction, deux
+	// requêtes concurrentes lisent le MÊME prédécesseur et écrivent deux
+	// maillons portant le même numéro de séquence. La vérification lit alors
+	// « lien rompu » et « -1 entrée supprimée », et pose Verified=false de
+	// façon définitive : le produit accuse l'utilisateur d'avoir altéré ses
+	// livres alors que personne n'a rien touché.
+	//
+	// `execQuerier` étant satisfait par *sql.DB comme par *sql.Tx, rien ne
+	// signalait l'erreur à la compilation.
+	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
+		log.Printf("WARNING: action %s sur %s/%s non tracée: %v",
+			action, table, recordID, err)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := accounting.RecordDocumentAction(ctx, tx, usePostgres,
+		table, userID, action, recordID, ip, state); err != nil {
 		// Journalisé, pas remonté : l'action a eu lieu et l'utilisateur n'y peut
 		// rien. C'est l'exploitant qui doit voir cette ligne, pas l'utilisateur
 		// qui vient d'envoyer une facture.
+		log.Printf("WARNING: action %s sur %s/%s non tracée: %v",
+			action, table, recordID, err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
 		log.Printf("WARNING: action %s sur %s/%s non tracée: %v",
 			action, table, recordID, err)
 	}

@@ -17,6 +17,27 @@ REPO="kmdn-ch/ledgeralps"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 DATA_DIR="${DATA_DIR:-/etc/ledgeralps}"
 SYSTEMD_DIR="/etc/systemd/system"
+
+# INSTALL_DIR et DATA_DIR viennent de l'environnement et finissent dans une
+# unité systemd écrite par un heredoc NON protégé (ligne « cat > $SERVICE_FILE
+# <<EOF », sans quotes autour de EOF, donc avec expansion). Un retour à la ligne
+# dans l'une de ces valeurs y ajouterait une directive — un ExecStartPre=
+# exécuté en root à chaque démarrage du service.
+#
+# Le prérequis est de contrôler l'environnement d'une exécution root : sudo
+# purge la plupart des variables, il faut « sudo -E » ou un env_keep permissif.
+# La probabilité est faible ; valider un chemin destiné à ExecStart= est de
+# toute façon dû, et coûte six lignes.
+valider_chemin() {
+  case "$2" in
+    /*) ;;
+    *)  error "$1 doit être un chemin absolu (reçu : $2)" ;;
+  esac
+  case "$2" in
+    *[$'
+']*) error "$1 contient un saut de ligne — refusé." ;;
+  esac
+}
 SERVICE_FILE="$SYSTEMD_DIR/ledgeralps.service"
 
 RED='\033[0;31m'
@@ -321,6 +342,9 @@ main() {
   echo ""
 
   [ "$(id -u)" -eq 0 ] || error "This installer must be run as root (or with sudo)."
+
+  valider_chemin INSTALL_DIR "$INSTALL_DIR"
+  valider_chemin DATA_DIR    "$DATA_DIR"
 
   detect_platform
   resolve_version

@@ -132,6 +132,23 @@ func main() {
 	if _, err := db.ApplyRetention(database, cfg.UsePostgres(), time.Now().UTC()); err != nil {
 		log.Printf("WARNING: passe de rétention échouée: %v", err)
 	}
+	// Puis chaque jour, et pas seulement au démarrage.
+	//
+	// Une passe unique tient la promesse sur un poste qu'on éteint le soir, et
+	// pas du tout sur un serveur allumé toute l'année — qui est justement
+	// l'installation où les adresses s'accumulent. Or « /maintenance/health »
+	// affiche ces durées (90 jours pour les adresses, 365 pour les événements)
+	// comme si elles s'appliquaient : le produit annonçait une garantie que le
+	// code ne tenait pas.
+	go func() {
+		t := time.NewTicker(24 * time.Hour)
+		defer t.Stop()
+		for range t.C {
+			if _, err := db.ApplyRetention(database, cfg.UsePostgres(), time.Now().UTC()); err != nil {
+				log.Printf("WARNING: passe de rétention échouée: %v", err)
+			}
+		}
+	}()
 
 	// ── 3b. Automatic backup ──────────────────────────────────────────────────
 	// LedgerAlps is local-first: this SQLite file is the only copy of records the
@@ -203,6 +220,24 @@ func main() {
 			"Attendu : des adresses ou des CIDR séparés par des virgules, "+
 			"par exemple « 10.0.0.1, 192.168.1.0/24 ».", err)
 	}
+
+	// Borner le corps AVANT que quoi que ce soit ne le lise.
+	//
+	// `c.FormFile` analyse la TOTALITÉ du corps avant que le gestionnaire ait
+	// pu regarder `fh.Size` : le contrôle des 10 Mo dans qrbill_import.go
+	// s'appliquait donc à un fichier déjà écrit sur le disque.
+	// MaxMultipartMemory ne borne que la MÉMOIRE — au-delà, `mime/multipart`
+	// déverse dans %TEMP% sans plafond. Un envoi de plusieurs gigaoctets
+	// remplissait ainsi le disque qui porte aussi la base comptable.
+	//
+	// 32 Mo laissent passer le plus gros usage réel — un relevé camt.053
+	// annuel, une facture fournisseur numérisée — avec une marge confortable.
+	const corpsMax = 32 << 20
+	r.MaxMultipartMemory = 8 << 20
+	r.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, corpsMax)
+		c.Next()
+	})
 
 	r.Use(gin.CustomRecovery(func(c *gin.Context, err any) {
 		log.Printf("PANIC recovered: %v", err)
@@ -288,7 +323,16 @@ func main() {
 	v1.POST("/auth/bootstrap", loginLimiter.Middleware(), authHandler.Bootstrap) // one-shot: creates first admin user
 
 	// Swiss registry proxy — public (called from setup wizard, no auth yet)
-	v1.GET("/uid-lookup", handlers.UIDLookup)
+	// Limité comme les routes d'authentification. C'est le seul point public
+	// qui déclenche un appel SORTANT — jusqu'à trois requêtes vers
+	// zefix.admin.ch, avec vingt secondes de budget chacune. Rien n'empêchait
+	// un tiers de le faire émettre en boucle depuis une installation censée
+	// rester hors ligne, ni d'y immobiliser des goroutines.
+	//
+	// Il n'y a PAS de SSRF ici : l'entrée est validée contre « ^CHE… » avant
+	// toute construction d'URL, et l'appelant ne choisit ni l'hôte ni le
+	// chemin. Ce qu'on borne est le débit, pas la destination.
+	v1.GET("/uid-lookup", loginLimiter.Middleware(), handlers.UIDLookup)
 
 	// Protected routes — JWT required
 	authorizer := middleware.NewAuthorizer(database, cfg.UsePostgres(), cfg.JWTSecret)
@@ -329,14 +373,14 @@ func main() {
 	api.GET("/accounts", ah.ListAccounts)
 	api.GET("/accounts/trial-balance", ah.TrialBalance) // BEFORE /:code to avoid shadowing
 	api.GET("/accounts/:code/balance", ah.AccountBalance)
-	api.POST("/accounts", ah.CreateAccount)
+	api.POST("/accounts", authorizer.Require(authz.PermWriteAccounting), ah.CreateAccount)
 
 	// Contacts
 	ch := handlers.NewContactsHandler(database, cfg.UsePostgres())
 	api.GET("/contacts", authorizer.Require(authz.PermRead), ch.ListContacts)
 	api.GET("/contacts/:id", ch.GetContact)
-	api.POST("/contacts", ch.CreateContact)
-	api.PATCH("/contacts/:id", ch.UpdateContact)
+	api.POST("/contacts", authorizer.Require(authz.PermWriteDocuments), ch.CreateContact)
+	api.PATCH("/contacts/:id", authorizer.Require(authz.PermWriteDocuments), ch.UpdateContact)
 	// Anonymisation (nLPD art. 6 al. 4 et 32) : effacer les données d'une
 	// personne est une décision, pas une opération de saisie.
 	api.POST("/contacts/:id/anonymise", authorizer.Require(authz.PermManage), ch.AnonymiseContact)
@@ -376,17 +420,22 @@ func main() {
 	api.GET("/invoices/:id/pdf", ih.GetInvoicePDF)
 	api.GET("/invoices/:id/six-validation", ih.SixValidationDossier)
 	// Téléchargement groupé : un PDF si un seul document, un ZIP si plusieurs.
-	api.POST("/invoices/bulk-pdf", ih.BulkInvoicePDF)
-	api.POST("/invoices", ih.CreateInvoice)
+	// Une LECTURE, en POST seulement parce que la liste d'identifiants ne
+	// tient pas dans une URL. PermRead, donc : une fiduciaire en lecture seule
+	// doit pouvoir repartir avec les factures de son client — c'est sa raison
+	// d'être. Le garde global refuse toute écriture au lecteur ; sans
+	// déclaration explicite, il refusait aussi celle-ci.
+	api.POST("/invoices/bulk-pdf", authorizer.Require(authz.PermRead), ih.BulkInvoicePDF)
+	api.POST("/invoices", authorizer.Require(authz.PermWriteDocuments), ih.CreateInvoice)
 	api.PATCH("/invoices/:id", authorizer.Require(authz.PermWriteDocuments), ih.UpdateInvoice)
-	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
+	api.POST("/invoices/:id/transition", authorizer.Require(authz.PermWriteAccounting), ih.TransitionInvoice)
 	// Quote lifecycle: an offer becomes an invoice by producing one, not by
 	// mutating into one — both documents are kept and linked.
-	api.POST("/invoices/:id/convert", ih.ConvertQuote)
-	api.POST("/invoices/:id/outcome", ih.SetQuoteOutcome)
+	api.POST("/invoices/:id/convert", authorizer.Require(authz.PermWriteDocuments), ih.ConvertQuote)
+	api.POST("/invoices/:id/outcome", authorizer.Require(authz.PermWriteDocuments), ih.SetQuoteOutcome)
 	// Une note de crédit cite la facture qu'elle annule (LTVA art. 27 al. 4)
 	// et son montant est borné par ce qui a déjà été crédité.
-	api.POST("/invoices/:id/credit-note", ih.CreateCreditNote)
+	api.POST("/invoices/:id/credit-note", authorizer.Require(authz.PermWriteAccounting), ih.CreateCreditNote)
 
 	// Sauvegardes. Créer un instantané est sûr serveur en marche ; restaurer
 	// ne l'est pas, la restauration est donc préparée puis appliquée au
@@ -440,7 +489,9 @@ func main() {
 	api.GET("/fiscal-years", fyh.ListFiscalYears)
 	api.POST("/fiscal-years", authorizer.Require(authz.PermManage), fyh.CreateFiscalYear)
 	api.POST("/fiscal-years/:id/close", authorizer.Require(authz.PermManage), fyh.CloseFiscalYear)
-	api.POST("/vat/declaration", fyh.GenerateVATDeclaration)
+	// Lecture, elle aussi : la déclaration se CALCULE, elle ne s'écrit nulle
+	// part. Le lecteur doit pouvoir la produire.
+	api.POST("/vat/declaration", authorizer.Require(authz.PermRead), fyh.GenerateVATDeclaration)
 
 	// VAT rates (static reference data — no DB)
 	api.GET("/vat/rates", func(c *gin.Context) {
@@ -469,7 +520,7 @@ func main() {
 	api.GET("/bank-entries", recoh.ListBankEntries)
 	api.PUT("/bank-entries/:id/match", authorizer.Require(authz.PermWriteAccounting), recoh.MatchBankEntry)
 	api.DELETE("/bank-entries/:id/match", authorizer.Require(authz.PermWriteAccounting), recoh.UnmatchBankEntry)
-	api.PUT("/bank-entries/:id/ignore", recoh.IgnoreBankEntry)
+	api.PUT("/bank-entries/:id/ignore", authorizer.Require(authz.PermWriteAccounting), recoh.IgnoreBankEntry)
 
 	// Legal archive export — CO art. 958f (10-year retention)
 	expH := handlers.NewExportHandler(database, cfg.UsePostgres())
@@ -498,7 +549,7 @@ func main() {
 
 	// Payments (CRUD — must be registered after /payments/export to avoid shadowing)
 	ph := handlers.NewPaymentsHandler(database, cfg.UsePostgres(), accountingSvc)
-	api.POST("/payments", ph.CreatePayment)
+	api.POST("/payments", authorizer.Require(authz.PermWriteAccounting), ph.CreatePayment)
 	api.GET("/payments", ph.ListPayments)
 	api.GET("/payments/:id", ph.GetPayment)
 
@@ -556,8 +607,11 @@ func main() {
 
 	api.GET("/settings/company", sh.GetCompany)
 	api.PUT("/settings/company", authorizer.Require(authz.PermManage), sh.PutCompany)
-	api.POST("/settings/logo", sh.UploadLogo)
-	api.DELETE("/settings/logo", sh.DeleteLogo)
+	// Même permission que PUT /settings/company : le logo est une colonne de
+	// la MÊME ligne. Deux régimes pour une seule donnée est un écart qui se
+	// creuse.
+	api.POST("/settings/logo", authorizer.Require(authz.PermManage), sh.UploadLogo)
+	api.DELETE("/settings/logo", authorizer.Require(authz.PermManage), sh.DeleteLogo)
 
 	// ── 8. Frontend (embedded) ───────────────────────────────────────────────
 	// The React build is compiled directly into the binary via //go:embed.
@@ -639,7 +693,23 @@ func main() {
 
 	// ── 9. Start ──────────────────────────────────────────────────────────────
 	addr := net.JoinHostPort(cfg.Host, cfg.Port)
-	srv := &http.Server{Addr: addr, Handler: r}
+	// Des délais, parce qu'une connexion sans délai est une connexion qu'on ne
+	// reprend jamais. Sans ReadHeaderTimeout, un client qui envoie son en-tête
+	// octet par octet occupe une goroutine indéfiniment — et il en faut peu
+	// pour les occuper toutes. Le mode récupération en posait déjà un ; le
+	// serveur principal était le seul des deux à n'en poser aucun.
+	//
+	// WriteTimeout reste large À DESSEIN : l'archive légale et le
+	// téléchargement groupé de deux cents factures passent par là, et couper
+	// un export comptable à mi-course serait pire que le mal qu'on soigne.
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       120 * time.Second,
+	}
 
 	certFile, keyFile, tlsErr := resolveTLS(cfg)
 	if tlsErr != nil {

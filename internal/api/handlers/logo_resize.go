@@ -39,6 +39,8 @@ import (
 	_ "image/jpeg"
 
 	"golang.org/x/image/draw"
+
+	"github.com/kmdn-ch/ledgeralps/internal/core/imgsafe"
 )
 
 // LogoTailleMax est le côté maximal, en pixels, du logo d'entreprise.
@@ -75,9 +77,13 @@ func ajusterLogo(dataURL string) (logoAjusté, error) {
 	// JPEG présenté comme « image/png » est banal — le navigateur pose le type
 	// du fichier, pas celui de ses octets — et se fier à l'entête ferait échouer
 	// un envoi parfaitement valable.
-	img, _, err := image.Decode(bytes.NewReader(brut))
+	//
+	// imgsafe plutôt qu'image.Decode : le plafond de 2 Mo posé sur les octets
+	// ne borne pas l'allocation. Un PNG uniforme de 20 000 × 20 000 tient dans
+	// 1,5 Mo et fait réserver 1,6 Gio avant qu'un seul pixel soit lu.
+	img, _, err := imgsafe.Decode(brut)
 	if err != nil {
-		return logoAjusté{}, fmt.Errorf("image illisible: %w", err)
+		return logoAjusté{}, err
 	}
 
 	b := img.Bounds()

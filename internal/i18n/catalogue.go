@@ -1036,7 +1036,7 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Dati base64 non validi",
 		EN: "Invalid base64 data",
 	},
-	"due_la date doit être au format AAAA-MM-JJ": {
+	"la date d'échéance doit être au format AAAA-MM-JJ": {
 		DE: "Das Fälligkeitsdatum muss im Format JJJJ-MM-TT vorliegen",
 		IT: "La data di scadenza dev’essere nel formato AAAA-MM-GG",
 		EN: "The due date must be in YYYY-MM-DD format",
@@ -1061,7 +1061,7 @@ var catalogue = map[string]map[Lang]string{
 		IT: "File vuoto",
 		EN: "Empty file",
 	},
-	"end_la date doit être au format AAAA-MM-JJ": {
+	"la date de fin doit être au format AAAA-MM-JJ": {
 		DE: "Das Enddatum muss im Format JJJJ-MM-TT vorliegen",
 		IT: "La data di fine dev’essere nel formato AAAA-MM-GG",
 		EN: "The end date must be in YYYY-MM-DD format",
@@ -1196,7 +1196,16 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Esito dell’offerta sconosciuto",
 		EN: "Unknown quote outcome",
 	},
-	"issue_la date doit être au format AAAA-MM-JJ": {
+	// L'image est refusée sur ses DIMENSIONS, pas sur son poids : un fichier
+	// minuscule peut demander plusieurs gigaoctets à la décompression. Le
+	// message nomme donc les pixels, seule grandeur que l'utilisateur puisse
+	// corriger.
+	"image trop grande": {
+		DE: "Bild zu gross",
+		IT: "Immagine troppo grande",
+		EN: "Image too large",
+	},
+	"la date d'émission doit être au format AAAA-MM-JJ": {
 		DE: "Das Ausstellungsdatum muss im Format JJJJ-MM-TT vorliegen",
 		IT: "La data di emissione dev’essere nel formato AAAA-MM-GG",
 		EN: "The issue date must be in YYYY-MM-DD format",
@@ -1661,7 +1670,7 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Passphrase vuota",
 		EN: "Empty passphrase",
 	},
-	"payment_la date doit être au format AAAA-MM-JJ": {
+	"la date de paiement doit être au format AAAA-MM-JJ": {
 		DE: "Das Zahlungsdatum muss im Format JJJJ-MM-TT vorliegen",
 		IT: "La data di pagamento dev’essere nel formato AAAA-MM-GG",
 		EN: "The payment date must be in YYYY-MM-DD format",
@@ -1791,7 +1800,7 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Solo le offerte possono essere convertite in fattura",
 		EN: "Only quotes can be turned into an invoice",
 	},
-	"start_la date doit être au format AAAA-MM-JJ": {
+	"la date de début doit être au format AAAA-MM-JJ": {
 		DE: "Das Startdatum muss im Format JJJJ-MM-TT vorliegen",
 		IT: "La data di inizio dev’essere nel formato AAAA-MM-GG",
 		EN: "The start date must be in YYYY-MM-DD format",

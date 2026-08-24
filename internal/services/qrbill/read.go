@@ -25,7 +25,6 @@
 package qrbill
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"image"
@@ -34,6 +33,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kmdn-ch/ledgeralps/internal/core/imgsafe"
 	"github.com/makiuchi-d/gozxing"
 	"github.com/makiuchi-d/gozxing/qrcode"
 )
@@ -72,9 +72,12 @@ var ErrNotASwissQRBill = errors.New(
 
 // DecodeImage lit un QR-facture depuis une image.
 func DecodeImage(data []byte) (*Bill, error) {
-	img, _, err := image.Decode(bytes.NewReader(data))
+	// imgsafe plutôt qu'image.Decode : le plafond de 10 Mo posé sur le fichier
+	// borne l'entrée, jamais l'allocation. Un aplat de 20 000 × 20 000 tient
+	// largement dessous et fait réserver 1,6 Gio.
+	img, _, err := imgsafe.Decode(data)
 	if err != nil {
-		return nil, fmt.Errorf("image illisible: %w", err)
+		return nil, err
 	}
 	payload, err := decodeQR(img)
 	if err != nil {

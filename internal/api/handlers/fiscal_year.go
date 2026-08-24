@@ -113,12 +113,12 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 
 	start, err := time.Parse("2006-01-02", req.StartDate)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "start_la date doit être au format AAAA-MM-JJ"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la date de début doit être au format AAAA-MM-JJ"})
 		return
 	}
 	end, err := time.Parse("2006-01-02", req.EndDate)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "end_la date doit être au format AAAA-MM-JJ"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la date de fin doit être au format AAAA-MM-JJ"})
 		return
 	}
 	if !end.After(start) {

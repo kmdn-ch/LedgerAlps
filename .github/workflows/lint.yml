@@ -5,6 +5,12 @@ on:
     branches: [main, test]
   pull_request:
 
+permissions:
+  # Aucun droit d'écriture : ces workflows lisent le dépôt et rapportent. Les
+  # trois autres déclarent déjà les leurs ; sans bloc, on hérite du défaut du
+  # dépôt, qui reste « read and write » sur tout dépôt créé avant février 2023.
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

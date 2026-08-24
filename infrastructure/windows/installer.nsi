@@ -37,7 +37,6 @@ Unicode True
 ; MUI2 configuration                                                          ;
 ; --------------------------------------------------------------------------- ;
 !include "MUI2.nsh"
-!include "WinMessages.nsh"
 
 !define MUI_ABORTWARNING
 
@@ -98,6 +97,20 @@ LangString DataDeleted ${LANG_ENGLISH} "Data deleted: $APPDATA\LedgerAlps"
 LangString DataDeleted ${LANG_FRENCH}  "Données supprimées : $APPDATA\LedgerAlps"
 LangString DataDeleted ${LANG_GERMAN}  "Daten gelöscht: $APPDATA\LedgerAlps"
 LangString DataDeleted ${LANG_ITALIAN} "Dati eliminati: $APPDATA\LedgerAlps"
+
+; Ne JAMAIS annoncer une suppression qui n'a pas eu lieu.
+;
+; Sous une elevation UAC par identifiants, $APPDATA designe le profil de
+; l'administrateur et non celui de l'utilisateur : RMDir portait alors sur un
+; chemin inexistant, ne supprimait rien, et l'ecran affichait quand meme
+; « Donnees supprimees ». Pour un logiciel comptable soumis aux obligations
+; d'effacement de la nLPD, affirmer une suppression fausse est le pire des deux
+; echecs possibles -- la base survit a une demande de destruction, et
+; l'utilisateur a une trace ecrite du contraire.
+LangString DataNotFound ${LANG_ENGLISH} "No data found under $APPDATA\LedgerAlps - nothing was deleted. If LedgerAlps was used by another Windows account, delete that account's LedgerAlps folder manually."
+LangString DataNotFound ${LANG_FRENCH}  "Aucune donnée trouvée dans $APPDATA\LedgerAlps - rien n'a été supprimé. Si LedgerAlps a été utilisé par un autre compte Windows, supprimez le dossier LedgerAlps de ce compte à la main."
+LangString DataNotFound ${LANG_GERMAN}  "Keine Daten unter $APPDATA\LedgerAlps gefunden - es wurde nichts gelöscht. Falls LedgerAlps unter einem anderen Windows-Konto verwendet wurde, löschen Sie dessen LedgerAlps-Ordner von Hand."
+LangString DataNotFound ${LANG_ITALIAN} "Nessun dato trovato in $APPDATA\LedgerAlps - non è stato eliminato nulla. Se LedgerAlps è stato usato con un altro account Windows, eliminate manualmente la cartella LedgerAlps di quell'account."
 
 LangString DataKept ${LANG_ENGLISH} "Your data in $APPDATA\LedgerAlps has been kept."
 LangString DataKept ${LANG_FRENCH}  "Vos données dans $APPDATA\LedgerAlps ont été conservées."
@@ -202,6 +215,11 @@ LangString UninstallDone ${LANG_ITALIAN} "LedgerAlps è stato disinstallato."
 Name             "${PRODUCT_NAME} ${PRODUCT_VERSION}"
 OutFile          "${OUT_FILE}"
 InstallDir       "${INSTALL_DIR}"
+; Le produit s'installe dans $PROGRAMFILES64 : sa cle de desinstallation doit
+; vivre dans la vue 64 bits. Sans cela, makensis produisant un executable
+; 32 bits, le redirecteur WOW64 l'ecrit sous WOW6432Node -- invisible pour les
+; outils d'inventaire, et deplacee le jour ou l'on passerait en Target amd64.
+SetRegView 64
 InstallDirRegKey HKLM "${UNINSTALL_KEY}" "InstallLocation"
 RequestExecutionLevel admin
 ShowInstDetails show
@@ -259,6 +277,14 @@ Section "LedgerAlps (required)" SecMain
   RMDir /r "$INSTDIR\assets"
 
   ; ── Shortcuts ──────────────────────────────────────────────────────────── ;
+  ; Installation PAR MACHINE ($PROGRAMFILES64 + HKLM) : les raccourcis doivent
+  ; suivre. En contexte « current » -- le defaut -- ils atterrissent dans le
+  ; profil du compte qui a ELEVE, qui n'est pas celui de l'utilisateur des que
+  ; l'UAC demande des identifiants d'administrateur au lieu d'un simple
+  ; consentement. Configuration courante en entreprise et en domaine : la
+  ; personne se retrouve alors sans aucun raccourci, alors que l'ecran de fin
+  ; lui dit de lancer l'application « depuis le Bureau ou le menu Demarrer ».
+  SetShellVarContext all
   ; Start Menu
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
   CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\LedgerAlps.lnk" \
@@ -275,6 +301,9 @@ Section "LedgerAlps (required)" SecMain
   CreateShortcut "$DESKTOP\LedgerAlps.lnk" \
     "$INSTDIR\${LAUNCHER_EXE}" "" "$INSTDIR\${LAUNCHER_EXE}" 0 \
     SW_SHOWNORMAL "" "$(ShortcutTip)"
+  ; Repasser en « current » : $APPDATA doit rester le profil utilisateur et non
+  ; C:\ProgramData -- c'est la que vivent config.json et la base comptable.
+  SetShellVarContext current
 
   ; ── Registry — uninstall entry ─────────────────────────────────────────── ;
   WriteRegStr   HKLM "${UNINSTALL_KEY}" "DisplayName"      "${PRODUCT_NAME}"
@@ -311,8 +340,16 @@ Section "Uninstall"
     IDYES lbl_delete_data IDNO lbl_keep_data
 
   lbl_delete_data:
-    RMDir /r "$APPDATA\LedgerAlps"
-    DetailPrint "$(DataDeleted)"
+    ; Garde double : $APPDATA ne doit pas etre vide -- sinon le chemin devient
+    ; "\LedgerAlps", a la racine du disque courant -- et le dossier doit
+    ; exister, sans quoi on annoncerait une suppression qui n'a pas eu lieu.
+    StrCmp $APPDATA "" lbl_data_absent 0
+    IfFileExists "$APPDATA\LedgerAlps\*.*" 0 lbl_data_absent
+      RMDir /r "$APPDATA\LedgerAlps"
+      DetailPrint "$(DataDeleted)"
+      Goto lbl_done_data
+  lbl_data_absent:
+    DetailPrint "$(DataNotFound)"
     Goto lbl_done_data
 
   lbl_keep_data:
@@ -336,10 +373,12 @@ Section "Uninstall"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir  "$INSTDIR"
 
-  ; Remove shortcuts
+  ; Remove shortcuts -- dans le MEME contexte que celui qui les a crees.
+  SetShellVarContext all
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\*.lnk"
   RMDir  "$SMPROGRAMS\${PRODUCT_NAME}"
   Delete "$DESKTOP\LedgerAlps.lnk"
+  SetShellVarContext current
 
   ; Remove uninstall registry key
   DeleteRegKey HKLM "${UNINSTALL_KEY}"

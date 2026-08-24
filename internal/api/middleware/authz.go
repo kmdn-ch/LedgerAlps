@@ -16,6 +16,7 @@ package middleware
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -174,11 +175,19 @@ func (a *Authorizer) mfaConfirmed(userID string) bool {
 		a.usePostgres)
 	var n int
 	if err := a.db.QueryRow(q, userID).Scan(&n); err != nil {
-		// Table absente (base plus ancienne que la migration) ou lecture en
-		// échec : ne pas enfermer l'administrateur hors de sa propre
-		// installation pour un défaut de lecture. Le mot de passe reste exigé,
-		// et l'écran d'inscription reste accessible.
-		return true
+		// Le motif d'origine — table absente, base antérieure à la migration —
+		// a disparu : la migration 0022 s'applique au démarrage, avant qu'une
+		// seule requête soit servie. Ne reste qu'un défaut de lecture (verrou
+		// SQLite, contexte expiré), et lever la règle dessus la rend levable à
+		// volonté par qui sait charger la base.
+		//
+		// Refuser n'enferme personne : les routes d'inscription du second
+		// facteur vivent hors de ce groupe et restent joignables. Ce qu'on
+		// refuse, c'est le RESTE de l'application à un administrateur qui n'a
+		// pas encore inscrit son second facteur — ce qui est précisément la
+		// règle.
+		log.Printf("WARNING: état du second facteur illisible pour %s: %v", userID, err)
+		return false
 	}
 	return n > 0
 }

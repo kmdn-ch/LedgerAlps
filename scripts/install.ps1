@@ -61,7 +61,11 @@ function Assert-Elevated {
 function Get-Arch {
     switch ($env:PROCESSOR_ARCHITECTURE) {
         "AMD64"  { return "amd64" }
-        "ARM64"  { return "arm64" }
+        # Aucun binaire windows/arm64 n'est publie (.goreleaser.yaml). Refuser
+        # ICI avec la raison, plutot que de laisser un 404 se presenter comme
+        # un echec de telechargement. Meme refus que install.sh, qui le dit
+        # deja pour Linux.
+        "ARM64"  { Write-Fail "Les binaires ARM ne sont plus publies depuis la v1.4.1. Utilisez l'installeur x86-64 (LedgerAlps_Setup_*_windows_amd64.exe) : Windows l'execute par emulation." }
         default  { Write-Fail "Unsupported architecture: $env:PROCESSOR_ARCHITECTURE" }
     }
 }
@@ -174,19 +178,37 @@ function Install-Binaries {
 # Add install directory to system PATH                                        #
 # --------------------------------------------------------------------------- #
 function Add-ToPath {
-    $regKey  = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
-    $current = (Get-ItemProperty -Path $regKey -Name Path).Path
+    # Get-ItemProperty DEVELOPPE les REG_EXPAND_SZ, et Set-ItemProperty
+    # reecrirait la forme developpee : %SystemRoot% disparaitrait du PATH
+    # systeme, pour TOUTES les entrees, definitivement. Sur un poste ou
+    # %SystemRoot% n'est pas C:\Windows -- image de deploiement, machine
+    # virtuelle, changement de lettre de volume -- le PATH pointerait alors sur
+    # des chemins morts : une panne a l'echelle de la machine, causee par un
+    # installeur applicatif.
+    $key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey(
+             'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', $true)
+    if (-not $key) { Write-Fail "Impossible d'ouvrir la cle Environment du registre." }
+    try {
+        $current = $key.GetValue('Path', '',
+            [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
 
-    if ($current -notlike "*$InstallDir*") {
-        Write-Info "Adding $InstallDir to system PATH..."
-        Set-ItemProperty -Path $regKey -Name Path -Value "$current;$InstallDir"
-        # Broadcast environment change to running processes
-        $HWND_BROADCAST = [IntPtr]0xffff
-        $WM_WININICHANGE = 0x001A
-        [System.Runtime.InteropServices.Marshal]::AllocHGlobal(0) | Out-Null
-        Write-Success "PATH updated (new terminals will see the change)"
-    } else {
-        Write-Info "PATH already contains $InstallDir"
+        # Comparaison litterale entree par entree : -like traiterait [ ] * ?
+        # d'un -InstallDir fourni par l'utilisateur comme des jokers.
+        if ($InstallDir -notin ($current -split ';')) {
+            Write-Info "Adding $InstallDir to system PATH..."
+            $key.SetValue('Path', "$current;$InstallDir",
+                [Microsoft.Win32.RegistryValueKind]::ExpandString)
+            # Pas de diffusion WM_WININICHANGE : les trois lignes qui
+            # pretendaient la faire n'appelaient aucun SendMessageTimeout et
+            # ne faisaient qu'allouer un tampon natif de zero octet, jamais
+            # libere. Un commentaire qui decrit une garantie inexistante est
+            # pire que l'absence de garantie -- on dit donc ce qui est vrai.
+            Write-Success "PATH updated (new terminals will see the change)"
+        } else {
+            Write-Info "PATH already contains $InstallDir"
+        }
+    } finally {
+        $key.Dispose()
     }
 }
 

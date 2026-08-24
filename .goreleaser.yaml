@@ -27,6 +27,11 @@ builds:
       - linux
     goarch:
       - amd64
+    # -trimpath : sans lui, chaque binaire porte les chemins absolus de la
+    # machine qui l'a compilé (/home/runner/work/...). C'est une fuite
+    # d'information gratuite, et cela empêche une compilation reproductible.
+    flags:
+      - -trimpath
     ldflags:
       - -s -w
       - -X github.com/kmdn-ch/ledgeralps/version.version={{.Version}}
@@ -47,6 +52,11 @@ builds:
       - windows
     goarch:
       - amd64
+    # -trimpath : sans lui, chaque binaire porte les chemins absolus de la
+    # machine qui l'a compilé (/home/runner/work/...). C'est une fuite
+    # d'information gratuite, et cela empêche une compilation reproductible.
+    flags:
+      - -trimpath
     ldflags:
       - -s -w -H=windowsgui
       - -X github.com/kmdn-ch/ledgeralps/version.version={{.Version}}
@@ -66,6 +76,11 @@ builds:
       - windows
     goarch:
       - amd64
+    # -trimpath : sans lui, chaque binaire porte les chemins absolus de la
+    # machine qui l'a compilé (/home/runner/work/...). C'est une fuite
+    # d'information gratuite, et cela empêche une compilation reproductible.
+    flags:
+      - -trimpath
     ldflags:
       - -s -w -H=windowsgui
       - -X github.com/kmdn-ch/ledgeralps/version.version={{.Version}}
@@ -84,6 +99,11 @@ builds:
       - windows
     goarch:
       - amd64
+    # -trimpath : sans lui, chaque binaire porte les chemins absolus de la
+    # machine qui l'a compilé (/home/runner/work/...). C'est une fuite
+    # d'information gratuite, et cela empêche une compilation reproductible.
+    flags:
+      - -trimpath
     ldflags:
       - -s -w
       - -X github.com/kmdn-ch/ledgeralps/version.version={{.Version}}
@@ -128,6 +148,16 @@ archives:
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
   algorithm: sha256
+
+# Un inventaire de ce qui compose chaque archive, publié à côté d'elle.
+#
+# LedgerAlps tient dix ans de pièces comptables (CO art. 958f) et tourne chez
+# des indépendants qui n'ont pas d'équipe sécurité. Quand une faille sort dans
+# une dépendance, la question « suis-je concerné ? » doit avoir une réponse
+# lisible sans recompiler quoi que ce soit. GoReleaser produit le SBOM à partir
+# du module Go lui-même : il est donc exact par construction, pas déclaratif.
+sboms:
+  - artifacts: archive
 
 changelog:
   use: github

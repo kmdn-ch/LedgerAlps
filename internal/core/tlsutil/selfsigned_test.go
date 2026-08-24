@@ -69,6 +69,44 @@ func TestGeneratesAUsableCertificate(t *testing.T) {
 	}
 }
 
+// Le certificat de la machine ne doit PAS pouvoir en signer d'autres.
+//
+// Il a porté `IsCA: true` et `KeyUsageCertSign`. Le geste évident pour faire
+// taire l'avertissement du navigateur est d'importer ce certificat dans les
+// autorités racines de confiance — et à partir de là, quiconque lisait la clé
+// dans %APPDATA% pouvait fabriquer un certificat valable pour n'importe quel
+// domaine. Le rayon d'action passait d'un fichier local à l'interception de
+// toute la navigation de la personne.
+//
+// Ce test tient la propriété, parce qu'un drapeau se remet sans y penser.
+func TestLeCertificatNEstPasUneAutorite(t *testing.T) {
+	dir := t.TempDir()
+	certPath, keyPath, err := EnsureSelfSigned(dir, []string{"localhost"})
+	if err != nil {
+		t.Fatalf("EnsureSelfSigned: %v", err)
+	}
+	pair, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		t.Fatalf("charger la paire: %v", err)
+	}
+	leaf, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	if leaf.IsCA {
+		t.Error("IsCA est vrai : importé dans le magasin racine, ce certificat " +
+			"permet de signer pour n'importe quel domaine")
+	}
+	if leaf.KeyUsage&x509.KeyUsageCertSign != 0 {
+		t.Error("KeyUsageCertSign est posé : ce certificat peut en signer d'autres")
+	}
+	// Ce qu'il doit garder pour servir du TLS.
+	if leaf.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+		t.Error("KeyUsageDigitalSignature manque : le certificat ne sert plus à rien")
+	}
+}
+
 // Regenerating on every start would invalidate the browser exception the user
 // granted, and teach them to dismiss the warning without reading it.
 func TestExistingPairIsReused(t *testing.T) {
