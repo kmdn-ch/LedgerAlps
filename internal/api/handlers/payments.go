@@ -48,7 +48,7 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 
 	paymentDate, err := time.Parse("2006-01-02", req.PaymentDate)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "payment_la date doit être au format AAAA-MM-JJ"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "la date de paiement doit être au format AAAA-MM-JJ"})
 		return
 	}
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -68,6 +69,20 @@ type Config struct {
 	LogLevel       string
 	AllowedOrigins string // comma-separated CORS origins
 
+	// TrustedProxies liste les mandataires dont on accepte les en-têtes
+	// d'adresse (`X-Forwarded-For`, `X-Real-IP`), en adresses ou en CIDR.
+	//
+	// VIDE PAR DÉFAUT, et c'est le point. gin fait l'inverse : ses mandataires
+	// de confiance valent `0.0.0.0/0` et `::/0`, si bien que `c.ClientIP()`
+	// rend l'en-tête posé par l'appelant. Le verrouillage des connexions
+	// devient alors décoratif — une valeur différente à chaque requête est une
+	// clé différente — et l'adresse scellée dans la chaîne d'audit
+	// (CO art. 957a) devient celle que l'attaquant a choisie.
+	//
+	// LedgerAlps écoute en direct. Une installation derrière un reverse proxy
+	// déclare le sien ici, explicitement, plutôt que de tout accepter.
+	TrustedProxies []string
+
 	// UpdateCheck controls the single outbound request LedgerAlps ever makes:
 	// asking whether a newer release exists, so a user is told to update when a
 	// compliance fix ships. It sends no identifiers and no user data. Set to
@@ -88,6 +103,9 @@ type fileConfig struct {
 	// Pointer so an absent key keeps the safe default (false).
 	AllowInsecureHTTP *bool  `json:"allow_insecure_http,omitempty"`
 	AllowedOrigins    string `json:"allowed_origins"`
+	// Mandataires de confiance, en adresses ou en CIDR. Absent ou vide = aucun,
+	// donc l'adresse observée est celle de la connexion elle-même.
+	TrustedProxies []string `json:"trusted_proxies,omitempty"`
 	// Pointer so that an absent key keeps the default (enabled) while an
 	// explicit `"update_check": false` is honoured.
 	UpdateCheck *bool `json:"update_check,omitempty"`
@@ -138,6 +156,7 @@ func Load() *Config {
 			JWTRefreshDays:   30,
 			LogLevel:         "INFO",
 			AllowedOrigins:   fc.AllowedOrigins,
+			TrustedProxies:   fc.TrustedProxies,
 			UpdateCheck:      fc.UpdateCheck == nil || *fc.UpdateCheck,
 		}
 		if cfg.Port == "" {
@@ -206,6 +225,7 @@ func Load() *Config {
 		IdleLogoutMinutes:   DefaultIdleLogoutMinutes,
 		LogLevel:            getEnv("LOG_LEVEL", "INFO"),
 		AllowedOrigins:      getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
+		TrustedProxies:      listeDeProxies(getEnv("TRUSTED_PROXIES", "")),
 		UpdateCheck:         getEnv("UPDATE_CHECK", "true") != "false",
 	}
 	cfg.validateSecrets()
@@ -262,6 +282,23 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+// listeDeProxies lit « 10.0.0.1, 192.168.1.0/24 » en liste.
+//
+// Rend `nil` — et non une tranche vide — quand il n'y a rien à lire :
+// `SetTrustedProxies(nil)` fait rendre à `ClientIP()` l'adresse de la connexion
+// seule, ce qui est exactement le défaut voulu. Les entrées vides laissées par
+// une virgule en trop sont écartées : une chaîne vide passée à gin serait une
+// erreur de démarrage, pour une faute de frappe.
+func listeDeProxies(brut string) []string {
+	var out []string
+	for _, p := range strings.Split(brut, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // applyEnvOverrides lets the environment win over the config file, for the
 // variables that are actually set. See Load for why.
 func applyEnvOverrides(cfg *Config) {
@@ -282,6 +319,9 @@ func applyEnvOverrides(cfg *Config) {
 	setStr("POSTGRES_DSN", &cfg.PostgresDSN)
 	setStr("JWT_SECRET", &cfg.JWTSecret)
 	setStr("ALLOWED_ORIGINS", &cfg.AllowedOrigins)
+	if v, ok := os.LookupEnv("TRUSTED_PROXIES"); ok {
+		cfg.TrustedProxies = listeDeProxies(v)
+	}
 	setStr("LOG_LEVEL", &cfg.LogLevel)
 	setStr("TLS_CERT", &cfg.TLSCert)
 	setStr("TLS_KEY", &cfg.TLSKey)

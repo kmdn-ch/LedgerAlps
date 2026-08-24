@@ -282,12 +282,12 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 		return
 	}
 	if _, err := time.Parse("2006-01-02", req.IssueDate); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "issue_la date doit être au format AAAA-MM-JJ"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la date d'émission doit être au format AAAA-MM-JJ"})
 		return
 	}
 	if req.DueDate != "" {
 		if _, err := time.Parse("2006-01-02", req.DueDate); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "due_la date doit être au format AAAA-MM-JJ"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la date d'échéance doit être au format AAAA-MM-JJ"})
 			return
 		}
 	}

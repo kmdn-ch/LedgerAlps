@@ -66,7 +66,23 @@ func AppendAuditEntryFor(
 	// hacher l'état non masqué puis stocker l'état masqué rendrait l'empreinte
 	// non recalculable, ce qui est exactement le défaut corrigé en v1.4.6.
 	maskedAfter := maskPersonalData(string(rawAfterJSON))
-	maskedBefore := maskPersonalData("")
+
+	// `before_state` reste VIDE, et c'est dit ici plutôt que déguisé.
+	//
+	// La ligne précédente appelait `maskPersonalData("")` — un masquage de la
+	// chaîne vide, qui rend la chaîne vide. Le calcul avait l'air de traiter un
+	// état antérieur ; il n'en recevait aucun. Le journal capture donc l'état
+	// APRÈS chaque action, jamais celui qu'il remplace.
+	//
+	// Ce n'est pas une faille : l'empreinte porte sur les valeurs réellement
+	// stockées, et la chaîne se vérifie. C'est une limite de RICHESSE — « qu'a
+	// changé cette modification, exactement ? » ne se lit pas dans le journal.
+	//
+	// La combler demande que chaque appelant relise l'enregistrement avant de
+	// le modifier et transmette cet état : c'est une fonctionnalité d'audit
+	// différentiel, à décider et à porter sur les neuf points de trace, pas un
+	// paramètre à ajouter en passant.
+	const maskedBefore = ""
 
 	now := time.Now().UTC().Truncate(time.Second)
 	entryHash := security.ComputeEntryHash(
@@ -87,10 +103,10 @@ func AppendAuditEntryFor(
 	if prevHash != "" {
 		prevHashPtr = &prevHash
 	}
+	// NULL en base, et non la chaîne vide : « on n'a pas capturé l'état
+	// antérieur » et « l'état antérieur était vide » ne sont pas la même chose,
+	// et la colonne est justement déclarée nullable pour les distinguer.
 	var beforePtr *string
-	if maskedBefore != "" {
-		beforePtr = &maskedBefore
-	}
 
 	// hash_version = 2 : empreinte calculée sur les valeurs réellement stockées.
 	insertAudit := db.Rebind(`

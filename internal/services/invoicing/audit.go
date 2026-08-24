@@ -49,8 +49,23 @@ func (s *Service) record(ctx context.Context, a Actor, action, recordID string, 
 	if a.UserID == "" {
 		return
 	}
-	if err := accsvc.RecordDocumentAction(ctx, s.db, s.usePostgres,
+	// DANS une transaction : le maillon précédent est lu puis le suivant est
+	// inséré, et hors transaction deux écritures concurrentes se partagent le
+	// même numéro de séquence. La chaîne se fourche, et la vérification
+	// annonce des livres altérés que personne n'a touchés.
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		log.Printf("WARNING: action %s sur le document %s non tracée: %v", action, recordID, err)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := accsvc.RecordDocumentAction(ctx, tx, s.usePostgres,
 		accsvc.TableInvoices, a.UserID, action, recordID, a.IP, state); err != nil {
+		log.Printf("WARNING: action %s sur le document %s non tracée: %v", action, recordID, err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
 		log.Printf("WARNING: action %s sur le document %s non tracée: %v", action, recordID, err)
 	}
 }

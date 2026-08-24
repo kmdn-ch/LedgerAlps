@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/kmdn-ch/ledgeralps/internal/core/imgsafe"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 )
@@ -139,14 +140,22 @@ func extractImages(data []byte) ([]pageImage, error) {
 		if e.IsDir() {
 			continue
 		}
-		f, err := os.Open(filepath.Join(out, e.Name()))
+		// Lire les octets puis décoder par imgsafe, plutôt que de décoder le
+		// flux directement : la garde a besoin de relire l'en-tête avant de
+		// décider. Ces images viennent d'un PDF déposé par un tiers — c'est la
+		// porte la plus réaliste pour une bombe de décompression, et elle ne
+		// demande à l'attaquant qu'un courriel.
+		octets, err := os.ReadFile(filepath.Join(out, e.Name()))
 		if err != nil {
 			continue
 		}
-		img, _, err := image.Decode(f)
-		f.Close()
+		img, _, err := imgsafe.Decode(octets)
 		if err != nil {
-			continue // format d'image que le décodeur ne connaît pas
+			// Format inconnu, fichier abîmé, ou image démesurée : dans les
+			// trois cas on passe à l'image suivante. Le QR est peut-être sur
+			// une autre page, et une facture ne doit pas être refusée parce
+			// qu'une de ses illustrations est illisible.
+			continue
 		}
 		images = append(images, pageImage{img: img})
 	}
