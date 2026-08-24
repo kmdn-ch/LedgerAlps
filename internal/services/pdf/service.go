@@ -963,13 +963,42 @@ func extractDigits(s string) string {
 func latin1(s string) string {
 	b := make([]byte, 0, len(s))
 	for _, r := range s {
-		if r < 0x100 {
+		switch {
+		case r < 0x100:
 			b = append(b, byte(r))
-		} else {
-			b = append(b, '?')
+		default:
+			// Translittérer avant d'abandonner.
+			//
+			// Rendre « ? » sur un tiret cadratin est un défaut visible : la
+			// ponctuation typographique est courante dans un texte français, et
+			// « Recettes ? CO art. 957 » fait douter du document entier. Les
+			// guillemets « » et les accents sont déjà dans Latin-1 ; ce sont les
+			// tirets et apostrophes typographiques qui n'y sont pas.
+			if repl, ok := translitteration[r]; ok {
+				b = append(b, repl...)
+			} else {
+				b = append(b, '?')
+			}
 		}
 	}
 	return string(b)
+}
+
+// translitteration donne l'équivalent Latin-1 des caractères typographiques
+// qu'un texte français contient couramment.
+var translitteration = map[rune]string{
+	'—': "-",   // tiret cadratin
+	'–': "-",   // tiret demi-cadratin
+	'’': "'",   // apostrophe typographique
+	'‘': "'",   //
+	'“': "\"",  // guillemets anglais
+	'”': "\"",  //
+	'…': "...", // points de suspension
+	// L'espace insécable (U+00A0) n'est PAS listé : il vaut 0xA0, donc il est
+	// déjà dans Latin-1 et n'atteint jamais ce repli.
+	' ': " ",   // espace fine insécable
+	'€': "EUR", // le symbole euro n'est pas dans Latin-1
+	'•': "-",   // puce
 }
 
 // ─── Document type ────────────────────────────────────────────────────────────

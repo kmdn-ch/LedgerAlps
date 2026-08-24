@@ -1205,6 +1205,26 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Immagine troppo grande",
 		EN: "Image too large",
 	},
+	"le PDF n'a pas pu être produit": {
+		DE: "Das PDF konnte nicht erstellt werden",
+		IT: "Il PDF non ha potuto essere prodotto",
+		EN: "The PDF could not be produced",
+	},
+	"« du » doit être au format AAAA-MM-JJ": {
+		DE: "«von» muss im Format JJJJ-MM-TT vorliegen",
+		IT: "«dal» dev’essere nel formato AAAA-MM-GG",
+		EN: "“from” must be in YYYY-MM-DD format",
+	},
+	"« au » doit être au format AAAA-MM-JJ": {
+		DE: "«bis» muss im Format JJJJ-MM-TT vorliegen",
+		IT: "«al» dev’essere nel formato AAAA-MM-GG",
+		EN: "“to” must be in YYYY-MM-DD format",
+	},
+	"la date de fin précède la date de début": {
+		DE: "Das Enddatum liegt vor dem Anfangsdatum",
+		IT: "La data di fine precede la data di inizio",
+		EN: "The end date comes before the start date",
+	},
 	"la date d'émission doit être au format AAAA-MM-JJ": {
 		DE: "Das Ausstellungsdatum muss im Format JJJJ-MM-TT vorliegen",
 		IT: "La data di emissione dev’essere nel formato AAAA-MM-GG",

@@ -9,6 +9,22 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Ajouté
 
+- **La comptabilité simplifiée — le « carnet du lait » — dans Rapports.** Une entreprise individuelle dont le chiffre d'affaires reste sous 500 000 francs peut se limiter à « une comptabilité des recettes et des dépenses ainsi que du patrimoine » (CO art. 957 al. 2 ch. 1). LedgerAlps produit désormais ce document, à l'écran, en CSV et en **PDF** — celui que l'on tend à l'administration.
+
+  **LedgerAlps ne devient pas une comptabilité simplifiée pour autant.** Le produit continue de tenir la partie double, qui dépasse le minimum légal ; le carnet en est une présentation extraite. C'est un avantage à faire valoir devant l'administration, et cela explique qu'il n'y ait rien à « activer ».
+
+  **Base caisse, et non compte de résultat.** « Recettes et dépenses » veut dire qu'on compte l'argent au moment où il entre et où il sort. Dériver le document du compte de résultat aurait produit un compte de résultat portant un autre nom, avec les factures émises non encaissées comptées comme des recettes — un écart qu'un contrôleur voit dès qu'il le rapproche du relevé bancaire. Les mouvements viennent donc du journal : tout mouvement d'argent touche un compte de liquidités, un débit est une entrée, un crédit une sortie, et la contrepartie donne la nature.
+
+  **Le virement interne est écarté.** Un retrait au bancomat touche deux comptes de liquidités : ce n'est ni une recette ni une dépense, mais une lecture ligne à ligne l'aurait compté **deux fois** et gonflé les deux colonnes — donc annoncé à l'administration un chiffre d'affaires qui n'existe pas.
+
+  **Le document dit s'il suffit.** Au-delà de 500 000 francs, l'écran et le PDF écrivent que la partie double et les comptes annuels sont obligatoires (CO art. 957 al. 1) et que ce carnet ne peut pas être présenté seul. À partir de 100 000 francs, ils rappellent l'assujettissement TVA (LTVA art. 10). Deux lois différentes, deux seuils qui ne décident pas de la même chose : l'un porte sur la forme des livres, l'autre sur un impôt.
+
+  Vérifié de bout en bout sur un serveur réel, avec des écritures saisies par l'API : les 8 000 francs d'une facture non encaissée restent hors des recettes mais comptent dans le chiffre d'affaires, le retrait au bancomat n'apparaît nulle part, et l'amortissement non plus. Traduit en allemand, italien et anglais.
+
+### Corrigé
+
+- **La ponctuation typographique sortait en « ? » dans les PDF.** Le générateur n'accepte que du Latin-1 et remplaçait tout le reste par un point d'interrogation : « Recettes **?** CO art. 957 ». Les tirets cadratins, apostrophes typographiques, points de suspension et le symbole € sont désormais translittérés. **Cela corrigeait aussi les factures**, où un tiret saisi dans une description produisait déjà ce défaut.
+
 - **L'audit différentiel : la piste dit maintenant ce qu'une action a REMPLACÉ.** Le journal capturait l'état après chaque modification, jamais celui d'avant — on savait qu'une facture valait 1500.- après coup, sans pouvoir dire qu'elle valait 1000.- avant. Les six points de trace transmettent désormais une transition explicite (création, modification, suppression), et l'écran **Paramètres → Maintenance → Piste d'audit** porte une colonne **« Champs modifiés »** qui nomme ce qui a bougé.
 
   **Le masquage rendait le cas principal invisible, et c'est ce qui a guidé la conception.** Les champs personnels sont remplacés par `[MASKED]` (nLPD art. 6) : un IBAN modifié aurait donné `[MASKED]` avant *et* après, faisant disparaître exactement le changement qui motive la fonctionnalité — cet IBAN est le compte qui reçoit les virements de tous les clients. La liste des champs modifiés est donc calculée sur les valeurs **brutes, avant masquage**. On sait que l'IBAN a changé, et qui l'a changé, **sans conserver aucun des deux IBAN** : plus utile que deux valeurs masquées, et moins de données personnelles retenues — la minimisation de la nLPD va ici dans le même sens que l'utilité.

@@ -561,6 +561,9 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/reports/general-ledger` | auth | Grand livre |
 | GET | `/reports/ar-aging` | auth | Balance âgée des créances |
 | GET | `/reports/revenue` | auth | Chiffre d'affaires groupé par `year`, `month` ou `contact`, avec `from`/`to`. La réponse porte `basis` : la convention de calcul, pour qu'un total ne soit pas comparé à un autre calculé autrement |
+| GET | `/reports/simplified-accounting` | lecture | Comptabilité simplifiée (CO art. 957 al. 2). `from`, `to` |
+| GET | `/reports/simplified-accounting.pdf` | lecture | Le même, en PDF — le document remis à l'administration |
+| GET | `/exports/simplified-accounting.csv` | lecture | Le même, en CSV |
 | GET | `/stats` | auth | Indicateurs du tableau de bord |
 
 ## Paiements et ISO 20022

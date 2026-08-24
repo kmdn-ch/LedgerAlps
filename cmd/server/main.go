@@ -547,6 +547,21 @@ func main() {
 	// Chiffre d'affaires groupable : par année, par mois ou par client.
 	api.GET("/reports/revenue", rh.Revenue)
 
+	// Comptabilité simplifiée — le « carnet du lait » du CO art. 957 al. 2.
+	//
+	// Une LECTURE : le carnet relit le journal et le présente sous la forme que
+	// la loi reconnaît pour une entreprise individuelle sous le seuil de
+	// 500 000 francs. Une fiduciaire en lecture seule doit pouvoir l'établir —
+	// c'est même une des raisons pour lesquelles on lui donne un accès.
+	sah := handlers.NewSimplifiedAccountingHandler(database, cfg.UsePostgres())
+	api.GET("/reports/simplified-accounting",
+		authorizer.Require(authz.PermRead), sah.Carnet)
+	api.GET("/exports/simplified-accounting.csv",
+		authorizer.Require(authz.PermRead), sah.CarnetCSV)
+	// Le PDF est le document que l'on tend à l'administration.
+	api.GET("/reports/simplified-accounting.pdf",
+		authorizer.Require(authz.PermRead), sah.CarnetPDF)
+
 	// Payments (CRUD — must be registered after /payments/export to avoid shadowing)
 	ph := handlers.NewPaymentsHandler(database, cfg.UsePostgres(), accountingSvc)
 	api.POST("/payments", authorizer.Require(authz.PermWriteAccounting), ph.CreatePayment)

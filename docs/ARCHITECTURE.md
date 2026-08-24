@@ -207,6 +207,35 @@ il est apparu au premier appel réel. `internal/services/accounting/integrity_te
 écrit désormais par le vrai chemin puis relit depuis la base — recalculer en
 mémoire ce qu'on vient de calculer en mémoire ne prouve rien.
 
+**Comptabilité simplifiée — le « carnet du lait » (CO art. 957 al. 2).** Une
+entreprise individuelle dont le chiffre d'affaires reste sous 500 000 francs
+peut se limiter à « une comptabilité des recettes et des dépenses ainsi que du
+patrimoine ». LedgerAlps continue de tenir la partie double, qui DÉPASSE ce
+minimum ; le carnet en est une PRÉSENTATION extraite, pas un mode dégradé.
+
+*Base caisse, et non compte de résultat.* « Recettes et dépenses » veut dire
+qu'on compte l'argent quand il entre et sort. Dériver le document du compte de
+résultat aurait produit un compte de résultat portant un autre nom, avec les
+créances non encaissées comptées comme des recettes — un écart qu'un contrôleur
+voit dès qu'il le rapproche du relevé bancaire.
+
+*Les mouvements viennent du journal.* Tout mouvement d'argent touche un compte
+de liquidités (1000 caisse, 1010 poste, 1020 banque) : un débit est une entrée,
+un crédit une sortie, et la contrepartie donne la nature. Les factures
+fournisseurs ne pouvaient pas servir de source — leur colonne `amount_paid` est
+un cumul SANS DATE.
+
+*Le virement interne est écarté.* Un retrait au bancomat touche deux comptes de
+liquidités : ce n'est ni une recette ni une dépense, mais une lecture ligne à
+ligne le compterait deux fois et gonflerait les deux colonnes sans changer le
+résultat.
+
+*Le document dit s'il suffit.* Au-delà de 500 000 francs, l'écran et le PDF
+écrivent que la partie double est obligatoire (CO art. 957 al. 1) et que ce
+document ne peut pas être présenté seul. À partir de 100 000 francs, ils
+rappellent l'assujettissement TVA (LTVA art. 10) — deux lois différentes, deux
+seuils qui ne décident pas de la même chose.
+
 **Exercice comptable et verrouillage de période.** Chaque écriture est rattachée
 à l'exercice couvrant sa date, dans la transaction qui l'insère ; sans exercice
 couvrant, l'année civile est créée. Un exercice clos refuse création **et**
