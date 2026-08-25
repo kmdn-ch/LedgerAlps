@@ -69,6 +69,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
   `from`/`to` écrits à la main dans l'état suivant disparaissent au passage : la transition a désormais un endroit pour se dire.
 
+### Supprimé
+
+- **`docs/REVUE-IA.md`.** Le mode d'emploi et le prompt pour faire auditer le code par un réviseur IA depuis une copie locale. Le lien qui y mène depuis l'entrée de la v1.5.2 plus bas ne pointe donc plus sur rien : cette entrée-là décrit ce qui a été ajouté à sa date et n'est pas réécrite.
+
 ### Sécurité
 
 - **Les trois vulnérabilités Go signalées sont corrigées.** Elles se réglaient toutes par une montée de CORRECTIF, sans changement d'interface : `golang.org/x/image` v0.44.0 → v0.45.0, `quic-go` v0.59.0 → v0.59.1, `pgx/v5` v5.9.1 → v5.9.2. Le `go get -u` prévu au plan d'action du premier audit n'avait jamais été exécuté — `go.mod` était inchangé depuis la v1.5.2.
