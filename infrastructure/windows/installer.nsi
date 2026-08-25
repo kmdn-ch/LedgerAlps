@@ -56,9 +56,39 @@ Unicode True
 !define MUI_WELCOMEPAGE_TITLE_3LINES
 !define MUI_FINISHPAGE_TITLE_3LINES
 
-; On the Finish page, offer to launch the app (via the launcher).
-!define MUI_FINISHPAGE_RUN          "$INSTDIR\${LAUNCHER_EXE}"
+; Lancement depuis la page de fin — SANS l'elevation de l'installeur.
+;
+; MUI execute MUI_FINISHPAGE_RUN par Exec DEPUIS LE PROCESSUS DE
+; L'INSTALLEUR, qui porte le jeton Administrateur (RequestExecutionLevel
+; admin). Le lanceur en heritait, et avec lui tout ce qu'il demarre :
+;
+;   - ledgeralps-server.exe (main.go:160), servant HTTP en Administrateur ;
+;   - le navigateur par defaut (main.go:124), idem ;
+;   - config.json, qui porte jwt_secret, et la base SQLite ecrits sous le
+;     %APPDATA% de L'ADMINISTRATEUR — c'est-a-dire le profil que le
+;     commentaire des raccourcis, plus bas, decrit precisement comme
+;     n'etant pas celui de l'utilisateur.
+;
+; La reprise passe par explorer.exe, SANS greffon.
+;
+; ShellExecAsUser aurait ete plus direct, mais ce greffon ne fait PAS
+; partie de la distribution standard de NSIS : verifie au compilateur, il
+; rend « Plugin not found, cannot call ShellExecAsUser » et fait echouer le
+; build sur le runner, qui installe NSIS tel quel.
+;
+; explorer.exe tourne deja sous le compte de l'utilisateur connecte : lui
+; passer un chemin le fait relancer a SON niveau d'integrite, et le jeton
+; Administrateur de l'installeur n'est pas transmis. C'est la methode sans
+; dependance, au prix d'une limite : si l'explorateur n'est pas en cours
+; d'execution, rien ne demarre. L'utilisateur a alors ses raccourcis, et
+; l'installation, elle, est complete.
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_FUNCTION LancerSansElevation
 !define MUI_FINISHPAGE_RUN_TEXT     "$(RunApp)"
+
+Function LancerSansElevation
+  Exec '"$WINDIR\explorer.exe" "$INSTDIR\${LAUNCHER_EXE}"'
+FunctionEnd
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\..\LICENSE"
@@ -246,10 +276,34 @@ Function .onInit
   ; installation precedente, et la lire dans l'autre vue rendrait le chemin
   ; introuvable.
   SetRegView 64
-  ; Detect reinstall: if config.json already exists, write a sentinel so the
-  ; launcher can show a "configuration preserved" notification on next launch.
+
+  ; Relire InstallLocation NOUS-MEMES, apres SetRegView.
+  ;
+  ; InstallDirRegKey est resolu par l'exehead AVANT l'appel de .onInit —
+  ; c'est precisement ce qui permet d'y surcharger $INSTDIR —, donc dans la
+  ; vue 32 bits, ou la cle n'existe plus depuis que l'installeur ecrit en
+  ; vue 64. Une reinstallation sur un repertoire personnalise retombait
+  ; alors sur $PROGRAMFILES64 et laissait l'ancienne copie derriere elle.
+  ; Cette lecture-ci est explicitement en vue 64.
+  ReadRegStr $R0 HKLM "${UNINSTALL_KEY}" "InstallLocation"
+  StrCmp $R0 "" +2 0
+    StrCpy $INSTDIR $R0
+
+  ; Temoin de reinstallation. LIMITE CONNUE, et c'est le meme piege que
+  ; celui documente pour les raccourcis plus bas : sous une elevation UAC
+  ; par identifiants, $APPDATA designe le profil de L'ADMINISTRATEUR. Le
+  ; temoin est alors ecrit dans un profil que le lanceur ne lira jamais, et
+  ; la notification « configuration preservee » ne s'affiche pas.
+  ;
+  ; Il n'existe pas de moyen NSIS de nommer le profil de l'utilisateur reel
+  ; depuis un processus eleve sans plugin. La notification est confortable,
+  ; pas fonctionnelle : son absence ne perd AUCUNE donnee. On l'ecrit quand
+  ; on peut, on ne pretend rien quand on ne peut pas — d'ou le IfErrors,
+  ; qui evite de laisser une poignee de fichier ouverte sur echec.
   IfFileExists "$APPDATA\LedgerAlps\config.json" 0 lbl_no_reinstall
+    ClearErrors
     FileOpen $0 "$APPDATA\LedgerAlps\.reinstalled" w
+    IfErrors lbl_no_reinstall
     FileClose $0
   lbl_no_reinstall:
 FunctionEnd

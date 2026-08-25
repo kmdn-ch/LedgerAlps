@@ -42,8 +42,22 @@ func carnetExemple() CarnetData {
 		Fortune:         5700,
 		ChiffreAffaires: 20000,
 		Eligible:        true,
-		Devise:          "CHF",
+		// La période du 1er janvier au 31 décembre EST un exercice : sans le
+		// dire, le document suspendrait ses verdicts. Le zéro du champ est
+		// délibérément le cas prudent — un carnet ne doit pas affirmer une
+		// éligibilité par omission.
+		SurExerciceComplet: true,
+		Devise:             "CHF",
 	}
+}
+
+// auDelaDuSeuil met le carnet dans l'état qu'un chiffre d'affaires de 620 000
+// produit réellement, tel que le handler le composerait.
+func auDelaDuSeuil(d CarnetData) CarnetData {
+	d.ChiffreAffaires = 620000
+	d.Eligible = false
+	d.DepasseSeuilRegime = true
+	return d
 }
 
 // Le document se produit et ressemble à un PDF.
@@ -93,9 +107,7 @@ func TestLeCarnetPorteSesMentionsLegales(t *testing.T) {
 // remettre un document que la loi ne reconnaît pas dans son cas. Le taire
 // serait le pire service à rendre.
 func TestAuDelaDuSeuilLeDocumentAvertit(t *testing.T) {
-	d := carnetExemple()
-	d.ChiffreAffaires = 620000
-	d.Eligible = false
+	d := auDelaDuSeuil(carnetExemple())
 
 	b, err := GenerateCarnet(d)
 	if err != nil {
@@ -147,7 +159,8 @@ func TestLesMontantsSontALaSuisse(t *testing.T) {
 // doit pouvoir remettre un document, pas se heurter à une erreur.
 func TestUnCarnetVideSeProduitQuandMeme(t *testing.T) {
 	b, err := GenerateCarnet(CarnetData{
-		Entreprise: "Nouvelle entreprise", Du: "2026-01-01", Au: "2026-12-31", Eligible: true,
+		Entreprise: "Nouvelle entreprise", Du: "2026-01-01", Au: "2026-12-31",
+		Eligible: true, SurExerciceComplet: true,
 	})
 	if err != nil {
 		t.Fatalf("un carnet vide échoue: %v", err)
@@ -327,10 +340,8 @@ func TestLAvertissementExisteDansLesQuatreLangues(t *testing.T) {
 		i18n.IT: "ATTENZIONE", i18n.EN: "WARNING",
 	}
 	for lang, mot := range motsAlerte {
-		d := carnetExemple()
+		d := auDelaDuSeuil(carnetExemple())
 		d.Langue = lang
-		d.ChiffreAffaires = 620000
-		d.Eligible = false
 		b, err := GenerateCarnet(d)
 		if err != nil {
 			t.Fatalf("%s: %v", lang, err)
@@ -368,5 +379,80 @@ func TestAucunLibelleNEstVide(t *testing.T) {
 				t.Errorf("%s : le libellé %q est vide", lang, v.Type().Field(i).Name)
 			}
 		}
+	}
+}
+
+// Sur une periode qui n'est PAS un exercice, le document ne conclut pas.
+//
+// C'est le defaut E-3 du second audit : les seuils du CO art. 957 et de la
+// LTVA art. 10 portent sur le chiffre d'affaires du dernier exercice. Mesures
+// sur un trimestre, ils faisaient imprimer « la comptabilite simplifiee est
+// admise », en vert et sous la reference legale, a une entreprise qui n'y a
+// pas droit — et « liberation de l'assujettissement TVA » a une entreprise qui
+// y est soumise. Les deux affirmations sont fausses, sur la piece meme que
+// l'on tend a l'administration.
+func TestSurUnePeriodePartielleLeDocumentNeConclutPas(t *testing.T) {
+	d := carnetExemple()
+	d.Du, d.Au = "2026-01-01", "2026-03-31"
+	d.SurExerciceComplet = false
+	d.ChiffreAffaires = 400000 // 1,6 million a l'annee : loin d'etre eligible
+
+	b, err := GenerateCarnet(d)
+	if err != nil {
+		t.Fatalf("GenerateCarnet: %v", err)
+	}
+	texte := texteDuPDF(b)
+
+	for _, interdit := range []string{"est admise", "ration de l'assujettissement"} {
+		if strings.Contains(texte, interdit) {
+			t.Errorf("le document affirme %q sur un trimestre", interdit)
+		}
+	}
+	if !strings.Contains(texte, "riode inf") {
+		t.Error("le document ne dit pas pourquoi il ne conclut pas")
+	}
+}
+
+// Le refus de conclure existe dans les quatre langues.
+//
+// Le taire dans une langue rendrait au carnet allemand ou italien exactement
+// le defaut que le correctif ferme.
+func TestLeRefusDeConclureExisteDansLesQuatreLangues(t *testing.T) {
+	marqueurs := map[i18n.Lang]string{
+		i18n.FR: "riode inf", i18n.DE: "Gesch", i18n.IT: "Periodo inferiore", i18n.EN: "shorter than",
+	}
+	for lang, mot := range marqueurs {
+		d := carnetExemple()
+		d.Langue = lang
+		d.Du, d.Au = "2026-01-01", "2026-03-31"
+		d.SurExerciceComplet = false
+
+		b, err := GenerateCarnet(d)
+		if err != nil {
+			t.Fatalf("%s: %v", lang, err)
+		}
+		if !strings.Contains(texteDuPDF(b), mot) {
+			t.Errorf("%s : le refus de conclure n'apparait pas (attendu %q)", lang, mot)
+		}
+	}
+}
+
+// Un depassement du seuil reste concluant, meme sur un trimestre.
+//
+// Le chiffre d'affaires ne decroit pas en allongeant la fenetre : ce qui est
+// deja au-dessus du seuil y restera. L'avertissement doit donc survivre au
+// garde-fou d'E-3, sans quoi le correctif ferait taire la mention qui protege
+// le plus l'utilisateur.
+func TestUnDepassementAvertitMemeSurUnTrimestre(t *testing.T) {
+	d := auDelaDuSeuil(carnetExemple())
+	d.Du, d.Au = "2026-01-01", "2026-03-31"
+	d.SurExerciceComplet = false
+
+	b, err := GenerateCarnet(d)
+	if err != nil {
+		t.Fatalf("GenerateCarnet: %v", err)
+	}
+	if !strings.Contains(texteDuPDF(b), "ATTENTION") {
+		t.Error("le depassement du seuil n'avertit plus sur une periode partielle")
 	}
 }

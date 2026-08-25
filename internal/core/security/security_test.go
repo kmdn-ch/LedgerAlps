@@ -214,7 +214,7 @@ func TestComputeEntryHash(t *testing.T) {
 			// Separator-safety: a field containing "]" or `"` must not cause
 			// a collision with adjacent fields split differently.
 			name:        `separator-safe: field with "]" does not collide`,
-			userID:      `user]1`,  // contains "]"
+			userID:      `user]1`, // contains "]"
 			action:      "post",
 			tableName:   "journal_entries",
 			recordID:    "entry-1",

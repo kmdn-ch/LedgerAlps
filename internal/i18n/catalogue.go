@@ -15,6 +15,15 @@ package i18n
 // Écrit par scratchpad/cat_go.py — modifiable à la main sans dommage.
 
 var catalogue = map[string]map[Lang]string{
+	// Le carnet du lait refuse de sortir quand ses totaux ne concordent pas
+	// avec le mouvement net de trésorerie. C'est un message d'exploitation,
+	// mais il atteint la personne qui a cliqué : elle doit le lire dans sa
+	// langue pour savoir que le document N'A PAS été produit.
+	"incohérence du carnet : le résultat (%.2f) ne correspond pas au mouvement net de liquidités (%.2f), écart de %.2f — le document n'est pas établi": {
+		DE: "Inkonsistenz im Kassabuch: Das Ergebnis (%.2f) stimmt nicht mit der Nettoveränderung der flüssigen Mittel (%.2f) überein, Abweichung von %.2f — das Dokument wird nicht erstellt",
+		IT: "Incoerenza del libro cassa: il risultato (%.2f) non corrisponde al movimento netto di liquidità (%.2f), scarto di %.2f — il documento non viene emesso",
+		EN: "Cash book inconsistency: the result (%.2f) does not match the net cash movement (%.2f), a discrepancy of %.2f — the document is not produced",
+	},
 
 	"\nNote sur les données personnelles (nLPD) : les IBAN des contacts sont\n": {
 		DE: "\nHinweis zu den Personendaten (DSG): die IBAN der Kontakte sind\n",

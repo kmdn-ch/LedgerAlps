@@ -100,6 +100,22 @@ func squareness(p pageImage) float64 {
 	return h / w
 }
 
+// Bornes de l'extraction : ce que la garde par image ne couvre pas.
+//
+// `imgsafe.Decode` refuse UNE image démesurée. Rien n'empêchait un document
+// d'en porter mille admissibles, toutes conservées en mémoire en même temps.
+const (
+	// PixelsCumulMax borne la somme des pixels retenus d'un même document.
+	//
+	// Quatre fois le plafond d'une image seule : de quoi accepter une facture
+	// illustrée sans permettre l'épuisement. Le QR est un carré unique — au
+	// delà de ce budget, on a de toute façon dépassé ce qu'une facture porte.
+	PixelsCumulMax = 4 * imgsafe.PixelsMax
+
+	// ImagesMax borne le nombre de fichiers examinés.
+	ImagesMax = 64
+)
+
 // extractImages sort les images du PDF via pdfcpu.
 //
 // pdfcpu écrit dans un dossier ; on lui en donne un temporaire, effacé à la
@@ -136,9 +152,21 @@ func extractImages(data []byte) ([]pageImage, error) {
 	}
 
 	var images []pageImage
+	var cumulPixels int64
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
+		}
+		// Borner le NOMBRE, avant même de lire le fichier.
+		//
+		// imgsafe refuse une image démesurée ; il ne dit rien de mille images
+		// admissibles. Un PDF de 10 Mo peut porter des centaines d'aplats de
+		// 5000 × 5000 pixels — quelques dizaines de kilo-octets chacun en
+		// Flate, donc chacun sous les 25 mégapixels de la garde, mais dont la
+		// SOMME ne la rencontre jamais. Le plafond de 32 Mo posé sur le corps
+		// de la requête borne le téléversement, pas l'expansion.
+		if len(images) >= ImagesMax {
+			break
 		}
 		// Lire les octets puis décoder par imgsafe, plutôt que de décoder le
 		// flux directement : la garde a besoin de relire l'en-tête avant de
@@ -157,6 +185,22 @@ func extractImages(data []byte) ([]pageImage, error) {
 			// qu'une de ses illustrations est illisible.
 			continue
 		}
+		// Borner le CUMUL des pixels conservés.
+		//
+		// Les images décodées sont toutes gardées en mémoire simultanément —
+		// c'est ce que `append` fait ici — et c'est ce cumul, non la taille
+		// d'une image, qui tue le processus. Or ce processus porte la base
+		// comptable ouverte.
+		//
+		// On s'arrête, on n'échoue pas : les images déjà retenues contiennent
+		// peut-être le QR, et une facture ne doit pas être refusée parce
+		// qu'elle est illustrée.
+		b := img.Bounds()
+		px := int64(b.Dx()) * int64(b.Dy())
+		if cumulPixels+px > PixelsCumulMax {
+			break
+		}
+		cumulPixels += px
 		images = append(images, pageImage{img: img})
 	}
 	return images, nil

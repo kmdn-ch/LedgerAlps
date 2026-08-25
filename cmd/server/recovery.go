@@ -53,6 +53,32 @@ func (e *essaisRecuperation) autorise(adresse string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	maintenant := time.Now()
+
+	// Purge GENERALE a chaque passage.
+	//
+	// La forme precedente n'elaguait une adresse que si CETTE MEME adresse
+	// revenait : une adresse vue une fois y restait pour la duree du
+	// processus. Un balayage depuis un /64 IPv6, ou depuis plusieurs machines
+	// du reseau local, faisait croitre la table sans terme -- sur un point
+	// NON AUTHENTIFIE, dans un processus fait pour attendre, parfois des
+	// heures, que quelqu'un vienne taper sa phrase.
+	//
+	// Avec la purge, la table n'a jamais plus d'entrees qu'il n'y a eu
+	// d'adresses distinctes dans la derniere minute.
+	for adr, ts := range e.essais {
+		var vivants []time.Time
+		for _, t := range ts {
+			if maintenant.Sub(t) < fenetreEssais {
+				vivants = append(vivants, t)
+			}
+		}
+		if len(vivants) == 0 {
+			delete(e.essais, adr)
+			continue
+		}
+		e.essais[adr] = vivants
+	}
+
 	var recents []time.Time
 	for _, t := range e.essais[adresse] {
 		if maintenant.Sub(t) < fenetreEssais {
@@ -158,6 +184,12 @@ func runRecoveryServer(cfg *config.Config, cause error) {
 		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		// Le serveur normal borne ses quatre delais ; celui-ci n'en bornait
+		// qu'un. Une connexion lente y tenait donc un descripteur sans terme,
+		// sur un point non authentifie.
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	schema := "http"

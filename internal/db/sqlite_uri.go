@@ -62,4 +62,21 @@ var livePragmas = []string{
 	"_pragma=journal_mode(WAL)",
 	"_pragma=foreign_keys(on)",
 	"_pragma=busy_timeout(5000)",
+	// BEGIN IMMEDIATE plutôt que BEGIN.
+	//
+	// Une transaction « deferred » — le défaut du pilote — qui LIT avant
+	// d'ÉCRIRE fige un instantané. Si une autre connexion valide entre les
+	// deux, la montée en écriture rend SQLITE_BUSY_SNAPSHOT, et busy_timeout
+	// ne le réessaie PAS : attendre ne rajeunit pas un instantané périmé.
+	//
+	// C'est exactement la forme de la chaîne d'audit — lire le maillon
+	// précédent, puis insérer le suivant — et sur `traceFor` comme sur
+	// `invoicing.record`, l'échec est journalisé et non remonté : le maillon
+	// disparaissait en silence. Un journal à trous, que le produit lui-même
+	// désigne comme pire qu'un journal absent. Avec SetMaxOpenConns(25), les
+	// écritures concurrentes sont possibles.
+	//
+	// « immediate » prend le verrou d'écriture dès le BEGIN : le conflit
+	// devient une ATTENTE, que busy_timeout absorbe.
+	"_txlock=immediate",
 }

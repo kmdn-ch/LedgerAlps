@@ -254,6 +254,21 @@ install_systemd() {
 
   mkdir -p /var/lib/ledgeralps /var/log/ledgeralps
   chown ledgeralps:ledgeralps /var/lib/ledgeralps /var/log/ledgeralps
+  # 750, pas 755. Ce repertoire porte ledgeralps.db, donc la comptabilite
+  # entiere : factures, contacts, IBAN, et dix ans de pieces (CO art. 958f).
+  # SQLite cree son fichier en 0644 masque par l'umask du service ; seul le
+  # repertoire le protege, et `mkdir -p` sous un umask root normal (022) le
+  # laissait en 0755 — lisible par tout compte local.
+  #
+  # Le durcissement de /etc/ledgeralps (la cle JWT) avait ete pose sans que
+  # celui-ci le soit. Le meme geste existe depuis toujours dans
+  # infrastructure/linux/preinstall.sh, mais les paquets .deb/.rpm ne sont plus
+  # publies depuis la v1.4.5 : ce script-ci est le seul chemin d'installation
+  # vivant, et c'est lui qui devait porter la correction.
+  #
+  # ProtectSystem=strict et NoNewPrivileges plus bas protegent le PROCESSUS,
+  # pas les lecteurs.
+  chmod 750 /var/lib/ledgeralps /var/log/ledgeralps
 
   info "Installing systemd service…"
   cat > "$SERVICE_FILE" <<EOF

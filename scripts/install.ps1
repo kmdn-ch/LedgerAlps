@@ -45,6 +45,28 @@ function Write-Success { param($Msg) Write-Host "[ledgeralps] $Msg" -ForegroundC
 function Write-Warn    { param($Msg) Write-Host "[ledgeralps] WARN: $Msg" -ForegroundColor Yellow }
 function Write-Fail    { param($Msg) Write-Error "[ledgeralps] ERROR: $Msg" }
 
+# Assert-CheminSain est le pendant Windows de valider_chemin
+# (scripts/install.sh:31), qui manquait ici.
+#
+# $InstallDir finit dans le PATH MACHINE (voir Add-ToPath) : un « ; »
+# y injecte des entrees supplementaires pour TOUS les comptes. $DataDir
+# finit en argument d icacls et dans le gabarit .env. Le prerequis est
+# d etre deja administrateur, donc ce n est pas une elevation -- c est
+# une asymetrie avec le raisonnement deja tenu cote Linux, et le geste
+# coute six lignes.
+function Assert-CheminSain {
+    param([string]$Nom, [string]$Chemin)
+    if ([string]::IsNullOrWhiteSpace($Chemin)) {
+        Write-Fail "$Nom ne peut pas etre vide."
+    }
+    if ($Chemin -match '[;"|<>*?]' -or $Chemin -match '[\r\n]') {
+        Write-Fail "$Nom contient un caractere refuse (; `" | < > * ? ou saut de ligne) : $Chemin"
+    }
+    if (-not [System.IO.Path]::IsPathRooted($Chemin)) {
+        Write-Fail "$Nom doit etre un chemin absolu (recu : $Chemin)"
+    }
+}
+
 # --------------------------------------------------------------------------- #
 # Elevation check                                                             #
 # --------------------------------------------------------------------------- #
@@ -137,13 +159,25 @@ function Install-Binaries {
     # ce que le reseau avait bien voulu rendre. Le mode d'emploi documente est
     # « irm ... | iex » : il n'y a aucune autre occasion d'inspecter.
     Write-Info "Verifying checksum..."
-    $ligne = Select-String -Path $sumsPath -Pattern ([regex]::Escape($archive)) |
-             Select-Object -First 1
-    if (-not $ligne) {
+    # Correspondance sur le CHAMP, pas sur la ligne.
+    #
+    # Select-String retenait toute ligne CONTENANT le nom de l archive, et
+    # « ...zip.sbom.json » -- publie par le bloc sboms de .goreleaser.yaml --
+    # contient « ...zip ». Que la bonne ligne arrive en premier tenait au tri
+    # de GoReleaser, que rien ne garantit ni ne documente : un futur artefact
+    # au nom prefixe (attestation, .sig, .pem) reveillait le defaut.
+    #
+    # install.sh:156 fait deja la comparaison de champ avec awk ; on aligne.
+    $attendu = Get-Content $sumsPath | ForEach-Object {
+        $champs = $_ -split '\s+', 2
+        if ($champs.Count -eq 2 -and $champs[1].Trim().TrimStart([char]42) -eq $archive) {
+            $champs[0]
+        }
+    } | Select-Object -First 1
+    if (-not $attendu) {
         Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
         Write-Fail "Aucune empreinte publiee pour $archive - installation abandonnee."
     }
-    $attendu = ($ligne.Line -split '\s+')[0]
     $obtenu  = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash
     if ($obtenu -ne $attendu.ToUpper()) {
         Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -400,6 +434,8 @@ function Write-NextSteps {
 # Main                                                                        #
 # --------------------------------------------------------------------------- #
 Assert-Elevated
+Assert-CheminSain -Nom 'InstallDir' -Chemin $InstallDir
+Assert-CheminSain -Nom 'DataDir'    -Chemin $DataDir
 
 $arch   = Get-Arch
 $tag    = Resolve-Version

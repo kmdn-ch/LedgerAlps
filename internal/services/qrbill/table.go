@@ -219,5 +219,3 @@ func (r tableRow) pick(labels []string, accept func(string) bool) (value, label 
 	}
 	return "", ""
 }
-
-

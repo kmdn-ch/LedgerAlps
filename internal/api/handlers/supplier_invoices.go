@@ -55,29 +55,29 @@ type supplierInvoiceLine struct {
 }
 
 type supplierInvoice struct {
-	ID                 string                `json:"id"`
-	SupplierID         string                `json:"supplier_id"`
-	SupplierName       string                `json:"supplier_name,omitempty"`
-	SupplierReference  string                `json:"supplier_reference"`
-	Status             string                `json:"status"`
-	IssueDate          string                `json:"issue_date"`
-	DueDate            string                `json:"due_date,omitempty"`
-	Currency           string                `json:"currency"`
-	SubtotalAmount     float64               `json:"subtotal_amount"`
-	VATAmount          float64               `json:"vat_amount"`
-	TotalAmount        float64               `json:"total_amount"`
-	VATRate            float64               `json:"vat_rate"`
-	AmountPaid         float64               `json:"amount_paid"`
-	ExpenseAccountCode string                `json:"expense_account_code,omitempty"`
+	ID                 string  `json:"id"`
+	SupplierID         string  `json:"supplier_id"`
+	SupplierName       string  `json:"supplier_name,omitempty"`
+	SupplierReference  string  `json:"supplier_reference"`
+	Status             string  `json:"status"`
+	IssueDate          string  `json:"issue_date"`
+	DueDate            string  `json:"due_date,omitempty"`
+	Currency           string  `json:"currency"`
+	SubtotalAmount     float64 `json:"subtotal_amount"`
+	VATAmount          float64 `json:"vat_amount"`
+	TotalAmount        float64 `json:"total_amount"`
+	VATRate            float64 `json:"vat_rate"`
+	AmountPaid         float64 `json:"amount_paid"`
+	ExpenseAccountCode string  `json:"expense_account_code,omitempty"`
 	// PaymentReference est la reference du bulletin de versement — celle qui
 	// voyage dans l'ordre de virement pour que le fournisseur rapproche
 	// l'encaissement. A ne pas confondre avec SupplierReference, qui est le
 	// numero de la facture chez lui.
-	PaymentReference string    `json:"payment_reference,omitempty"`
-	JournalEntryID   string    `json:"journal_entry_id,omitempty"`
-	Notes            string    `json:"notes,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
-	Lines              []supplierInvoiceLine `json:"lines,omitempty"`
+	PaymentReference string                `json:"payment_reference,omitempty"`
+	JournalEntryID   string                `json:"journal_entry_id,omitempty"`
+	Notes            string                `json:"notes,omitempty"`
+	CreatedAt        time.Time             `json:"created_at"`
+	Lines            []supplierInvoiceLine `json:"lines,omitempty"`
 }
 
 type createSupplierInvoiceRequest struct {

@@ -177,8 +177,8 @@ Les appelants transmettent désormais une `accounting.Transition` — `Creation`
 `map[string]any` côte à côte : les intervertir produirait une piste qui affirme
 le contraire de ce qui s'est passé, avec l'autorité d'une chaîne valide.
 
-*Le masquage change la donne.* `maskPersonalData` remplace la valeur des champs
-personnels (nLPD art. 6) : un IBAN modifié donnerait `[MASKED]` des deux côtés,
+*Le masquage opère sur la STRUCTURE, avant encodage.* `masquerEtat` remplace
+la valeur des champs personnels (nLPD art. 6) : un IBAN modifié donnerait `[MASKED]` des deux côtés,
 et le changement disparaîtrait — précisément le cas qui motive la
 fonctionnalité, puisque cet IBAN est le compte qui reçoit les virements de tous
 les clients. La liste des champs qui ont bougé est donc calculée sur les valeurs
@@ -229,6 +229,43 @@ un cumul SANS DATE.
 liquidités : ce n'est ni une recette ni une dépense, mais une lecture ligne à
 ligne le compterait deux fois et gonflerait les deux colonnes sans changer le
 résultat.
+
+*Chaque contrepartie est classée par SON propre sens.* Une écriture peut porter
+les deux à la fois : un encaissement diminué de frais bancaires apporte un
+produit ET une charge ; un règlement fournisseur avec escompte, une charge ET
+un produit. Classer l'écriture entière puis ne lire de chaque contrepartie que
+le côté opposé au mouvement faisait disparaître celle qui se trouvait du même
+côté que la liquidité — elle portait zéro du côté interrogé. Un crédit de
+contrepartie est une recette, un débit une dépense, et les deux sont comptés.
+
+*Le document ne sort pas s'il ne concorde pas.* Dans une écriture équilibrée,
+séparer les lignes de liquidités des autres donne
+`débitL - créditL = créditC - débitC`, c'est-à-dire
+**`mouvement net de trésorerie = recettes - dépenses`**. `mouvements` vérifie
+cette égalité au centime et rend une erreur si elle est rompue. Sur une pièce
+remise à l'administration, l'absence de document est un problème
+d'exploitation ; un document faux est un problème fiscal.
+
+*Le carnet a sa propre période.* La plage de l'écran Rapports est commune au
+journal, au grand livre et à la balance, et sa valeur par défaut n'est jamais
+un exercice. Le sélecteur du carnet (`frontend/src/utils/exercices.ts`) liste
+les exercices **déclarés** — `GET /fiscal-years`, dont la réponse est
+`{ items, total }` et non un tableau nu — et se rabat sur une **déduction**
+depuis `fiscal_year_start_month`, annoncée comme telle à l'écran. Il propose
+d'emblée le dernier exercice **révolu** : un carnet du lait sert à déclarer une
+année terminée. L'option « période personnalisée » conserve le choix libre.
+
+*Les seuils ne s'apprécient que sur un exercice.* Ceux du CO art. 957 al. 2
+ch. 1 et de la LTVA art. 10 al. 2 let. a portent en droit sur le chiffre
+d'affaires du **dernier exercice**. Mesurés sur la période demandée, quelle
+qu'elle soit, ils faisaient imprimer « la comptabilité simplifiée est admise »
+à une entreprise à 1,6 million qui demandait un trimestre. `Eligibilite` porte
+donc `SurExerciceComplet`, et sur une période plus courte le document **suspend
+son verdict** au lieu d'en rendre un favorable. Les deux conclusions ne sont
+pas symétriques : un dépassement constaté sur un trimestre est acquis pour
+l'exercice — le chiffre d'affaires ne décroît pas en allongeant la fenêtre —,
+tandis qu'« inférieur au seuil » ne se déduit d'aucune période partielle. Seule
+la conclusion favorable est donc conditionnée, et l'avertissement subsiste.
 
 *La langue du document est celle de l'écran au moment du clic.* Elle voyage
 dans `Accept-Language`, que le client pose à chaque requête. Le middleware

@@ -373,7 +373,41 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	insCtx, insCancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer insCancel()
 
-	if _, err := h.db.ExecContext(insCtx, q, id, req.Email, req.Name, hash, now, now); err != nil {
+	// Le contrôle et l'insertion dans la MÊME transaction.
+	//
+	// Séparés, ils laissaient passer deux requêtes simultanées : le COUNT(*)
+	// plus haut et cet INSERT sont séparés par le hachage bcrypt, soit une
+	// centaine de millisecondes — le `cancel()` ci-dessus l'a même placé hors
+	// budget à dessein. Deux appels concurrents lisaient donc tous deux
+	// count == 0, et comme `users.email` est UNIQUE, deux adresses
+	// différentes produisaient DEUX administrateurs.
+	//
+	// Le second contrôle est fait DANS la transaction, qui prend le verrou
+	// d'écriture dès son ouverture (_txlock=immediate) : « ne fonctionne
+	// qu'une fois » cesse de vouloir dire « qu'une fois si personne
+	// n'appelle en même temps ».
+	tx, err := h.db.BeginTx(insCtx, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var encore int
+	if err := tx.QueryRowContext(insCtx, "SELECT COUNT(*) FROM users").Scan(&encore); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+		return
+	}
+	if encore > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "l'installation est déjà initialisée — passez par la création de compte ou le panneau d'administration"})
+		return
+	}
+
+	if _, err := tx.ExecContext(insCtx, q, id, req.Email, req.Name, hash, now, now); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+		return
+	}
+	if err := tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}

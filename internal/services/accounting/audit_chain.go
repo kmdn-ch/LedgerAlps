@@ -61,14 +61,26 @@ func AppendAuditEntryFor(
 	// La liste des champs modifiés est calculée sur les valeurs BRUTES, avant
 	// masquage : sur les valeurs masquées, un IBAN changé donnerait
 	// « [MASKED] » des deux côtés et le changement serait invisible.
-	rawAfterJSON, err := json.Marshal(avecChampsModifies(transition))
+	// Masquer d'abord, encoder ensuite.
+	//
+	// L'ordre inverse obligeait à retrouver les valeurs dans le texte, ce qui
+	// ne se fait pas de façon sûre : le motif s'arrêtait au premier guillemet
+	// échappé et laissait un fragment en clair. `masquerEtat` opère sur la
+	// structure, où la question ne se pose pas.
+	//
+	// `avecChampsModifies` est appelé AVANT le masquage : la liste des champs
+	// modifiés se calcule sur les valeurs brutes, sans quoi un IBAN changé
+	// donnerait « [MASKED] » des deux côtés et le changement serait invisible.
+	// `champs_modifies` n'est pas une clé sensible (ses mots sont « champs » et
+	// « modifies »), elle traverse donc le masquage intacte.
+	rawAfterJSON, err := json.Marshal(masquerEtat(avecChampsModifies(transition)))
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("encode after_state: %w", err)
 	}
 	// Les données personnelles sont masquées AVANT le calcul (nLPD art. 6) :
 	// hacher l'état non masqué puis stocker l'état masqué rendrait l'empreinte
 	// non recalculable, ce qui est exactement le défaut corrigé en v1.4.6.
-	maskedAfter := maskPersonalData(string(rawAfterJSON))
+	maskedAfter := string(rawAfterJSON)
 
 	// L'état antérieur passe par le MÊME masquage que le suivant, et avant le
 	// calcul de l'empreinte.
@@ -87,11 +99,11 @@ func AppendAuditEntryFor(
 	maskedBefore := ""
 	var beforePtr *string
 	if transition.Avant != nil {
-		rawBeforeJSON, err := json.Marshal(transition.Avant)
+		rawBeforeJSON, err := json.Marshal(masquerEtat(transition.Avant))
 		if err != nil {
 			return "", time.Time{}, fmt.Errorf("encode before_state: %w", err)
 		}
-		maskedBefore = maskPersonalData(string(rawBeforeJSON))
+		maskedBefore = string(rawBeforeJSON)
 		beforePtr = &maskedBefore
 	}
 

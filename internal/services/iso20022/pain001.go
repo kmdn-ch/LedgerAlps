@@ -18,9 +18,9 @@ const pain001NS = "urn:iso:std:iso:20022:tech:xsd:pain.001.001.09"
 // Pain001Request is the input to GeneratePain001.
 type Pain001Request struct {
 	// Debtor (the company initiating the payments)
-	DebtorName  string
-	DebtorIBAN  string
-	DebtorBIC   string // optional — bank BIC/SWIFT
+	DebtorName string
+	DebtorIBAN string
+	DebtorBIC  string // optional — bank BIC/SWIFT
 
 	// Execution date (ISO 8601 date)
 	ExecutionDate time.Time
@@ -83,7 +83,7 @@ func GeneratePain001(req Pain001Request) ([]byte, error) {
 					Value: fmt.Sprintf("%.2f", math.Round(t.Amount*100)/100),
 				},
 			},
-			Cdtr:    p1Party{Nm: t.CreditorName},
+			Cdtr:     p1Party{Nm: t.CreditorName},
 			CdtrAcct: p1Acct{ID: p1AcctID{IBAN: normalizeIBAN(t.CreditorIBAN)}},
 		}
 		if t.Reference != "" {
@@ -131,9 +131,9 @@ func GeneratePain001(req Pain001Request) ([]byte, error) {
 				ReqdExctnDt: p1ReqdExctnDt{
 					Dt: req.ExecutionDate.Format("2006-01-02"),
 				},
-				Dbtr:    p1Party{Nm: req.DebtorName},
-				DbtrAcct: p1Acct{ID: p1AcctID{IBAN: normalizeIBAN(req.DebtorIBAN)}},
-				DbtrAgt:  buildDbtrAgt(req.DebtorBIC),
+				Dbtr:        p1Party{Nm: req.DebtorName},
+				DbtrAcct:    p1Acct{ID: p1AcctID{IBAN: normalizeIBAN(req.DebtorIBAN)}},
+				DbtrAgt:     buildDbtrAgt(req.DebtorBIC),
 				CdtTrfTxInf: txInfos,
 			},
 		},
@@ -149,8 +149,8 @@ func GeneratePain001(req Pain001Request) ([]byte, error) {
 // ─── XML structs (pain.001.001.09) ───────────────────────────────────────────
 
 type p1Document struct {
-	XMLName          xml.Name          `xml:"Document"`
-	Xmlns            string            `xml:"xmlns,attr"`
+	XMLName          xml.Name           `xml:"Document"`
+	Xmlns            string             `xml:"xmlns,attr"`
 	CstmrCdtTrfInitn p1CstmrCdtTrfInitn `xml:"CstmrCdtTrfInitn"`
 }
 
@@ -160,24 +160,24 @@ type p1CstmrCdtTrfInitn struct {
 }
 
 type p1GrpHdr struct {
-	MsgID    string   `xml:"MsgId"`
-	CreDtTm  string   `xml:"CreDtTm"`
-	NbOfTxs  int      `xml:"NbOfTxs"`
-	CtrlSum  string   `xml:"CtrlSum"`
-	InitgPty p1Party  `xml:"InitgPty"`
+	MsgID    string  `xml:"MsgId"`
+	CreDtTm  string  `xml:"CreDtTm"`
+	NbOfTxs  int     `xml:"NbOfTxs"`
+	CtrlSum  string  `xml:"CtrlSum"`
+	InitgPty p1Party `xml:"InitgPty"`
 }
 
 type p1PmtInf struct {
-	PmtInfID     string           `xml:"PmtInfId"`
-	PmtMtd       string           `xml:"PmtMtd"`
-	NbOfTxs      int              `xml:"NbOfTxs"`
-	CtrlSum      string           `xml:"CtrlSum"`
-	PmtTpInf     *p1PmtTpInf     `xml:"PmtTpInf,omitempty"`
-	ReqdExctnDt  p1ReqdExctnDt   `xml:"ReqdExctnDt"`
-	Dbtr         p1Party          `xml:"Dbtr"`
-	DbtrAcct     p1Acct           `xml:"DbtrAcct"`
-	DbtrAgt      p1DbtrAgt        `xml:"DbtrAgt"`
-	CdtTrfTxInf  []p1CdtTrfTxInf `xml:"CdtTrfTxInf"`
+	PmtInfID    string          `xml:"PmtInfId"`
+	PmtMtd      string          `xml:"PmtMtd"`
+	NbOfTxs     int             `xml:"NbOfTxs"`
+	CtrlSum     string          `xml:"CtrlSum"`
+	PmtTpInf    *p1PmtTpInf     `xml:"PmtTpInf,omitempty"`
+	ReqdExctnDt p1ReqdExctnDt   `xml:"ReqdExctnDt"`
+	Dbtr        p1Party         `xml:"Dbtr"`
+	DbtrAcct    p1Acct          `xml:"DbtrAcct"`
+	DbtrAgt     p1DbtrAgt       `xml:"DbtrAgt"`
+	CdtTrfTxInf []p1CdtTrfTxInf `xml:"CdtTrfTxInf"`
 }
 
 // PmtTpInf est OMIS pour un virement suisse ordinaire.
@@ -216,7 +216,7 @@ type p1DbtrAgt struct {
 }
 
 type p1FinInstnID struct {
-	BICFI string `xml:"BICFI,omitempty"`
+	BICFI string  `xml:"BICFI,omitempty"`
 	Othr  *p1Othr `xml:"Othr,omitempty"`
 }
 
@@ -225,10 +225,10 @@ type p1Othr struct {
 }
 
 type p1CdtTrfTxInf struct {
-	PmtID    p1PmtID  `xml:"PmtId"`
-	Amt      p1Amt    `xml:"Amt"`
-	Cdtr     p1Party  `xml:"Cdtr"`
-	CdtrAcct p1Acct   `xml:"CdtrAcct"`
+	PmtID    p1PmtID   `xml:"PmtId"`
+	Amt      p1Amt     `xml:"Amt"`
+	Cdtr     p1Party   `xml:"Cdtr"`
+	CdtrAcct p1Acct    `xml:"CdtrAcct"`
 	RmtInf   *p1RmtInf `xml:"RmtInf,omitempty"`
 }
 
@@ -246,8 +246,8 @@ type p1InstdAmt struct {
 }
 
 type p1RmtInf struct {
-	Ustrd string   `xml:"Ustrd,omitempty"`
-	Strd  *p1Strd  `xml:"Strd,omitempty"`
+	Ustrd string  `xml:"Ustrd,omitempty"`
+	Strd  *p1Strd `xml:"Strd,omitempty"`
 }
 
 type p1Strd struct {
