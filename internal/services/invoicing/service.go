@@ -245,6 +245,25 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 
+	// La naissance de la piece entre dans la chaine d'empreintes.
+	//
+	// `created_by_id` disait deja QUI l'avait creee, mais dans la table des
+	// factures -- une colonne, pas un maillon : elle se modifie sans que rien
+	// ne s'en apercoive. ActionDocumentCreated existait pour cela et n'etait
+	// ecrite nulle part.
+	//
+	// L'adresse IP n'est pas connue ici : ce service ne voit pas la requete.
+	// Une trace sans IP vaut mieux qu'aucune trace, et `record` se tait de
+	// toute facon quand l'auteur est inconnu.
+	s.record(ctx, Actor{UserID: userID}, accsvc.ActionDocumentCreated, invoiceID,
+		accsvc.Creation(map[string]any{
+			"invoice_number": number,
+			"contact_id":     req.ContactID,
+			"total_amount":   total,
+			"currency":       req.Currency,
+			"issue_date":     req.IssueDate.Format("2006-01-02"),
+		}))
+
 	now := time.Now()
 	return &models.Invoice{
 		ID:             invoiceID,
@@ -273,7 +292,18 @@ var ErrInvoicePaid = fmt.Errorf("impossible de modifier une facture avec un paie
 
 // UpdateInvoice replaces the editable fields and all lines of an invoice.
 // Blocked if amount_paid > 0 (payment has been validated).
+//
+// Sans auteur : la modification n'est PAS tracee. Meme decoupage que
+// Transition / TransitionBy, et meme raison -- les tests et les appels
+// internes n'ont pas d'auteur a fournir, et une trace anonyme ferait croire
+// a une couverture qui n'existe pas.
 func (s *Service) UpdateInvoice(ctx context.Context, invoiceID string, req CreateInvoiceRequest) (*models.Invoice, error) {
+	return s.UpdateInvoiceBy(ctx, invoiceID, req, Actor{})
+}
+
+// UpdateInvoiceBy est la meme chose, en inscrivant l'auteur dans la chaine
+// d'empreintes (ActionDocumentUpdated).
+func (s *Service) UpdateInvoiceBy(ctx context.Context, invoiceID string, req CreateInvoiceRequest, actor Actor) (*models.Invoice, error) {
 	// Guard: check payment status before touching anything.
 	var amountPaid float64
 	chkQ := db.Rebind("SELECT amount_paid FROM invoices WHERE id = ?", s.usePostgres)
@@ -372,6 +402,19 @@ func (s *Service) UpdateInvoice(ctx context.Context, invoiceID string, req Creat
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
+	// Modifier une facture emise change ce que le client doit.
+	//
+	// ActionDocumentUpdated etait declaree et jamais ecrite : le montant
+	// d'une facture pouvait changer sans qu'aucun maillon ne le dise, alors
+	// que c'est exactement la question a laquelle l'audit differentiel a ete
+	// construit pour repondre.
+	s.record(ctx, actor, accsvc.ActionDocumentUpdated, invoiceID,
+		accsvc.Creation(map[string]any{
+			"contact_id":   req.ContactID,
+			"total_amount": total,
+			"lignes":       len(req.Lines),
+		}))
+
 	return nil, nil // caller reloads via GetInvoice
 }
 
@@ -906,6 +949,20 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
+
+	// Une note de credit ANNULE tout ou partie d'une facture emise.
+	//
+	// C'est le geste que le CO art. 958f rend irreversible : on ne supprime
+	// pas une piece comptable, on en emet une qui la corrige. La constante
+	// ActionCreditNoteIssued existait pour l'inscrire dans la chaine, et
+	// n'etait ecrite nulle part -- le document apparaissait donc dans les
+	// livres sans maillon disant qui l'avait decide.
+	s.record(ctx, Actor{UserID: userID}, accsvc.ActionCreditNoteIssued, creditNoteID,
+		accsvc.Creation(map[string]any{
+			"corrects_invoice_id": invoiceID,
+			"invoice_number":      number,
+			"total_amount":        total,
+		}))
 
 	corrects := invoiceID
 	return &models.Invoice{

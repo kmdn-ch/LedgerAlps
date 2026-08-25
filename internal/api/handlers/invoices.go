@@ -333,7 +333,12 @@ func (h *InvoicesHandler) UpdateInvoice(c *gin.Context) {
 		}
 	}
 
-	_, err = h.svc.UpdateInvoice(c.Request.Context(), id, invoicing.CreateInvoiceRequest{
+	// UpdateInvoiceBy : l'auteur et son adresse entrent dans la chaine.
+	actor := invoicing.Actor{IP: c.ClientIP()}
+	if claims := mw.GetClaims(c); claims != nil {
+		actor.UserID = claims.UserID
+	}
+	_, err = h.svc.UpdateInvoiceBy(c.Request.Context(), id, invoicing.CreateInvoiceRequest{
 		DocumentType: req.DocumentType,
 		ContactID:    req.ContactID,
 		IssueDate:    issueDate,
@@ -342,7 +347,7 @@ func (h *InvoicesHandler) UpdateInvoice(c *gin.Context) {
 		Notes:        req.Notes,
 		Terms:        req.Terms,
 		Lines:        lines,
-	})
+	}, actor)
 	if err != nil {
 		switch err {
 		case invoicing.ErrInvoiceNotFound:

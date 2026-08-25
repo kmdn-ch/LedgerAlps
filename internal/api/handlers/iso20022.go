@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 	"github.com/kmdn-ch/ledgeralps/internal/services/banking"
 	"github.com/kmdn-ch/ledgeralps/internal/services/iso20022"
 )
@@ -21,6 +23,25 @@ type ISO20022Handler struct {
 	// run construit les virements depuis les factures fournisseurs. Nil dans les
 	// tests qui n'exercent que la generation du XML.
 	run *PaymentRunHandler
+
+	// db et usePostgres servent UNIQUEMENT a la piste d'audit.
+	//
+	// Un import de releve bancaire et une generation d'ordre de virement sont
+	// deux mouvements d'argent : le premier fait entrer des ecritures dans les
+	// livres, le second produit le fichier que la banque execute. Ni l'un ni
+	// l'autre ne laissait de trace, alors que les constantes existaient
+	// (ActionBankStatementImported, ActionPaymentFileGenerated). Nil dans les
+	// tests qui n'exercent que l'analyse du XML : `trace` est alors silencieuse.
+	db          *sql.DB
+	usePostgres bool
+}
+
+// WithAudit branche la piste d'audit sur les deux operations qui deplacent de
+// l'argent. Sans elle, le handler fonctionne mais ne trace rien.
+func (h *ISO20022Handler) WithAudit(database *sql.DB, usePostgres bool) *ISO20022Handler {
+	h.db = database
+	h.usePostgres = usePostgres
+	return h
 }
 
 func NewISO20022Handler() *ISO20022Handler { return &ISO20022Handler{} }
@@ -173,6 +194,29 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 	}
 
 	filename := fmt.Sprintf("paiements-%s.xml", req.ExecutionDate)
+
+	// Ce fichier est celui que la banque EXECUTE : c'est le moment où l'argent
+	// part. Il n'existe pas d'action du produit dont on veuille davantage
+	// savoir qui l'a déclenchée, et elle n'était pas tracée.
+	//
+	// Ni les IBAN des bénéficiaires ni les montants individuels n'entrent dans
+	// l'état : le nombre de virements, le total et la date d'exécution
+	// suffisent à rapprocher la trace du fichier, et recopier les
+	// coordonnées de tiers dans une table conservée dix ans irait contre la
+	// nLPD art. 6. Le nom du débiteur est masqué par `masquerEtat`.
+	var total float64
+	for _, t := range txs {
+		total += t.Amount
+	}
+	trace(c, h.db, h.usePostgres, accounting.TablePayments,
+		ActionPaymentFileGenerated, filename, accounting.Creation(map[string]any{
+			"fichier":        filename,
+			"format":         "pain.001",
+			"virements":      len(txs),
+			"total":          total,
+			"date_execution": req.ExecutionDate,
+		}))
+
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	c.Data(http.StatusOK, "application/xml; charset=UTF-8", xmlBytes)
 }
@@ -237,8 +281,18 @@ func (h *ISO20022Handler) ImportCamt053(c *gin.Context) {
 		}
 		imported, duplicate = res.Imported, res.Duplicate
 	}
-	_ = imported
-	_ = duplicate
+	// L'import fait ENTRER des ecritures dans les livres. Le compte du
+	// nombre importe / doublons ecartes est ce qu'on veut relire apres coup
+	// quand un solde ne concorde pas ; les lignes elles-memes vivent deja
+	// dans bank_entries, il n'y a pas a les recopier.
+	trace(c, h.db, h.usePostgres, TableBankEntries,
+		ActionBankStatementImported, fmt.Sprintf("camt053-%d", time.Now().UTC().Unix()),
+		accounting.Creation(map[string]any{
+			"format":    "camt.053",
+			"lues":      len(entries),
+			"importees": imported,
+			"doublons":  duplicate,
+		}))
 
 	// Convert to API-friendly response
 	type entryResponse struct {

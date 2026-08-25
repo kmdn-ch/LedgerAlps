@@ -7,12 +7,26 @@ package handlers
 // La chaîne d'empreintes du CO art. 957a existait, avec sa vérification et son
 // attestation, et TROIS actions y entraient : la comptabilisation d'une
 // écriture, la clôture d'un exercice, et le changement de statut d'une facture.
-// Les constantes `ActionContactUpdated`, `ActionPaymentRecorded`,
-// `ActionBankEntryMatched` étaient déclarées et jamais appelées.
+// Le reste des constantes était déclaré et jamais appelé.
 //
 // Un journal à trous est pire qu'un journal absent : on le consulte en croyant
 // qu'il dit tout, et l'absence d'une ligne se lit comme « cela n'a pas eu
 // lieu » alors qu'elle veut dire « cela n'a jamais été écrit ».
+//
+// # Et la première correction n'avait corrigé que la moitié
+//
+// Une version antérieure de ce commentaire nommait trois constantes en disant
+// qu'elles « étaient déclarées et jamais appelées » — au passé, comme si le
+// nécessaire avait été fait. Il ne l'avait pas été : au moment où cette phrase
+// existait, l'unique occurrence de `ActionContactUpdated` dans tout le dépôt
+// ÉTAIT ce commentaire. Le second audit a compté onze actions déclarées et
+// jamais écrites, dont `ActionDataExported`, dont le commentaire promettait de
+// répondre à la question que pose la nLPD art. 6.
+//
+// Un commentaire faux coûte plus cher qu'un commentaire absent : il fait
+// renoncer à vérifier. Les quinze actions sont désormais câblées, et
+// `internal/frontend/audit_actions_test.go` échoue si l'une cesse de l'être —
+// y compris si elle ne subsiste que dans un commentaire qui l'affirme.
 //
 // # Pourquoi un helper plutôt que l'appel direct
 //
@@ -68,6 +82,7 @@ const (
 	TableSupplierInvoices = "supplier_invoices"
 	TableCompanySettings  = "company_settings"
 	TableExports          = "exports"
+	TableBankEntries      = "bank_entries"
 )
 
 // trace écrit un maillon d'audit pour l'action en cours.
@@ -125,4 +140,31 @@ func traceFor(ctx context.Context, database *sql.DB, usePostgres bool,
 		log.Printf("WARNING: action %s sur %s/%s non tracée: %v",
 			action, table, recordID, err)
 	}
+}
+
+// traceExport écrit un maillon pour une sortie de données hors de la machine.
+//
+// C'est la promesse que porte `ActionDataExported` : dire QUI a sorti quoi, et
+// quand. La constante était déclarée depuis la v1.5.3 et n'était écrite nulle
+// part — le produit ne pouvait donc pas répondre à la question que pose un
+// incident, celle à laquelle la nLPD art. 6 demande de pouvoir répondre.
+//
+// L'état décrit l'export, pas les données exportées : le nom du fichier, le
+// format et la période suffisent à reconstituer ce qui est sorti, et recopier
+// la charge utile dans une table conservée dix ans irait contre l'article même
+// qu'on cherche à satisfaire.
+func traceExport(c *gin.Context, database *sql.DB, usePostgres bool,
+	nomFichier, format string, details map[string]any) {
+	etat := map[string]any{
+		"fichier": nomFichier,
+		"format":  format,
+	}
+	for k, v := range details {
+		etat[k] = v
+	}
+	// `recordID` porte le nom du fichier : c'est par lui qu'on retrouve un
+	// export dans le journal, et il n'existe pas d'autre identifiant — un
+	// export n'est pas une ligne de la base.
+	trace(c, database, usePostgres, TableExports,
+		ActionDataExported, nomFichier, accounting.Creation(etat))
 }

@@ -183,6 +183,22 @@ et le changement disparaîtrait — précisément le cas qui motive la
 fonctionnalité, puisque cet IBAN est le compte qui reçoit les virements de tous
 les clients. La liste des champs qui ont bougé est donc calculée sur les valeurs
 **brutes, avant masquage**, et jointe à l'état suivant sous `champs_modifies`.
+
+Le masquage a longtemps opéré par expression régulière sur du JSON DÉJÀ
+encodé, et terminait la valeur au premier guillemet **échappé** : une raison
+sociale contenant un guillemet — *Au « Bon » Vin Sàrl* — produisait un état
+illisible ET laissait un fragment du nom en clair. On ne lit pas du JSON avec
+une expression régulière ; ici la structure est disponible, il n'y a pas à
+essayer.
+
+**Quinze actions, et un test qui le vérifie.** Le journal a longtemps déclaré
+des actions qu'il n'écrivait pas : onze des quinze constantes n'avaient aucun
+point d'appel, et l'en-tête de `audit_trace.go` affirmait au passé que le
+nécessaire avait été fait. Un journal à trous est pire qu'un journal absent —
+et un commentaire faux pire qu'un commentaire absent, parce qu'il fait
+renoncer à vérifier. `internal/frontend/audit_actions_test.go` échoue
+désormais si une action déclarée cesse d'être écrite, y compris quand elle ne
+subsiste que dans un commentaire qui prétend le contraire.
 On sait que l'IBAN a changé, et qui l'a changé, **sans conserver aucun des deux
 IBAN** — plus utile que deux valeurs masquées, et moins de données personnelles
 retenues.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
 // Anonymisation d'un contact — nLPD (RS 235.1) art. 6 al. 4 et art. 32.
@@ -149,6 +150,23 @@ func (h *ContactsHandler) AnonymiseContact(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
+
+	// L'anonymisation EFFACE des donnees personnelles pour de bon.
+	//
+	// C'est le traitement dont la nLPD art. 32 demande le plus de pouvoir
+	// rendre compte : une personne qui demande l'effacement de ses donnees
+	// doit pouvoir apprendre QUAND il a eu lieu et QUI l'a execute. La
+	// constante existait ; aucune trace n'etait ecrite.
+	//
+	// L'etat ne porte que le libelle de remplacement et le nombre de pieces
+	// conservees : recopier ce qui vient d'etre efface dans une table gardee
+	// dix ans annulerait l'effacement.
+	trace(c, h.db, h.usePostgres, accounting.TableContacts,
+		accounting.ActionContactAnonymised, id, accounting.Creation(map[string]any{
+			"libelle_remplacement": label,
+			"documents_conserves":  invoices,
+			"base_legale":          "nLPD art. 6 al. 4 ; nLPD art. 32",
+		}))
 
 	c.JSON(http.StatusOK, anonymiseResult{
 		ID:           id,

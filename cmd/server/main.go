@@ -507,7 +507,11 @@ func main() {
 	// ISO 20022 — pain.001 export + camt.053 import
 	bankingSvc := banking.New(database, cfg.UsePostgres())
 	runh := handlers.NewPaymentRunHandler(database, cfg.UsePostgres())
-	isoH := handlers.NewISO20022HandlerWithReconciliation(bankingSvc).WithPaymentRun(runh)
+	isoH := handlers.NewISO20022HandlerWithReconciliation(bankingSvc).
+		WithPaymentRun(runh).
+		// La piste d'audit : un import de releve et une generation d'ordre de
+		// virement deplacent de l'argent, et ne laissaient aucune trace.
+		WithAudit(database, cfg.UsePostgres())
 	recoh := handlers.NewReconciliationHandler(database, cfg.UsePostgres())
 
 	// Lire ce qu'il y a a payer est une consultation ; produire l'ordre de

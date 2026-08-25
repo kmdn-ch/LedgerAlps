@@ -190,7 +190,10 @@ func (h *AccountingExportHandler) ExportJournalCSV(c *gin.Context) {
 	// complet : un export tronqué se repère à un total qui ne s'équilibre plus.
 	out = append(out, []string{"TOTAL", "", "", "", "", money(totalD), money(totalC), "", "", ""})
 
-	writeCSV(c, "journal_"+periodSuffix(from, to)+".csv", out)
+	nom := "journal_" + periodSuffix(from, to) + ".csv"
+	traceExport(c, h.db, h.usePostgres, nom, "csv",
+		map[string]any{"du": from, "au": to, "lignes": len(out)})
+	writeCSV(c, nom, out)
 }
 
 // ─── Grand livre ─────────────────────────────────────────────────────────────
@@ -254,7 +257,10 @@ func (h *AccountingExportHandler) ExportLedgerCSV(c *gin.Context) {
 		return
 	}
 
-	writeCSV(c, "grand-livre_"+periodSuffix(from, to)+".csv", out)
+	nom := "grand-livre_" + periodSuffix(from, to) + ".csv"
+	traceExport(c, h.db, h.usePostgres, nom, "csv",
+		map[string]any{"du": from, "au": to, "lignes": len(out)})
+	writeCSV(c, nom, out)
 }
 
 // ─── Balance de vérification ─────────────────────────────────────────────────
@@ -324,7 +330,10 @@ func (h *AccountingExportHandler) ExportTrialBalanceCSV(c *gin.Context) {
 	}
 	out = append(out, []string{"TOTAL", "", "", money(totalD), money(totalC), money(totalD - totalC)})
 
-	writeCSV(c, "balance_"+periodSuffix(from, to)+".csv", out)
+	nom := "balance_" + periodSuffix(from, to) + ".csv"
+	traceExport(c, h.db, h.usePostgres, nom, "csv",
+		map[string]any{"du": from, "au": to, "lignes": len(out)})
+	writeCSV(c, nom, out)
 }
 
 // accountTypeLabel traduit le type de compte. Un CSV destiné à une fiduciaire

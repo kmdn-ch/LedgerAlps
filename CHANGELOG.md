@@ -31,9 +31,19 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ### Corrigé
 
+- **Onze des quinze actions d'audit n'étaient jamais écrites.** Le journal annonçait une couverture qu'il n'avait pas : `ActionContactUpdated`, `ActionPaymentRecorded`, `ActionBankEntryMatched`, `ActionDocumentCreated`, `ActionCreditNoteIssued`, `ActionDataExported` et cinq autres étaient déclarées et appelées nulle part. Modifier l'IBAN d'un fournisseur, encaisser un paiement, générer un ordre de virement, anonymiser un contact, exporter toute la comptabilité : aucun de ces gestes ne laissait de maillon.
+
+  Pire, l'en-tête de `audit_trace.go` affirmait **au passé** que trois de ces constantes « étaient déclarées et jamais appelées » — donnant la faute pour réparée alors que leur unique occurrence dans tout le dépôt était ce commentaire même. Un commentaire faux coûte plus cher qu'un commentaire absent : il fait renoncer à vérifier.
+
+  **Les quinze actions sont désormais câblées**, et `internal/frontend/audit_actions_test.go` échoue si l'une cesse de l'être — y compris si elle ne subsiste que dans un commentaire qui prétend le contraire. Vérifié en insérant une constante morte, puis la même accompagnée d'un commentaire affirmant qu'elle est câblée : le test attrape les deux.
+
 - **Le filet de test des permissions rapportait vert sur deux trous.** Il lisait trois lignes à partir de chaque route : une route sans permission **suivie** d'une voisine déclarée empruntait le `authorizer.Require(` de sa voisine et passait. Et le motif n'accrochait que `api.`, si bien qu'une route d'écriture montée sur `v1.` échappait à la fois au test et à toute la pile de filtres — le trou exact qu'était `POST /auth/register`. Le bloc s'arrête maintenant à la parenthèse fermante de son propre appel, le motif couvre les trois groupes, et les dix routes qui vivent délibérément hors du groupe protégé sont **nommées une par une**. Les deux trous ont été reproduits avant et après.
 
 - **La détection des liquidités du carnet reposait sur une comparaison de chaînes.** `estLiquidite` comparait lexicographiquement dans `["1000","1029"]` : « 10200 » était liquide et « 10290 » ne l'était pas, et « 1000A » passait — or `POST /accounts` n'impose aucun format. Surtout, les comptes de **virement interne** 1090/1091 du plan PME tombaient hors fenêtre : chaque virement était compté comme une recette ou une dépense, et tout paiement fait depuis un second compte bancaire créé à la main disparaissait du document. La comparaison porte désormais sur un nombre, la borne monte à 1099, et le sous-adressage est validé.
+
+- **La trace de la fiche entreprise décrivait la requête, pas ce qui avait été écrit.** Basculer l'entreprise en « non assujettie » efface le numéro de TVA après coup : l'audit enregistrait pourtant le numéro demandé, que la base ne contenait plus. Et `vat_status`, `auto_post_invoices` et `bank_address` ne figuraient dans aucun des deux états — changer le statut TVA, qui décide de ce qui s'imprime sur toute facture émise ensuite (LTVA art. 27 al. 1), ne laissait aucune trace. L'état « après » est maintenant lu dans la ligne relue.
+
+- **La branche « création » de la fiche entreprise était morte.** La branche `INSERT` remplissait `existingID`, si bien que le test `existingID != ""` était toujours vrai : la toute première écriture était enregistrée comme une *modification depuis `{}`* et l'écran d'audit affichait « 18 champs modifiés » sur une création qui n'avait rien remplacé.
 
 - **Les transactions SQLite étaient *deferred*.** Lire le maillon d'audit précédent puis insérer le suivant fige un instantané ; une écriture concurrente rendait `SQLITE_BUSY_SNAPSHOT`, que `busy_timeout` ne réessaie pas — attendre ne rajeunit pas un instantané. Sur les deux points de trace où l'échec est journalisé et non remonté, le maillon disparaissait en silence. `_txlock=immediate` transforme le conflit en attente.
 
