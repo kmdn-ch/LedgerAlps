@@ -28,6 +28,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 	"github.com/kmdn-ch/ledgeralps/internal/services/pdf"
 	"github.com/kmdn-ch/ledgeralps/internal/services/simplified"
 )
@@ -101,58 +102,66 @@ func (h *SimplifiedAccountingHandler) CarnetCSV(c *gin.Context) {
 		return
 	}
 
+	// Le CSV suit la même langue que le PDF : c'est le même document sous une
+	// autre forme, et le remettre à sa fiduciaire alémanique en français
+	// n'aurait pas plus de sens ici que là.
+	lang := i18n.Langue(c)
+	L := pdf.LibellesCarnet(lang)
+
 	rows := [][]string{
-		{"Comptabilité simplifiée (CO art. 957 al. 2)"},
-		{"Période", k.Du, "au", k.Au},
+		{L.Titre + " (" + L.SousTitre + ")"},
+		{L.Periode, k.Du, k.Au},
 		{},
-		{"RECETTES"},
-		{"Compte", "Libellé", "Montant"},
+		{L.Recettes},
+		{L.Compte, L.Libelle, L.Montant},
 	}
 	for _, l := range k.Recettes {
 		rows = append(rows, []string{l.Code, l.Libelle, money(l.Montant)})
 	}
 	rows = append(rows,
-		[]string{"", "Total des recettes", money(k.TotalRecettes)},
+		[]string{"", L.TotalRec, money(k.TotalRecettes)},
 		[]string{},
-		[]string{"DÉPENSES"},
-		[]string{"Compte", "Libellé", "Montant"})
+		[]string{L.Depenses},
+		[]string{L.Compte, L.Libelle, L.Montant})
 	for _, l := range k.Depenses {
 		rows = append(rows, []string{l.Code, l.Libelle, money(l.Montant)})
 	}
 	rows = append(rows,
-		[]string{"", "Total des dépenses", money(k.TotalDepenses)},
+		[]string{"", L.TotalDep, money(k.TotalDepenses)},
 		[]string{},
-		[]string{"", "RÉSULTAT", money(k.Resultat)},
+		[]string{"", L.Resultat, money(k.Resultat)},
 		[]string{},
-		[]string{"ÉTAT DU PATRIMOINE au " + k.Au},
-		[]string{"Compte", "Libellé", "Montant"},
-		[]string{"Avoirs"})
+		[]string{L.Patrimoine + k.Au},
+		[]string{L.Compte, L.Libelle, L.Montant},
+		[]string{L.Avoirs})
 	for _, p := range k.Avoirs {
 		rows = append(rows, []string{p.Code, p.Libelle, money(p.Montant)})
 	}
 	rows = append(rows,
-		[]string{"", "Total des avoirs", money(k.TotalAvoirs)},
-		[]string{"Engagements"})
+		[]string{"", L.TotalAvoirs, money(k.TotalAvoirs)},
+		[]string{L.Engagements})
 	for _, p := range k.Engagements {
 		rows = append(rows, []string{p.Code, p.Libelle, money(p.Montant)})
 	}
 	rows = append(rows,
-		[]string{"", "Total des engagements", money(k.TotalEngagements)},
-		[]string{"", "FORTUNE NETTE", money(k.Fortune)},
+		[]string{"", L.TotalEngag, money(k.TotalEngagements)},
+		[]string{"", L.Fortune, money(k.Fortune)},
 		[]string{},
-		[]string{"Chiffre d'affaires de la période", money(k.Eligibilite.ChiffreAffaires)},
-		[]string{"Comptabilité simplifiée admise (< 500 000)", oui(k.Eligibilite.Eligible)},
-		[]string{"Assujettissement TVA (≥ 100 000)", oui(k.Eligibilite.AssujettiTVA)},
+		[]string{L.CA, money(k.Eligibilite.ChiffreAffaires)},
+		[]string{L.LigneAdmise, oui(k.Eligibilite.Eligible, lang)},
+		[]string{L.LigneTVA, oui(k.Eligibilite.AssujettiTVA, lang)},
 	)
 
-	writeCSV(c, fmt.Sprintf("comptabilite-simplifiee_%s_%s.csv", k.Du, k.Au), rows)
+	writeCSV(c, fmt.Sprintf("%s_%s_%s.csv", pdf.NomFichierCarnet(lang), k.Du, k.Au), rows)
 }
 
-func oui(v bool) string {
+// oui rend le « oui / non » de la langue du document.
+func oui(v bool, l i18n.Lang) string {
+	L := pdf.LibellesCarnet(l)
 	if v {
-		return "oui"
+		return L.Oui
 	}
-	return "non"
+	return L.Non
 }
 
 // CarnetPDF GET /api/v1/reports/simplified-accounting.pdf
@@ -174,8 +183,16 @@ func (h *SimplifiedAccountingHandler) CarnetPDF(c *gin.Context) {
 		return
 	}
 
+	// La langue de l'interface AU MOMENT DU CLIC.
+	//
+	// Elle voyage dans `Accept-Language`, que le client pose à chaque requête.
+	// Un carnet établi depuis un écran allemand doit sortir en allemand : c'est
+	// la pièce que l'on tend à une administration cantonale, et elle doit
+	// parler la langue de son destinataire — pas celle du code source.
+	lang := i18n.Langue(c)
+
 	d := pdf.CarnetData{
-		Du: k.Du, Au: k.Au,
+		Du: k.Du, Au: k.Au, Langue: lang,
 		TotalRecettes:    k.TotalRecettes,
 		TotalDepenses:    k.TotalDepenses,
 		Resultat:         k.Resultat,
@@ -213,7 +230,7 @@ func (h *SimplifiedAccountingHandler) CarnetPDF(c *gin.Context) {
 		d.Adresse = strings.TrimSpace(strings.Trim(d.Adresse, ","))
 	}
 	if d.Entreprise == "" {
-		d.Entreprise = "(raison sociale non renseignée)"
+		d.Entreprise = pdf.SansRaisonSociale(lang)
 	}
 
 	octets, err := pdf.GenerateCarnet(d)
@@ -221,7 +238,10 @@ func (h *SimplifiedAccountingHandler) CarnetPDF(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "le PDF n'a pas pu être produit"})
 		return
 	}
+	// Le nom du fichier suit la langue lui aussi : il se retrouve dans un
+	// dossier de téléchargements parmi cent autres, et c'est par son nom qu'on
+	// le reconnaît.
 	c.Header("Content-Disposition", fmt.Sprintf(
-		`attachment; filename="comptabilite-simplifiee_%s_%s.pdf"`, k.Du, k.Au))
+		`attachment; filename="%s_%s_%s.pdf"`, pdf.NomFichierCarnet(lang), k.Du, k.Au))
 	c.Data(http.StatusOK, "application/pdf", octets)
 }

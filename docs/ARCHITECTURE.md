@@ -230,6 +230,16 @@ liquidités : ce n'est ni une recette ni une dépense, mais une lecture ligne à
 ligne le compterait deux fois et gonflerait les deux colonnes sans changer le
 résultat.
 
+*La langue du document est celle de l'écran au moment du clic.* Elle voyage
+dans `Accept-Language`, que le client pose à chaque requête. Le middleware
+`Langue()` ne peut pas s'en charger — il ne réécrit que les champs `error` et
+`message` d'une réponse JSON, et laisse traverser les PDF et les CSV, à raison.
+Les libellés du carnet vivent donc dans `internal/services/pdf/carnet_langue.go`,
+structurés par langue. Les références légales y changent de NOM, pas seulement
+de langue : le Code des obligations est l'OR en allemand, la loi sur la TVA la
+MWSTG. Les noms de comptes ne sont pas traduits — ce sont les données de
+l'utilisateur.
+
 *Le document dit s'il suffit.* Au-delà de 500 000 francs, l'écran et le PDF
 écrivent que la partie double est obligatoire (CO art. 957 al. 1) et que ce
 document ne peut pas être présenté seul. À partir de 100 000 francs, ils

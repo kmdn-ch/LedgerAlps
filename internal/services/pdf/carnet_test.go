@@ -11,8 +11,11 @@ import (
 	"bytes"
 	"compress/zlib"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 )
 
 func carnetExemple() CarnetData {
@@ -258,4 +261,112 @@ func latin1BrutAttendu(s string) string {
 		}
 	}
 	return string(b)
+}
+
+// Le carnet sort dans la langue de l'interface au moment du clic.
+//
+// C'est la pièce que l'on tend à une administration cantonale : établie depuis
+// un écran allemand, elle doit être en allemand. Et les références légales
+// changent de NOM, pas seulement de langue — le Code des obligations est l'OR
+// en allemand, la loi sur la TVA est la MWSTG. Un document remis à Zurich qui
+// citerait « CO art. 957 » citerait une loi qui n'y porte pas ce nom.
+func TestLeCarnetSortDansLaLangueDemandee(t *testing.T) {
+	cas := []struct {
+		lang     i18n.Lang
+		attendus []string
+		absents  []string
+	}{
+		{i18n.FR, []string{"Comptabilit", "RECETTES", "CO art. 957"}, []string{"EINNAHMEN", "RECEIPTS"}},
+		{i18n.DE, []string{"Vereinfachte", "EINNAHMEN", "OR Art. 957", "MWSTG"}, []string{"RECETTES", "RECEIPTS"}},
+		{i18n.IT, []string{"semplificata", "ENTRATE", "CO art. 957 cpv", "LIVA"}, []string{"RECETTES", "EINNAHMEN"}},
+		{i18n.EN, []string{"Simplified", "RECEIPTS", "CO art. 957 para", "VAT Act"}, []string{"RECETTES", "EINNAHMEN"}},
+	}
+	for _, c := range cas {
+		t.Run(string(c.lang), func(t *testing.T) {
+			d := carnetExemple()
+			d.Langue = c.lang
+			b, err := GenerateCarnet(d)
+			if err != nil {
+				t.Fatalf("GenerateCarnet(%s): %v", c.lang, err)
+			}
+			texte := texteDuPDF(b)
+			for _, a := range c.attendus {
+				if !strings.Contains(texte, a) {
+					t.Errorf("%s : le document ne porte pas %q", c.lang, a)
+				}
+			}
+			for _, x := range c.absents {
+				if strings.Contains(texte, x) {
+					t.Errorf("%s : le document porte encore %q — une autre langue a fui", c.lang, x)
+				}
+			}
+		})
+	}
+}
+
+// Une langue inconnue retombe sur le français, la langue des sources.
+func TestUneLangueInconnueRetombeSurLeFrancais(t *testing.T) {
+	d := carnetExemple()
+	d.Langue = i18n.Lang("es")
+	b, err := GenerateCarnet(d)
+	if err != nil {
+		t.Fatalf("GenerateCarnet: %v", err)
+	}
+	if !strings.Contains(texteDuPDF(b), "RECETTES") {
+		t.Error("une langue inconnue ne retombe pas sur le français")
+	}
+}
+
+// L'avertissement du dépassement de seuil existe dans les quatre langues.
+//
+// C'est la mention qui protège l'utilisateur : la taire dans une langue
+// laisserait quelqu'un remettre un document que la loi ne reconnaît pas.
+func TestLAvertissementExisteDansLesQuatreLangues(t *testing.T) {
+	motsAlerte := map[i18n.Lang]string{
+		i18n.FR: "ATTENTION", i18n.DE: "ACHTUNG",
+		i18n.IT: "ATTENZIONE", i18n.EN: "WARNING",
+	}
+	for lang, mot := range motsAlerte {
+		d := carnetExemple()
+		d.Langue = lang
+		d.ChiffreAffaires = 620000
+		d.Eligible = false
+		b, err := GenerateCarnet(d)
+		if err != nil {
+			t.Fatalf("%s: %v", lang, err)
+		}
+		if !strings.Contains(texteDuPDF(b), mot) {
+			t.Errorf("%s : pas d'avertissement au-delà du seuil (attendu %q)", lang, mot)
+		}
+	}
+}
+
+// Le nom de fichier suit la langue : c'est par lui qu'on reconnaît le document
+// dans un dossier de téléchargements.
+func TestLeNomDeFichierSuitLaLangue(t *testing.T) {
+	attendus := map[i18n.Lang]string{
+		i18n.FR: "comptabilite-simplifiee",
+		i18n.DE: "vereinfachte-buchhaltung",
+		i18n.IT: "contabilita-semplificata",
+		i18n.EN: "simplified-accounting",
+	}
+	for lang, attendu := range attendus {
+		if got := NomFichierCarnet(lang); got != attendu {
+			t.Errorf("%s : nom = %q, attendu %q", lang, got, attendu)
+		}
+	}
+}
+
+// Aucun libellé ne doit rester vide dans une langue : un champ oublié
+// produirait un document troué, et personne ne le verrait avant de le remettre.
+func TestAucunLibelleNEstVide(t *testing.T) {
+	for _, lang := range []i18n.Lang{i18n.FR, i18n.DE, i18n.IT, i18n.EN} {
+		L := libellés(lang)
+		v := reflect.ValueOf(L)
+		for i := 0; i < v.NumField(); i++ {
+			if v.Field(i).String() == "" {
+				t.Errorf("%s : le libellé %q est vide", lang, v.Type().Field(i).Name)
+			}
+		}
+	}
 }

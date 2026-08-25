@@ -19,7 +19,9 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
   **Le document dit s'il suffit.** Au-delà de 500 000 francs, l'écran et le PDF écrivent que la partie double et les comptes annuels sont obligatoires (CO art. 957 al. 1) et que ce carnet ne peut pas être présenté seul. À partir de 100 000 francs, ils rappellent l'assujettissement TVA (LTVA art. 10). Deux lois différentes, deux seuils qui ne décident pas de la même chose : l'un porte sur la forme des livres, l'autre sur un impôt.
 
-  Vérifié de bout en bout sur un serveur réel, avec des écritures saisies par l'API : les 8 000 francs d'une facture non encaissée restent hors des recettes mais comptent dans le chiffre d'affaires, le retrait au bancomat n'apparaît nulle part, et l'amortissement non plus. Traduit en allemand, italien et anglais.
+  **Le document sort dans la langue de l'interface au moment du clic.** Écran, CSV, PDF et jusqu'au nom du fichier : établi depuis un écran allemand, le carnet est en allemand. C'est la pièce que l'on tend à une administration cantonale, et elle doit parler la langue de son destinataire. Les **références légales changent de nom**, pas seulement de langue — le Code des obligations est l'*OR* en allemand, la loi sur la TVA la *MWSTG* ; un document remis à Zurich qui citerait « CO art. 957 » citerait une loi qui n'y porte pas ce nom. Les noms de comptes, eux, restent tels que l'utilisateur les a saisis : c'est sa donnée, pas un libellé du produit.
+
+  Vérifié de bout en bout sur un serveur réel, avec des écritures saisies par l'API : les 8 000 francs d'une facture non encaissée restent hors des recettes mais comptent dans le chiffre d'affaires, le retrait au bancomat n'apparaît nulle part, et l'amortissement non plus. Le carnet a été produit dans les quatre langues depuis un navigateur, en basculant l'interface avant de cliquer.
 
 ### Corrigé
 
