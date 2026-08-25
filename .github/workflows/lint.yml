@@ -21,18 +21,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version-file: go.mod
           cache: false
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84  # v6.5.2
         with:
-          version: latest
+          # Version FIXE, et non « latest » : sinon le linteur change sous nos
+          # pieds et une CI verte devient rouge sans qu'aucune ligne du depot
+          # ait bouge. install-mode: goinstall lance un `go install` ; sans
+          # version epinglee, c'est un `@latest` non verifie a chaque execution.
+          # v1.64.8, derniere de la serie 1.x : le .golangci.yml du depot est
+          # au schema v1 (« linters-settings: »), que golangci-lint v2 refuse.
+          # Passer a v2 demande de reecrire la configuration -- c'est une
+          # decision, pas un epinglage, et elle ne se prend pas ici.
+          version: v1.64.8
           # goinstall compiles golangci-lint with the installed Go toolchain (1.26),
           # so it can lint modules targeting go1.26 without version mismatch errors.
           install-mode: goinstall
@@ -56,10 +64,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version-file: go.mod
           cache: true

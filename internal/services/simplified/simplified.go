@@ -74,15 +74,56 @@ const (
 
 // estLiquidite dit si un compte porte de l'argent disponible.
 //
-// Plan comptable suisse PME : 1000 caisse, 1010 poste, 1020 banque. La borne
-// s'arrête à 1029 — 1060 « Titres cotés » est un placement, pas de l'argent
-// qu'on dépense, et 1100 « Débiteurs » est une créance, c'est-à-dire
-// exactement ce que la base caisse refuse de compter.
+// Plan comptable suisse PME : 1000 caisse, 1010 poste, 1020 banque.
+//
+// # La comparaison porte sur un NOMBRE, pas sur une chaîne
+//
+// La forme précédente comparait `code >= "1000" && code <= "1029"`,
+// lexicographiquement. Elle rendait « 10200 » liquide et « 10290 » non liquide
+// alors que 1020 et 1029 le sont tous deux, et acceptait « 1000A » ou
+// « 1020␣ » — or `POST /accounts` laisse le code entièrement libre, sans
+// validation de format.
+//
+// # Et la borne haute monte à 1099
+//
+// Le plan PME suisse range en 1090/1091 les comptes de VIREMENT INTERNE, qui
+// sont par construction les deux côtés d'un mouvement que le carnet doit
+// écarter. Les laisser hors de la fenêtre faisait compter chaque virement
+// comme une recette ou une dépense — le double comptage que ce paquet existe
+// pour empêcher — et rendait invisible tout paiement fait depuis un second
+// compte bancaire créé à la main hors de 1000-1029.
+//
+// Restent dehors : 1060 « Titres cotés », qui est un placement et non de
+// l'argent qu'on dépense, et 1100 « Débiteurs », qui est une créance —
+// c'est-à-dire exactement ce que la base caisse refuse de compter.
 func estLiquidite(code string) bool {
 	if len(code) < 4 {
 		return false
 	}
-	return code >= "1000" && code <= "1029"
+	n := 0
+	for i := 0; i < 4; i++ {
+		c := code[i]
+		if c < '0' || c > '9' {
+			return false
+		}
+		n = n*10 + int(c-'0')
+	}
+	// Ce qui suit la racine doit être un sous-adressage, et rien d'autre :
+	// des chiffres (« 10200 »), éventuellement précédés d'un point
+	// (« 1020.1 »). Sans ce contrôle, « 1000A » et « 1020␣ » passaient — et
+	// `POST /accounts` accepte l'un comme l'autre, faute de valider le format.
+	for i, c := range code[4:] {
+		if c == '.' && i == 0 {
+			continue
+		}
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	if n == 1060 {
+		return false
+	}
+	return n >= 1000 && n <= 1099
 }
 
 // Ligne est un poste du carnet, agrégé par compte de contrepartie.
@@ -107,8 +148,31 @@ type PostePatrimoine struct {
 type Eligibilite struct {
 	ChiffreAffaires float64 `json:"chiffre_affaires"`
 	Eligible        bool    `json:"eligible"`
+
+	// SurExerciceComplet dit si les deux seuils ont pu être appréciés.
+	//
+	// Ils portent en droit sur le chiffre d'affaires du DERNIER EXERCICE
+	// (CO art. 957 al. 2 ch. 1 ; LTVA art. 10 al. 2 let. a). Mesurés sur un
+	// trimestre, ils déclaraient éligible une entreprise à 1,6 million — et
+	// le PDF l'imprimait en vert, sous la référence légale. Une affirmation
+	// de droit fausse sur la pièce que l'on tend à l'administration.
+	//
+	// Sur une période partielle, le document SUSPEND son verdict au lieu
+	// d'en rendre un favorable. Les deux conclusions ne sont pas symétriques :
+	// « chiffre d'affaires trop élevé » reste vraie sur une période courte —
+	// le dépassement ne peut que s'aggraver en s'allongeant —, tandis que
+	// « inférieur au seuil » ne se déduit d'aucun trimestre. C'est pourquoi
+	// seule la conclusion FAVORABLE est conditionnée.
+	SurExerciceComplet bool `json:"sur_exercice_complet"`
+
 	// AssujettiTVA dit si le chiffre d'affaires impose l'assujettissement,
 	// indépendamment de ce que la fiche entreprise déclare.
+	//
+	// Vrai est concluant sur toute période, pour la raison ci-dessus. Faux ne
+	// l'est que si SurExerciceComplet : sans quoi le carnet mensuel d'une
+	// entreprise à 300 000 francs annoncerait la libération de
+	// l'assujettissement. La présentation doit donc gouverner sur
+	// SurExerciceComplet avant d'afficher une libération.
 	AssujettiTVA bool `json:"assujetti_tva"`
 	// StatutDeclare est ce que la fiche entreprise affirme : « liable »,
 	// « exempt », ou vide. L'écart entre le chiffre d'affaires réel et cette
@@ -214,6 +278,11 @@ func (s *Service) mouvements(ctx context.Context, c *Carnet) error {
 	recettes := map[string]*Ligne{}
 	depenses := map[string]*Ligne{}
 
+	// mouvementNet est la somme algébrique des mouvements de liquidités de la
+	// période — ce que le relevé bancaire montrerait. Il sert de contrôle
+	// final : voir la vérification de concordance en fin de fonction.
+	var mouvementNet float64
+
 	for _, id := range ordre {
 		lignes := parEcriture[id]
 
@@ -245,27 +314,35 @@ func (s *Service) mouvements(ctx context.Context, c *Carnet) error {
 			continue
 		}
 
-		cible := depenses
-		if entree > sortie {
-			cible = recettes
-		}
+		mouvementNet += entree - sortie
 
+		// Chaque contrepartie est classée par SON PROPRE sens, et non par
+		// celui de l'écriture entière.
+		//
+		// Une écriture peut porter les deux à la fois : un encaissement
+		// diminué de frais bancaires apporte un produit ET une charge ; un
+		// règlement fournisseur avec escompte, une charge ET un produit. Les
+		// ranger en bloc du côté majoritaire faisait disparaître la minorité
+		// — elle porte zéro du côté qu'on interrogeait, et le `continue`
+		// l'écartait en silence. Le document cessait alors de concorder avec
+		// le relevé bancaire, qui est la seule chose qu'un contrôleur
+		// rapproche, et l'écart allait dans les deux sens : un escompte non
+		// compté SOUS-DÉCLARE le bénéfice.
+		//
+		// Un crédit de contrepartie est une RECETTE — l'argent vient de là.
+		// Un débit est une DÉPENSE — l'argent va là. Les deux côtés sont
+		// ajoutés indépendamment : en pratique une ligne n'en porte qu'un,
+		// mais les traiter séparément rend l'identité vérifiée plus bas vraie
+		// sans hypothèse sur la forme des écritures.
 		for _, l := range lignes {
 			if estLiquidite(l.code) {
 				continue
 			}
-			// La contrepartie porte le montant du côté opposé au mouvement.
-			montant := l.credit
-			if entree <= sortie {
-				montant = l.debit
+			if l.credit != 0 {
+				cumuler(recettes, l.code, l.nom, l.credit)
 			}
-			if montant == 0 {
-				continue
-			}
-			if p, vu := cible[l.code]; vu {
-				p.Montant += montant
-			} else {
-				cible[l.code] = &Ligne{Code: l.code, Libelle: l.nom, Montant: montant}
+			if l.debit != 0 {
+				cumuler(depenses, l.code, l.nom, l.debit)
 			}
 		}
 	}
@@ -281,7 +358,37 @@ func (s *Service) mouvements(ctx context.Context, c *Carnet) error {
 	c.Resultat = arrondi(c.TotalRecettes - c.TotalDepenses)
 	c.TotalRecettes = arrondi(c.TotalRecettes)
 	c.TotalDepenses = arrondi(c.TotalDepenses)
+
+	// Concordance : le résultat DOIT égaler le mouvement net de liquidités.
+	//
+	// Ce n'est pas une précaution décorative, c'est l'identité qui définit le
+	// document. Dans une écriture équilibrée, débits et crédits s'égalent ;
+	// en séparant les lignes de liquidités des autres, il vient
+	// « débitL - créditL = créditC - débitC », c'est-à-dire exactement
+	// « mouvement net = recettes - dépenses ». Un carnet du lait qui ne
+	// vérifie pas cette égalité ne se rapproche pas du relevé bancaire, et
+	// c'est la première chose qu'un contrôleur rapproche.
+	//
+	// L'écart FAIT ÉCHOUER la production plutôt que de sortir un document
+	// faux : sur une pièce remise à l'administration, l'absence de document
+	// est un problème d'exploitation, un document faux est un problème
+	// fiscal. C'est ce contrôle qui aurait arrêté le classement en bloc des
+	// écritures composées.
+	if ecart := math.Abs(arrondi(mouvementNet) - c.Resultat); ecart > 0.005 {
+		return fmt.Errorf(
+			"incohérence du carnet : le résultat (%.2f) ne correspond pas au mouvement net de liquidités (%.2f), écart de %.2f — le document n'est pas établi",
+			c.Resultat, arrondi(mouvementNet), ecart)
+	}
 	return nil
+}
+
+// cumuler ajoute un montant au poste d'un compte, en créant le poste au besoin.
+func cumuler(postes map[string]*Ligne, code, nom string, montant float64) {
+	if p, vu := postes[code]; vu {
+		p.Montant += montant
+		return
+	}
+	postes[code] = &Ligne{Code: code, Libelle: nom, Montant: montant}
 }
 
 // patrimoine remplit l'état du patrimoine à la date de clôture.
@@ -381,13 +488,47 @@ func (s *Service) eligibilite(ctx context.Context, c *Carnet) error {
 		return fmt.Errorf("lecture du statut TVA: %w", err)
 	}
 
+	complet := exerciceComplet(c.Du, c.Au)
+
 	c.Eligibilite = Eligibilite{
 		ChiffreAffaires: ca,
-		Eligible:        ca < SeuilComptabiliteSimplifiee,
-		AssujettiTVA:    ca >= SeuilAssujettissementTVA,
-		StatutDeclare:   statut,
+		// Le doute penche du côté qui n'affirme rien de faux : sur une
+		// période partielle, ni « admise », ni « libérée ».
+		Eligible:           complet && ca < SeuilComptabiliteSimplifiee,
+		SurExerciceComplet: complet,
+		AssujettiTVA:       ca >= SeuilAssujettissementTVA,
+		StatutDeclare:      statut,
 	}
 	return nil
+}
+
+// dureeExerciceMinimale est la longueur en deçà de laquelle une période n'est
+// pas tenue pour un exercice.
+//
+// 360 jours et non 365 : un exercice civil demandé du 1er janvier au
+// 31 décembre couvre 364 jours d'écart entre ses bornes, et un exercice décalé
+// tombe sur des longueurs voisines. La marge absorbe ces variations sans
+// laisser passer un semestre.
+const dureeExerciceMinimale = 360 * 24 * time.Hour
+
+// exerciceComplet dit si la période est assez longue pour qu'un seuil annuel
+// s'y apprécie.
+//
+// Un exercice raccourci — première année d'activité, changement de date de
+// clôture — est légalement un exercice, et se voit pourtant refuser le verdict
+// ici. C'est délibéré : l'appréciation correcte demanderait alors une
+// annualisation, qui est un choix comptable et non un calcul. Refuser de
+// conclure est la seule position que le document peut tenir seul.
+func exerciceComplet(du, au string) bool {
+	d, err := time.Parse("2006-01-02", du)
+	if err != nil {
+		return false
+	}
+	a, err := time.Parse("2006-01-02", au)
+	if err != nil {
+		return false
+	}
+	return a.Sub(d) >= dureeExerciceMinimale
 }
 
 // trier rend les lignes ordonnées par code de compte.

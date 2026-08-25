@@ -10,6 +10,7 @@ package simplified
 import (
 	"context"
 	"database/sql"
+	"math"
 	"os"
 	"testing"
 
@@ -292,8 +293,17 @@ func TestLEligibiliteSeMesureSurLesLivres(t *testing.T) {
 
 // Un compte de liquidités se reconnaît, un compte de créances non.
 func TestCeQuiCompteCommeLiquidite(t *testing.T) {
-	liquides := []string{"1000", "1010", "1020", "1029"}
-	autres := []string{"1060", "1100", "1101", "1200", "2000", "3000", "6000", "", "99"}
+	// 1090/1091 sont les comptes de VIREMENT INTERNE du plan PME : les
+	// laisser hors de la fenetre faisait compter chaque virement comme une
+	// recette ou une depense. 10200 et 10290 sont des sous-comptes : ils
+	// suivent leur racine, ce que la comparaison lexicographique ne faisait
+	// pas -- elle rendait 10200 liquide et 10290 non liquide.
+	liquides := []string{"1000", "1010", "1020", "1029", "1030", "1050",
+		"1090", "1091", "1099", "10200", "10290", "1020.1"}
+	// 1060 « Titres cotes » est un placement ; 1100 « Debiteurs » une creance.
+	// Les codes mal formes sont refuses : POST /accounts ne valide rien.
+	autres := []string{"1060", "1100", "1101", "1200", "2000", "3000", "6000",
+		"", "99", "1000A", "1020 ", "abcd", "10a0"}
 
 	for _, c := range liquides {
 		if !estLiquidite(c) {
@@ -317,5 +327,220 @@ func TestLesBornesSontControlees(t *testing.T) {
 	}
 	if PeriodeValide("2026-12-31", "2026-01-01") == nil {
 		t.Error("une fin antérieure au début est acceptée")
+	}
+}
+
+// ligneComposee est une ligne d'écriture pour ecritureComposee.
+type ligneComposee struct {
+	code          string
+	debit, credit float64
+}
+
+// ecritureComposee passe une écriture comptabilisée à N lignes.
+//
+// Le fabricant `ecriture` ci-dessus n'en produit que de deux lignes, et c'est
+// ce qui a laissé passer le classement en bloc : une écriture à deux lignes a
+// toujours sa contrepartie du côté opposé à la liquidité, donc le défaut ne
+// pouvait pas s'y manifester. Un encaissement diminué de frais, un règlement
+// avec escompte, une caisse de fin de journée — la forme normale de ces trois
+// opérations est à trois lignes.
+func ecritureComposee(t *testing.T, d *sql.DB, date, libelle string, lignes []ligneComposee) {
+	t.Helper()
+	var n int
+	_ = d.QueryRow(`SELECT COUNT(*) FROM journal_entries`).Scan(&n)
+	id := "e" + string(rune('a'+n))
+
+	var totalDebit, totalCredit float64
+	for _, l := range lignes {
+		totalDebit += l.debit
+		totalCredit += l.credit
+	}
+	if math.Abs(totalDebit-totalCredit) > 0.005 {
+		t.Fatalf("écriture de test déséquilibrée : débits %.2f, crédits %.2f", totalDebit, totalCredit)
+	}
+
+	if _, err := d.Exec(`
+		INSERT INTO journal_entries (id, date, reference, description, status, created_by_id)
+		VALUES (?, ?, ?, ?, 'posted', 'u1')`, id, date, "JN-TEST-"+id, libelle); err != nil {
+		t.Fatalf("écriture: %v", err)
+	}
+	for i, l := range lignes {
+		// Un seul côté renseigné, l'autre NULL — comme le schéma l'impose.
+		var debit, credit any
+		if l.debit != 0 {
+			debit = l.debit
+		}
+		if l.credit != 0 {
+			credit = l.credit
+		}
+		if _, err := d.Exec(`
+			INSERT INTO journal_lines (id, entry_id, account_id, debit_amount, credit_amount)
+			VALUES (?, ?, ?, ?, ?)`,
+			id+"-"+string(rune('0'+i)), id, idCompte(t, d, l.code), debit, credit); err != nil {
+			t.Fatalf("ligne: %v", err)
+		}
+	}
+}
+
+// poste rend le montant d'un compte dans une liste, ou -1 s'il est absent.
+func poste(lignes []Ligne, code string) float64 {
+	for _, l := range lignes {
+		if l.Code == code {
+			return l.Montant
+		}
+	}
+	return -1
+}
+
+// Une écriture composée porte ses DEUX sens à la fois, et le carnet doit les
+// montrer tous les deux.
+//
+// C'est le défaut É-1 du second audit : le classement se faisait par écriture
+// entière, puis chaque contrepartie n'était lue que du côté opposé au
+// mouvement. Celle qui se trouvait du même côté que la liquidité portait zéro
+// et disparaissait en silence — les frais bancaires n'apparaissaient nulle
+// part, et l'escompte obtenu SOUS-DÉCLARAIT le bénéfice.
+func TestUneEcritureComposeePorteSesDeuxSens(t *testing.T) {
+	cas := []struct {
+		nom      string
+		lignes   []ligneComposee
+		recettes map[string]float64
+		depenses map[string]float64
+		resultat float64
+	}{
+		{
+			nom: "encaissement de 1000 diminué de 50 de frais bancaires",
+			lignes: []ligneComposee{
+				{code: "1020", debit: 950},
+				{code: "6500", debit: 50},
+				{code: "3000", credit: 1000},
+			},
+			recettes: map[string]float64{"3000": 1000},
+			depenses: map[string]float64{"6500": 50},
+			resultat: 950,
+		},
+		{
+			nom: "règlement fournisseur de 1000 avec 20 d'escompte obtenu",
+			lignes: []ligneComposee{
+				{code: "6100", debit: 1000},
+				{code: "1020", credit: 980},
+				{code: "3400", credit: 20},
+			},
+			recettes: map[string]float64{"3400": 20},
+			depenses: map[string]float64{"6100": 1000},
+			resultat: -980,
+		},
+		{
+			nom: "caisse du jour : vente de 800, salaire de 300 payé du tiroir",
+			lignes: []ligneComposee{
+				{code: "1000", debit: 500},
+				{code: "5000", debit: 300},
+				{code: "3000", credit: 800},
+			},
+			recettes: map[string]float64{"3000": 800},
+			depenses: map[string]float64{"5000": 300},
+			resultat: 500,
+		},
+	}
+
+	for _, c := range cas {
+		t.Run(c.nom, func(t *testing.T) {
+			s, d := baseTest(t)
+			ecritureComposee(t, d, "2026-04-10", c.nom, c.lignes)
+
+			k, err := s.Etablir(context.Background(), "2026-01-01", "2026-12-31")
+			if err != nil {
+				t.Fatalf("Etablir: %v", err)
+			}
+			for code, attendu := range c.recettes {
+				if got := poste(k.Recettes, code); math.Abs(got-attendu) > 0.005 {
+					t.Errorf("recette %s = %.2f, attendu %.2f", code, got, attendu)
+				}
+			}
+			for code, attendu := range c.depenses {
+				if got := poste(k.Depenses, code); math.Abs(got-attendu) > 0.005 {
+					t.Errorf("dépense %s = %.2f, attendu %.2f", code, got, attendu)
+				}
+			}
+			if math.Abs(k.Resultat-c.resultat) > 0.005 {
+				t.Errorf("résultat = %.2f, attendu %.2f", k.Resultat, c.resultat)
+			}
+			// L'identité qui définit le document : le résultat est le
+			// mouvement net de trésorerie, au centime.
+			if math.Abs(k.TotalRecettes-k.TotalDepenses-c.resultat) > 0.005 {
+				t.Errorf("recettes %.2f - dépenses %.2f ne fait pas %.2f",
+					k.TotalRecettes, k.TotalDepenses, c.resultat)
+			}
+		})
+	}
+}
+
+// Les seuils légaux ne s'apprécient QUE sur un exercice.
+//
+// C'est le défaut É-3 du second audit : le chiffre d'affaires était mesuré sur
+// la période demandée, quelle qu'elle soit, puis comparé à des seuils annuels.
+// Une entreprise à 1,6 million qui demandait un carnet trimestriel recevait un
+// PDF affirmant en vert, sous la référence légale, que la comptabilité
+// simplifiée lui était admise.
+func TestLesSeuilsNeSApprecientQueSurUnExercice(t *testing.T) {
+	s, d := baseTest(t)
+
+	// 400 000 francs encaissés par trimestre — 1,6 million sur l'année, donc
+	// très au-delà des deux seuils.
+	for _, date := range []string{"2026-02-10", "2026-05-10", "2026-08-10", "2026-11-10"} {
+		ecriture(t, d, date, "Vente encaissée", "1020", "3000", 400_000)
+	}
+
+	t.Run("le trimestre ne conclut pas en faveur de l'entreprise", func(t *testing.T) {
+		k, err := s.Etablir(context.Background(), "2026-01-01", "2026-03-31")
+		if err != nil {
+			t.Fatalf("Etablir: %v", err)
+		}
+		if k.Eligibilite.SurExerciceComplet {
+			t.Error("un trimestre est tenu pour un exercice complet")
+		}
+		if k.Eligibilite.Eligible {
+			t.Errorf("une entreprise à 1,6 million est déclarée éligible sur un trimestre "+
+				"(chiffre d'affaires mesuré : %.2f)", k.Eligibilite.ChiffreAffaires)
+		}
+	})
+
+	t.Run("l'exercice complet conclut, et défavorablement", func(t *testing.T) {
+		k, err := s.Etablir(context.Background(), "2026-01-01", "2026-12-31")
+		if err != nil {
+			t.Fatalf("Etablir: %v", err)
+		}
+		if !k.Eligibilite.SurExerciceComplet {
+			t.Error("un exercice civil n'est pas tenu pour complet")
+		}
+		if k.Eligibilite.Eligible {
+			t.Error("1,6 million est déclaré sous le seuil de 500 000")
+		}
+		if !k.Eligibilite.AssujettiTVA {
+			t.Error("1,6 million est déclaré non assujetti à la TVA")
+		}
+	})
+}
+
+// Une entreprise réellement sous le seuil reste éligible sur son exercice.
+//
+// Le garde-fou d'É-3 ne doit pas refuser le document à ceux à qui la loi
+// l'accorde : c'est la moitié du correctif qu'il serait facile d'oublier.
+func TestUnExerciceSousLeSeuilResteEligible(t *testing.T) {
+	s, d := baseTest(t)
+	ecriture(t, d, "2026-06-10", "Vente encaissée", "1020", "3000", 80_000)
+
+	k, err := s.Etablir(context.Background(), "2026-01-01", "2026-12-31")
+	if err != nil {
+		t.Fatalf("Etablir: %v", err)
+	}
+	if !k.Eligibilite.SurExerciceComplet {
+		t.Fatal("l'exercice civil n'est pas reconnu")
+	}
+	if !k.Eligibilite.Eligible {
+		t.Error("80 000 francs sur l'exercice ne donne pas droit au carnet")
+	}
+	if k.Eligibilite.AssujettiTVA {
+		t.Error("80 000 francs déclenche l'assujettissement TVA")
 	}
 }

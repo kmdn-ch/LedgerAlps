@@ -32,7 +32,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0  # GoReleaser needs full history for changelog
 
@@ -84,20 +84,26 @@ jobs:
           fi
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: "20"
 
       - name: Install frontend dependencies
-        # --no-package-lock prevents creating/modifying package-lock.json,
-        # which would make the git worktree dirty and fail goreleaser's dirty check.
-        run: cd frontend && npm install --no-package-lock
+        # npm ci, et non npm install --no-package-lock.
+        #
+        # `ci` installe EXACTEMENT le verrou committe, echoue si package.json et
+        # package-lock.json divergent, et ne modifie jamais le verrou -- il ne
+        # salit donc pas l'arbre de travail que goreleaser controle, ce qui
+        # etait la raison invoquee pour --no-package-lock. Sans verrou, l'arbre
+        # npm etait resolu a neuf a chaque publication et le JavaScript embarque
+        # dans le binaire n'etait ni reproductible ni auditable.
+        run: cd frontend && npm ci
 
       - name: Build frontend
         run: cd frontend && npm run build
@@ -106,17 +112,36 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
 
-      # syft produit le SBOM déclaré dans .goreleaser.yaml (bloc `sboms`).
-      # Sans lui sur le runner, goreleaser échoue au moment de l'écrire.
-      # Version épinglée : un outil qui fabrique l'inventaire de ce qu'on
-      # publie ne doit pas changer sous nos pieds d'une release à l'autre.
+      # syft produit le SBOM declare dans .goreleaser.yaml (bloc `sboms`).
+      # Sans lui sur le runner, goreleaser echoue au moment de l'ecrire.
+      #
+      # On installe le BINAIRE publie, avec son empreinte, et non le script
+      # install.sh du depot amont. La forme precedente relisait ce script
+      # depuis la branche `main` d'anchore/syft -- une branche mouvante, sans
+      # empreinte -- et versait son contenu dans `sh`, dans un job portant
+      # `contents: write` et le GITHUB_TOKEN. La VERSION de l'outil etait
+      # epinglee ; le script qui l'installe ne l'etait pas, ce qui laissait a
+      # quiconque pousse sur cette branche l'execution de code dans le job qui
+      # construit et publie les binaires LedgerAlps.
       - name: Install syft (SBOM)
+        env:
+          SYFT_VERSION: "1.18.1"
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh             | sh -s -- -b /usr/local/bin v1.18.1
+          set -euo pipefail
+          base="https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}"
+          archive="syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL --retry 3 -o "$archive"   "${base}/${archive}"
+          curl -sSfL --retry 3 -o syft.sums    "${base}/syft_${SYFT_VERSION}_checksums.txt"
+          # grep puis sha256sum -c : l'empreinte doit CORRESPONDRE, et l'absence
+          # de la ligne doit echouer aussi (d'ou le grep, qui rend 1 si vide).
+          grep " ${archive}$" syft.sums | sha256sum -c -
+          tar -xzf "$archive" syft
+          sudo install -m 0755 syft /usr/local/bin/syft
+          rm -f "$archive" syft.sums syft
           syft --version
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6.4.0
         with:
           distribution: goreleaser
           version: ${{ env.GORELEASER_VERSION }}
@@ -130,7 +155,7 @@ jobs:
     needs: goreleaser
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
       - name: Install NSIS
         shell: pwsh
@@ -248,5 +273,38 @@ jobs:
           VERSION: ${{ needs.goreleaser.outputs.version }}
         shell: bash
         run: |
-          installer=$(ls infrastructure/windows/LedgerAlps_Setup_*.exe)
+          set -euo pipefail
+          # Nommer le fichier attendu plutot que capturer un glob : plusieurs
+          # resultats devenaient un seul argument, et l'echec etait opaque.
+          VERSION_NUM="${VERSION#v}"
+          installer="infrastructure/windows/LedgerAlps_Setup_${VERSION_NUM}_windows_amd64.exe"
+          [ -f "$installer" ] || { echo "::error::$installer introuvable"; exit 1; }
           gh release upload "$VERSION" "$installer" --clobber
+
+      # L'empreinte de l'installeur, ajoutee au checksums.txt de la release.
+      #
+      # .goreleaser.yaml designe cet .exe comme le telechargement RECOMMANDE
+      # sous Windows, et il etait le seul artefact que personne ne pouvait
+      # verifier : GoReleaser ecrit et publie checksums.txt depuis le job
+      # `goreleaser`, avant que ce job-ci ne construise l'installeur, qui n'y
+      # figurait donc jamais. Verifie sur les releases v1.5.3 et v1.5.4 :
+      # quatre lignes, aucune pour l'installeur.
+      #
+      # Cela ne remplace PAS une signature Authenticode, qui reste la seule
+      # reponse a l'avertissement SmartScreen et suppose un certificat OV/EV.
+      - name: Publish the installer checksum
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.goreleaser.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_NUM="${VERSION#v}"
+          sums="ledgeralps_${VERSION_NUM}_checksums.txt"
+          mkdir -p sums
+          gh release download "$VERSION" --pattern "$sums" --dir sums --clobber
+          ( cd infrastructure/windows \
+            && sha256sum "LedgerAlps_Setup_${VERSION_NUM}_windows_amd64.exe" ) >> "sums/$sums"
+          gh release upload "$VERSION" "sums/$sums" --clobber
+          echo "Empreintes publiees :"
+          cat "sums/$sums"

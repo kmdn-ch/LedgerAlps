@@ -22,9 +22,9 @@ type BankEntry struct {
 	ValueDate   time.Time
 
 	// References
-	BankRef      string // AcctSvcrRef — bank's own reference
-	EndToEndRef  string // payment's EndToEndId
-	QRReference  string // QRR reference if present
+	BankRef     string // AcctSvcrRef — bank's own reference
+	EndToEndRef string // payment's EndToEndId
+	QRReference string // QRR reference if present
 
 	// Counterpart
 	CounterpartName string
@@ -105,7 +105,7 @@ func ParseCamt053(xmlData []byte) ([]BankEntry, error) {
 // ─── XML structs (camt.053.001.08) ───────────────────────────────────────────
 
 type c53Document struct {
-	XMLName       xml.Name      `xml:"Document"`
+	XMLName       xml.Name     `xml:"Document"`
 	BkToCstmrStmt c53BkToCstmr `xml:"BkToCstmrStmt"`
 }
 
@@ -135,7 +135,7 @@ type c53AcctID struct {
 
 type c53Ntry struct {
 	Amt         c53Amt      `xml:"Amt"`
-	CdtDbtInd   string      `xml:"CdtDbtInd"`  // CRDT or DBIT
+	CdtDbtInd   string      `xml:"CdtDbtInd"` // CRDT or DBIT
 	Sts         c53Sts      `xml:"Sts"`
 	BookgDt     c53Date     `xml:"BookgDt"`
 	ValDt       c53Date     `xml:"ValDt"`
@@ -162,19 +162,19 @@ type c53NtryDtls struct {
 }
 
 type c53TxDtls struct {
-	Refs     c53Refs     `xml:"Refs"`
-	RmtInf   c53RmtInf   `xml:"RmtInf"`
+	Refs      c53Refs      `xml:"Refs"`
+	RmtInf    c53RmtInf    `xml:"RmtInf"`
 	RltdPties c53RltdPties `xml:"RltdPties"`
 }
 
 type c53Refs struct {
-	EndToEndID string `xml:"EndToEndId"`
+	EndToEndID  string `xml:"EndToEndId"`
 	AcctSvcrRef string `xml:"AcctSvcrRef"`
 }
 
 type c53RmtInf struct {
-	Ustrd string    `xml:"Ustrd"`
-	Strd  *c53Strd  `xml:"Strd"`
+	Ustrd string   `xml:"Ustrd"`
+	Strd  *c53Strd `xml:"Strd"`
 }
 
 type c53Strd struct {
@@ -186,9 +186,9 @@ type c53CdtrRefInf struct {
 }
 
 type c53RltdPties struct {
-	Dbtr    c53RltdPty `xml:"Dbtr"`
+	Dbtr     c53RltdPty  `xml:"Dbtr"`
 	DbtrAcct c53RltdAcct `xml:"DbtrAcct"`
-	Cdtr    c53RltdPty `xml:"Cdtr"`
+	Cdtr     c53RltdPty  `xml:"Cdtr"`
 	CdtrAcct c53RltdAcct `xml:"CdtrAcct"`
 }
 

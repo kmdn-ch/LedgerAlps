@@ -148,9 +148,22 @@ func (h *SimplifiedAccountingHandler) CarnetCSV(c *gin.Context) {
 		[]string{"", L.Fortune, money(k.Fortune)},
 		[]string{},
 		[]string{L.CA, money(k.Eligibilite.ChiffreAffaires)},
-		[]string{L.LigneAdmise, oui(k.Eligibilite.Eligible, lang)},
-		[]string{L.LigneTVA, oui(k.Eligibilite.AssujettiTVA, lang)},
 	)
+
+	// Le CSV dit exactement ce que dit le PDF, y compris quand il ne conclut
+	// pas. Répondre « non » à « comptabilité simplifiée admise » sur un
+	// trimestre laisserait croire à un refus, et « non » à l'assujettissement
+	// TVA serait franchement faux : ni l'un ni l'autre ne se mesure sur une
+	// période qui n'est pas un exercice.
+	if !k.Eligibilite.SurExerciceComplet &&
+		k.Eligibilite.ChiffreAffaires < simplified.SeuilComptabiliteSimplifiee {
+		rows = append(rows, []string{L.PeriodePartielle})
+	} else {
+		rows = append(rows,
+			[]string{L.LigneAdmise, oui(k.Eligibilite.Eligible, lang)},
+			[]string{L.LigneTVA, oui(k.Eligibilite.AssujettiTVA, lang)},
+		)
+	}
 
 	writeCSV(c, fmt.Sprintf("%s_%s_%s.csv", pdf.NomFichierCarnet(lang), k.Du, k.Au), rows)
 }
@@ -202,6 +215,12 @@ func (h *SimplifiedAccountingHandler) CarnetPDF(c *gin.Context) {
 		ChiffreAffaires:  k.Eligibilite.ChiffreAffaires,
 		Eligible:         k.Eligibilite.Eligible,
 		AssujettiTVA:     k.Eligibilite.AssujettiTVA,
+
+		SurExerciceComplet: k.Eligibilite.SurExerciceComplet,
+		// La comparaison au seuil se fait ICI, avec la constante qui porte sa
+		// référence légale — le paquet pdf met en page, il ne connaît pas le
+		// droit comptable.
+		DepasseSeuilRegime: k.Eligibilite.ChiffreAffaires >= simplified.SeuilComptabiliteSimplifiee,
 	}
 	for _, l := range k.Recettes {
 		d.Recettes = append(d.Recettes, pdf.CarnetLigne{Code: l.Code, Libelle: l.Libelle, Montant: l.Montant})

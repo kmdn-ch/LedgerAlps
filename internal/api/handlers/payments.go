@@ -148,6 +148,21 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 		UpdatedAt:   now,
 	}
 
+	// Le paiement est enregistre : il entre dans la piste d'audit AVANT le
+	// branchement, pour que la trace existe qu'il solde la facture ou non.
+	//
+	// ActionPaymentRecorded etait declaree depuis longtemps et n'etait ecrite
+	// nulle part : encaisser de l'argent ne laissait aucun maillon, alors que
+	// c'est l'action qui change le solde d'un client.
+	trace(c, h.db, h.usePostgres, accounting.TablePayments,
+		accounting.ActionPaymentRecorded, paymentID, accounting.Creation(map[string]any{
+			"invoice_id":   req.InvoiceID,
+			"amount":       req.Amount,
+			"payment_date": req.PaymentDate,
+			"method":       req.Method,
+			"reference":    req.Reference,
+		}))
+
 	// 5. If payment >= invoice total: create + post journal entry and mark invoice paid.
 	if req.Amount >= inv.TotalAmount {
 		debit := req.Amount

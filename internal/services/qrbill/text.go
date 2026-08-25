@@ -280,4 +280,3 @@ func (l line) text() string {
 	}
 	return strings.Join(parts, " ")
 }
-

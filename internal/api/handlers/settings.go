@@ -146,18 +146,24 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	// réellement changé, calculée avant masquage. On sait donc que l'IBAN a
 	// changé, et qui l'a changé, sans conserver aucun des deux IBAN.
 	var existingID string
-	avant := map[string]any{}
+	// NUL, et non une carte vide : c'est ce qui distingue une creation d'une
+	// modification depuis {}. Voir plus bas — la branche Creation etait morte.
+	var avant map[string]any
 	selectQ := db.Rebind(`
 		SELECT id, COALESCE(company_name,''), COALESCE(legal_form,''),
 		       COALESCE(address_street,''), COALESCE(address_postal_code,''),
 		       COALESCE(address_city,''), COALESCE(address_country,''),
 		       COALESCE(che_number,''), COALESCE(vat_number,''),
+		       COALESCE(vat_status,''), COALESCE(auto_post_invoices,0),
 		       COALESCE(phone,''), COALESCE(email,''),
-		       COALESCE(bank_name,''), COALESCE(bank_bic,''), COALESCE(iban,''),
+		       COALESCE(bank_name,''), COALESCE(bank_address,''),
+		       COALESCE(bank_bic,''), COALESCE(iban,''),
 		       COALESCE(fiscal_year_start_month,1), COALESCE(currency,'')
 		  FROM company_settings LIMIT 1`, h.usePostgres)
 	var (
 		avCompanyName, avLegalForm, avStreet, avNPA, avCity, avCountry string
+		avVatStatus, avBankAddress                                     string
+		avAutoPost                                                     int
 		avCHE, avVAT, avPhone, avEmail, avBankName, avBIC, avIBAN      string
 		avCurrency                                                     string
 		avFiscalMonth                                                  int
@@ -165,8 +171,8 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	err := h.db.QueryRowContext(ctx, selectQ).Scan(
 		&existingID, &avCompanyName, &avLegalForm,
 		&avStreet, &avNPA, &avCity, &avCountry,
-		&avCHE, &avVAT, &avPhone, &avEmail,
-		&avBankName, &avBIC, &avIBAN,
+		&avCHE, &avVAT, &avVatStatus, &avAutoPost, &avPhone, &avEmail,
+		&avBankName, &avBankAddress, &avBIC, &avIBAN,
 		&avFiscalMonth, &avCurrency)
 	if err == nil {
 		avant = map[string]any{
@@ -174,8 +180,10 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 			"address_street": avStreet, "address_postal_code": avNPA,
 			"address_city": avCity, "address_country": avCountry,
 			"che_number": avCHE, "vat_number": avVAT,
+			"vat_status": avVatStatus, "auto_post_invoices": avAutoPost == 1,
 			"phone": avPhone, "email": avEmail,
-			"bank_name": avBankName, "bank_bic": avBIC, "iban": avIBAN,
+			"bank_name": avBankName, "bank_address": avBankAddress,
+			"bank_bic": avBIC, "iban": avIBAN,
 			"fiscal_year_start_month": avFiscalMonth, "currency": avCurrency,
 		}
 	}
@@ -317,21 +325,40 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	}
 	s.AutoPostInvoices = autoPostOut == 1
 
-	// L'état « après » porte les MÊMES clés que l'état « avant » : c'est ce qui
-	// rend la comparaison possible, et ce qui borne les données conservées à ce
-	// qui a servi à la calculer.
+	// L'état « après » est lu dans `s`, c'est-à-dire dans la LIGNE RELUE, et
+	// non dans la requête.
+	//
+	// Les deux diffèrent : « non assujetti » efface le numéro de TVA APRÈS
+	// coup (voir l'UPDATE plus haut), si bien que l'état construit depuis
+	// `req` affirmait un numéro que la base ne contenait plus. Une piste
+	// d'audit dit ce qui a été ÉCRIT, pas ce qui a été demandé.
+	//
+	// `vat_status`, `auto_post_invoices` et `bank_address` figurent désormais
+	// des deux côtés : basculer l'entreprise en non-assujettie change ce qui
+	// s'imprime sur toute facture émise ensuite (LTVA art. 27 al. 1) et ne
+	// laissait aucune trace.
 	apres := map[string]any{
-		"company_name": req.CompanyName, "legal_form": req.LegalForm,
-		"address_street": req.AddressStreet, "address_postal_code": req.AddressPostalCode,
-		"address_city": req.AddressCity, "address_country": req.AddressCountry,
-		"che_number": req.CheNumber, "vat_number": req.VatNumber,
-		"phone": req.Phone, "email": req.Email,
-		"bank_name": req.BankName, "bank_bic": req.BankBIC, "iban": req.IBAN,
-		"fiscal_year_start_month": req.FiscalYearStartMonth, "currency": req.Currency,
+		"company_name": s.CompanyName, "legal_form": s.LegalForm,
+		"address_street": s.AddressStreet, "address_postal_code": s.AddressPostalCode,
+		"address_city": s.AddressCity, "address_country": s.AddressCountry,
+		"che_number": s.CheNumber, "vat_number": s.VatNumber,
+		"vat_status": s.VatStatus, "auto_post_invoices": s.AutoPostInvoices,
+		"phone": s.Phone, "email": s.Email,
+		"bank_name": s.BankName, "bank_address": s.BankAddress,
+		"bank_bic": s.BankBIC, "iban": s.IBAN,
+		"fiscal_year_start_month": s.FiscalYearStartMonth, "currency": s.Currency,
 	}
-	// Première écriture de la fiche : rien ne précédait, donc une création.
+	// C'est `avant` qui dit si une fiche précédait, PAS `existingID`.
+	//
+	// La branche INSERT plus haut remplit `existingID` avec l'identifiant
+	// qu'elle vient de créer : le test `existingID != ""` était donc toujours
+	// vrai sur le chemin de succès, et `accounting.Creation` n'était jamais
+	// atteint. La toute première écriture de la fiche était enregistrée comme
+	// une MODIFICATION depuis {} — `before_state` valant {} au lieu de NULL,
+	// et l'écran d'audit affichant « 18 champs modifiés » sur une création qui
+	// n'avait rien remplacé.
 	transition := accounting.Creation(apres)
-	if existingID != "" {
+	if avant != nil {
 		transition = accounting.Modification(avant, apres)
 	}
 	trace(c, h.db, h.usePostgres, TableCompanySettings,

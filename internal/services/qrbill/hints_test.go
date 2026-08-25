@@ -62,7 +62,7 @@ func TestUnAppariementDecaleEstRefuse(t *testing.T) {
 	decale := tableRow{
 		"numéro de facture": "538690",
 		"date":              "01.12.2025",
-		"devise":            "53.30",     // un montant sous « Devise »
+		"devise":            "53.30",      // un montant sous « Devise »
 		"montant":           "31.12.2025", // une date sous « Montant »
 	}
 	if plausible(decale) {
@@ -150,9 +150,9 @@ func TestUnTauxDeTVASeReconnaitDansSesEcrituresCourantes(t *testing.T) {
 
 func TestLesDatesSeNormalisentVersLeFormatDeLInterface(t *testing.T) {
 	cas := map[string]string{
-		"31.12.2025": "2025-12-31",
-		"01/12/2025": "2025-12-01",
-		"2025-12-31": "2025-12-31",
+		"31.12.2025":   "2025-12-31",
+		"01/12/2025":   "2025-12-01",
+		"2025-12-31":   "2025-12-31",
 		"pas une date": "",
 	}
 	for in, attendu := range cas {
@@ -181,10 +181,10 @@ func TestUneDateNEstPasPriseePourUnNumeroDeFacture(t *testing.T) {
 // la valeur.
 func TestLesAccentsEtLApostropheCourbeSeDecodent(t *testing.T) {
 	cas := map[string]string{
-		`(Num\351ro de facture)`:  "Numéro de facture",
-		`(\311chu)`:               "Échu",
+		`(Num\351ro de facture)`:   "Numéro de facture",
+		`(\311chu)`:                "Échu",
 		`(jusqu\222au 18.02.2026)`: "jusqu’au 18.02.2026",
-		`(Wilhelmsh\366he 1)`:     "Wilhelmshöhe 1",
+		`(Wilhelmsh\366he 1)`:      "Wilhelmshöhe 1",
 	}
 	for in, attendu := range cas {
 		if got := decodePDFText(in); got != attendu {

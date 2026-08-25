@@ -44,19 +44,19 @@ func routeurDesDepots(a *Authorizer) (*gin.Engine, map[string]*bool) {
 		})
 	}
 
-	monter(http.MethodPost, "/supplier-invoices/read-qr")   // dépôt d'un PDF fournisseur
-	monter(http.MethodPost, "/supplier-invoices")           // saisie d'une facture reçue
-	monter(http.MethodPost, "/bank-statements/import")      // camt.053
-	monter(http.MethodPost, "/payments/export")             // pain.001
-	monter(http.MethodPost, "/settings/logo")               // logo de société
-	monter(http.MethodDelete, "/settings/logo")             //
-	monter(http.MethodPut, "/settings/company")             // coordonnées, IBAN, n° TVA
-	monter(http.MethodPost, "/journal-entries")             // écriture comptable
-	monter(http.MethodPost, "/invoices")                    // facture émise
-	monter(http.MethodPatch, "/invoices/:id")               //
-	monter(http.MethodPost, "/contacts")                    // client ou fournisseur
-	monter(http.MethodPut, "/contacts/:id")                 //
-	monter(http.MethodPost, "/bank-entries/:id/match")      // rapprochement
+	monter(http.MethodPost, "/supplier-invoices/read-qr") // dépôt d'un PDF fournisseur
+	monter(http.MethodPost, "/supplier-invoices")         // saisie d'une facture reçue
+	monter(http.MethodPost, "/bank-statements/import")    // camt.053
+	monter(http.MethodPost, "/payments/export")           // pain.001
+	monter(http.MethodPost, "/settings/logo")             // logo de société
+	monter(http.MethodDelete, "/settings/logo")           //
+	monter(http.MethodPut, "/settings/company")           // coordonnées, IBAN, n° TVA
+	monter(http.MethodPost, "/journal-entries")           // écriture comptable
+	monter(http.MethodPost, "/invoices")                  // facture émise
+	monter(http.MethodPatch, "/invoices/:id")             //
+	monter(http.MethodPost, "/contacts")                  // client ou fournisseur
+	monter(http.MethodPut, "/contacts/:id")               //
+	monter(http.MethodPost, "/bank-entries/:id/match")    // rapprochement
 	return r, atteintes
 }
 

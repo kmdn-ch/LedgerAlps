@@ -35,9 +35,71 @@ import (
 	"testing"
 )
 
-// Une route montée sur le groupe protégé, avec sa méthode.
+// Une route d'ecriture, sur quelque groupe qu'elle soit montee.
+//
+// Le motif ne se limite plus a `api.` : une route posee sur `v1.` echappe a
+// TOUTE la pile de filtres -- RequireAuth, DenyWritesWithoutPermission,
+// RequirePasswordChanged, RequireMFAEnrolled -- et c'est exactement le trou
+// qu'etait POST /auth/register. Un test qui ne regardait que `api.` ne pouvait
+// pas le voir.
 var reRouteEcriture = regexp.MustCompile(
-	`(?m)^\s*api\.(POST|PUT|PATCH|DELETE)\(\s*"([^"]+)"`)
+	`(?m)^\s*(?:api|v1|r)\.(POST|PUT|PATCH|DELETE)\(\s*"([^"]+)"`)
+
+// horsDuGroupe nomme les routes qui vivent DELIBEREMENT hors du groupe protege.
+//
+// Ce sont celles qui doivent rester joignables avant l'autorisation complete :
+// se connecter, rafraichir son jeton, changer un mot de passe expire, inscrire
+// ou presenter son second facteur, initialiser l'installation. Les y placer est
+// une DECISION ; en trouver une ici qui n'y figure pas est un accident. La
+// liste se relit ; un oubli ne se relit pas.
+var horsDuGroupe = map[string]bool{
+	"POST /auth/login":           true,
+	"POST /auth/refresh":         true,
+	"POST /auth/logout":          true,
+	"POST /auth/change-password": true,
+	"POST /auth/mfa/verify":      true,
+	"POST /auth/mfa/setup":       true,
+	"POST /auth/mfa/confirm":     true,
+	"DELETE /auth/mfa":           true,
+	"DELETE /auth/devices":       true,
+	"POST /auth/bootstrap":       true,
+}
+
+// blocDeLAppel rend le texte d'un appel, de sa premiere parenthese a celle qui
+// la referme, en ignorant les parentheses des chaines litterales.
+//
+// La fenetre de trois lignes qu'employait ce test empruntait le
+// `authorizer.Require(` de la route SUIVANTE : dans une table ou les routes
+// sont enregistrees en blocs serres -- c'est le cas de main.go --, une omission
+// avait toutes les chances d'etre masquee par sa voisine. Verifie : une route
+// non declaree suivie d'une route declaree passait le test.
+func blocDeLAppel(s string) string {
+	debut := strings.IndexByte(s, '(')
+	if debut < 0 {
+		return s
+	}
+	profondeur, dansChaine := 0, false
+	for i := debut; i < len(s); i++ {
+		switch s[i] {
+		case '"':
+			if i == 0 || s[i-1] != '\\' {
+				dansChaine = !dansChaine
+			}
+		case '(':
+			if !dansChaine {
+				profondeur++
+			}
+		case ')':
+			if !dansChaine {
+				profondeur--
+				if profondeur == 0 {
+					return s[:i+1]
+				}
+			}
+		}
+	}
+	return s
+}
 
 func TestChaqueRouteDEcritureDeclareSaPermission(t *testing.T) {
 	chemin := filepath.Join("..", "..", "cmd", "server", "main.go")
@@ -58,23 +120,13 @@ func TestChaqueRouteDEcritureDeclareSaPermission(t *testing.T) {
 		methode := source[m[2]:m[3]]
 		route := source[m[4]:m[5]]
 
-		// La déclaration peut vivre sur la même ligne ou sur la suivante : une
-		// route à trois filtres passe souvent à la ligne. On regarde donc
-		// jusqu'à la parenthèse fermante de l'appel.
-		fin := strings.IndexByte(source[m[0]:], '\n')
-		bloc := source[m[0]:]
-		// Deux lignes suffisent : au-delà, c'est une autre route.
-		for i := 0; i < 2 && fin > 0 && m[0]+fin+1 < len(source); i++ {
-			suite := strings.IndexByte(source[m[0]+fin+1:], '\n')
-			if suite < 0 {
-				break
-			}
-			fin += suite + 1
-		}
-		if fin > 0 {
-			bloc = source[m[0] : m[0]+fin]
+		if horsDuGroupe[methode+" "+route] {
+			continue
 		}
 
+		// Le bloc s'arrête à la parenthèse fermante de CET appel, pas au bout
+		// d'un nombre fixe de lignes.
+		bloc := blocDeLAppel(source[m[0]:])
 		if !strings.Contains(bloc, "authorizer.Require(") {
 			manquantes = append(manquantes, methode+" "+route)
 		}

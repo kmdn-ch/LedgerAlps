@@ -231,6 +231,11 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 
 	// ── Send response ─────────────────────────────────────────────────────────
 	filename := fmt.Sprintf("ledgeralps_archive_%s.zip", today)
+	// L'archive légale est la plus grosse sortie du produit : tout le grand
+	// livre, tous les contacts, toutes les pièces. C'est l'export dont on veut
+	// le plus savoir qui l'a déclenché.
+	traceExport(c, h.db, h.usePostgres, filename, "zip",
+		map[string]any{"octets": buf.Len()})
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	c.Data(http.StatusOK, "application/zip", buf.Bytes())
 }

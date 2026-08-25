@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
@@ -332,8 +334,138 @@ var sensitiveFieldRe = regexp.MustCompile(
 //
 // Champs couverts : email, name, address, phone, iban, qr_iban, password_hash,
 // et leurs variantes composées (company_name, address_street, …).
+//
+// # Conservée pour les chaînes déjà encodées, PAS pour la piste d'audit
+//
+// La piste passe désormais par `masquerEtat`, qui opère sur la structure. Cette
+// fonction-ci reste pour les appelants qui n'ont qu'un texte JSON en main, avec
+// la limite que le motif ne peut pas dépasser : il termine la valeur au premier
+// guillemet ÉCHAPPÉ, donc casse sur `{"company_name":"Au \"Bon\" Vin Sàrl"}`.
 func maskPersonalData(jsonData string) string {
 	return sensitiveFieldRe.ReplaceAllString(jsonData, `${1}"[MASKED]"`)
+}
+
+// estChampSensible reconnaît un terme personnel comme MOT dans un nom de clé.
+//
+// Les mots sont délimités par des tirets bas et comparés hors casse :
+// `company_name`, `address_street`, `Email`, `customerName` — cette dernière
+// via la césure sur les majuscules — sont reconnus, `number` et `document_type`
+// ne le sont pas.
+func estChampSensible(cle string) bool {
+	for _, mot := range motsDeLaCle(cle) {
+		switch mot {
+		case "email", "name", "address", "phone", "iban", "hash", "password":
+			return true
+		}
+	}
+	return false
+}
+
+// motsDeLaCle découpe un nom de clé en mots, puis les met en minuscules.
+//
+// `customer_name`, `customerName` et `CustomerName` donnent les mêmes mots : le
+// masquage ne doit pas dépendre de la convention d'écriture de l'appelant.
+//
+// # Les acronymes comptent
+//
+// Couper à CHAQUE majuscule réduirait `IBAN` à « i », « b », « a », « n » — et
+// la clé la plus sensible du produit traverserait le masquage intacte. La
+// césure n'a donc lieu qu'aux VRAIES frontières : une majuscule qui suit une
+// minuscule ou un chiffre (`customerName` → customer·Name), et une majuscule
+// suivie d'une minuscule au sein d'une suite de majuscules (`IBANNumber` →
+// IBAN·Number). `IBAN` reste ainsi un seul mot.
+func motsDeLaCle(cle string) []string {
+	runes := []rune(cle)
+	var mots []string
+	courant := strings.Builder{}
+	vider := func() {
+		if courant.Len() > 0 {
+			mots = append(mots, strings.ToLower(courant.String()))
+			courant.Reset()
+		}
+	}
+	for i, r := range runes {
+		if r == '_' || r == '-' {
+			vider()
+			continue
+		}
+		if unicode.IsUpper(r) && i > 0 {
+			prec := runes[i-1]
+			finDeMot := unicode.IsLower(prec) || unicode.IsDigit(prec)
+			debutDApresAcronyme := unicode.IsUpper(prec) &&
+				i+1 < len(runes) && unicode.IsLower(runes[i+1])
+			if finDeMot || debutDApresAcronyme {
+				vider()
+			}
+		}
+		courant.WriteRune(r)
+	}
+	vider()
+	return mots
+}
+
+// masquerEtat remplace les valeurs sensibles DANS LA STRUCTURE, avant tout
+// encodage (nLPD art. 6).
+//
+// # Pourquoi pas l'expression régulière
+//
+// Le masquage textuel terminait la valeur sur `[^"]*"`, donc au premier
+// guillemet échappé produit par `json.Marshal`. Une raison sociale suisse
+// banale — *Au « Bon » Vin Sàrl* — donnait :
+//
+//	{"company_name":"[MASKED]"Bon\" Vin Sarl","iban":"[MASKED]"}
+//
+// c'est-à-dire du JSON INVALIDE, avec un fragment du nom de l'indépendant resté
+// EN CLAIR dans une table conservée dix ans (CO art. 958f). L'écran d'audit,
+// qui fait `JSON.parse` puis `catch`, affichait alors « aucun champ modifié »
+// sur un changement d'IBAN — le cas exact pour lequel l'audit différentiel
+// existe. Et la chaîne d'empreintes restait valide, puisqu'elle porte sur la
+// chaîne telle que stockée : le maillon corrompu se vérifiait, ce qui rendait
+// le défaut invisible.
+//
+// On ne lit pas du JSON avec une expression régulière ; ici on n'a pas à
+// essayer, la structure est disponible.
+//
+// # Ce qu'il couvre en plus
+//
+// Les valeurs NON textuelles (`"phone": 41791234567`) et les objets imbriqués,
+// que le motif laissait traverser intacts parce qu'il n'accrochait que `"…"`.
+func masquerEtat(etat map[string]any) map[string]any {
+	if etat == nil {
+		return nil
+	}
+	out := make(map[string]any, len(etat))
+	for k, v := range etat {
+		if estChampSensible(k) {
+			out[k] = "[MASKED]"
+			continue
+		}
+		switch t := v.(type) {
+		case map[string]any:
+			out[k] = masquerEtat(t)
+		case []any:
+			out[k] = masquerListe(t)
+		default:
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// masquerListe applique le masquage aux objets d'une liste.
+func masquerListe(l []any) []any {
+	out := make([]any, len(l))
+	for i, v := range l {
+		switch t := v.(type) {
+		case map[string]any:
+			out[i] = masquerEtat(t)
+		case []any:
+			out[i] = masquerListe(t)
+		default:
+			out[i] = v
+		}
+	}
+	return out
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

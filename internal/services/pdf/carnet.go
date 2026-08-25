@@ -60,7 +60,28 @@ type CarnetData struct {
 	ChiffreAffaires float64
 	Eligible        bool
 	AssujettiTVA    bool
-	Devise          string
+
+	// SurExerciceComplet gouverne l'impression des verdicts.
+	//
+	// Faux, le document n'affirme ni l'admission de la comptabilité
+	// simplifiée ni la libération de la TVA : les deux seuils portent en droit
+	// sur le chiffre d'affaires du dernier exercice, et un trimestre ne les
+	// mesure pas. Voir simplified.Eligibilite.SurExerciceComplet.
+	SurExerciceComplet bool
+
+	// DepasseSeuilRegime dit que le chiffre d'affaires mesuré conclut à lui
+	// seul, quelle que soit la longueur de la période.
+	//
+	// Un dépassement constaté sur un trimestre est acquis pour l'exercice : le
+	// chiffre d'affaires ne décroît pas en allongeant la fenêtre. C'est ce qui
+	// rend l'AVERTISSEMENT légitime là où l'autorisation ne l'est pas.
+	//
+	// Le champ porte la décision plutôt que le seuil : ce paquet met en page,
+	// il ne connaît pas le droit comptable. La comparaison appartient au
+	// paquet simplified, qui détient la constante et sa référence légale.
+	DepasseSeuilRegime bool
+
+	Devise string
 
 	// Langue du document, telle que l'interface l'affichait au moment du clic.
 	// Un carnet établi depuis un écran allemand doit sortir en allemand : c'est
@@ -261,10 +282,24 @@ func carnetMentions(pdf *fpdf.Fpdf, d CarnetData, L libellésCarnet) {
 	pdf.CellFormat(32, 5.5, latin1(montantCarnet(d.ChiffreAffaires)), "", 1, "R", false, 0, "")
 
 	pdf.SetFont("Helvetica", "", 8.5)
-	if d.Eligible {
+
+	// Trois cas, et non deux. Sur une période qui n'est pas un exercice, le
+	// document SUSPEND son verdict au lieu d'en rendre un favorable : les deux
+	// seuils portent sur le chiffre d'affaires du dernier exercice, et les
+	// apprécier sur un trimestre imprimait « la comptabilité simplifiée est
+	// admise », en vert et sous la référence légale, à une entreprise qui n'y
+	// a pas droit. Un dépassement, lui, reste concluant sur toute période — il
+	// ne peut que s'aggraver en s'allongeant —, d'où le second cas conservé.
+	switch {
+	case !d.SurExerciceComplet && !d.DepasseSeuilRegime:
+		pdf.SetTextColor(120, 90, 20)
+		pdf.MultiCell(largeurUtile, 4.5, latin1(L.PeriodePartielle), "", "L", false)
+		pdf.SetTextColor(0, 0, 0)
+		return
+	case d.Eligible:
 		pdf.SetTextColor(30, 100, 50)
 		pdf.MultiCell(largeurUtile, 4.5, latin1(L.Admise), "", "L", false)
-	} else {
+	default:
 		pdf.SetTextColor(150, 40, 30)
 		pdf.MultiCell(largeurUtile, 4.5, latin1(L.Refusee), "", "L", false)
 	}

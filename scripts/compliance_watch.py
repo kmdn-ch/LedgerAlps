@@ -58,6 +58,13 @@ class CheckError(Exception):
 
 
 def _get(url: str, headers: dict | None = None) -> bytes:
+    # Le registre est un fichier suivi, donc de confiance -- mais urlopen
+    # accepte file:// et ftp://, et une entree malformee lirait alors un
+    # fichier local au lieu d'une source de droit. Defense en profondeur :
+    # la garde coute deux lignes et ferme la classe entiere.
+    if urllib.parse.urlparse(url).scheme != "https":
+        raise CheckError(f"schema d'URL refuse : {url!r} -- https uniquement")
+
     req = urllib.request.Request(url, headers={**UA, **(headers or {})})
     with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
         body = r.read()

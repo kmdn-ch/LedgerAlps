@@ -194,7 +194,12 @@ func (h *SupplierInvoicesHandler) cancelOne(
 		delQ := db.Rebind("DELETE FROM supplier_invoices WHERE id = ? AND status = 'draft'",
 			h.usePostgres)
 		if _, err := h.db.ExecContext(ctx, delQ, id); err != nil {
-			return cancelResult{ID: id, Outcome: "refused", Detail: "suppression impossible"}
+			// StatutAvant/Apres renseignes, comme dans les six autres branches.
+			// Sans eux, la trace enregistrait une transition "" -> "" et la
+			// question « dans quel etat etait-elle ? » restait sans reponse --
+			// alors qu'ici le statut EST connu : c'est un brouillon.
+			return cancelResult{ID: id, Outcome: "refused", Detail: "suppression impossible",
+				StatutAvant: status, StatutApres: status}
 		}
 		return cancelResult{ID: id, Outcome: "deleted",
 			Detail:      "brouillon supprimé — rien n'était entré dans les livres",

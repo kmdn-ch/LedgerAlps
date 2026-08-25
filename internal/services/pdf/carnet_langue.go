@@ -53,10 +53,17 @@ type libellésCarnet struct {
 	Refusee     string
 	TVADue      string
 	TVALiberee  string
-	PiedDePage  string
-	Page        string
-	SansRaison  string
-	NomFichier  string
+
+	// PeriodePartielle remplace les DEUX verdicts quand la periode n'est
+	// pas un exercice. Les seuils du CO art. 957 et de la LTVA art. 10
+	// portent sur le chiffre d'affaires du dernier exercice : mesures sur
+	// un trimestre, ils affirmaient en vert une eligibilite que rien ne
+	// fondait. Le document dit alors qu'il ne conclut pas.
+	PeriodePartielle string
+	PiedDePage       string
+	Page             string
+	SansRaison       string
+	NomFichier       string
 
 	// Propres à l'export CSV : il porte les mêmes informations que le PDF,
 	// mais sous forme de lignes plutôt que de mise en page.
@@ -112,16 +119,17 @@ var jeuxCarnet = map[i18n.Lang]libellésCarnet{
 			"(LTVA art. 10). Le décompte TVA accompagne ce document.",
 		TVALiberee: "Chiffre d'affaires inférieur à 100 000 francs : libération de l'assujettissement " +
 			"à la TVA (LTVA art. 10 al. 2 let. a).",
-		PiedDePage:  "Établi par LedgerAlps — comptabilité en partie double",
-		Page:        "Page %d/{nb}",
-		SansRaison:  "(raison sociale non renseignée)",
-		NomFichier:  "comptabilite-simplifiee",
-		Periode:     "Période",
-		Montant:     "Montant",
-		Oui:         "oui",
-		Non:         "non",
-		LigneAdmise: "Comptabilité simplifiée admise (< 500 000)",
-		LigneTVA:    "Assujettissement TVA (>= 100 000)",
+		PiedDePage:       "Établi par LedgerAlps — comptabilité en partie double",
+		Page:             "Page %d/{nb}",
+		SansRaison:       "(raison sociale non renseignée)",
+		NomFichier:       "comptabilite-simplifiee",
+		PeriodePartielle: "Période inférieure à un exercice : les seuils du CO art. 957 al. 2 ch. 1 et de la LTVA art. 10 al. 2 let. a portent sur le chiffre d'affaires du dernier exercice et ne peuvent pas être appréciés sur ce document.",
+		Periode:          "Période",
+		Montant:          "Montant",
+		Oui:              "oui",
+		Non:              "non",
+		LigneAdmise:      "Comptabilité simplifiée admise (< 500 000)",
+		LigneTVA:         "Assujettissement TVA (>= 100 000)",
 	},
 
 	i18n.DE: {
@@ -159,16 +167,17 @@ var jeuxCarnet = map[i18n.Lang]libellésCarnet{
 			"Die MWST-Abrechnung begleitet dieses Dokument.",
 		TVALiberee: "Umsatz unter 100 000 Franken: Befreiung von der MWST-Pflicht " +
 			"(MWSTG Art. 10 Abs. 2 Bst. a).",
-		PiedDePage:  "Erstellt mit LedgerAlps — doppelte Buchhaltung",
-		Page:        "Seite %d/{nb}",
-		SansRaison:  "(Firmenname nicht erfasst)",
-		NomFichier:  "vereinfachte-buchhaltung",
-		Periode:     "Periode",
-		Montant:     "Betrag",
-		Oui:         "ja",
-		Non:         "nein",
-		LigneAdmise: "Vereinfachte Buchhaltung zulässig (< 500 000)",
-		LigneTVA:    "MWST-Pflicht (>= 100 000)",
+		PiedDePage:       "Erstellt mit LedgerAlps — doppelte Buchhaltung",
+		Page:             "Seite %d/{nb}",
+		SansRaison:       "(Firmenname nicht erfasst)",
+		NomFichier:       "vereinfachte-buchhaltung",
+		PeriodePartielle: "Zeitraum kürzer als ein Geschäftsjahr: Die Schwellenwerte von OR Art. 957 Abs. 2 Ziff. 1 und MWSTG Art. 10 Abs. 2 Bst. a beziehen sich auf den Umsatz des letzten Geschäftsjahres und können anhand dieses Dokuments nicht beurteilt werden.",
+		Periode:          "Periode",
+		Montant:          "Betrag",
+		Oui:              "ja",
+		Non:              "nein",
+		LigneAdmise:      "Vereinfachte Buchhaltung zulässig (< 500 000)",
+		LigneTVA:         "MWST-Pflicht (>= 100 000)",
 	},
 
 	i18n.IT: {
@@ -206,16 +215,17 @@ var jeuxCarnet = map[i18n.Lang]libellésCarnet{
 			"(LIVA art. 10). Il rendiconto IVA accompagna questo documento.",
 		TVALiberee: "Cifra d'affari inferiore a 100 000 franchi: esenzione dall'assoggettamento " +
 			"all'IVA (LIVA art. 10 cpv. 2 lett. a).",
-		PiedDePage:  "Allestita con LedgerAlps — contabilità in partita doppia",
-		Page:        "Pagina %d/{nb}",
-		SansRaison:  "(ragione sociale non indicata)",
-		NomFichier:  "contabilita-semplificata",
-		Periode:     "Periodo",
-		Montant:     "Importo",
-		Oui:         "sì",
-		Non:         "no",
-		LigneAdmise: "Contabilità semplificata ammessa (< 500 000)",
-		LigneTVA:    "Assoggettamento IVA (>= 100 000)",
+		PiedDePage:       "Allestita con LedgerAlps — contabilità in partita doppia",
+		Page:             "Pagina %d/{nb}",
+		SansRaison:       "(ragione sociale non indicata)",
+		NomFichier:       "contabilita-semplificata",
+		PeriodePartielle: "Periodo inferiore a un esercizio: le soglie dell'art. 957 cpv. 2 n. 1 CO e dell'art. 10 cpv. 2 lett. a LIVA si riferiscono alla cifra d'affari dell'ultimo esercizio e non possono essere valutate su questo documento.",
+		Periode:          "Periodo",
+		Montant:          "Importo",
+		Oui:              "sì",
+		Non:              "no",
+		LigneAdmise:      "Contabilità semplificata ammessa (< 500 000)",
+		LigneTVA:         "Assoggettamento IVA (>= 100 000)",
 	},
 
 	i18n.EN: {
@@ -253,16 +263,17 @@ var jeuxCarnet = map[i18n.Lang]libellésCarnet{
 			"The VAT return accompanies this document.",
 		TVALiberee: "Turnover below CHF 100,000: exempt from VAT liability " +
 			"(VAT Act art. 10 para. 2 let. a).",
-		PiedDePage:  "Prepared with LedgerAlps — double-entry bookkeeping",
-		Page:        "Page %d/{nb}",
-		SansRaison:  "(business name not set)",
-		NomFichier:  "simplified-accounting",
-		Periode:     "Period",
-		Montant:     "Amount",
-		Oui:         "yes",
-		Non:         "no",
-		LigneAdmise: "Simplified accounting allowed (< 500,000)",
-		LigneTVA:    "VAT liability (>= 100,000)",
+		PiedDePage:       "Prepared with LedgerAlps — double-entry bookkeeping",
+		Page:             "Page %d/{nb}",
+		SansRaison:       "(business name not set)",
+		NomFichier:       "simplified-accounting",
+		PeriodePartielle: "Period shorter than a financial year: the thresholds of CO art. 957 para. 2 no. 1 and VAT Act art. 10 para. 2 let. a apply to the turnover of the last financial year and cannot be assessed from this document.",
+		Periode:          "Period",
+		Montant:          "Amount",
+		Oui:              "yes",
+		Non:              "no",
+		LigneAdmise:      "Simplified accounting allowed (< 500,000)",
+		LigneTVA:         "VAT liability (>= 100,000)",
 	},
 }
 

@@ -34,6 +34,26 @@ func auditService(t *testing.T) (*Service, *sql.DB, string) {
 	return s, database, contactID
 }
 
+// auditRowsPour lit les traces d'UNE action.
+//
+// Filtrer par action, et non compter toutes les lignes de la table : sinon
+// chaque nouvelle action cablee cassera mecaniquement des tests qui ne la
+// concernent pas -- c'est ce qui est arrive quand ActionDocumentCreated a ete
+// branchee, et un test qui casse pour une bonne nouvelle finit par etre
+// desactive.
+func auditRowsPour(t *testing.T, database *sql.DB, table, action string) []struct {
+	Action, UserID, RecordID string
+} {
+	t.Helper()
+	var out []struct{ Action, UserID, RecordID string }
+	for _, r := range auditRows(t, database, table) {
+		if r.Action == action {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 func auditRows(t *testing.T, database *sql.DB, table string) []struct {
 	Action, UserID, RecordID string
 } {
@@ -67,9 +87,10 @@ func TestLEnvoiDUneFactureEstTraceAvecSonAuteur(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := auditRows(t, database, accounting.TableInvoices)
+	rows := auditRowsPour(t, database, accounting.TableInvoices,
+		accounting.ActionDocumentTransition)
 	if len(rows) != 1 {
-		t.Fatalf("%d trace(s) pour un envoi, attendu 1", len(rows))
+		t.Fatalf("%d trace(s) de transition pour un envoi, attendu 1", len(rows))
 	}
 	if rows[0].UserID != "u1" {
 		t.Errorf("auteur = %q, attendu u1", rows[0].UserID)
@@ -97,9 +118,10 @@ func TestLAnnulationEstTracee(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := auditRows(t, database, accounting.TableInvoices)
+	rows := auditRowsPour(t, database, accounting.TableInvoices,
+		accounting.ActionDocumentTransition)
 	if len(rows) != 2 {
-		t.Fatalf("%d traces, attendu 2", len(rows))
+		t.Fatalf("%d traces de transition, attendu 2", len(rows))
 	}
 	if rows[1].UserID != "u2" {
 		t.Fatalf("l'annulation est attribuée à %q, attendu u2", rows[1].UserID)
@@ -192,7 +214,11 @@ func TestSansAuteurAucuneTraceAnonyme(t *testing.T) {
 	if err := s.Transition(context.Background(), invID, models.InvoiceStatusSent); err != nil {
 		t.Fatal(err)
 	}
-	if rows := auditRows(t, database, accounting.TableInvoices); len(rows) != 0 {
+	// La CREATION, elle, a bien un auteur (makeInvoice le fournit) : on ne
+	// compte donc que les transitions, qui sont ce que ce test eprouve.
+	rows := auditRowsPour(t, database, accounting.TableInvoices,
+		accounting.ActionDocumentTransition)
+	if len(rows) != 0 {
 		t.Fatalf("%d trace(s) écrite(s) sans auteur : %+v", len(rows), rows)
 	}
 }

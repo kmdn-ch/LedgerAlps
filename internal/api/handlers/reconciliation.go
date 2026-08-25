@@ -18,15 +18,26 @@ import (
 
 	"github.com/gin-gonic/gin"
 	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 	"github.com/kmdn-ch/ledgeralps/internal/services/banking"
 )
 
 type ReconciliationHandler struct {
 	svc *banking.Service
+
+	// db et usePostgres servent a la piste d'audit : rapprocher une ecriture
+	// bancaire d'une facture est une decision comptable, et elle ne laissait
+	// aucune trace alors qu'ActionBankEntryMatched etait declaree.
+	db          *sql.DB
+	usePostgres bool
 }
 
 func NewReconciliationHandler(database *sql.DB, usePostgres bool) *ReconciliationHandler {
-	return &ReconciliationHandler{svc: banking.New(database, usePostgres)}
+	return &ReconciliationHandler{
+		svc:         banking.New(database, usePostgres),
+		db:          database,
+		usePostgres: usePostgres,
+	}
 }
 
 // ListBankEntries GET /api/v1/bank-entries?all=true
@@ -59,6 +70,10 @@ func (h *ReconciliationHandler) MatchBankEntry(c *gin.Context) {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
 	}
+	trace(c, h.db, h.usePostgres, TableBankEntries,
+		accounting.ActionBankEntryMatched, c.Param("id"),
+		accounting.Creation(map[string]any{"invoice_id": body.InvoiceID}))
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Écriture rapprochée. L'encaissement reste à enregistrer depuis la facture : " +
 			"rapprocher identifie le versement, il ne solde pas la créance.",

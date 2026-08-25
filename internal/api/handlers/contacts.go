@@ -14,6 +14,7 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
 type ContactsHandler struct {
@@ -190,6 +191,18 @@ func (h *ContactsHandler) CreateContact(c *gin.Context) {
 		return
 	}
 
+	// Un contact porte un nom, une adresse, un IBAN : c'est la donnee la plus
+	// personnelle du produit. ActionContactCreated etait declaree et jamais
+	// ecrite. `masquerEtat` remplace ces valeurs par [MASKED] avant stockage :
+	// la trace dit QU'UN contact a ete cree et par qui, pas qui il est.
+	trace(c, h.db, h.usePostgres, accounting.TableContacts,
+		accounting.ActionContactCreated, id, accounting.Creation(map[string]any{
+			"contact_type": req.ContactType,
+			"is_company":   req.IsCompany,
+			"name":         req.Name,
+			"email":        req.Email,
+		}))
+
 	c.JSON(http.StatusCreated, models.Contact{
 		ID: id, ContactType: models.ContactType(req.ContactType), IsCompany: req.IsCompany,
 		Name: req.Name, LegalName: req.LegalName, Email: req.Email, Phone: req.Phone,
@@ -331,6 +344,26 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
+
+	// Quelles colonnes ont bouge, et par qui.
+	//
+	// ActionContactUpdated etait declaree et jamais ecrite : modifier l'IBAN
+	// d'un fournisseur ne laissait aucun maillon, alors que c'est le champ
+	// vers lequel un virement part.
+	//
+	// LIMITE ASSUMEE : la trace nomme les colonnes touchees, pas leurs
+	// anciennes valeurs. Les relire demanderait un SELECT supplementaire dans
+	// la meme transaction ; et comme `masquerEtat` remplace de toute facon
+	// nom, e-mail et IBAN par [MASKED], les conserver n'apporterait rien de
+	// lisible ici. Ce qui compte est de savoir QUE l'IBAN a change.
+	colonnes := make([]string, 0, len(sets))
+	for _, s := range sets {
+		colonnes = append(colonnes, strings.TrimSpace(strings.SplitN(s, "=", 2)[0]))
+	}
+	trace(c, h.db, h.usePostgres, accounting.TableContacts,
+		accounting.ActionContactUpdated, id, accounting.Creation(map[string]any{
+			"colonnes_modifiees": colonnes,
+		}))
 
 	// Return updated contact
 	h.GetContact(c)
