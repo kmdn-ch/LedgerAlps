@@ -65,15 +65,18 @@ func RecordDocumentAction(
 	tx execQuerier,
 	usePostgres bool,
 	table, userID, action, recordID, ipAddress string,
-	state map[string]any,
+	transition Transition,
 ) error {
 	if userID == "" {
 		return fmt.Errorf("trace refusée: aucun auteur pour %s sur %s/%s", action, table, recordID)
 	}
-	if state == nil {
-		state = map[string]any{}
+	// `Apres` nul devient une map vide : le maillon doit exister même quand
+	// l'action ne laisse rien derrière elle. `Avant` nul, en revanche, est
+	// SIGNIFIANT — c'est une création — et reste tel quel.
+	if transition.Apres == nil {
+		transition.Apres = map[string]any{}
 	}
 	_, _, err := AppendAuditEntryFor(ctx, tx, usePostgres,
-		table, userID, action, recordID, ipAddress, state)
+		table, userID, action, recordID, ipAddress, transition)
 	return err
 }

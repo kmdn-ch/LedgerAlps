@@ -561,6 +561,9 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/reports/general-ledger` | auth | Grand livre |
 | GET | `/reports/ar-aging` | auth | Balance âgée des créances |
 | GET | `/reports/revenue` | auth | Chiffre d'affaires groupé par `year`, `month` ou `contact`, avec `from`/`to`. La réponse porte `basis` : la convention de calcul, pour qu'un total ne soit pas comparé à un autre calculé autrement |
+| GET | `/reports/simplified-accounting` | lecture | Comptabilité simplifiée (CO art. 957 al. 2). `from`, `to` |
+| GET | `/reports/simplified-accounting.pdf` | lecture | Le même, en PDF — le document remis à l'administration |
+| GET | `/exports/simplified-accounting.csv` | lecture | Le même, en CSV |
 | GET | `/stats` | auth | Indicateurs du tableau de bord |
 
 ## Paiements et ISO 20022
@@ -620,6 +623,17 @@ s'écrit dans `<Cd>`.
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
 | GET | `/audit-logs` | **admin** | Piste d'audit. `order=asc` (défaut, ordre d'écriture) ou `desc` ; `table_name`, `record_id`, `from`, `to`, `limit`, `offset` |
+
+Chaque maillon porte `before_state` et `after_state`. `before_state` vaut `null`
+sur une création — rien ne précédait, ce qui n'est pas la même chose qu'un état
+vide. Les valeurs personnelles y sont masquées (nLPD art. 6), des deux côtés et
+avant le calcul de l'empreinte.
+
+`after_state` porte en outre `champs_modifies` : les noms des champs dont la
+valeur a réellement changé, calculés **avant** le masquage. C'est ce qui rend
+lisible un changement d'IBAN, dont les deux valeurs sont masquées et donc
+identiques dans la piste. Cette liste entre dans l'empreinte : l'altérer casse
+la chaîne.
 | GET | `/audit-logs/verify-chain` | **admin** | Vérifier **toute** la chaîne : empreintes, chaînage, continuité des numéros. `200` si intacte, `409` avec le rapport sinon |
 | GET | `/audit-logs/attestation` | **admin** | Attestation d'intégrité (Olico art. 9), en pièce jointe JSON : état de la chaîne, empreinte de tête, périmètre, **et ses limites** |
 | GET | `/audit-logs/:id/verify` | **admin** | Vérifier une entrée isolée. Détecte une modification de contenu, **pas une suppression** — voir la note ci-dessous |

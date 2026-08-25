@@ -378,12 +378,14 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 		return
 	}
 
+	// Une création ne remplace rien : `before_state` reste NULL, ce qui se
+	// distingue d'un état antérieur vide.
 	trace(c, h.db, h.usePostgres, TableSupplierInvoices,
-		ActionSupplierInvoiceCreated, id, map[string]any{
+		ActionSupplierInvoiceCreated, id, accounting.Creation(map[string]any{
 			"reference": req.SupplierReference,
 			"total":     total,
 			"currency":  req.Currency,
-		})
+		}))
 
 	c.JSON(http.StatusCreated, gin.H{
 		"id": id, "status": "draft",
@@ -458,9 +460,13 @@ func (h *SupplierInvoicesHandler) TransitionSupplierInvoice(c *gin.Context) {
 	if req.Status != "booked" {
 		action = ActionSupplierInvoiceUpdated
 	}
-	trace(c, h.db, h.usePostgres, TableSupplierInvoices, action, id, map[string]any{
-		"from": current, "to": req.Status, "journal_entry_id": entryID,
-	})
+	// « from / to » écrit à la main disparaît : l'état antérieur a désormais sa
+	// place, et la vérification le relit au même titre que le suivant.
+	trace(c, h.db, h.usePostgres, TableSupplierInvoices, action, id,
+		accounting.Modification(
+			map[string]any{"status": current},
+			map[string]any{"status": req.Status, "journal_entry_id": entryID},
+		))
 
 	c.JSON(http.StatusOK, gin.H{"id": id, "status": req.Status, "journal_entry_id": entryID})
 }
@@ -475,9 +481,21 @@ func (h *SupplierInvoicesHandler) DeleteSupplierInvoice(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	var status string
-	getQ := db.Rebind("SELECT status FROM supplier_invoices WHERE id = ?", h.usePostgres)
-	switch err := h.db.QueryRowContext(ctx, getQ, id).Scan(&status); {
+	// On relit ce qui va disparaître, pas seulement son statut.
+	//
+	// La trace survit à la pièce, et c'est le seul cas où elle est la SEULE
+	// chose qui reste : « une facture fournisseur a été supprimée » sans dire
+	// laquelle ni de quel montant ne répond à aucune question que l'on se pose
+	// après coup. Le nom du fournisseur est masqué à l'écriture (nLPD art. 6) ;
+	// la référence et le montant, eux, sont des données comptables.
+	var status, referenceFournisseur, devise string
+	var montantTotal float64
+	getQ := db.Rebind(`
+		SELECT status, COALESCE(supplier_reference, ''), COALESCE(currency, ''),
+		       COALESCE(total_amount, 0)
+		  FROM supplier_invoices WHERE id = ?`, h.usePostgres)
+	switch err := h.db.QueryRowContext(ctx, getQ, id).Scan(
+		&status, &referenceFournisseur, &devise, &montantTotal); {
 	case err == sql.ErrNoRows:
 		c.JSON(http.StatusNotFound, gin.H{"error": "facture fournisseur introuvable"})
 		return
@@ -497,10 +515,13 @@ func (h *SupplierInvoicesHandler) DeleteSupplierInvoice(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
-	// La trace survit à la pièce : c'est même le seul cas où elle est la seule
-	// chose qui reste.
 	trace(c, h.db, h.usePostgres, TableSupplierInvoices,
-		ActionSupplierInvoiceDeleted, id, map[string]any{"status": status})
+		ActionSupplierInvoiceDeleted, id, accounting.Suppression(map[string]any{
+			"status":    status,
+			"reference": referenceFournisseur,
+			"total":     montantTotal,
+			"currency":  devise,
+		}))
 	c.Status(http.StatusNoContent)
 }
 

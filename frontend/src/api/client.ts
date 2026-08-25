@@ -310,6 +310,24 @@ export const accountingExportApi = {
     api.get('/exports/trial-balance.csv', { params: { from, to }, responseType: 'blob' }),
 }
 
+// Comptabilité simplifiée — le « carnet du lait » du CO art. 957 al. 2.
+//
+// Une LECTURE, comme les exports ci-dessus : le carnet relit le journal et le
+// présente sous la forme que la loi reconnaît pour une entreprise individuelle
+// sous le seuil de 500 000 francs. Une fiduciaire en lecture seule doit pouvoir
+// l'établir.
+export const carnetApi = {
+  // Les chiffres, pour l'écran : c'est ce qui permet de les regarder avant de
+  // télécharger quoi que ce soit.
+  lire: (from: string, to: string) =>
+    api.get('/reports/simplified-accounting', { params: { from, to } }),
+  csv: (from: string, to: string) =>
+    api.get('/exports/simplified-accounting.csv', { params: { from, to }, responseType: 'blob' }),
+  // Le PDF est le document que l'on tend à l'administration.
+  pdf: (from: string, to: string) =>
+    api.get('/reports/simplified-accounting.pdf', { params: { from, to }, responseType: 'blob' }),
+}
+
 // Archive légale et export de réversibilité (CO art. 958f).
 export const exportApi = {
   legalArchive: () =>

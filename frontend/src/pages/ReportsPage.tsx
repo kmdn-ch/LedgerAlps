@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { isoApi, exportApi, accountingExportApi } from '@/api/client'
 import { PaymentRunPanel } from '@/components/payments/PaymentRunPanel'
+import { CarnetDuLait } from '@/components/reports/CarnetDuLait'
 import { PageHeader, SectionTitle, ErrorBanner } from '@/components/ui'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 import { useT, useFormats } from '@/i18n/useT'
@@ -138,6 +139,12 @@ export function ReportsPage() {
             `balance_${periode}.csv`)}
         />
       </div>
+
+      {/* La comptabilité simplifiée : une LECTURE, donc ouverte à tous les
+          rôles, y compris la fiduciaire en lecture seule — c'est justement
+          elle qui établit ce document pour l'administration. */}
+      <SectionTitle>{t('carnet.titre')}</SectionTitle>
+      <CarnetDuLait du={startDate} au={endDate} />
 
       {/* Import camt.053 — déposer un fichier est une écriture.
           Les EXPORTS ci-dessus restent ouverts à tous : consulter et sortir ses

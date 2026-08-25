@@ -167,6 +167,36 @@ rétroactive casse la chaîne de façon détectable, comme l'exige le CO art. 95
 `GET /audit-logs/verify-chain` parcourt l'ensemble et distingue quatre ruptures ;
 l'écran **Paramètres → Maintenance → Piste d'audit** l'expose.
 
+**Audit différentiel — ce qu'une action a remplacé.** Le maillon portait l'état
+APRÈS chaque action, jamais celui d'avant : `before_state` était systématiquement
+nul. On savait qu'une facture valait 1500.- après modification, sans pouvoir dire
+qu'elle valait 1000.- avant.
+
+Les appelants transmettent désormais une `accounting.Transition` — `Creation`,
+`Modification` ou `Suppression`. Des champs nommés plutôt que deux
+`map[string]any` côte à côte : les intervertir produirait une piste qui affirme
+le contraire de ce qui s'est passé, avec l'autorité d'une chaîne valide.
+
+*Le masquage change la donne.* `maskPersonalData` remplace la valeur des champs
+personnels (nLPD art. 6) : un IBAN modifié donnerait `[MASKED]` des deux côtés,
+et le changement disparaîtrait — précisément le cas qui motive la
+fonctionnalité, puisque cet IBAN est le compte qui reçoit les virements de tous
+les clients. La liste des champs qui ont bougé est donc calculée sur les valeurs
+**brutes, avant masquage**, et jointe à l'état suivant sous `champs_modifies`.
+On sait que l'IBAN a changé, et qui l'a changé, **sans conserver aucun des deux
+IBAN** — plus utile que deux valeurs masquées, et moins de données personnelles
+retenues.
+
+Cette liste entre dans l'empreinte : l'effacer pour cacher qu'un IBAN a bougé
+casse la chaîne. Une trace des changements réinscriptible ne prouverait rien.
+
+*Rétrocompatible sans migration.* Une création écrit `NULL`, la vérification
+relit `COALESCE(before_state, '')`, et les maillons antérieurs se recalculent
+donc à l'identique. Le masquage a par ailleurs été élargi aux variantes
+composées (`company_name`, `address_street`, `supplier_name`…) : la règle
+n'acceptait que les clés exactes et laissait en clair, chez un indépendant, son
+propre nom et son adresse privée.
+
 *Règle apprise à ses dépens :* l'empreinte doit couvrir **exactement les valeurs
 enregistrées**. Jusqu'à la v1.4.6 elle était calculée sur un `after_state` rédigé
 séparément de celui inséré et sur un horodatage venu de Go alors que la colonne
@@ -176,6 +206,45 @@ chaque test fabriquait ses propres lignes avec les mêmes valeurs des deux côt�
 il est apparu au premier appel réel. `internal/services/accounting/integrity_test.go`
 écrit désormais par le vrai chemin puis relit depuis la base — recalculer en
 mémoire ce qu'on vient de calculer en mémoire ne prouve rien.
+
+**Comptabilité simplifiée — le « carnet du lait » (CO art. 957 al. 2).** Une
+entreprise individuelle dont le chiffre d'affaires reste sous 500 000 francs
+peut se limiter à « une comptabilité des recettes et des dépenses ainsi que du
+patrimoine ». LedgerAlps continue de tenir la partie double, qui DÉPASSE ce
+minimum ; le carnet en est une PRÉSENTATION extraite, pas un mode dégradé.
+
+*Base caisse, et non compte de résultat.* « Recettes et dépenses » veut dire
+qu'on compte l'argent quand il entre et sort. Dériver le document du compte de
+résultat aurait produit un compte de résultat portant un autre nom, avec les
+créances non encaissées comptées comme des recettes — un écart qu'un contrôleur
+voit dès qu'il le rapproche du relevé bancaire.
+
+*Les mouvements viennent du journal.* Tout mouvement d'argent touche un compte
+de liquidités (1000 caisse, 1010 poste, 1020 banque) : un débit est une entrée,
+un crédit une sortie, et la contrepartie donne la nature. Les factures
+fournisseurs ne pouvaient pas servir de source — leur colonne `amount_paid` est
+un cumul SANS DATE.
+
+*Le virement interne est écarté.* Un retrait au bancomat touche deux comptes de
+liquidités : ce n'est ni une recette ni une dépense, mais une lecture ligne à
+ligne le compterait deux fois et gonflerait les deux colonnes sans changer le
+résultat.
+
+*La langue du document est celle de l'écran au moment du clic.* Elle voyage
+dans `Accept-Language`, que le client pose à chaque requête. Le middleware
+`Langue()` ne peut pas s'en charger — il ne réécrit que les champs `error` et
+`message` d'une réponse JSON, et laisse traverser les PDF et les CSV, à raison.
+Les libellés du carnet vivent donc dans `internal/services/pdf/carnet_langue.go`,
+structurés par langue. Les références légales y changent de NOM, pas seulement
+de langue : le Code des obligations est l'OR en allemand, la loi sur la TVA la
+MWSTG. Les noms de comptes ne sont pas traduits — ce sont les données de
+l'utilisateur.
+
+*Le document dit s'il suffit.* Au-delà de 500 000 francs, l'écran et le PDF
+écrivent que la partie double est obligatoire (CO art. 957 al. 1) et que ce
+document ne peut pas être présenté seul. À partir de 100 000 francs, ils
+rappellent l'assujettissement TVA (LTVA art. 10) — deux lois différentes, deux
+seuils qui ne décident pas de la même chose.
 
 **Exercice comptable et verrouillage de période.** Chaque écriture est rattachée
 à l'exercice couvrant sa date, dans la transaction qui l'insère ; sans exercice

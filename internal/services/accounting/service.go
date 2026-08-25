@@ -303,16 +303,35 @@ func (s *Service) VerifyEntryIntegrity(ctx context.Context, entryID string) erro
 
 // ─── nLPD data minimisation ───────────────────────────────────────────────────
 
-// sensitiveFieldRe matches JSON key-value pairs whose keys are known personal-data
-// fields (nLPD art. 6 — minimisation des données dans les logs).
-// It captures: "fieldname":"<value>" or "fieldname": "<value>" (with optional space).
+// sensitiveFieldRe reconnaît les paires clé-valeur JSON dont la clé désigne une
+// donnée personnelle (nLPD art. 6 — minimisation des données dans les journaux).
+//
+// # Pourquoi les variantes composées comptent
+//
+// La règle ne reconnaissait que les clés EXACTES : `name`, `address`, `iban`.
+// Elle laissait donc passer `company_name`, `legal_name`, `supplier_name`,
+// `address_street`, `address_city` — c'est-à-dire, chez un indépendant, son
+// propre nom et son adresse privée, écrits en clair dans une table conservée
+// dix ans (CO art. 958f).
+//
+// Le motif accepte maintenant le terme sensible comme MOT, délimité par des
+// tirets bas : préfixé (`company_name`), suffixé (`address_street`), ou les
+// deux. Les clés voisines restent intactes — `number` ne contient pas `name`,
+// et `document_type` ne contient aucun terme sensible.
+//
+// Élargir le masquage ne remet en cause aucun maillon existant : l'empreinte
+// porte sur ce qui a été RÉELLEMENT stocké, et les anciennes lignes conservent
+// leurs valeurs comme leur empreinte. Seuls les maillons écrits ensuite sont
+// plus discrets.
 var sensitiveFieldRe = regexp.MustCompile(
-	`("(?:email|name|address|phone|iban|qr_iban|password_hash)"\s*:\s*)"[^"]*"`,
+	`("(?:[a-z0-9]+_)*(?:email|name|address|phone|iban|qr_iban|password_hash)(?:_[a-z0-9]+)*"\s*:\s*)"[^"]*"`,
 )
 
-// maskPersonalData replaces the values of sensitive fields with "[MASKED]"
-// in a JSON string (nLPD art. 6 — minimisation des données dans les logs).
-// Masked fields: email, name, address, phone, iban, qr_iban, password_hash.
+// maskPersonalData remplace la valeur des champs sensibles par "[MASKED]" dans
+// une chaîne JSON (nLPD art. 6 — minimisation des données dans les journaux).
+//
+// Champs couverts : email, name, address, phone, iban, qr_iban, password_hash,
+// et leurs variantes composées (company_name, address_street, …).
 func maskPersonalData(jsonData string) string {
 	return sensitiveFieldRe.ReplaceAllString(jsonData, `${1}"[MASKED]"`)
 }

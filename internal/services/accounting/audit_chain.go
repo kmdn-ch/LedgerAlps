@@ -38,7 +38,7 @@ func AppendAuditEntry(
 	afterState map[string]any,
 ) (chainedHash string, at time.Time, err error) {
 	return AppendAuditEntryFor(ctx, tx, usePostgres,
-		"journal_entries", userID, action, recordID, ipAddress, afterState)
+		"journal_entries", userID, action, recordID, ipAddress, Creation(afterState))
 }
 
 // AppendAuditEntryFor écrit un maillon pour n'importe quelle table.
@@ -56,9 +56,12 @@ func AppendAuditEntryFor(
 	tx execQuerier,
 	usePostgres bool,
 	tableName, userID, action, recordID, ipAddress string,
-	afterState map[string]any,
+	transition Transition,
 ) (chainedHash string, at time.Time, err error) {
-	rawAfterJSON, err := json.Marshal(afterState)
+	// La liste des champs modifiés est calculée sur les valeurs BRUTES, avant
+	// masquage : sur les valeurs masquées, un IBAN changé donnerait
+	// « [MASKED] » des deux côtés et le changement serait invisible.
+	rawAfterJSON, err := json.Marshal(avecChampsModifies(transition))
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("encode after_state: %w", err)
 	}
@@ -67,22 +70,30 @@ func AppendAuditEntryFor(
 	// non recalculable, ce qui est exactement le défaut corrigé en v1.4.6.
 	maskedAfter := maskPersonalData(string(rawAfterJSON))
 
-	// `before_state` reste VIDE, et c'est dit ici plutôt que déguisé.
+	// L'état antérieur passe par le MÊME masquage que le suivant, et avant le
+	// calcul de l'empreinte.
 	//
-	// La ligne précédente appelait `maskPersonalData("")` — un masquage de la
-	// chaîne vide, qui rend la chaîne vide. Le calcul avait l'air de traiter un
-	// état antérieur ; il n'en recevait aucun. Le journal capture donc l'état
-	// APRÈS chaque action, jamais celui qu'il remplace.
+	// Les deux points comptent. Le même masquage, sinon un champ personnel
+	// serait protégé d'un côté et conservé de l'autre — la fuite se ferait par
+	// la moitié qu'on a oubliée. Avant le calcul, sinon l'empreinte porterait
+	// sur des valeurs que la base ne contient pas et ne serait plus
+	// recalculable : c'est exactement le défaut corrigé en v1.4.6, et le
+	// reproduire sur `before_state` le rouvrirait par l'autre porte.
 	//
-	// Ce n'est pas une faille : l'empreinte porte sur les valeurs réellement
-	// stockées, et la chaîne se vérifie. C'est une limite de RICHESSE — « qu'a
-	// changé cette modification, exactement ? » ne se lit pas dans le journal.
-	//
-	// La combler demande que chaque appelant relise l'enregistrement avant de
-	// le modifier et transmette cet état : c'est une fonctionnalité d'audit
-	// différentiel, à décider et à porter sur les neuf points de trace, pas un
-	// paramètre à ajouter en passant.
-	const maskedBefore = ""
+	// Une création laisse `maskedBefore` vide et `beforePtr` nul : la colonne
+	// vaut alors NULL, la vérification relit «» via COALESCE, et l'empreinte
+	// tombe juste — les maillons écrits avant cette fonctionnalité continuent
+	// donc de se vérifier sans migration.
+	maskedBefore := ""
+	var beforePtr *string
+	if transition.Avant != nil {
+		rawBeforeJSON, err := json.Marshal(transition.Avant)
+		if err != nil {
+			return "", time.Time{}, fmt.Errorf("encode before_state: %w", err)
+		}
+		maskedBefore = maskPersonalData(string(rawBeforeJSON))
+		beforePtr = &maskedBefore
+	}
 
 	now := time.Now().UTC().Truncate(time.Second)
 	entryHash := security.ComputeEntryHash(
@@ -103,10 +114,6 @@ func AppendAuditEntryFor(
 	if prevHash != "" {
 		prevHashPtr = &prevHash
 	}
-	// NULL en base, et non la chaîne vide : « on n'a pas capturé l'état
-	// antérieur » et « l'état antérieur était vide » ne sont pas la même chose,
-	// et la colonne est justement déclarée nullable pour les distinguer.
-	var beforePtr *string
 
 	// hash_version = 2 : empreinte calculée sur les valeurs réellement stockées.
 	insertAudit := db.Rebind(`
