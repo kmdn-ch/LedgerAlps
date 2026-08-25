@@ -35,10 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
 
@@ -58,8 +58,25 @@ jobs:
         if: steps.check.outputs.exit_code != '0'
         id: report
         run: |
-          python - <<'PY' >> "$GITHUB_ENV"
+          # Delimiteur ALEATOIRE, et refus si la valeur le contient.
+          #
+          # `body` est construit a partir de result.json, donc de reponses
+          # RESEAU : `current` vient d'un re.findall applique au HTML distant
+          # de six-group.com, et `error` embarque du texte d'exception. Avec
+          # un « EOF » fixe, une ligne valant exactement EOF fermait le bloc
+          # en avance, et le RESTE du texte devenait des affectations de
+          # variables d'environnement -- dans un job portant issues: write et
+          # GH_TOKEN. L'ecriture directe par >> contourne toute protection du
+          # toolkit Actions.
+          #
+          # Vraisemblance faible (il faudrait compromettre fedlex.admin.ch ou
+          # SIX), mais c'est la construction que la documentation GitHub
+          # designe explicitement comme a proscrire.
+          DELIM="EOF_$(openssl rand -hex 16)"
+          DELIM="$DELIM" python - <<'PY' >> "$GITHUB_ENV"
           import json
+          import os
+          import sys
           data = json.load(open("result.json", encoding="utf-8"))
           lines = []
           for c in data["changes"]:
@@ -88,9 +105,12 @@ jobs:
               lines.append("_A failed check is not evidence of a change — most often a transient network or upstream outage._")
               lines.append("")
           body = "\n".join(lines)
-          print("REPORT<<EOF")
+          delim = os.environ["DELIM"]
+          if any(l.strip() == delim for l in body.splitlines()):
+              sys.exit("le rapport contient le delimiteur - rendu abandonne")
+          print(f"REPORT<<{delim}")
           print(body)
-          print("EOF")
+          print(delim)
           PY
 
       - name: Open or update issue

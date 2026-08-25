@@ -41,40 +41,67 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0 # GoReleaser a besoin de l'historique complet
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: "20"
 
       - name: Install frontend dependencies
-        run: cd frontend && npm install --no-package-lock
+        # npm ci, et non npm install --no-package-lock.
+        #
+        # `ci` installe EXACTEMENT le verrou committe, echoue si package.json et
+        # package-lock.json divergent, et ne modifie jamais le verrou -- il ne
+        # salit donc pas l'arbre de travail que goreleaser controle, ce qui
+        # etait la raison invoquee pour --no-package-lock. Sans verrou, l'arbre
+        # npm etait resolu a neuf a chaque publication et le JavaScript embarque
+        # dans le binaire n'etait ni reproductible ni auditable.
+        run: cd frontend && npm ci
 
       - name: Build frontend
         run: cd frontend && npm run build
 
       # --snapshot ignore l'absence de tag et n'appelle jamais l'API GitHub :
       # les artefacts sont écrits dans dist/ et rien n'est publié.
-      # syft produit le SBOM déclaré dans .goreleaser.yaml (bloc `sboms`).
-      # Sans lui sur le runner, goreleaser échoue au moment de l'écrire.
-      # Version épinglée : un outil qui fabrique l'inventaire de ce qu'on
-      # publie ne doit pas changer sous nos pieds d'une release à l'autre.
+      # syft produit le SBOM declare dans .goreleaser.yaml (bloc `sboms`).
+      # Sans lui sur le runner, goreleaser echoue au moment de l'ecrire.
+      #
+      # On installe le BINAIRE publie, avec son empreinte, et non le script
+      # install.sh du depot amont. La forme precedente relisait ce script
+      # depuis la branche `main` d'anchore/syft -- une branche mouvante, sans
+      # empreinte -- et versait son contenu dans `sh`, dans un job portant
+      # `contents: write` et le GITHUB_TOKEN. La VERSION de l'outil etait
+      # epinglee ; le script qui l'installe ne l'etait pas, ce qui laissait a
+      # quiconque pousse sur cette branche l'execution de code dans le job qui
+      # construit et publie les binaires LedgerAlps.
       - name: Install syft (SBOM)
+        env:
+          SYFT_VERSION: "1.18.1"
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh             | sh -s -- -b /usr/local/bin v1.18.1
+          set -euo pipefail
+          base="https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}"
+          archive="syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL --retry 3 -o "$archive"   "${base}/${archive}"
+          curl -sSfL --retry 3 -o syft.sums    "${base}/syft_${SYFT_VERSION}_checksums.txt"
+          # grep puis sha256sum -c : l'empreinte doit CORRESPONDRE, et l'absence
+          # de la ligne doit echouer aussi (d'ou le grep, qui rend 1 si vide).
+          grep " ${archive}$" syft.sums | sha256sum -c -
+          tar -xzf "$archive" syft
+          sudo install -m 0755 syft /usr/local/bin/syft
+          rm -f "$archive" syft.sums syft
           syft --version
 
       - name: Run GoReleaser (snapshot)
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6.4.0
         with:
           distribution: goreleaser
           version: ${{ env.GORELEASER_VERSION }}
@@ -101,7 +128,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload build artefacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: dryrun-binaries
           path: |
@@ -120,7 +147,7 @@ jobs:
     if: inputs.build_installer
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
       - name: Install NSIS
         shell: pwsh
@@ -142,7 +169,7 @@ jobs:
       # Différence clé avec release.yml : les binaires viennent de l'artefact du
       # job précédent, pas d'une GitHub Release — puisqu'aucune n'existe.
       - name: Download binaries from the build job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
           name: dryrun-binaries
           path: installer-work
@@ -215,7 +242,7 @@ jobs:
 
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: dryrun-windows-installer
           path: infrastructure/windows/LedgerAlps_Setup_*.exe

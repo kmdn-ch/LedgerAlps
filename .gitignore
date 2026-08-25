@@ -57,8 +57,14 @@ ledgeralps-server
 ledgeralps-cli
 ledgeralps
 
-# npm lock (goreleaser uses --no-package-lock)
-frontend/package-lock.json
+# frontend/package-lock.json est SUIVI, volontairement.
+#
+# Sans lui, la publication resolvait l'arbre npm A NEUF a chaque release :
+# le JavaScript compile par Vite puis embarque dans ledgeralps-server.exe
+# n'etait ni reproductible ni auditable, et une version malveillante d'une
+# dependance transitive y serait entree sans laisser de trace. Le SBOM de
+# .goreleaser.yaml n'aide pas : syft inventorie les modules Go lus dans les
+# metadonnees du binaire, et le JavaScript minifie vit dans un embed.FS.
 
 # Embedded frontend — track the directory (via .gitkeep), ignore build output
 !internal/frontend/dist/
