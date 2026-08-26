@@ -46,6 +46,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | Obligation | Base légale | État |
 |---|---|---|
 | Traçabilité des écritures et des documents | CO art. 957a al. 2 ch. 5 | ✅ chaîne SHA-256 vérifiable, auteur de chaque action |
+| Comptabilité simplifiée (« carnet du lait ») sous 500 000 francs | CO art. 957 al. 2 ch. 1 | ✅ recettes, dépenses et patrimoine — le document refuse de sortir si son résultat ne concorde pas avec le mouvement net de trésorerie |
 | Conservation dix ans | CO art. 958f | ✅ archive légale JSON + CSV |
 | Support modifiable admis | Olico art. 9 | ✅ attestation d'intégrité exportable |
 | Exercice bouclé immuable | CO art. 958f, Olico art. 3 | ✅ verrouillage de période |
@@ -748,6 +749,16 @@ Un journal à trous est pire qu'un journal absent : on le consulte en croyant
 qu'il dit tout, et l'absence d'une ligne se lit comme « cela n'a pas eu lieu »
 alors qu'elle veut dire « cela n'a jamais été écrit ».
 
+**v1.5.5 — les quinze actions sont câblées.** Le second audit de sécurité a
+recompté : sur les quinze constantes que le journal déclarait, **onze**
+n'étaient toujours appelées nulle part — dont les trois nommées ci-dessus, dont
+le paragraphe qui précède annonçait la correction au passé. L'unique occurrence
+d'`ActionContactUpdated` dans tout le dépôt était ce paragraphe-là. Un
+commentaire faux coûte plus cher qu'un commentaire absent : il fait renoncer à
+vérifier. `internal/frontend/audit_actions_test.go` échoue désormais si une
+action déclarée cesse d'être écrite quelque part dans le dépôt — y compris si
+elle ne subsiste que dans un commentaire qui l'affirme.
+
 **Ce qui entre désormais dans la chaîne** : création, modification,
 comptabilisation, annulation et suppression d'une facture fournisseur ;
 modification des coordonnées de l'entreprise — c'est l'IBAN qui reçoit les
@@ -984,6 +995,11 @@ avec leur raison.
 
 | Version | Apport principal |
 |---|---|
+| **v1.5.5** | **Second audit de sécurité, plan d'action exécuté en entier** (hors signature de code, qui attend un certificat OV/EV). Le carnet du lait perdait une contrepartie sur toute écriture composée — dont un cas de sous-déclaration du bénéfice — et appréciait ses seuils légaux sur n'importe quelle période ; les deux sont corrigés, avec un contrôle de concordance qui refuse le document s'il ne balance pas. Base comptable Linux 0755 → 0750. Chaîne d'approvisionnement durcie : verrou npm suivi, `syft` par binaire vérifié, empreinte de l'installeur publiée, actions GitHub épinglées par SHA. Les quinze actions du journal d'audit sont câblées (voir 13c). Masquage nLPD reconstruit sur la structure, plus par expression régulière. `internal/services/iso20022` : 0 → 97,5 % de couverture. `gofmt` réactivé en CI |
+| **v1.5.4** | La comptabilité simplifiée — le « carnet du lait » (CO art. 957 al. 2) — dans Rapports, en écran, CSV et PDF, dans la langue de l'interface au moment du clic. Audit différentiel : la piste dit désormais ce qu'une action a remplacé, pas seulement son état après coup |
+| **v1.5.3** | **Premier audit de sécurité, plan d'action exécuté.** Inscription publique (`POST /auth/register`) retirée ; `X-Forwarded-For` n'est plus cru par défaut ; mode récupération limité en tentatives et ne servant plus la phrase en clair ; installation vérifiée par empreinte SHA-256 ; `JWT_SECRET` et le service Windows durcis ; bombes de décompression d'image bloquées ; chaîne d'audit rendue non fourchable |
+| **v1.5.2** | Écran de connexion à deux panneaux, verrouillage de connexion progressif |
+| **v1.5.1** | Statut TVA déclaré avec conséquences réelles, marque officielle intégrée, liste de mise en route sur le tableau de bord (point 15), attestation d'intégrité vérifiable depuis l'écran |
 | **v1.5.0** | **Les quatre langues officielles, de bout en bout** — interface, messages du serveur, facture PDF, bulletin QR, exports CSV, attestation, installeur. Lecture complète d'une facture fournisseur (QR + couche texte), lecture seule réellement en lecture seule, QR-IBAN distingué de l'IBAN, traçabilité étendue et attestation d'intégrité automatique, retrait d'une facture de la liste des paiements par extourne |
 | **v1.4.9** | Exports comptables réels (journal, grand livre, balance), création de fournisseur à la volée, accents du PDF |
 | **v1.4.8** | Rôles et permissions, second facteur TOTP, ordinateurs de confiance, écriture au journal des factures fournisseurs |
