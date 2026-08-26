@@ -11,7 +11,7 @@ import { useAuthStore } from '@/store/auth'
 import { settingsApi, healthApi, authApi } from '@/api/client'
 import { AccountBanner } from './AccountBanner'
 import { useT } from '@/i18n/useT'
-import { LedgerAlpsIcon, LedgerAlpsPlaque } from '@/components/brand/Logo'
+import { LedgerAlpsIcon } from '@/components/brand/Logo'
 
 const NAV = [
   { to: '/',          icon: LayoutDashboard, cle: 'nav.tableauDeBord' },
@@ -137,20 +137,18 @@ export function Sidebar() {
           <div className="px-3 py-2 mt-1 border-t border-alpine-700/50">
             <div className="text-xs font-medium text-white truncate">{user.name}</div>
             <div className="text-[10px] text-alpine-400 truncate">{user.email}</div>
-            {/* La marque du PRODUIT, ici et pas en haut.
-                En haut vit l'entreprise de l'utilisateur — son logo, son nom —
-                et lui disputer cette place serait malpoli. En bas, elle ne
-                gêne personne et répond à la seule question qu'on se pose
-                devant une capture d'écran : quel logiciel est-ce ? */}
-            <div className="flex items-baseline justify-between gap-2 mt-2 pt-2
-                            border-t border-alpine-800">
-              <LedgerAlpsPlaque hauteur="h-3" />
-              {health?.version && (
-                <span className="text-[9px] text-alpine-600 tabular-nums flex-shrink-0">
+            {/* La marque du PRODUIT ne vit plus ici : elle est montée une
+                seule fois, en haut à droite de l'espace de travail
+                (AppLayout). La répéter en bas de la barre latérale doublait
+                le même message sans ajouter d'information — seul le numéro
+                de version restait utile à cet endroit. */}
+            {health?.version && (
+              <div className="mt-2 pt-2 border-t border-alpine-800 text-right">
+                <span className="text-[9px] text-alpine-600 tabular-nums">
                   {health.version}
                 </span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>

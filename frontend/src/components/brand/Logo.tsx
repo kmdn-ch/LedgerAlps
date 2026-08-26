@@ -9,8 +9,10 @@
 // capture d'écran six mois plus tard.
 //
 // La marque du produit se pose donc là où elle n'entre pas en concurrence avec
-// celle du client : le haut à DROITE de l'espace de travail, le pied de la barre
-// latérale, l'écran de connexion, et l'onglet du navigateur.
+// celle du client : le haut à DROITE de l'espace de travail, l'écran de
+// connexion, et l'onglet du navigateur. Elle a aussi vécu au pied de la barre
+// latérale ; retirée de là, une fois montée en haut à droite, elle y aurait
+// répété le même message sans rien ajouter.
 //
 // # D'où viennent ces images, et pourquoi on n'y touche pas
 //
@@ -52,22 +54,6 @@ export function LedgerAlpsLogo({
   return <img src="/ledgeralps-logo.svg" alt={alt} className={className} />
 }
 
-/**
- * Le logotype sur sa plaque claire — la forme à employer sur fond sombre.
- *
- * La plaque n'est pas décorative : sans elle, un logo bleu nuit sur un fond
- * bleu nuit ne se voit pas.
- */
-export function LedgerAlpsPlaque({
-  className = '',
-  hauteur = 'h-4',
-}: {
-  className?: string
-  hauteur?: string
-}) {
-  return (
-    <span className={`inline-flex items-center rounded bg-white px-2 py-1 ${className}`}>
-      <LedgerAlpsLogo className={`${hauteur} w-auto`} />
-    </span>
-  )
-}
+// La plaque claire — la forme du logotype à employer sur fond sombre — n'a
+// plus qu'un seul emploi (l'écran de connexion) et vit désormais directement
+// là où elle sert, plutôt que dans un composant partagé sans second appelant.
