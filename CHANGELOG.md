@@ -7,6 +7,28 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Modifié
+
+- **L'import camt.053 n'a plus qu'un seul point d'entrée.** Il vivait à deux endroits — Rapports et Paramètres → Banque — pour la même route et le même effet : les deux ÉCRIVAIENT en base. Mais celui de Rapports présentait une liste de lecture, « voilà ce que j'ai lu », sans dire que les écritures étaient persistées au passage : on croyait consulter un fichier, on alimentait la file de rapprochement. Deux boutons pour un même geste, dont l'un cache ce qu'il fait, ne sont pas une commodité. L'import vit désormais là où se fait le travail qui le suit, et Rapports porte un renvoi vers cet écran.
+
+- **La régénération de la clé de signature tient dans une seule carte, et sa périodicité n'est plus réglable.** Deux encadrés parlaient de la même clé sur deux écrans, le premier renvoyant au second par « voir plus bas » : qui lisait le premier croyait devoir cliquer, alors que la machine le fait déjà chaque nuit. La périodicité, elle, offrait quatre valeurs — jamais / jour / semaine / mois — dont trois n'existaient que pour affaiblir la quatrième, « jamais » rendant à l'identique la situation que la rotation automatique venait corriger. Elle est désormais **constante, quotidienne**, l'écran l'énonce en toutes lettres, et il ne reste qu'une commande : régénérer tout de suite, pour la fuite dont on vient de s'apercevoir.
+
+  Le réglage part avec son code : `rotation_days` quitte la route, `SetJWTSecretMaxAge` et le champ de configuration disparaissent, et un `jwt_secret_max_age_days` resté dans un `config.json` est **ignoré puis effacé** à la première rotation — le laisser ferait croire à qui ouvre le fichier que la valeur qu'il y lit s'applique encore. Une installation où la rotation avait été coupée tourne donc de nouveau, ce qui est le cas qui comptait.
+
+- **La liste de la piste d'audit défile dans son cadre, pas dans la page.** Vingt-cinq lignes poussaient le pied de page — et les boutons « précédent / suivant » avec lui — hors de l'écran : pour changer de page il fallait faire défiler toute la page jusqu'en bas, puis remonter pour lire. Le tableau a maintenant une hauteur bornée et son propre défilement, et son en-tête reste collé en haut : à la quinzième ligne, on sait encore quelle colonne est laquelle.
+
+- **Le logotype a été refait, et il apparaît en haut à droite de l'espace de travail.** L'ancien fichier était le décalque d'une image : il portait les artefacts de ce décalque, et surtout un rouge `#C42527` là où le drapeau suisse veut `#DA291C` (Pantone 485 C). Les lettres sont de nouveau vectorisées depuis le fichier fourni — écart mesuré après rendu, pixel à pixel : 0,76 sur 255 en moyenne. Le badge, lui, n'est plus décalqué mais **construit** aux proportions de l'ordonnance sur les armoiries (RS 232.21) : sur un carré de 32 unités, des bras de 6 unités de large et 20 d'un bout à l'autre, centrés. Un drapeau suisse est une géométrie, pas un dessin. L'écran de connexion suit le même fichier. Le monogramme « LA » du bureau et de l'installeur n'a pas changé.
+
+### Corrigé
+
+- **L'import d'un relevé bancaire annonçait toujours « 0 écriture(s) ajoutée(s) ».** L'écran de rapprochement lisait `imported` dans la réponse ; la route ne l'a jamais renvoyé — le compte était calculé côté serveur puis jeté par un `_ = imported`. Le message était donc faux à chaque import réussi, sur le seul chiffre qui dit si le geste a servi à quelque chose. La réponse porte maintenant `imported` et `duplicate`, vérifiés à l'écran : un relevé de trois écritures affiche « 3 écriture(s) ajoutée(s) », le même relevé réimporté en compte trois en doublon.
+
+- **Le renvoi de Rapports vers le rapprochement déposait le lecteur sur « Identité ».** L'onglet visé s'écrit dans le fragment de l'adresse (`#banking`) et non en paramètre : une adresse qui ne correspond à aucun onglet ne produit aucune erreur, elle retombe en silence sur le premier. Attrapé au clic, pas à la compilation.
+
+### Retiré
+
+- **L'onglet « Légal » des paramètres.** Il affichait quatre phrases immuables sur le CO, identiques pour toutes les entreprises et sans jamais rien lire de la base consultée. Un onglet qui n'affiche rien de l'installation qu'on regarde apprend à ne pas être ouvert, et fait douter de ses voisins qui, eux, disent quelque chose. Ce que le logiciel a réellement à dire sur la conformité vit dans Maintenance → Conformité, qui lit les livres. Les six clés de traduction partent avec.
+
 ## [1.5.5] — 2026-08-26
 
 ### Ajouté

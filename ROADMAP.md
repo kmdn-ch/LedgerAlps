@@ -223,7 +223,7 @@ regarder ensemble : en durcir un seul donne l'illusion d'une protection.
 | | Défaut | Réglable |
 |---|---|---|
 | **Déconnexion après inactivité** | 10 minutes | 2 min à 1 h, ou jamais |
-| **Régénération de la clé de signature** | chaque jour, au démarrage | jour / semaine / mois, ou jamais |
+| **Régénération de la clé de signature** | chaque jour, au démarrage | non — constante |
 
 Dix minutes et pas cinq, parce qu'aucun brouillon n'est enregistré : lire une
 facture fournisseur avant de la saisir prend plus de cinq minutes sans qu'une
@@ -235,6 +235,12 @@ La clé tourne **au démarrage seulement**. Sur une minuterie, elle déconnecter
 au milieu d'une saisie ; au démarrage, elle ne coûte qu'une reconnexion. Le
 bouton manuel reste pour la fuite dont on vient de s'apercevoir, qu'aucune
 périodicité ne couvre.
+
+Sa périodicité, elle, **ne se règle plus**. Elle l'a été — jamais / jour /
+semaine / mois — et trois de ces quatre choix n'existaient que pour affaiblir le
+quatrième, « jamais » rendant à l'identique la situation que la rotation
+automatique venait corriger. Les deux encadrés qui parlaient de cette clé, sur
+deux écrans, n'en font plus qu'un.
 
 ### 5 — HTTPS natif
 
@@ -536,6 +542,12 @@ pas — toutes les banques ne la renseignent pas — et le montant seul non plus
 deux versements identiques le même jour existent, et les fondre ferait
 disparaître un encaissement.
 
+L'import n'a **qu'un seul point d'entrée**, ici. Il en a eu deux — Rapports
+portait le même bouton, pour la même route et le même effet — mais celui-là
+présentait une liste de lecture sans dire que les écritures étaient conservées au
+passage : on croyait consulter un fichier, on alimentait cette file. Rapports
+porte désormais un renvoi vers cet écran, et rien d'autre.
+
 **Reste** : créer le paiement depuis l'écran de rapprochement, une fois le geste
 éprouvé sur des relevés réels.
 
@@ -785,6 +797,13 @@ temps de présence. L'OLT 3 art. 26 interdit les systèmes destinés à surveill
 le comportement des travailleurs ; ce journal n'en est pas un, et sa conception
 doit le rester.
 
+**La liste des entrées défile dans son propre cadre.** Vingt-cinq lignes par
+page, ce qui est le bon nombre pour lire, poussaient le pied de page — et les
+boutons de pagination avec lui — hors de l'écran : changer de page demandait de
+faire défiler toute la page jusqu'en bas, puis de remonter. Le tableau a
+maintenant une hauteur bornée et son défilement à lui, en-tête collé : à la
+quinzième ligne on sait encore quelle colonne est laquelle.
+
 **Reste** : le fichier en ajout seul hors de la base (« lot 2 »), qui protégerait
 du cas d'une restauration effaçant l'historique. Écarté pour l'instant — il
 place une seconde écriture dans le chemin critique de chaque action, pour un
@@ -861,6 +880,28 @@ brouillon ne compte ni à la balance ni au bilan, qu'un contact facturé
 s'anonymise au lieu de se supprimer (CO art. 958f), qu'on n'a rien à faire dans
 le plan comptable au quotidien. Elle s'ouvre au survol, s'épingle au clic, se
 ferme par Échap — au doigt comme au clavier, il n'y a pas de survol.
+
+**La marque du produit se voit, en haut à droite.** La barre latérale porte le
+logo et le nom de l'ENTREPRISE — c'est son espace de travail, et lui disputer
+cette place serait malpoli. Mais dès qu'une entreprise pose son logo, plus rien
+à l'écran ne dit quel logiciel on utilise : ni au support, ni à la fiduciaire qui
+ouvre la session d'un client, ni à celui qui retrouve une capture d'écran six
+mois plus tard. Le coin opposé ne gêne personne et répond à cette question.
+
+Le logotype lui-même a été refait à cette occasion. L'ancien était le décalque
+d'une image et en portait les à-peu-près, dont un rouge `#C42527` là où le
+drapeau suisse veut `#DA291C` (Pantone 485 C). Les lettres sont de nouveau
+vectorisées depuis le fichier fourni ; le badge, lui, est **construit** aux
+proportions de l'ordonnance sur les armoiries (RS 232.21) — un drapeau suisse est
+une géométrie, pas un dessin. Le monogramme du bureau et de l'installeur n'a pas
+suivi : c'est un fichier séparé, et le refaire est un chantier à part.
+
+**Un onglet est parti** : « Légal », dans les paramètres. Il affichait quatre
+phrases immuables sur le CO, identiques pour toutes les entreprises et sans
+jamais rien lire de la base consultée. Un onglet qui n'affiche rien de
+l'installation qu'on regarde apprend à ne pas être ouvert, et fait douter de ses
+voisins qui, eux, disent quelque chose. Ce que le logiciel a réellement à dire
+sur la conformité vit dans Maintenance → Conformité, qui lit les livres.
 
 **Écarté pour l'instant** : regrouper le menu en « Mon activité » et « Ma
 comptabilité ». Cela déplace de la navigation apprise et se décide à part.
