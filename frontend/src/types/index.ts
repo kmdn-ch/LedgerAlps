@@ -479,9 +479,10 @@ export interface DatabaseEncryption {
 
 // Réglages de sécurité de la session.
 export interface SecuritySettings {
+  // La périodicité n'y figure pas : elle est constante — chaque jour — et
+  // l'interface l'énonce en toutes lettres. Les deux dates sont absentes tant
+  // que la clé n'a jamais tourné, c'est-à-dire jusqu'au premier démarrage.
   rotation: {
-    // 0 = rotation automatique désactivée.
-    max_age_days: number
     rotated_at?: string
     next_at?: string
   }

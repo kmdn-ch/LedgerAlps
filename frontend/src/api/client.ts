@@ -355,8 +355,10 @@ export const securityApi = {
   // Rotation de la clé de signature et déconnexion sur inactivité. Les deux se
   // lisent ensemble : ils bornent la même chose — la durée pendant laquelle une
   // session vaut quelque chose — par deux chemins différents.
+  //
+  // Seule la seconde se règle : la périodicité de la rotation est constante.
   settings:     () => api.get('/settings/security'),
-  saveSettings: (body: { rotation_days?: number; idle_logout_minutes?: number }) =>
+  saveSettings: (body: { idle_logout_minutes?: number }) =>
     api.put('/settings/security', body),
 }
 

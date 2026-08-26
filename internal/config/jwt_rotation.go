@@ -29,37 +29,54 @@ package config
 //
 // Au démarrage, la seule conséquence est une reconnexion, au moment où
 // l'utilisateur ouvre l'application de toute façon.
+//
+// # Pourquoi la périodicité n'est plus un réglage
+//
+// Elle l'a été : jamais / chaque jour / chaque semaine / chaque mois. Trois de
+// ces quatre choix n'existaient que pour affaiblir le quatrième, et « jamais »
+// rendait à l'identique la situation que la rotation automatique venait de
+// corriger — une clé qui ne tourne pas, derrière une case à cocher cette fois.
+//
+// Un réglage dont toutes les valeurs sauf une sont pires que le défaut n'est
+// pas un réglage, c'est un piège. La périodicité est donc une constante, et
+// l'écran ne propose plus qu'une seule commande : la régénération immédiate,
+// pour le cas que la périodicité ne couvre pas — on vient de s'apercevoir
+// d'une fuite et attendre demain serait trop long.
 
 import (
 	"fmt"
 	"time"
 )
 
-// DefaultJWTSecretMaxAgeDays est l'âge au-delà duquel la clé est régénérée au
+// JWTSecretRotationDays est l'âge au-delà duquel la clé est régénérée au
 // démarrage suivant. Un jour : le coût est une reconnexion quotidienne, sur une
 // application qu'on ouvre le matin et ferme le soir.
-const DefaultJWTSecretMaxAgeDays = 1
+//
+// Ce n'est pas une valeur par défaut — rien ne la surcharge.
+const JWTSecretRotationDays = 1
 
 // JWTRotationStatus décrit l'état de la rotation, pour que l'interface le
 // montre au lieu de laisser deviner.
+//
+// La périodicité n'y figure pas : elle est constante, et l'interface l'énonce
+// en toutes lettres plutôt que de rendre un nombre que rien ne fait varier.
 type JWTRotationStatus struct {
-	// MaxAgeDays vaut 0 quand la rotation automatique est désactivée.
-	MaxAgeDays int        `json:"max_age_days"`
-	RotatedAt  *time.Time `json:"rotated_at,omitempty"`
-	// NextAt est nul quand la rotation automatique est désactivée.
-	NextAt *time.Time `json:"next_at,omitempty"`
+	RotatedAt *time.Time `json:"rotated_at,omitempty"`
+	NextAt    *time.Time `json:"next_at,omitempty"`
 }
 
 // RotationStatus reports the current rotation state.
+//
+// Les deux dates restent nulles tant que la clé n'a jamais tourné — une
+// installation antérieure à la rotation automatique. Le cas ne dure qu'un
+// démarrage : MaybeRotateJWTSecret fait précisément tourner celle-là.
 func RotationStatus(cfg *Config) JWTRotationStatus {
-	st := JWTRotationStatus{MaxAgeDays: cfg.JWTSecretMaxAgeDays}
+	var st JWTRotationStatus
 	if !cfg.JWTSecretRotatedAt.IsZero() {
 		t := cfg.JWTSecretRotatedAt
 		st.RotatedAt = &t
-		if cfg.JWTSecretMaxAgeDays > 0 {
-			n := t.Add(time.Duration(cfg.JWTSecretMaxAgeDays) * 24 * time.Hour)
-			st.NextAt = &n
-		}
+		n := t.Add(JWTSecretRotationDays * 24 * time.Hour)
+		st.NextAt = &n
 	}
 	return st
 }
@@ -76,10 +93,7 @@ func RotationStatus(cfg *Config) JWTRotationStatus {
 // pu écrire un fichier de configuration laisserait l'utilisateur sans ses
 // livres, ce qui est pire que de garder la clé un jour de plus.
 func MaybeRotateJWTSecret(cfg *Config, now time.Time) (bool, error) {
-	if cfg.JWTSecretMaxAgeDays <= 0 {
-		return false, nil // rotation automatique désactivée
-	}
-	maxAge := time.Duration(cfg.JWTSecretMaxAgeDays) * 24 * time.Hour
+	const maxAge = JWTSecretRotationDays * 24 * time.Hour
 	if !cfg.JWTSecretRotatedAt.IsZero() && now.Sub(cfg.JWTSecretRotatedAt) < maxAge {
 		return false, nil
 	}
@@ -94,23 +108,16 @@ func MaybeRotateJWTSecret(cfg *Config, now time.Time) (bool, error) {
 	if err := updateConfigFile(func(existing map[string]any) {
 		existing["jwt_secret"] = secret
 		existing["jwt_secret_rotated_at"] = now.UTC().Format(time.RFC3339)
+		// Le réglage de périodicité a existé et a pu être écrit. Plus rien ne
+		// le lit : le laisser dans le fichier ferait croire à qui l'ouvre que
+		// la valeur qu'il y voit s'applique encore.
+		delete(existing, "jwt_secret_max_age_days")
 	}); err != nil {
 		return false, err
 	}
 	cfg.JWTSecret = secret
 	cfg.JWTSecretRotatedAt = now.UTC()
 	return true, nil
-}
-
-// SetJWTSecretMaxAge enregistre la périodicité de la rotation. Zéro la
-// désactive.
-func SetJWTSecretMaxAge(days int) error {
-	if days < 0 || days > 365 {
-		return fmt.Errorf("périodicité hors bornes: %d jours (0 pour désactiver, 365 au plus)", days)
-	}
-	return updateConfigFile(func(existing map[string]any) {
-		existing["jwt_secret_max_age_days"] = days
-	})
 }
 
 // DefaultIdleLogoutMinutes déconnecte après ce délai sans activité.

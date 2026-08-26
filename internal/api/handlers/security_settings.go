@@ -36,30 +36,22 @@ func (h *SystemHandler) GetSecuritySettings(c *gin.Context) {
 
 // UpdateSecuritySettings PUT /api/v1/settings/security
 //
-// La périodicité de rotation ne prend effet qu'au démarrage suivant — c'est là,
-// et seulement là, que la clé tourne. La réponse le dit plutôt que de laisser
-// croire que le réglage vient de s'appliquer.
+// La périodicité de la rotation ne se règle plus : elle est quotidienne, point.
+// Le seul réglage restant est le délai d'inactivité, et il prend effet tout de
+// suite — il est appliqué par l'interface, qui relit ce réglage.
 //
-// Le délai d'inactivité, lui, prend effet tout de suite : il est appliqué par
-// l'interface, qui relit ce réglage.
+// Un `rotation_days` envoyé par un client resté sur une ancienne version est
+// ignoré en silence plutôt que refusé : refuser ferait échouer l'enregistrement
+// du délai d'inactivité, qui, lui, est valide.
 func (h *SystemHandler) UpdateSecuritySettings(c *gin.Context) {
 	var body struct {
-		// Pointeurs : distinguer « absent, ne touche pas » de « posé à zéro »,
+		// Pointeur : distinguer « absent, ne touche pas » de « posé à zéro »,
 		// qui veut dire désactiver et doit être respecté.
-		RotationDays      *int `json:"rotation_days"`
 		IdleLogoutMinutes *int `json:"idle_logout_minutes"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 		return
-	}
-
-	if body.RotationDays != nil {
-		if err := config.SetJWTSecretMaxAge(*body.RotationDays); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-			return
-		}
-		h.cfg.JWTSecretMaxAgeDays = *body.RotationDays
 	}
 
 	if body.IdleLogoutMinutes != nil {

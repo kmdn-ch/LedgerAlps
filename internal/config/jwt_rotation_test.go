@@ -49,7 +49,6 @@ func readConfig(t *testing.T) map[string]any {
 func TestUneCleSansHorodatageTourne(t *testing.T) {
 	cfg := withConfigFile(t, map[string]any{"jwt_secret": "ancienne-cle", "port": "8000"})
 	cfg.JWTSecret = "ancienne-cle"
-	cfg.JWTSecretMaxAgeDays = 1
 
 	rotated, err := MaybeRotateJWTSecret(cfg, time.Now())
 	if err != nil {
@@ -76,7 +75,6 @@ func TestUneCleSansHorodatageTourne(t *testing.T) {
 func TestUneCleRecenteNeTournePas(t *testing.T) {
 	cfg := withConfigFile(t, map[string]any{"jwt_secret": "cle-recente", "port": "8000"})
 	cfg.JWTSecret = "cle-recente"
-	cfg.JWTSecretMaxAgeDays = 1
 	cfg.JWTSecretRotatedAt = time.Now().Add(-2 * time.Hour)
 
 	rotated, err := MaybeRotateJWTSecret(cfg, time.Now())
@@ -94,7 +92,6 @@ func TestUneCleRecenteNeTournePas(t *testing.T) {
 func TestUneCleTropVieilleTourne(t *testing.T) {
 	cfg := withConfigFile(t, map[string]any{"jwt_secret": "vieille", "port": "8000"})
 	cfg.JWTSecret = "vieille"
-	cfg.JWTSecretMaxAgeDays = 1
 	cfg.JWTSecretRotatedAt = time.Now().Add(-25 * time.Hour)
 
 	rotated, err := MaybeRotateJWTSecret(cfg, time.Now())
@@ -106,39 +103,29 @@ func TestUneCleTropVieilleTourne(t *testing.T) {
 	}
 }
 
-// Zéro veut dire « désactivé », et doit être respecté — pas relu comme
-// « absent, donc valeur par défaut ».
-func TestPeriodiciteZeroDesactiveLaRotation(t *testing.T) {
-	cfg := withConfigFile(t, map[string]any{"jwt_secret": "immuable", "port": "8000"})
+// Une installation où la périodicité avait été coupée — `jwt_secret_max_age_days`
+// à zéro — ne doit plus rien couper du tout. C'est le cas qui compte de cette
+// suppression : le réglage a existé, il est resté dans des fichiers, et s'il
+// continuait d'être lu, la rotation quotidienne annoncée à l'écran serait un
+// mensonge sur exactement les installations qu'elle vient corriger.
+func TestUnAncienReglageNeDesactivePlusLaRotation(t *testing.T) {
+	cfg := withConfigFile(t, map[string]any{
+		"jwt_secret": "immuable", "port": "8000", "jwt_secret_max_age_days": 0,
+	})
 	cfg.JWTSecret = "immuable"
-	cfg.JWTSecretMaxAgeDays = 0
 
 	rotated, err := MaybeRotateJWTSecret(cfg, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rotated {
-		t.Fatal("rotation effectuée alors qu'elle est désactivée")
+	if !rotated {
+		t.Fatal("un ancien « jamais » enregistré empêche encore la rotation")
 	}
-}
 
-// Le piège du pointeur : « 0 » enregistré doit se relire « 0 », et non
-// retomber sur la valeur par défaut au démarrage suivant — ce qui
-// réactiverait en silence ce que l'utilisateur vient de couper.
-func TestZeroEnregistreSeRelitZero(t *testing.T) {
-	withConfigFile(t, map[string]any{"jwt_secret": "x", "port": "8000", "sqlite_path": "x.db"})
-	if err := SetJWTSecretMaxAge(0); err != nil {
-		t.Fatal(err)
-	}
-	fc, err := loadFromFile(ConfigFilePath())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fc.JWTSecretMaxAgeDays == nil {
-		t.Fatal("la clé n'a pas été écrite")
-	}
-	if *fc.JWTSecretMaxAgeDays != 0 {
-		t.Fatalf("relu %d, attendu 0", *fc.JWTSecretMaxAgeDays)
+	// Et la clé morte quitte le fichier : la laisser ferait croire à qui
+	// l'ouvre que la valeur qu'il y lit s'applique encore.
+	if _, present := readConfig(t)["jwt_secret_max_age_days"]; present {
+		t.Fatal("jwt_secret_max_age_days survit dans le fichier alors que plus rien ne le lit")
 	}
 }
 
@@ -197,30 +184,22 @@ func TestChaqueRotationDonneUneCleDifferente(t *testing.T) {
 	}
 }
 
-func TestPeriodiciteHorsBornesRefusee(t *testing.T) {
-	withConfigFile(t, map[string]any{"jwt_secret": "x", "port": "8000"})
-	if err := SetJWTSecretMaxAge(-1); err == nil {
-		t.Error("une périodicité négative a été acceptée")
-	}
-	if err := SetJWTSecretMaxAge(400); err == nil {
-		t.Error("une périodicité de 400 jours a été acceptée")
-	}
-}
-
-// L'état montré à l'interface doit être cohérent : pas de prochaine échéance
-// annoncée quand la rotation est désactivée.
-func TestLEtatNAnnoncePasDEcheanceQuandCestDesactive(t *testing.T) {
-	cfg := &Config{JWTSecretMaxAgeDays: 0, JWTSecretRotatedAt: time.Now()}
-	if st := RotationStatus(cfg); st.NextAt != nil {
-		t.Fatalf("échéance annoncée (%v) alors que la rotation est désactivée", st.NextAt)
-	}
-	cfg = &Config{JWTSecretMaxAgeDays: 1, JWTSecretRotatedAt: time.Now()}
-	st := RotationStatus(cfg)
+// L'état montré à l'interface doit être cohérent : une échéance annoncée dès
+// qu'une date de rotation existe, et aucune tant qu'il n'y en a pas — une
+// installation antérieure à la rotation automatique, où annoncer « prochaine
+// le … » à partir de rien inventerait une date.
+func TestLEtatAnnonceLEcheanceADemain(t *testing.T) {
+	st := RotationStatus(&Config{JWTSecretRotatedAt: time.Now()})
 	if st.NextAt == nil {
-		t.Fatal("aucune échéance annoncée alors que la rotation est active")
+		t.Fatal("aucune échéance annoncée alors que la clé a une date de rotation")
 	}
 	if delta := st.NextAt.Sub(*st.RotatedAt); delta != 24*time.Hour {
 		t.Fatalf("échéance à +%v, attendu +24h", delta)
+	}
+
+	vide := RotationStatus(&Config{})
+	if vide.RotatedAt != nil || vide.NextAt != nil {
+		t.Fatalf("dates inventées pour une clé jamais tournée: %+v", vide)
 	}
 }
 
