@@ -21,3 +21,21 @@ infrastructure/brand/icon.svg -text
 # sans le BOM, NSIS lit le fichier dans la page de codes ANSI et massacre les
 # accents. La CI le vérifie ; autant que git ne s'en mêle pas non plus.
 infrastructure/windows/installer.nsi -text
+
+# Les sources Go sont stockees ET extraites en LF.
+#
+# Le depot stocke deja du LF -- verifie octet par octet sur les 211 fichiers.
+# Ce que cette ligne ajoute, c'est de ne plus dependre du reglage core.autocrlf
+# de chaque poste : un contributeur Windows avec autocrlf=false committerait
+# sinon du CRLF sans s'en apercevoir, et gofmt -- reactive dans .golangci.yml
+# -- ferait alors echouer la CI sur un fichier parfaitement bien indente.
+#
+# Elle change aussi l'arbre de travail sous Windows, mais A LA PROCHAINE
+# EXTRACTION seulement : une copie deja presente garde ses CRLF. Pour la
+# rafraichir sans rien perdre, une fois le travail en cours committe :
+#
+#     git rm --cached -r . && git reset --hard
+#
+# Apres quoi « gofmt -l . » redevient utilisable localement sous Windows --
+# c'est precisement la verification que son absence avait fait desactiver.
+*.go text eol=lf

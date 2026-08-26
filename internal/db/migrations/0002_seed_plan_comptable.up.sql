@@ -31,7 +31,7 @@ INSERT OR IGNORE INTO accounts (id, code, name, account_type, description, is_ac
 (lower(hex(randomblob(16))), '2100', 'Dettes bancaires court terme', 'liability', 'Crédits bancaires remboursables < 1 an', 1),
 (lower(hex(randomblob(16))), '2200', 'Dettes à court terme', 'liability', 'Autres dettes exigibles à court terme', 1),
 (lower(hex(randomblob(16))), '2261', 'TVA due (dette fiscale)', 'liability', 'TVA collectée à reverser à l''AFC', 1),
-(lower(hex(randomblob(16))), '2262', 'TVA déductible (créance fiscale)', 'liability', 'TVA récupérable sur achats', 1),
+(lower(hex(randomblob(16))), '2262', 'TVA déductible (créance fiscale)', 'asset', 'TVA récupérable sur achats — c''est une CRÉANCE envers l''AFC, pas une dette (voir migration 0027)', 1),
 (lower(hex(randomblob(16))), '2270', 'Impôts dus', 'liability', 'Impôts communaux, cantonaux et fédéraux dus', 1),
 (lower(hex(randomblob(16))), '2300', 'Produits constatés d''avance', 'liability', 'Régularisation passif — produits différés', 1),
 (lower(hex(randomblob(16))), '2301', 'Charges à payer', 'liability', 'Régularisation passif — charges courues', 1),

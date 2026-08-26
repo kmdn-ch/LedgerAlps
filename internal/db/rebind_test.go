@@ -77,10 +77,71 @@ func TestRebind(t *testing.T) {
 			want:        "INSERT INTO audit_logs (a,b,c,d,e) VALUES ($1,$2,$3,$4,$5)",
 		},
 		{
-			name:        "Postgres: ? inside string literal position is still replaced (Rebind is dumb-replace)",
+			name:        "Postgres: deux emplacements ordinaires",
 			query:       "UPDATE t SET col=? WHERE id=?",
 			usePostgres: true,
 			want:        "UPDATE t SET col=$1 WHERE id=$2",
+		},
+
+		// ── Ce qui n'est PAS un emplacement ────────────────────────────────────
+		//
+		// Rebind ignore les chaines litterales, les identifiants entre
+		// guillemets et les commentaires. Un « ? » y est un CARACTERE. Aucune
+		// requete du depot n'en contient aujourd'hui : le defaut etait latent,
+		// et ces cas empechent qu'il redevienne possible.
+		{
+			name:        "Postgres: ? dans une chaine litterale n'est pas un emplacement",
+			query:       "SELECT * FROM t WHERE note = 'et alors ?' AND id = ?",
+			usePostgres: true,
+			want:        "SELECT * FROM t WHERE note = 'et alors ?' AND id = $1",
+		},
+		{
+			name:        "Postgres: apostrophe echappee dans la chaine",
+			query:       "SELECT * FROM t WHERE note = 'l''heure ? oui' AND id = ?",
+			usePostgres: true,
+			want:        "SELECT * FROM t WHERE note = 'l''heure ? oui' AND id = $1",
+		},
+		{
+			name:        "Postgres: motif LIKE contenant un ?",
+			query:       "SELECT * FROM t WHERE nom LIKE '%?%' AND id = ?",
+			usePostgres: true,
+			want:        "SELECT * FROM t WHERE nom LIKE '%?%' AND id = $1",
+		},
+		{
+			name:        "Postgres: ? dans un identifiant entre guillemets",
+			query:       `SELECT "col?" FROM t WHERE id = ?`,
+			usePostgres: true,
+			want:        `SELECT "col?" FROM t WHERE id = $1`,
+		},
+		{
+			name:        "Postgres: ? dans un commentaire de ligne",
+			query:       "SELECT 1 -- pourquoi ?\n  WHERE id = ?",
+			usePostgres: true,
+			want:        "SELECT 1 -- pourquoi ?\n  WHERE id = $1",
+		},
+		{
+			name:        "Postgres: ? dans un commentaire de bloc",
+			query:       "SELECT /* est-ce clair ? */ 1 WHERE id = ?",
+			usePostgres: true,
+			want:        "SELECT /* est-ce clair ? */ 1 WHERE id = $1",
+		},
+		{
+			name:        "Postgres: commentaires de bloc IMBRIQUES (PostgreSQL les imbrique)",
+			query:       "SELECT /* a /* b ? */ c ? */ 1 WHERE id = ?",
+			usePostgres: true,
+			want:        "SELECT /* a /* b ? */ c ? */ 1 WHERE id = $1",
+		},
+		{
+			name:        "Postgres: la numerotation ne saute pas apres un litteral",
+			query:       "SELECT ? , 'a ? b' , ? , ?",
+			usePostgres: true,
+			want:        "SELECT $1 , 'a ? b' , $2 , $3",
+		},
+		{
+			name:        "SQLite: rien n'est touche, litteraux compris",
+			query:       "SELECT * FROM t WHERE note = 'et alors ?' AND id = ?",
+			usePostgres: false,
+			want:        "SELECT * FROM t WHERE note = 'et alors ?' AND id = ?",
 		},
 
 		// ── Both modes: no ? ───────────────────────────────────────────────────

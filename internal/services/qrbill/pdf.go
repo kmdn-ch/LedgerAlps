@@ -30,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 
 	"github.com/kmdn-ch/ledgeralps/internal/core/imgsafe"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
@@ -114,6 +115,26 @@ const (
 
 	// ImagesMax borne le nombre de fichiers examinés.
 	ImagesMax = 64
+
+	// OctetsExtraitsMax borne ce que l'extraction écrit SUR LE DISQUE.
+	//
+	// Les deux bornes précédentes protègent la mémoire, mais elles
+	// s'appliquent APRÈS `ExtractImagesFile`, qui a déjà tout déversé. Un PDF
+	// de 10 Mo dont les images se décompressent massivement remplit le disque
+	// avant que la première ne soit décodée — et ce disque porte aussi la base
+	// comptable. Le `defer os.RemoveAll` nettoie, mais seulement une fois le
+	// mal fait.
+	//
+	// 256 Mio : très au-delà de ce qu'une facture porte, très en deçà de ce
+	// qui met en peine une partition.
+	OctetsExtraitsMax = 256 << 20
+
+	// PagesExtraitesMax borne le nombre de pages parcourues.
+	//
+	// Le bulletin QR est sur la première page ou l'une des toutes premières.
+	// Parcourir un document de mille pages pour y chercher un carré coûterait
+	// plus que le service rendu.
+	PagesExtraitesMax = 20
 )
 
 // extractImages sort les images du PDF via pdfcpu.
@@ -140,7 +161,8 @@ func extractImages(data []byte) ([]pageImage, error) {
 
 	conf := model.NewDefaultConfiguration()
 	conf.ValidationMode = model.ValidationRelaxed
-	if err := api.ExtractImagesFile(src, out, nil, conf); err != nil {
+
+	if err := extrairePageParPage(src, out, conf); err != nil {
 		// Un PDF chiffré, malformé ou sans image passe par ici. Le message dit
 		// ce qui manque, sans prétendre que le fichier est corrompu.
 		return nil, fmt.Errorf("%w (le document n'a pas pu être ouvert : %v)", ErrNoQRCode, err)
@@ -219,4 +241,87 @@ func ReadAllLimited(r io.Reader) ([]byte, error) {
 		return nil, errors.New("le fichier dépasse 10 Mo")
 	}
 	return data, nil
+}
+
+// extrairePageParPage sort les images d'un PDF en bornant ce qui atteint le
+// disque.
+//
+// # Pourquoi pas un seul appel
+//
+// `ExtractImagesFile(src, out, nil, conf)` déverse TOUT le document d'un coup :
+// au moment où l'on pourrait mesurer le dossier, il est déjà rempli. Les
+// bornes de mémoire posées plus haut ne servent alors à rien pour le disque.
+//
+// En passant les pages une à une, on mesure ENTRE chaque page et l'on s'arrête
+// dès que le budget est atteint. Le coût est un appel par page plutôt qu'un
+// seul ; sur une facture de deux pages, c'est indolore.
+//
+// # S'arrêter, et non échouer
+//
+// Une facture volumineuse mais légitime doit pouvoir être lue : les pages déjà
+// extraites contiennent très probablement le QR, qui vit sur la première. On
+// rend donc ce qu'on a, et c'est l'appelant qui conclura « aucun QR trouvé »
+// s'il n'y était pas — un message que l'utilisateur comprend, là où « document
+// trop volumineux » sur une facture ordinaire ne lui dirait rien d'utile.
+func extrairePageParPage(src, out string, conf *model.Configuration) error {
+	pages, err := api.PageCountFile(src)
+	if err != nil {
+		return err
+	}
+	if pages > PagesExtraitesMax {
+		pages = PagesExtraitesMax
+	}
+
+	var extraitAvant error
+	for p := 1; p <= pages; p++ {
+		if err := api.ExtractImagesFile(src, out, []string{strconv.Itoa(p)}, conf); err != nil {
+			// Une page sans image, ou qu'une seule page refuse de rendre, ne
+			// doit pas condamner le document : le QR est peut-être ailleurs.
+			// L'erreur n'est retenue que pour le cas où AUCUNE page ne donne
+			// rien — sans quoi l'appelant ne saurait pas pourquoi.
+			if extraitAvant == nil {
+				extraitAvant = err
+			}
+			continue
+		}
+
+		octets, err := tailleDuDossier(out)
+		if err != nil {
+			return err
+		}
+		if octets >= OctetsExtraitsMax {
+			break
+		}
+	}
+
+	// Aucune image nulle part : on remonte la première raison rencontrée.
+	entries, err := os.ReadDir(out)
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 && extraitAvant != nil {
+		return extraitAvant
+	}
+	return nil
+}
+
+// tailleDuDossier somme la taille des fichiers d'un dossier, sans descendre :
+// pdfcpu écrit à plat.
+func tailleDuDossier(dir string) (int64, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue // fichier disparu entre-temps : il ne compte pas
+		}
+		total += info.Size()
+	}
+	return total, nil
 }

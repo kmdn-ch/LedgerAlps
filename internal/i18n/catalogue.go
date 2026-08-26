@@ -15,6 +15,14 @@ package i18n
 // Écrit par scratchpad/cat_go.py — modifiable à la main sans dommage.
 
 var catalogue = map[string]map[Lang]string{
+	// Le logo est refuse sur le format REELLEMENT detecte dans ses octets,
+	// pas sur ce que l'entete annonce. La personne qui envoie un GIF doit
+	// comprendre ce qui est attendu, dans sa langue.
+	"format d'image non accepté : %s (PNG ou JPEG attendu)": {
+		DE: "Bildformat nicht akzeptiert: %s (PNG oder JPEG erwartet)",
+		IT: "formato d'immagine non accettato: %s (atteso PNG o JPEG)",
+		EN: "image format not accepted: %s (PNG or JPEG expected)",
+	},
 	// Le carnet du lait refuse de sortir quand ses totaux ne concordent pas
 	// avec le mouvement net de trésorerie. C'est un message d'exploitation,
 	// mais il atteint la personne qui a cliqué : elle doit le lire dans sa

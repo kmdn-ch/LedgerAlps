@@ -544,3 +544,59 @@ func TestUnExerciceSousLeSeuilResteEligible(t *testing.T) {
 		t.Error("80 000 francs déclenche l'assujettissement TVA")
 	}
 }
+
+// La TVA déductible est une CRÉANCE, donc un avoir — jamais un engagement
+// négatif.
+//
+// Le compte 2262 portait le type `liability` depuis le plan comptable semé.
+// Le patrimoine calculant le solde d'un passif par `crédit - débit`, et ce
+// compte étant débité à chaque achat, son solde sortait NÉGATIF parmi les
+// engagements : une créance présentée comme une dette négative, sur la pièce
+// que l'on remet à l'administration fiscale. La migration 0027 le retype.
+func TestLaTVADeductibleEstUnAvoirPasUnEngagementNegatif(t *testing.T) {
+	s, d := baseTest(t)
+
+	// Achat avec TVA récupérable : charge + TVA déductible au débit,
+	// dette fournisseur au crédit. La forme normale d'une facture reçue.
+	ecritureComposee(t, d, "2026-04-01", "Achat fournisseur avec TVA", []ligneComposee{
+		{code: "6100", debit: 1000},
+		{code: "2262", debit: 81}, // TVA déductible à 8,1 %
+		{code: "2000", credit: 1081},
+	})
+
+	k, err := s.Etablir(context.Background(), "2026-01-01", "2026-12-31")
+	if err != nil {
+		t.Fatalf("Etablir: %v", err)
+	}
+
+	// 1. Elle figure parmi les AVOIRS, positive.
+	if got := posteDuPatrimoine(k.Avoirs, "2262"); got != 81 {
+		t.Errorf("2262 dans les avoirs = %.2f, attendu 81.00", got)
+	}
+	// 2. Et surtout : nulle part dans les engagements.
+	if got := posteDuPatrimoine(k.Engagements, "2262"); got != -1 {
+		t.Errorf("2262 figure encore dans les engagements (%.2f) — le compte est "+
+			"typé « liability » et son solde y sort négatif", got)
+	}
+	// 3. La dette fournisseur, elle, EST un engagement — sans quoi le test
+	//    passerait aussi sur un patrimoine vide.
+	if got := posteDuPatrimoine(k.Engagements, "2000"); got != 1081 {
+		t.Errorf("2000 dans les engagements = %.2f, attendu 1081.00", got)
+	}
+	// 4. La fortune nette est inchangée par le retypage : +81 en avoir ou
+	//    -81 en engagement contribuent identiquement. C'est ce qui a permis au
+	//    défaut de vivre si longtemps sans que les totaux le signalent.
+	if k.Fortune != -1000 {
+		t.Errorf("fortune = %.2f, attendu -1000.00", k.Fortune)
+	}
+}
+
+// posteDuPatrimoine rend le montant d'un compte, ou -1 s'il est absent.
+func posteDuPatrimoine(postes []PostePatrimoine, code string) float64 {
+	for _, p := range postes {
+		if p.Code == code {
+			return p.Montant
+		}
+	}
+	return -1
+}

@@ -158,3 +158,95 @@ func TestUnFichierQuiNEstPasUneImageEstRefuse(t *testing.T) {
 		t.Error("aucune erreur sur un fichier qui n'est pas une image")
 	}
 }
+
+// L'entête d'une adresse de données n'est JAMAIS recopié depuis l'appelant.
+//
+// Le contrôle qui accepte l'envoi cherche une sous-chaîne : « image/png » se
+// trouve aussi bien dans « data:text/html;image/png;base64,… ». Une image déjà
+// assez petite ressortait alors avec cet entête intact, et il était stocké tel
+// quel dans la fiche société — d'où il part dans les sauvegardes et dans
+// l'archive légale. Le contenu restant un PNG valide, aucune balise <img> ne
+// l'exécute ; mais on ne conserve pas une déclaration fournie par l'appelant
+// quand on peut la reconstruire d'après les octets.
+func TestLEnteteDuLogoEstReecritDApresLeContenu(t *testing.T) {
+	// Une vraie image PNG, mais annoncée sous un entête forgé.
+	propre := imagePNG(t, 100, 60)
+	charge := propre[strings.IndexByte(propre, ',')+1:]
+	forge := "data:text/html;image/png;base64," + charge
+
+	got, err := ajusterLogo(forge)
+	if err != nil {
+		t.Fatalf("ajusterLogo : %v", err)
+	}
+	if strings.Contains(got.DataURL, "text/html") {
+		t.Errorf("l'entête forgé a traversé : %.60s…", got.DataURL)
+	}
+	if !strings.HasPrefix(got.DataURL, "data:image/png;base64,") {
+		t.Errorf("entête rendu = %.40s…, attendu « data:image/png;base64, »", got.DataURL)
+	}
+	// Les OCTETS, eux, doivent être intacts : c'est la même image.
+	if got.DataURL != propre {
+		t.Error("les octets de l'image ont changé alors que seul l'entête devait l'être")
+	}
+}
+
+// Un JPEG annoncé « image/png » ressort sous son VRAI type.
+//
+// Le navigateur pose le type du fichier, pas celui de ses octets : l'envoi est
+// parfaitement valable et ne doit pas être refusé — mais l'entête stocké doit
+// dire ce que les octets sont réellement.
+func TestUnJPEGAnnoncePNGRessortEnJPEG(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 80, 50))
+	for y := 0; y < 50; y++ {
+		for x := 0; x < 80; x++ {
+			img.Set(x, y, color.RGBA{R: 200, G: 100, B: 50, A: 255})
+		}
+	}
+	var b bytes.Buffer
+	if err := jpeg.Encode(&b, img, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Annoncé PNG, alors que ce sont des octets JPEG.
+	forge := "data:image/png;base64," + base64.StdEncoding.EncodeToString(b.Bytes())
+
+	got, err := ajusterLogo(forge)
+	if err != nil {
+		t.Fatalf("ajusterLogo : %v", err)
+	}
+	if !strings.HasPrefix(got.DataURL, "data:image/jpeg;base64,") {
+		t.Errorf("entête rendu = %.40s…, attendu « data:image/jpeg;base64, »", got.DataURL)
+	}
+}
+
+// Un format que le produit n'accepte pas est refusé ICI, au point où le format
+// est connu — plutôt que laissé entrer sous un entête que personne n'a vérifié.
+func TestUnFormatNonAccepteEstRefuse(t *testing.T) {
+	// Un GIF : image.Decode ne le connaît pas ici (aucun décodeur importé),
+	// donc imgsafe refuse avant même mimeDuFormat. Le refus est le même.
+	gif := []byte("GIF89a\x01\x00\x01\x00\x00\xff\x00,\x00\x00\x00\x00" +
+		"\x01\x00\x01\x00\x00\x02\x00;")
+	forge := "data:image/png;base64," + base64.StdEncoding.EncodeToString(gif)
+
+	if _, err := ajusterLogo(forge); err == nil {
+		t.Fatal("aucune erreur pour un format non accepté")
+	}
+}
+
+// mimeDuFormat ferme sa liste : tout ce qui n'est pas PNG ou JPEG est refusé.
+func TestMimeDuFormatNAccepteQuePNGEtJPEG(t *testing.T) {
+	cas := map[string]string{
+		"png":  "image/png",
+		"jpeg": "image/jpeg",
+	}
+	for format, attendu := range cas {
+		got, ok := mimeDuFormat(format)
+		if !ok || got != attendu {
+			t.Errorf("mimeDuFormat(%q) = %q, %v — attendu %q, true", format, got, ok, attendu)
+		}
+	}
+	for _, format := range []string{"gif", "webp", "bmp", "tiff", "", "html"} {
+		if _, ok := mimeDuFormat(format); ok {
+			t.Errorf("mimeDuFormat(%q) accepte un format que le produit ne prend pas", format)
+		}
+	}
+}
