@@ -7,6 +7,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+## [1.5.5] — 2026-08-26
+
 ### Ajouté
 
 - **Le carnet du lait propose un exercice, et non la plage des autres exports.** La période de l'écran Rapports est commune au journal, au grand livre et à la balance : on l'ajuste pour regarder ce qu'on veut, et sa valeur par défaut (du 31 décembre au jour courant) n'était jamais un exercice. Or les deux seuils du carnet portent en droit sur le chiffre d'affaires du **dernier exercice** : ouvrir l'écran et cliquer ne donnait donc aucun verdict.
@@ -14,20 +16,6 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
   Le carnet a maintenant son propre sélecteur. Il liste les **exercices déclarés** quand il y en a — c'est la donnée de l'utilisateur, et elle porte les décalages, les exercices raccourcis et les clôtures qu'aucun calcul ne devine —, à défaut ceux que le **mois de début d'exercice** de la fiche entreprise permet de déduire, en le disant. Il propose d'emblée le **dernier exercice révolu** : on établit un carnet du lait pour déclarer une année terminée, et proposer l'exercice en cours sortirait un document forcément incomplet que son lecteur prendrait pour un bilan. Une option **« Période personnalisée »** conserve le choix libre de dates.
 
   Les exercices à cheval sont nommés sur leurs deux millésimes — « 2025/2026 » et non « 2025 », qui induirait en erreur pour un exercice courant jusqu'en juin. Vérifié en navigateur dans les deux cas, exercice déclaré et exercice déduit, en français et en allemand.
-
-- **La comptabilité simplifiée — le « carnet du lait » — dans Rapports.** Une entreprise individuelle dont le chiffre d'affaires reste sous 500 000 francs peut se limiter à « une comptabilité des recettes et des dépenses ainsi que du patrimoine » (CO art. 957 al. 2 ch. 1). LedgerAlps produit désormais ce document, à l'écran, en CSV et en **PDF** — celui que l'on tend à l'administration.
-
-  **LedgerAlps ne devient pas une comptabilité simplifiée pour autant.** Le produit continue de tenir la partie double, qui dépasse le minimum légal ; le carnet en est une présentation extraite. C'est un avantage à faire valoir devant l'administration, et cela explique qu'il n'y ait rien à « activer ».
-
-  **Base caisse, et non compte de résultat.** « Recettes et dépenses » veut dire qu'on compte l'argent au moment où il entre et où il sort. Dériver le document du compte de résultat aurait produit un compte de résultat portant un autre nom, avec les factures émises non encaissées comptées comme des recettes — un écart qu'un contrôleur voit dès qu'il le rapproche du relevé bancaire. Les mouvements viennent donc du journal : tout mouvement d'argent touche un compte de liquidités, un débit est une entrée, un crédit une sortie, et la contrepartie donne la nature.
-
-  **Le virement interne est écarté.** Un retrait au bancomat touche deux comptes de liquidités : ce n'est ni une recette ni une dépense, mais une lecture ligne à ligne l'aurait compté **deux fois** et gonflé les deux colonnes — donc annoncé à l'administration un chiffre d'affaires qui n'existe pas.
-
-  **Le document dit s'il suffit.** Au-delà de 500 000 francs, l'écran et le PDF écrivent que la partie double et les comptes annuels sont obligatoires (CO art. 957 al. 1) et que ce carnet ne peut pas être présenté seul. À partir de 100 000 francs, ils rappellent l'assujettissement TVA (LTVA art. 10). Deux lois différentes, deux seuils qui ne décident pas de la même chose : l'un porte sur la forme des livres, l'autre sur un impôt.
-
-  **Le document sort dans la langue de l'interface au moment du clic.** Écran, CSV, PDF et jusqu'au nom du fichier : établi depuis un écran allemand, le carnet est en allemand. C'est la pièce que l'on tend à une administration cantonale, et elle doit parler la langue de son destinataire. Les **références légales changent de nom**, pas seulement de langue — le Code des obligations est l'*OR* en allemand, la loi sur la TVA la *MWSTG* ; un document remis à Zurich qui citerait « CO art. 957 » citerait une loi qui n'y porte pas ce nom. Les noms de comptes, eux, restent tels que l'utilisateur les a saisis : c'est sa donnée, pas un libellé du produit.
-
-  Vérifié de bout en bout sur un serveur réel, avec des écritures saisies par l'API : les 8 000 francs d'une facture non encaissée restent hors des recettes mais comptent dans le chiffre d'affaires, le retrait au bancomat n'apparaît nulle part, et l'amortissement non plus. Le carnet a été produit dans les quatre langues depuis un navigateur, en basculant l'interface avant de cliquer.
 
 ### Corrigé
 
@@ -64,18 +52,6 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 - **Les seuils légaux étaient appréciés sur n'importe quelle période.** Ceux du CO art. 957 al. 2 ch. 1 (500 000 francs) et de la LTVA art. 10 al. 2 let. a (100 000) portent en droit sur le chiffre d'affaires du **dernier exercice**. Ils étaient comparés au chiffre d'affaires de la période demandée, sans contrôle de sa longueur : une entreprise à 1,6 million qui demandait un carnet trimestriel recevait un PDF affirmant **en vert, sous la référence légale**, que la comptabilité simplifiée lui était admise — et le carnet mensuel d'une entreprise à 300 000 annonçait la libération de l'assujettissement TVA. Deux affirmations de droit fausses sur la pièce que l'on tend à l'administration.
 
   Sur une période plus courte qu'un exercice, l'écran, le CSV et le PDF **suspendent leur verdict** et disent pourquoi, dans les quatre langues. L'avertissement de dépassement, lui, subsiste : un chiffre d'affaires déjà au-dessus du seuil sur un trimestre y restera sur l'année, et c'est la mention qui protège le plus l'utilisateur.
-
-- **La ponctuation typographique sortait en « ? » dans les PDF.** Le générateur n'accepte que du Latin-1 et remplaçait tout le reste par un point d'interrogation : « Recettes **?** CO art. 957 ». Les tirets cadratins, apostrophes typographiques, points de suspension et le symbole € sont désormais translittérés. **Cela corrigeait aussi les factures**, où un tiret saisi dans une description produisait déjà ce défaut.
-
-- **L'audit différentiel : la piste dit maintenant ce qu'une action a REMPLACÉ.** Le journal capturait l'état après chaque modification, jamais celui d'avant — on savait qu'une facture valait 1500.- après coup, sans pouvoir dire qu'elle valait 1000.- avant. Les six points de trace transmettent désormais une transition explicite (création, modification, suppression), et l'écran **Paramètres → Maintenance → Piste d'audit** porte une colonne **« Champs modifiés »** qui nomme ce qui a bougé.
-
-  **Le masquage rendait le cas principal invisible, et c'est ce qui a guidé la conception.** Les champs personnels sont remplacés par `[MASKED]` (nLPD art. 6) : un IBAN modifié aurait donné `[MASKED]` avant *et* après, faisant disparaître exactement le changement qui motive la fonctionnalité — cet IBAN est le compte qui reçoit les virements de tous les clients. La liste des champs modifiés est donc calculée sur les valeurs **brutes, avant masquage**. On sait que l'IBAN a changé, et qui l'a changé, **sans conserver aucun des deux IBAN** : plus utile que deux valeurs masquées, et moins de données personnelles retenues — la minimisation de la nLPD va ici dans le même sens que l'utilité.
-
-  **La liste entre dans l'empreinte.** L'effacer pour cacher qu'un IBAN a bougé casse la chaîne, comme le fait de réécrire l'état antérieur. Une trace des changements que l'on pourrait réinscrire ne prouverait rien. Deux tests le vérifient en falsifiant réellement la base.
-
-  **Aucune migration, aucune rupture.** Une création écrit `NULL` et la vérification relit `COALESCE(before_state, '')` : les maillons écrits avant cette version se recalculent à l'identique, et se vérifient à côté des nouveaux. Vérifié de bout en bout sur un serveur réel — deux modifications de la fiche entreprise, chaîne `verified: true`, et la colonne affiche `iban` puis `address_city, company_name`.
-
-  `from`/`to` écrits à la main dans l'état suivant disparaissent au passage : la transition a désormais un endroit pour se dire.
 
 ### Supprimé
 
@@ -114,6 +90,40 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 - **La table des tentatives du mode récupération ne s'élaguait jamais.** Elle ne purgeait une adresse que si cette même adresse revenait : un balayage la faisait croître sans terme, sur un point non authentifié, dans un processus fait pour attendre des heures. Purge générale à chaque passage, et trois délais HTTP ajoutés au serveur de récupération.
 
 - **`install.ps1` : empreinte cherchée par sous-chaîne, et chemins non validés.** La recherche retenait toute ligne *contenant* le nom de l'archive — or `…zip.sbom.json` contient `…zip` — et ne tombait juste que par une propriété de tri que rien ne garantit. Comparaison de champ, alignée sur `install.sh`. Par ailleurs `-InstallDir` et `-DataDir` n'étaient pas validés, contrairement à leur pendant Linux, alors que le premier finit dans le PATH machine : un `;` y injectait des entrées pour tous les comptes.
+
+## [1.5.4] — 2026-08-25
+
+### Ajouté
+
+- **La comptabilité simplifiée — le « carnet du lait » — dans Rapports.** Une entreprise individuelle dont le chiffre d'affaires reste sous 500 000 francs peut se limiter à « une comptabilité des recettes et des dépenses ainsi que du patrimoine » (CO art. 957 al. 2 ch. 1). LedgerAlps produit désormais ce document, à l'écran, en CSV et en **PDF** — celui que l'on tend à l'administration.
+
+  **LedgerAlps ne devient pas une comptabilité simplifiée pour autant.** Le produit continue de tenir la partie double, qui dépasse le minimum légal ; le carnet en est une présentation extraite. C'est un avantage à faire valoir devant l'administration, et cela explique qu'il n'y ait rien à « activer ».
+
+  **Base caisse, et non compte de résultat.** « Recettes et dépenses » veut dire qu'on compte l'argent au moment où il entre et où il sort. Dériver le document du compte de résultat aurait produit un compte de résultat portant un autre nom, avec les factures émises non encaissées comptées comme des recettes — un écart qu'un contrôleur voit dès qu'il le rapproche du relevé bancaire. Les mouvements viennent donc du journal : tout mouvement d'argent touche un compte de liquidités, un débit est une entrée, un crédit une sortie, et la contrepartie donne la nature.
+
+  **Le virement interne est écarté.** Un retrait au bancomat touche deux comptes de liquidités : ce n'est ni une recette ni une dépense, mais une lecture ligne à ligne l'aurait compté **deux fois** et gonflé les deux colonnes — donc annoncé à l'administration un chiffre d'affaires qui n'existe pas.
+
+  **Le document dit s'il suffit.** Au-delà de 500 000 francs, l'écran et le PDF écrivent que la partie double et les comptes annuels sont obligatoires (CO art. 957 al. 1) et que ce carnet ne peut pas être présenté seul. À partir de 100 000 francs, ils rappellent l'assujettissement TVA (LTVA art. 10). Deux lois différentes, deux seuils qui ne décident pas de la même chose : l'un porte sur la forme des livres, l'autre sur un impôt.
+
+  **Le document sort dans la langue de l'interface au moment du clic.** Écran, CSV, PDF et jusqu'au nom du fichier : établi depuis un écran allemand, le carnet est en allemand. C'est la pièce que l'on tend à une administration cantonale, et elle doit parler la langue de son destinataire. Les **références légales changent de nom**, pas seulement de langue — le Code des obligations est l'*OR* en allemand, la loi sur la TVA la *MWSTG* ; un document remis à Zurich qui citerait « CO art. 957 » citerait une loi qui n'y porte pas ce nom. Les noms de comptes, eux, restent tels que l'utilisateur les a saisis : c'est sa donnée, pas un libellé du produit.
+
+  Vérifié de bout en bout sur un serveur réel, avec des écritures saisies par l'API : les 8 000 francs d'une facture non encaissée restent hors des recettes mais comptent dans le chiffre d'affaires, le retrait au bancomat n'apparaît nulle part, et l'amortissement non plus. Le carnet a été produit dans les quatre langues depuis un navigateur, en basculant l'interface avant de cliquer.
+
+### Corrigé
+
+- **La ponctuation typographique sortait en « ? » dans les PDF.** Le générateur n'accepte que du Latin-1 et remplaçait tout le reste par un point d'interrogation : « Recettes **?** CO art. 957 ». Les tirets cadratins, apostrophes typographiques, points de suspension et le symbole € sont désormais translittérés. **Cela corrigeait aussi les factures**, où un tiret saisi dans une description produisait déjà ce défaut.
+
+- **L'audit différentiel : la piste dit maintenant ce qu'une action a REMPLACÉ.** Le journal capturait l'état après chaque modification, jamais celui d'avant — on savait qu'une facture valait 1500.- après coup, sans pouvoir dire qu'elle valait 1000.- avant. Les six points de trace transmettent désormais une transition explicite (création, modification, suppression), et l'écran **Paramètres → Maintenance → Piste d'audit** porte une colonne **« Champs modifiés »** qui nomme ce qui a bougé.
+
+  **Le masquage rendait le cas principal invisible, et c'est ce qui a guidé la conception.** Les champs personnels sont remplacés par `[MASKED]` (nLPD art. 6) : un IBAN modifié aurait donné `[MASKED]` avant *et* après, faisant disparaître exactement le changement qui motive la fonctionnalité — cet IBAN est le compte qui reçoit les virements de tous les clients. La liste des champs modifiés est donc calculée sur les valeurs **brutes, avant masquage**. On sait que l'IBAN a changé, et qui l'a changé, **sans conserver aucun des deux IBAN** : plus utile que deux valeurs masquées, et moins de données personnelles retenues — la minimisation de la nLPD va ici dans le même sens que l'utilité.
+
+  **La liste entre dans l'empreinte.** L'effacer pour cacher qu'un IBAN a bougé casse la chaîne, comme le fait de réécrire l'état antérieur. Une trace des changements que l'on pourrait réinscrire ne prouverait rien. Deux tests le vérifient en falsifiant réellement la base.
+
+  **Aucune migration, aucune rupture.** Une création écrit `NULL` et la vérification relit `COALESCE(before_state, '')` : les maillons écrits avant cette version se recalculent à l'identique, et se vérifient à côté des nouveaux. Vérifié de bout en bout sur un serveur réel — deux modifications de la fiche entreprise, chaîne `verified: true`, et la colonne affiche `iban` puis `address_city, company_name`.
+
+  `from`/`to` écrits à la main dans l'état suivant disparaissent au passage : la transition a désormais un endroit pour se dire.
+
+### Sécurité
 
 - **Le masquage des données personnelles couvre les variantes composées.** Il ne reconnaissait que les clés exactes — `name`, `address`, `iban` — et laissait donc passer `company_name`, `legal_name`, `supplier_name`, `address_street`, `address_city` : chez un indépendant, son propre nom et son adresse privée, écrits en clair dans une table conservée dix ans (CO art. 958f). Le terme sensible est maintenant reconnu comme mot, préfixé ou suffixé. Les clés voisines restent lisibles — `number` ne contient pas `name` —, sans quoi une piste entièrement masquée n'apprendrait plus rien. Les maillons existants gardent leurs valeurs et leur empreinte ; seuls les suivants sont plus discrets.
 
