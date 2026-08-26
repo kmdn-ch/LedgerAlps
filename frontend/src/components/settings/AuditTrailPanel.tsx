@@ -212,28 +212,39 @@ export function AuditTrailPanel() {
 
         {logs.data && logs.data.total > 0 && (
           <>
-            <div className="overflow-x-auto">
+            {/* La liste défile DANS son cadre, pas la page.
+                Vingt-cinq lignes poussaient le pied de page — et les boutons
+                « précédent / suivant » avec lui — hors de l'écran : pour passer
+                à la page suivante il fallait d'abord faire défiler la page
+                entière jusqu'en bas, puis remonter pour lire. Borner la hauteur
+                du tableau garde la commande sous les yeux, et l'en-tête reste
+                collé : à la ligne quinze, on sait encore quelle colonne est
+                laquelle. */}
+            <div className="max-h-[26rem] overflow-auto rounded-md border border-neutral-200">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wider text-alpine-500">
-                    <th className="py-2 pr-3 font-medium">{t('at.colNumero')}</th>
-                    <th className="py-2 pr-3 font-medium">{t('fact.colDate')}</th>
-                    <th className="py-2 pr-3 font-medium">{t('at.colAction')}</th>
-                    <th className="py-2 pr-3 font-medium">{t('at.colDocument')}</th>
-                    <th className="py-2 pr-3 font-medium">{t('at.colAuteur')}</th>
-                    <th className="py-2 pr-3 font-medium">{t('at.colChamps')}</th>
-                    <th className="py-2 font-medium">{t('at.colEmpreinte')}</th>
+                  <tr className="text-left text-xs uppercase tracking-wider text-alpine-500">
+                    {/* La bordure vit sur les cellules, pas sur la ligne : une
+                        bordure de <tr> ne suit pas un en-tête collé et s'en va
+                        au premier défilement. */}
+                    <th className="sticky top-0 z-10 border-b border-neutral-200 bg-white py-2 px-3 font-medium">{t('at.colNumero')}</th>
+                    <th className="sticky top-0 z-10 border-b border-neutral-200 bg-white py-2 px-3 font-medium">{t('fact.colDate')}</th>
+                    <th className="sticky top-0 z-10 border-b border-neutral-200 bg-white py-2 px-3 font-medium">{t('at.colAction')}</th>
+                    <th className="sticky top-0 z-10 border-b border-neutral-200 bg-white py-2 px-3 font-medium">{t('at.colDocument')}</th>
+                    <th className="sticky top-0 z-10 border-b border-neutral-200 bg-white py-2 px-3 font-medium">{t('at.colAuteur')}</th>
+                    <th className="sticky top-0 z-10 border-b border-neutral-200 bg-white py-2 px-3 font-medium">{t('at.colChamps')}</th>
+                    <th className="sticky top-0 z-10 border-b border-neutral-200 bg-white py-2 px-3 font-medium">{t('at.colEmpreinte')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {logs.data.items.map(l => (
                     <tr key={l.id} className="border-b border-neutral-100">
-                      <td className="py-2 pr-3 tabular-nums text-alpine-500">{l.sequence_number}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap">{formatDate(l.created_at, 'dd.MM.yyyy HH:mm')}</td>
-                      <td className="py-2 pr-3">{l.action}</td>
-                      <td className="py-2 pr-3 font-mono text-xs">{l.record_id}</td>
-                      <td className="py-2 pr-3">{l.user_name || <span className="text-alpine-400">—</span>}</td>
-                      <td className="py-2 pr-3">
+                      <td className="py-2 px-3 tabular-nums text-alpine-500">{l.sequence_number}</td>
+                      <td className="py-2 px-3 whitespace-nowrap">{formatDate(l.created_at, 'dd.MM.yyyy HH:mm')}</td>
+                      <td className="py-2 px-3">{l.action}</td>
+                      <td className="py-2 px-3 font-mono text-xs">{l.record_id}</td>
+                      <td className="py-2 px-3">{l.user_name || <span className="text-alpine-400">—</span>}</td>
+                      <td className="py-2 px-3">
                         {(() => {
                           const champs = champsModifies(l.after_state)
                           // Une création ne remplace rien : afficher « aucun
@@ -254,7 +265,7 @@ export function AuditTrailPanel() {
                           )
                         })()}
                       </td>
-                      <td className="py-2 font-mono text-xs text-alpine-500" title={l.entry_hash}>
+                      <td className="py-2 px-3 font-mono text-xs text-alpine-500" title={l.entry_hash}>
                         {l.entry_hash.slice(0, 12)}…
                       </td>
                     </tr>
