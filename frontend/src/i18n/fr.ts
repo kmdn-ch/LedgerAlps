@@ -331,7 +331,8 @@ export const fr = {
   'rp.importBancaire': 'Import bancaire — ISO 20022 camt.053',
   'rp.releveCamt': 'Relevé bancaire camt.053',
   'rp.releveCamtAide': 'Déposez le fichier XML téléchargé depuis votre e-banking : LedgerAlps y reconnaît vos encaissements et propose les rapprochements.',
-  'rp.choisirXML': 'Choisir un fichier XML',
+  'rp.importVitAilleurs': 'L\'import se fait dans Paramètres → Banque, avec le rapprochement qui le suit : déposer un relevé enregistre des écritures, et c\'est là qu\'on voit ce qu\'elles deviennent.',
+  'rp.allerAuRapprochement': 'Aller au rapprochement bancaire',
   'rp.exportsOuverts': 'L’import d’un relevé bancaire et la production d’un ordre de paiement demandent un compte autorisé à écrire. Les exports et l’archive légale ci-dessous vous restent ouverts.',
   'rp.archivage': 'Archivage légal — CO art. 958f (10 ans)',
   'rp.archiveZIP': 'Archive légale ZIP',
@@ -349,8 +350,6 @@ export const fr = {
   'rp.archiveZIPAide': 'Toute la comptabilité en JSON et en CSV — écritures, factures, contacts, exercices — avec un manifeste SHA-256. Le format est ce qui rend la sortie réelle : une archive qu’on ne peut pas relire ailleurs n’est pas une archive.',
 
   // ─── Rapports — camt ───
-  'rp.uneTransactionLue': '{n} transaction lue — rapprochez-la dans Paramètres → Banque',
-  'rp.desTransactionsLues': '{n} transactions lues — rapprochez-les dans Paramètres → Banque',
 
   // ─── Paramètres ───
   'pr.sousTitre': 'Configuration de votre société',

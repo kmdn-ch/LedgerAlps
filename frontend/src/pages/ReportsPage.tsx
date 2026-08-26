@@ -14,17 +14,17 @@ import { useState } from 'react'
 import {
   Archive, Upload, FileSpreadsheet, BookOpen, BarChart3, Calendar, Download, Lock,
 } from 'lucide-react'
-import { isoApi, exportApi, accountingExportApi } from '@/api/client'
+import { Link } from 'react-router-dom'
+import { exportApi, accountingExportApi } from '@/api/client'
 import { PaymentRunPanel } from '@/components/payments/PaymentRunPanel'
 import { CarnetDuLait } from '@/components/reports/CarnetDuLait'
 import { PageHeader, SectionTitle, ErrorBanner } from '@/components/ui'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
-import { useT, useFormats } from '@/i18n/useT'
+import { useT } from '@/i18n/useT'
 import { refusalMessage } from '@/utils/refusal'
 
 export function ReportsPage() {
   const t = useT()
-  const { pluriel } = useFormats()
   const peutEcrire = useCanWrite()
   const [startDate, setStartDate] = useState(() =>
     new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)
@@ -32,7 +32,6 @@ export function ReportsPage() {
   const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const [camtResult, setCamtResult] = useState<null | { count: number; entries: unknown[] }>(null)
 
   // Un téléchargement passe par un Blob et non par window.location : la requête
   // porte le jeton d'authentification, qu'une navigation directe n'emporterait
@@ -54,20 +53,6 @@ export function ReportsPage() {
       URL.revokeObjectURL(url)
     } catch (e) {
       setError(refusalMessage(e, "Le fichier n'a pas pu être produit."))
-    } finally {
-      setLoading(null)
-    }
-  }
-
-  const handleCamtUpload = async (file: File) => {
-    setLoading('camt')
-    setError('')
-    setCamtResult(null)
-    try {
-      const res = await isoApi.importCamt053(file)
-      setCamtResult(res.data)
-    } catch (e) {
-      setError(refusalMessage(e, "Le relevé bancaire n'a pas pu être lu."))
     } finally {
       setLoading(null)
     }
@@ -146,65 +131,40 @@ export function ReportsPage() {
       <SectionTitle>{t('carnet.titre')}</SectionTitle>
       <CarnetDuLait du={startDate} au={endDate} />
 
-      {/* Import camt.053 — déposer un fichier est une écriture.
-          Les EXPORTS ci-dessus restent ouverts à tous : consulter et sortir ses
-          propres livres n'est pas une modification, et c'est précisément ce
-          qu'on attend d'un accès de fiduciaire. */}
+      {/* L'import camt.053 ne vit PLUS ici.
+
+          Il existait a deux endroits — ici et Parametres -> Banque — pour la
+          meme route et le meme effet : les deux ecrivaient en base. Celui-ci
+          presentait une liste de lecture, « voila ce que j'ai lu », sans dire
+          que les ecritures etaient PERSISTEES au passage. L'utilisateur
+          croyait consulter un fichier ; il alimentait la file de
+          rapprochement.
+
+          Deux boutons pour un meme geste, dont l'un cache ce qu'il fait, ne
+          sont pas une commodite. L'import vit la ou se fait le travail qui
+          le suit : le rapprochement. */}
       {peutEcrire && (
       <>
       <SectionTitle>{t('rp.importBancaire')}</SectionTitle>
       <div className="card mb-8">
-        <div className="card-body">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-alpine-100 flex items-center
-                            justify-center flex-shrink-0">
-              <Upload size={18} className="text-alpine-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-alpine-900 mb-1">{t('rp.releveCamt')}</h3>
-              <p className="text-sm text-alpine-600 mb-3">
-                {t('rp.releveCamtAide')}
-              </p>
-              <label className="btn-secondary btn-sm inline-flex items-center gap-1.5 cursor-pointer">
-                <Upload size={14} />
-                {loading === 'camt' ? t('ach.lecture') : t('rp.choisirXML')}
-                <input type="file" accept=".xml,text/xml,application/xml" className="hidden"
-                       onChange={e => {
-                         const f = e.target.files?.[0]
-                         if (f) handleCamtUpload(f)
-                         e.target.value = ''
-                       }} />
-              </label>
-            </div>
+        <div className="card-body flex items-start gap-4">
+          <div className="w-10 h-10 rounded-xl bg-alpine-100 flex items-center
+                          justify-center flex-shrink-0">
+            <Upload size={18} className="text-alpine-600" />
           </div>
-
-          {camtResult && (
-            <div className="mt-4 p-4 bg-success-100 border border-success-100 rounded-lg">
-              <p className="text-sm font-medium text-success-700 mb-2">
-                {pluriel(camtResult.count,
-                  t('rp.uneTransactionLue', { n: camtResult.count }),
-                  t('rp.desTransactionsLues', { n: camtResult.count }))}
-              </p>
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {(camtResult.entries as Array<{
-                  booking_date: string; amount: number; currency: string
-                  is_credit: boolean; counterpart_name?: string; unstructured?: string
-                }>).map((e, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs
-                                          text-success-700 bg-white/60 rounded px-2 py-1">
-                    <span>{e.booking_date}</span>
-                    <span className={e.is_credit
-                      ? 'text-success-700 font-medium' : 'text-danger-700 font-medium'}>
-                      {e.is_credit ? '+' : '-'}{e.amount.toFixed(2)} {e.currency}
-                    </span>
-                    <span className="truncate max-w-[200px] text-alpine-500">
-                      {e.counterpart_name || e.unstructured || '—'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="flex-1">
+            <h3 className="font-semibold text-alpine-900 mb-1">{t('rp.releveCamt')}</h3>
+            <p className="text-sm text-alpine-600 mb-3">{t('rp.importVitAilleurs')}</p>
+            {/* Un FRAGMENT, et la clé exacte : SettingsPage lit `#banking`, pas
+                `?tab=`. Une adresse qui ne correspond à rien ne produit aucune
+                erreur — elle retombe en silence sur le premier onglet, et le
+                renvoi déposait le lecteur sur « Identité » sans rien dire. */}
+            <Link to="/settings#banking"
+                  className="btn-secondary btn-sm inline-flex items-center gap-1.5">
+              <Upload size={14} />
+              {t('rp.allerAuRapprochement')}
+            </Link>
+          </div>
         </div>
       </div>
 

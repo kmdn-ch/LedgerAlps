@@ -331,8 +331,22 @@ func (h *ISO20022Handler) ImportCamt053(c *gin.Context) {
 		result = append(result, r)
 	}
 
+	// `imported` et `duplicate` SORTENT dans la réponse.
+	//
+	// Ils étaient calculés puis jetés — le code portait littéralement
+	// `_ = imported` / `_ = duplicate`. L'écran de rapprochement, lui, les lit
+	// (`d.imported ?? 0`) : il annonçait donc « 0 écriture(s) ajoutée(s) » à
+	// chaque import, quel qu'en soit le résultat. Vérifié sur un serveur réel,
+	// deux écritures entrées en base et l'écran disant zéro.
+	//
+	// La distinction compte : « 12 ajoutées » et « 0 ajoutée, 12 déjà connues »
+	// décrivent deux situations opposées — un relevé qu'on vient d'intégrer, et
+	// un relevé qu'on réimporte par erreur. Sans ces chiffres, l'utilisateur ne
+	// peut pas savoir laquelle des deux il vient de provoquer.
 	c.JSON(http.StatusOK, gin.H{
-		"entries": result,
-		"count":   len(result),
+		"entries":   result,
+		"count":     len(result),
+		"imported":  imported,
+		"duplicate": duplicate,
 	})
 }

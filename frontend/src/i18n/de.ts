@@ -288,7 +288,8 @@ export const de: Catalogue = {
   'rp.importBancaire': 'Bankimport — ISO 20022 camt.053',
   'rp.releveCamt': 'Kontoauszug camt.053',
   'rp.releveCamtAide': 'Laden Sie die aus Ihrem E-Banking heruntergeladene XML-Datei hoch: LedgerAlps erkennt Ihre Eingänge und schlägt die Abstimmung vor.',
-  'rp.choisirXML': 'XML-Datei wählen',
+  'rp.importVitAilleurs': 'Der Import erfolgt unter Einstellungen → Bank, zusammen mit dem anschliessenden Abgleich: Ein Kontoauszug erzeugt Buchungen, und dort sieht man, was aus ihnen wird.',
+  'rp.allerAuRapprochement': 'Zum Bankabgleich',
   'rp.exportsOuverts': 'Der Import eines Kontoauszugs und die Erstellung eines Zahlungsauftrags verlangen ein schreibberechtigtes Konto. Die Exporte und das gesetzliche Archiv unten bleiben Ihnen offen.',
   'rp.archivage': 'Gesetzliche Archivierung — OR Art. 958f (10 Jahre)',
   'rp.archiveZIP': 'Gesetzliches Archiv ZIP',
@@ -306,8 +307,6 @@ export const de: Catalogue = {
   'rp.archiveZIPAide': 'Die ganze Buchhaltung als JSON und CSV — Buchungen, Rechnungen, Kontakte, Geschäftsjahre — mit einem SHA-256-Manifest. Das Format macht den Ausstieg erst wirklich: ein Archiv, das man anderswo nicht lesen kann, ist kein Archiv.',
 
   // ─── Rapports — camt ───
-  'rp.uneTransactionLue': '{n} Transaktion gelesen — stimmen Sie sie unter Einstellungen → Bank ab',
-  'rp.desTransactionsLues': '{n} Transaktionen gelesen — stimmen Sie sie unter Einstellungen → Bank ab',
 
   // ─── Paramètres ───
   'pr.sousTitre': 'Konfiguration Ihres Unternehmens',

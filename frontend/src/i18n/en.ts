@@ -287,7 +287,8 @@ export const en: Catalogue = {
   'rp.importBancaire': 'Bank import — ISO 20022 camt.053',
   'rp.releveCamt': 'Bank statement camt.053',
   'rp.releveCamtAide': 'Upload the XML file downloaded from your e-banking: LedgerAlps recognises your receipts and suggests the reconciliations.',
-  'rp.choisirXML': 'Choose an XML file',
+  'rp.importVitAilleurs': 'Importing happens in Settings → Bank, together with the reconciliation that follows: uploading a statement records entries, and that is where you see what becomes of them.',
+  'rp.allerAuRapprochement': 'Go to bank reconciliation',
   'rp.exportsOuverts': 'Importing a bank statement and producing a payment order require an account allowed to write. The exports and the legal archive below remain open to you.',
   'rp.archivage': 'Legal archiving — CO art. 958f (10 years)',
   'rp.archiveZIP': 'Legal archive ZIP',
@@ -305,8 +306,6 @@ export const en: Catalogue = {
   'rp.archiveZIPAide': 'The whole set of books as JSON and CSV — entries, invoices, contacts, financial years — with a SHA-256 manifest. The format is what makes the exit real: an archive you cannot read elsewhere is not an archive.',
 
   // ─── Rapports — camt ───
-  'rp.uneTransactionLue': '{n} transaction read — reconcile it in Settings → Bank',
-  'rp.desTransactionsLues': '{n} transactions read — reconcile them in Settings → Bank',
 
   // ─── Paramètres ───
   'pr.sousTitre': 'Your company settings',

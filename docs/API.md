@@ -618,6 +618,12 @@ dans la liste de codes externes ISO 20022 — tandis que `SCOR`, qui y figure,
 s'écrit dans `<Cd>`.
 | POST | `/bank-statements/import` | auth | Import relevés `camt.053.001.08` |
 
+La réponse porte `entries` (ce qui a été lu), `count`, puis `imported` et
+`duplicate` — ce que l'appel a réellement ajouté et ce qu'il a reconnu comme
+déjà présent. Les deux derniers ont manqué longtemps, et l'écran de
+rapprochement, qui les lit, annonçait « 0 écriture(s) ajoutée(s) » après chaque
+import réussi.
+
 ## Audit, conformité, archivage
 
 | Méthode | Route | Accès | Description |

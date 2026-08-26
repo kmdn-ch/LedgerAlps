@@ -287,7 +287,8 @@ export const it: Catalogue = {
   'rp.importBancaire': 'Importazione bancaria — ISO 20022 camt.053',
   'rp.releveCamt': 'Estratto conto camt.053',
   'rp.releveCamtAide': 'Carichi il file XML scaricato dal suo e-banking: LedgerAlps vi riconosce i suoi incassi e propone le riconciliazioni.',
-  'rp.choisirXML': 'Scegliere un file XML',
+  'rp.importVitAilleurs': 'L\'importazione avviene in Impostazioni → Banca, con la riconciliazione che ne segue: caricare un estratto registra delle scritture, ed è lì che si vede che cosa ne diventa.',
+  'rp.allerAuRapprochement': 'Vai alla riconciliazione bancaria',
   'rp.exportsOuverts': 'L’importazione di un estratto conto e la produzione di un ordine di pagamento richiedono un account autorizzato a scrivere. Le esportazioni e l’archivio legale qui sotto le restano aperti.',
   'rp.archivage': 'Archiviazione legale — CO art. 958f (10 anni)',
   'rp.archiveZIP': 'Archivio legale ZIP',
@@ -305,8 +306,6 @@ export const it: Catalogue = {
   'rp.archiveZIPAide': 'Tutta la contabilità in JSON e in CSV — registrazioni, fatture, contatti, esercizi — con un manifesto SHA-256. È il formato a rendere reale l’uscita: un archivio che non si può rileggere altrove non è un archivio.',
 
   // ─── Rapports — camt ───
-  'rp.uneTransactionLue': '{n} transazione letta — la riconcili in Impostazioni → Banca',
-  'rp.desTransactionsLues': '{n} transazioni lette — le riconcili in Impostazioni → Banca',
 
   // ─── Paramètres ───
   'pr.sousTitre': 'Configurazione della sua società',
