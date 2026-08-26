@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Save, Building2, CreditCard, FileText, Shield,
+  Save, Building2, CreditCard, FileText,
   Upload, Trash2, ImageOff, Loader2, AlertTriangle, Database, Wrench, UserCog,
 } from 'lucide-react'
 import { settingsApi } from '@/api/client'
@@ -55,7 +55,12 @@ const TABS = [
   { key: 'identity',  cle: 'pr.ongletIdentite'    as Cle, icon: Building2  },
   { key: 'banking',   cle: 'pr.ongletBanque'      as Cle, icon: CreditCard },
   { key: 'invoicing', cle: 'pr.ongletFacturation' as Cle, icon: FileText   },
-  { key: 'legal',     cle: 'pr.ongletLegal'       as Cle, icon: Shield     },
+  // Il y a eu ici un onglet « Légal ». Il montrait quatre phrases immuables sur
+  // le CO — les mêmes pour toutes les entreprises, jamais fonction de ce que
+  // contenait la base. Un onglet qui n'affiche rien de l'installation qu'on
+  // consulte apprend à ne pas être ouvert, et fait douter des voisins qui, eux,
+  // disent quelque chose. Ce que le logiciel a réellement à dire sur la
+  // conformité vit dans Maintenance → Conformité, qui LIT les livres.
   { key: 'backups',   cle: 'pr.ongletSauvegardes' as Cle, icon: Database   },
   { key: 'maintenance', cle: 'pr.ongletMaintenance' as Cle, icon: Wrench   },
   // Ce que chacun règle pour LUI-MÊME : son second facteur, ses ordinateurs de
@@ -581,36 +586,6 @@ export function SettingsPage() {
             </div>
           )}
 
-          {/* ─── Légal ────────────────────────────────────────────────── */}
-          {effectiveTab === 'legal' && (
-            <div className="space-y-4">
-              <div className="card border-warning-100 bg-warning-100/30">
-                <div className="card-body">
-                  <h3 className="text-sm font-semibold text-warning-700 mb-2">
-                    {t('pr.obligationsLegales')}
-                  </h3>
-                  <ul className="text-sm text-alpine-700 space-y-1.5">
-                    <li className="flex items-start gap-2">
-                      <span className="text-success-700 mt-0.5">✓</span>
-                      <span>{t('pr.obligationConservation')}</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-success-700 mt-0.5">✓</span>
-                      <span>{t('pr.obligationDonnees')}</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-success-700 mt-0.5">✓</span>
-                      <span>{t('pr.obligationDeclaration')}</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-warning-700 mt-0.5">⚠</span>
-                      <span>{t('pr.pasExpert')}</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}
         </fieldset>
         </form>
         )}
