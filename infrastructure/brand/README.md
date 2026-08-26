@@ -5,35 +5,49 @@ qui en dérive mécaniquement. Rien n'y est redessiné.
 
 | Fichier | Ce que c'est |
 |---|---|
-| `LOGO.svg` | Le logotype « LedgerAlps ». **Original, intact.** |
+| `LOGO.png` | Le logotype « LedgerAlps ». **Fourni, intact.** C'est la référence. |
+| `LOGO.svg` | Le même, vectorisé depuis `LOGO.png`. C'est ce que l'interface affiche. |
 | `icon.svg` | Le monogramme « LA ». **Original, intact.** C'est l'icône du bureau. |
 | `ledgeralps.ico` | L'icône Windows, sept tailles, produite depuis `icon.svg`. |
 | `faire_ico.py` | Assemble le `.ico` à partir des rendus PNG. |
 | `faire_syso.py` | Produit la ressource Windows qui donne son icône à l'exécutable. |
 
-## Pourquoi les originaux ne bougent pas
+## Pourquoi on décalque au lieu de retaper
 
-Une première version de la marque avait été **reconstruite** à partir de
-captures d'écran. Elle perdait ce qui fait un logo : la police, l'espacement, le
-détail des raccords. Les fichiers ci-dessus sont donc la référence, et tout ce
-que le produit affiche en dérive sans intervention manuelle.
+Une première version de la marque avait été **reconstruite** à la police, à
+partir de captures d'écran. Elle perdait ce qui fait un logo : la graisse,
+l'espacement, le détail des raccords. Les lettres du logotype sont donc
+vectorisées depuis l'image fournie, pas ressaisies.
+
+**Sauf le badge suisse**, qui est *construit*. Un drapeau suisse n'est pas un
+dessin, c'est une géométrie : l'ordonnance sur les armoiries (RS 232.21) le
+décrit sur un carré de 32 unités où chaque bras mesure 6 unités de large et 20
+d'un bout à l'autre, centré. Le décalquer revenait à recopier les à-peu-près de
+l'image — l'ancien logo portait un rouge `#C42527` là où le `#DA291C` (Pantone
+485 C) fait foi, et une croix qui n'était pas tout à fait aux proportions.
+
+Écart mesuré entre `LOGO.png` et `LOGO.svg`, pixel à pixel après rendu : **0,76
+sur 255 en moyenne** sur les lettres, deux pixels au-delà du seuil sur 102 600.
+Le badge s'en écarte davantage, et c'est voulu : c'est là qu'on a corrigé.
 
 ## Ce que le produit utilise, et d'où ça vient
 
 **Dans l'interface** — `frontend/public/ledgeralps-logo.svg` et
-`ledgeralps-icon.svg`. Ce sont les mêmes tracés, recopiés à l'identique. Deux
-choses seulement changent, et aucune ne touche au dessin :
+`ledgeralps-icon.svg`.
 
-- le `viewBox` cadre sur les limites réelles du dessin, au lieu de la planche de
-  1408 × 768 qui l'entoure de blanc ;
-- pour le LOGOTYPE, le rectangle de fond blanc est retiré : il se pose sur une
-  plaque claire que la page fournit elle-même ;
-- pour l'ICÔNE, le fond blanc RESTE, étendu au cadre carré. Une icône se pose
-  sur un bureau, une barre des tâches, un fond dont on ne sait rien, et un
-  monogramme bleu nuit sur fond transparent y disparaîtrait.
+- le LOGOTYPE est la copie exacte de `LOGO.svg`. Son fond est transparent : il
+  se pose sur une plaque claire que la page fournit elle-même là où le fond est
+  sombre — barre latérale, écran de connexion — et tel quel là où il est clair,
+  en haut à droite de l'espace de travail ;
+- l'ICÔNE reprend les tracés d'`icon.svg`, avec pour seuls changements un
+  `viewBox` cadré sur le dessin au lieu de la planche de 1408 × 768 qui
+  l'entoure de blanc. Le fond blanc y RESTE, étendu au cadre carré : une icône
+  se pose sur un bureau, une barre des tâches, un fond dont on ne sait rien, et
+  un monogramme bleu nuit sur fond transparent y disparaîtrait.
 
-Les polices sont **déjà vectorisées** dans les originaux : l'espacement et le
-style sont dans les coordonnées, et rien ne les altère.
+Le monogramme n'a pas suivi la mise à jour du logotype : il porte encore son
+rouge `#CA2E24`. C'est un fichier séparé, qui alimente le `.ico` et la ressource
+Windows, et le refaire est un chantier à part.
 
 **Sur le bureau et dans le menu Démarrer** — l'icône vient de
 `cmd/launcher/rsrc_windows_amd64.syso`, une ressource Windows liée à
