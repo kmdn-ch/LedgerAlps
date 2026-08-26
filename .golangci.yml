@@ -14,6 +14,20 @@ linters:
     - bodyclose
     - noctx
     - sqlclosecheck
+    # gofmt a longtemps ete DESACTIVE, sur un diagnostic errone.
+    #
+    # Le commentaire disait « pre-existing files have Windows CRLF
+    # inconsistencies; run gofmt manually ». Le symptome etait reel : sur un
+    # poste Windows avec core.autocrlf=true, l'arbre de travail est en CRLF,
+    # gofmt refuse le CRLF, et « gofmt -l . » signale donc TOUS les fichiers.
+    #
+    # Mais le depot, lui, STOCKE du LF -- verifie octet par octet sur les 211
+    # fichiers .go : zero CR. C'est ce que la CI recupere sur un runner Linux,
+    # et gofmt n'y signale rien. Le linteur ne cassait pas la CI ; il cassait
+    # une verification LOCALE sur Windows, et on l'a desactive pour tout le
+    # monde. La consigne de remplacement -- « run gofmt manually » -- n'etait
+    # appliquee par rien, et treize fichiers avaient derive.
+    - gofmt
   disable:
     - exhaustive
     - wrapcheck
@@ -24,8 +38,6 @@ linters:
     - funlen
     - cyclop
     - gocognit
-    # gofmt: pre-existing files have Windows CRLF inconsistencies; run gofmt manually
-    - gofmt
     # misspell: multilingual codebase (French/Swiss comments, British spellings like
     # "cancelled" are valid in this context)
     - misspell

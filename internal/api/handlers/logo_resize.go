@@ -57,8 +57,9 @@ type logoAjusté struct {
 // ajusterLogo rend une image dont aucun côté ne dépasse LogoTailleMax.
 //
 // L'entrée est l'adresse de données complète (« data:image/png;base64,… »).
-// Une image déjà à la bonne taille est rendue TELLE QUELLE : la ré-encoder
-// n'apporterait rien et dégraderait un PNG déjà optimisé.
+// Les OCTETS d'une image déjà à la bonne taille sont rendus intacts : les
+// ré-encoder n'apporterait rien et dégraderait un PNG déjà optimisé. L'entête,
+// lui, est TOUJOURS reconstruit d'après le format détecté — voir plus bas.
 func ajusterLogo(dataURL string) (logoAjusté, error) {
 	virgule := strings.IndexByte(dataURL, ',')
 	if virgule < 0 {
@@ -81,15 +82,38 @@ func ajusterLogo(dataURL string) (logoAjusté, error) {
 	// imgsafe plutôt qu'image.Decode : le plafond de 2 Mo posé sur les octets
 	// ne borne pas l'allocation. Un PNG uniforme de 20 000 × 20 000 tient dans
 	// 1,5 Mo et fait réserver 1,6 Gio avant qu'un seul pixel soit lu.
-	img, _, err := imgsafe.Decode(brut)
+	img, format, err := imgsafe.Decode(brut)
 	if err != nil {
 		return logoAjusté{}, err
+	}
+
+	// Le format retenu est celui des OCTETS, et l'entête est réécrit d'après
+	// lui — jamais recopié depuis ce que le client a envoyé.
+	//
+	// L'entête d'origine traversait intact quand l'image n'avait pas besoin
+	// d'être redimensionnée, et le contrôle qui l'accepte en amont cherche une
+	// sous-chaîne : « data:text/html;image/png;base64,… » contient bien
+	// « image/png ». Le contenu restant un PNG valide, aucun navigateur ne
+	// l'exécute aujourd'hui dans une balise <img> ; mais cet entête est stocké
+	// tel quel, part dans les sauvegardes et dans l'archive légale, et il
+	// suffirait qu'un écran place un jour `logo_data` dans un href ou une
+	// iframe pour que la déclaration compte. On ne conserve donc pas une chaîne
+	// fournie par l'appelant là où on peut la reconstruire.
+	mime, ok := mimeDuFormat(format)
+	if !ok {
+		return logoAjusté{}, fmt.Errorf("format d'image non accepté : %s (PNG ou JPEG attendu)", format)
 	}
 
 	b := img.Bounds()
 	l, h := b.Dx(), b.Dy()
 	if l <= LogoTailleMax && h <= LogoTailleMax {
-		return logoAjusté{DataURL: dataURL, Largeur: l, Hauteur: h}, nil
+		// Les OCTETS de l'image sont rendus intacts — les ré-encoder
+		// dégraderait un PNG déjà optimisé. Seul l'entête est reconstruit.
+		return logoAjusté{
+			DataURL: "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(brut),
+			Largeur: l,
+			Hauteur: h,
+		}, nil
 	}
 
 	nl, nh := tailleAjustée(l, h)
@@ -135,4 +159,21 @@ func tailleAjustée(l, h int) (int, int) {
 		nl = 1
 	}
 	return nl, LogoTailleMax
+}
+
+// mimeDuFormat traduit le format DÉTECTÉ par le décodeur en type MIME.
+//
+// La liste est fermée à dessein : `image.Decode` reconnaît tout format dont un
+// décodeur a été importé, et le produit n'en accepte que deux. Rendre `false`
+// plutôt qu'un type par défaut fait refuser un GIF ou un WebP ici — au point
+// où le format est CONNU — au lieu de le laisser entrer sous un entête que
+// personne n'a vérifié.
+func mimeDuFormat(format string) (string, bool) {
+	switch format {
+	case "png":
+		return "image/png", true
+	case "jpeg":
+		return "image/jpeg", true
+	}
+	return "", false
 }
