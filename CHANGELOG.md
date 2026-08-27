@@ -7,6 +7,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+## [1.5.7] — 2026-08-27
+
 ### Modifié
 
 - **Le README est reconstruit autour de ce qui reste : le produit, pas la procédure.** Les sections « Installation », « Où vont vos données » et « Plateformes » sont retirées — la première fait double emploi avec le badge de téléchargement, déjà en tête de page ; le schéma de la deuxième répétait ce que dit déjà le sous-titre ; la troisième était une explication technique que peu de lecteurs venaient chercher là. Le mur de texte qui suivait le tableau « Ce que fait LedgerAlps » — achats, paiements, comptes et accès, en plusieurs paragraphes denses — est retiré : ce qu'il couvrait vit déjà dans `docs/DROITS.md`, `docs/ARCHITECTURE.md` et la FAQ, qui restent. La page ouvre maintenant sur le logotype, vectorisé sur une carte lisible en thème clair comme sombre.
