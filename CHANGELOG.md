@@ -7,6 +7,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+## [1.5.8] — 2026-08-27
+
 ### Corrigé
 
 - **L'extourne d'une facture fournisseur ne se disait pas extourne.** Le schéma porte `is_reversal` et `reversal_of_id` depuis la première migration, et les deux partent dans l'**archive légale** — celle que le CO art. 958f impose de conserver dix ans et qu'on remet à sa fiduciaire. Seul le chemin des factures CLIENTS les renseignait. L'extourne d'une facture fournisseur s'y décrivait pourtant comme une extourne dans son libellé, tout en portant `is_reversal = 0` et aucun lien vers l'écriture qu'elle annule : une fiduciaire qui reconstitue les annulations d'un exercice n'en voyait que la moitié, et un chiffre venu d'une extourne non identifiée est un chiffre qu'on ne sait pas expliquer.
