@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 )
 
 const (
@@ -37,10 +38,9 @@ const (
 // installations serve plain HTTP on localhost, where a Secure cookie would be
 // dropped by the browser and lock the user out of their own accounts.
 func isSecureRequest(c *gin.Context) bool {
-	if c.Request.TLS != nil {
-		return true
-	}
-	return c.GetHeader("X-Forwarded-Proto") == "https"
+	// Meme regle que pour X-Forwarded-For : un en-tete de mandataire ne vaut
+	// que s'il vient d'un mandataire declare. Voir middleware/mandataire.go.
+	return mw.ProtocoleAnnonceHTTPS(c)
 }
 
 // setRefreshCookie stores the refresh token for the browser.

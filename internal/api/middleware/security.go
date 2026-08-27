@@ -24,8 +24,14 @@ func SecurityHeaders() gin.HandlerFunc {
 				"object-src 'none'; "+
 				"base-uri 'self'")
 
-		// HSTS only over HTTPS (conditional — avoids breaking plain HTTP dev)
-		if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
+		// HSTS uniquement sur HTTPS REEL.
+		//
+		// La condition passait par c.GetHeader, donc croyait un en-tete que
+		// n'importe qui pose. Emettre HSTS sur une reponse servie en clair
+		// n'est pas une protection de trop : un navigateur qui l'enregistre
+		// pour « localhost » refuse ensuite http:// sur cet hote, et
+		// l'utilisateur perd l'acces a sa comptabilite. Voir mandataire.go.
+		if ProtocoleAnnonceHTTPS(c) {
 			c.Header("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 		}
 

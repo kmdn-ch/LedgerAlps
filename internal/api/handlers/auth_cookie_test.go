@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 )
 
 func cookieFromRecorder(w *httptest.ResponseRecorder, name string) *http.Cookie {
@@ -20,8 +21,15 @@ func cookieFromRecorder(w *httptest.ResponseRecorder, name string) *http.Cookie 
 }
 
 func runWithRequest(req *http.Request, h gin.HandlerFunc) *httptest.ResponseRecorder {
+	return runWithProxies(req, nil, h)
+}
+
+// runWithProxies monte le routeur avec la liste de mandataires declares, comme
+// le fait le serveur d'apres TRUSTED_PROXIES.
+func runWithProxies(req *http.Request, mandataires []string, h gin.HandlerFunc) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
+	r.Use(mw.ConfianceMandataire(mandataires))
 	r.GET("/probe", h)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -56,23 +64,41 @@ func TestRefreshCookieIsHttpOnly(t *testing.T) {
 
 // LedgerAlps is local-first: most installs serve plain HTTP on localhost, where
 // a Secure cookie is dropped by the browser and would lock the user out.
+//
+// Le drapeau Secure suit donc la connexion — mais « la connexion » ne veut pas
+// dire « ce que l'appelant en dit ». Ce test tient les trois cas.
 func TestSecureFlagFollowsTheConnection(t *testing.T) {
-	plain := runWithRequest(httptest.NewRequest(http.MethodGet, "/probe", nil), func(c *gin.Context) {
+	poser := func(c *gin.Context) {
 		setRefreshCookie(c, "t", time.Hour)
 		c.Status(http.StatusOK)
-	})
+	}
+
+	// 1. HTTP en clair, sans rien : pas de Secure, sinon localhost s'enferme.
+	plain := runWithRequest(httptest.NewRequest(http.MethodGet, "/probe", nil), poser)
 	if ck := cookieFromRecorder(plain, refreshCookieName); ck == nil || ck.Secure {
 		t.Error("over plain HTTP the cookie must not be Secure, or localhost users cannot log in")
 	}
 
+	// 2. Derriere un mandataire DECLARE qui annonce https : Secure.
 	fwd := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	fwd.RemoteAddr = "10.0.0.1:5000"
 	fwd.Header.Set("X-Forwarded-Proto", "https")
-	behindProxy := runWithRequest(fwd, func(c *gin.Context) {
-		setRefreshCookie(c, "t", time.Hour)
-		c.Status(http.StatusOK)
-	})
+	behindProxy := runWithProxies(fwd, []string{"10.0.0.1"}, poser)
 	if ck := cookieFromRecorder(behindProxy, refreshCookieName); ck == nil || !ck.Secure {
-		t.Error("behind an HTTPS reverse proxy the cookie must be Secure")
+		t.Error("derriere un mandataire declare annoncant https, le cookie doit etre Secure")
+	}
+
+	// 3. Le meme en-tete, mais d'un pair QUELCONQUE : il ne vaut rien.
+	//
+	// C'etait le trou releve par le troisieme audit : X-Forwarded-Proto etait
+	// cru sans verifier d'ou il venait, alors que X-Forwarded-For, lui, etait
+	// deja garde par TRUSTED_PROXIES. Ce cas tient la symetrie.
+	usurpe := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	usurpe.RemoteAddr = "203.0.113.7:5000"
+	usurpe.Header.Set("X-Forwarded-Proto", "https")
+	sansMandataire := runWithProxies(usurpe, nil, poser)
+	if ck := cookieFromRecorder(sansMandataire, refreshCookieName); ck == nil || ck.Secure {
+		t.Error("X-Forwarded-Proto cru alors qu'aucun mandataire n'est declare")
 	}
 }
 
