@@ -7,6 +7,34 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Corrigé
+
+- **L'extourne d'une facture fournisseur ne se disait pas extourne.** Le schéma porte `is_reversal` et `reversal_of_id` depuis la première migration, et les deux partent dans l'**archive légale** — celle que le CO art. 958f impose de conserver dix ans et qu'on remet à sa fiduciaire. Seul le chemin des factures CLIENTS les renseignait. L'extourne d'une facture fournisseur s'y décrivait pourtant comme une extourne dans son libellé, tout en portant `is_reversal = 0` et aucun lien vers l'écriture qu'elle annule : une fiduciaire qui reconstitue les annulations d'un exercice n'en voyait que la moitié, et un chiffre venu d'une extourne non identifiée est un chiffre qu'on ne sait pas expliquer.
+
+  Le marquage est posé **avant** la comptabilisation, parce que le déclencheur d'immuabilité (CO art. 957a) refuse toute mise à jour d'une écriture déjà comptabilisée — vérifié en inversant l'ordre, qui échoue sur `Cannot modify a posted journal entry`. Un test tient désormais l'invariant des deux côtés. Vérifié de bout en bout sur un serveur réel, jusqu'au contenu de l'archive produite.
+
+  *Les extournes fournisseur déjà passées restent non marquées.* Les corriger demanderait de modifier des écritures comptabilisées, ce que le déclencheur interdit précisément — c'est une décision, pas une correction.
+
+- **Le port lu dans `config.json` n'était validé nulle part.** Il finit dans une URL passée à `cmd /c start` **et** dans un `template.JS`, deux endroits qui réinterprètent ce qu'on leur donne. Go échappe ses arguments avec `syscall.EscapeArg`, qui met entre guillemets ce qui contient un espace mais **pas** ce qui contient `&` : une valeur sans espace traversait intacte jusqu'à `cmd.exe`, qui la découpait. Reproduit avant correction. Le port est désormais validé à la lecture du fichier **et** à l'entrée de l'assistant d'installation, qui le reçoit par une requête HTTP.
+
+- **`X-Forwarded-Proto` était cru sans vérifier d'où il venait.** `X-Forwarded-For` était pourtant déjà gardé par `TRUSTED_PROXIES`, avec le raisonnement écrit dans la configuration. Le second en-tête y échappait, aux deux endroits où il décide quelque chose : le drapeau `Secure` du cookie de rafraîchissement, et l'émission de HSTS. Le second est le plus gênant — un navigateur qui enregistre `Strict-Transport-Security` pour `localhost` refuse ensuite `http://` sur cet hôte, et l'utilisateur perd l'accès à sa comptabilité pour deux ans. La confiance est maintenant décidée une fois, au plus tôt dans la chaîne, et six tests tiennent la symétrie.
+
+- **L'adresse d'une nouvelle version, venue du réseau, allait dans un `href` sans contrôle.** React 18 avertit sur un `href` en `javascript:` mais le rend tout de même. La garde porte sur le schéma — pas sur l'hôte, car le point d'accès est configurable et une installation local-first a de bonnes raisons de ne pas interroger GitHub.
+
+- **Créer un client depuis une facture laissait parfois le champ vide.** La sélection attendait le rechargement de la liste, et rien n'attrapait le rejet : si le rechargement échouait, la fenêtre se fermait sur un champ « client » vide, sans explication. Le contact est désormais posé dans le cache — ce qui crée l'option sans réseau — et sélectionné au tour de rendu suivant, que le rechargement aboutisse ou non.
+
+### Modifié
+
+- **La lecture des droits, faite à chaque requête, a un délai et une trace.** Elle n'avait ni l'un ni l'autre : un verrou d'écriture SQLite — une sauvegarde volumineuse, une restauration — bloquait indéfiniment tout ce qui arrivait, et une panne de lecture se présentait à l'utilisateur comme « droits insuffisants », sans rien laisser dans le journal. Refuser reste le bon réflexe ; le taire ne l'était pas.
+
+- **Sept fonctions que plus rien n'appelait sont retirées**, dont un constructeur gardé par un commentaire qui le justifiait « pour les tests » — alors que sa seule occurrence dans tout le dépôt était sa propre définition. Le linteur `unused` ne pouvait pas les voir : il ne signale que les identifiants non exportés. Un job **`deadcode`** raisonnant par atteignabilité rejoint la CI pour que cela ne revienne pas.
+
+- **La goroutine de rétention écoute l'annulation**, comme celle des attestations le faisait déjà. Les deux tâches de fond partagent désormais un seul contexte de durée de vie.
+
+- **Le frontend n'a plus de `any` de contournement.** Neuf sites déballaient une erreur HTTP à la main alors que `refusalMessage` existe et sert déjà à vingt-quatre autres endroits ; le dernier `any`, dans cet assistant, est remplacé par le type qu'on y lit réellement. Les deux directives `eslint-disable` devenues inertes au retrait d'ESLint sont remplacées par l'explication qu'elles tenaient lieu de donner.
+
+- **Les scripts de marque encadrent leurs fichiers** (`with`), et la veille de conformité borne aussi ses **redirections** à https — sa garde ne portait que sur l'adresse de départ.
+
 ## [1.5.7] — 2026-08-27
 
 ### Modifié
