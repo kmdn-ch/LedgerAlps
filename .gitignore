@@ -70,3 +70,6 @@ ledgeralps
 !internal/frontend/dist/
 internal/frontend/dist/*
 !internal/frontend/dist/.gitkeep
+
+# Rapports d'audit generes localement — jamais publies dans le depot
+review*.md
