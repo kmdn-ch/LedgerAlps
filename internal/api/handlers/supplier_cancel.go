@@ -219,7 +219,7 @@ func (h *SupplierInvoicesHandler) cancelOne(
 			StatutAvant: status, StatutApres: status}
 	}
 
-	reversal, err := h.reverseSupplierEntry(ctx, id, entryID, userID, ip, reason, reference)
+	reversal, err := h.reverseSupplierEntry(ctx, entryID, userID, ip, reason, reference)
 	if err != nil {
 		return cancelResult{ID: id, Outcome: "refused", Detail: err.Error(),
 			StatutAvant: status, StatutApres: status}
@@ -248,7 +248,7 @@ func (h *SupplierInvoicesHandler) cancelOne(
 // pu être corrigé, et une extourne qui ne solde pas exactement ce qui a été
 // passé laisse un résidu sur des comptes que personne ne va rapprocher.
 func (h *SupplierInvoicesHandler) reverseSupplierEntry(
-	ctx context.Context, invoiceID, entryID, userID, ip, reason, reference string,
+	ctx context.Context, entryID, userID, ip, reason, reference string,
 ) (string, error) {
 	if h.accountingSvc == nil {
 		return "", fmt.Errorf("service comptable indisponible")
@@ -319,9 +319,28 @@ func (h *SupplierInvoicesHandler) reverseSupplierEntry(
 	if err != nil {
 		return "", fmt.Errorf("création de l'extourne: %w", err)
 	}
+
+	// Marquer l'écriture comme extourne, et la rattacher à celle qu'elle annule.
+	//
+	// Ces deux colonnes existaient et n'étaient renseignées QUE par le chemin
+	// des factures clients (invoicing/service.go). Une extourne fournisseur
+	// partait donc dans l'archive légale — celle que le CO art. 958f impose de
+	// conserver dix ans et qu'on remet à sa fiduciaire — comme une écriture
+	// ordinaire, sans lien vers ce qu'elle annule. Elle s'y décrivait pourtant
+	// elle-même comme une extourne, dans son libellé.
+	//
+	// AVANT la comptabilisation, et pas après : trg_journal_entries_no_update
+	// (migration 0001) refuse toute mise à jour d'une écriture dont le statut
+	// est déjà « posted ». C'est aussi l'ordre que suit le chemin client.
+	flagQ := db.Rebind(
+		`UPDATE journal_entries SET is_reversal = 1, reversal_of_id = ? WHERE id = ?`,
+		h.usePostgres)
+	if _, err := h.db.ExecContext(ctx, flagQ, entryID, entry.ID); err != nil {
+		return "", fmt.Errorf("marquage de l'extourne %s: %w", entry.ID, err)
+	}
+
 	if err := h.accountingSvc.PostEntry(ctx, userID, entry.ID, ip); err != nil {
 		return "", fmt.Errorf("comptabilisation de l'extourne %s: %w", entry.ID, err)
 	}
-	_ = invoiceID
 	return entry.ID, nil
 }

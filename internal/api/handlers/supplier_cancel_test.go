@@ -363,3 +363,69 @@ func TestLaComptabilisationEstTracee(t *testing.T) {
 		t.Errorf("%d maillon(s) pour la comptabilisation, attendu 1", n)
 	}
 }
+
+// L'extourne doit se DIRE extourne, et dire ce qu'elle annule.
+//
+// Le schéma porte `is_reversal` et `reversal_of_id` depuis la première
+// migration, et les deux partent dans l'archive légale (export.go) — celle que
+// le CO art. 958f impose de conserver dix ans et qu'on remet à sa fiduciaire.
+//
+// Jusqu'au troisième audit, seul le chemin des factures CLIENTS les
+// renseignait. L'extourne d'une facture FOURNISSEUR s'y décrivait comme une
+// extourne dans son libellé, tout en portant `is_reversal = 0` et aucun lien
+// vers l'écriture annulée. Une fiduciaire qui reconstitue les annulations d'un
+// exercice n'en voyait que la moitié.
+//
+// Ce test tient l'invariant des DEUX côtés : le marquage, et le rattachement.
+func TestUneExtourneFournisseurEstMarqueeEtRattachee(t *testing.T) {
+	database, r, _ := cancelEnv(t)
+	creerFacture(t, database, r, "f1", "FA-001", 1000, 81)
+
+	// L'écriture d'origine, telle que la comptabilisation l'a posée.
+	var origine string
+	if err := database.QueryRow(
+		`SELECT COALESCE(journal_entry_id,'') FROM supplier_invoices WHERE id = 'f1'`,
+	).Scan(&origine); err != nil {
+		t.Fatal(err)
+	}
+	if origine == "" {
+		t.Fatal("la comptabilisation n'a laissé aucune écriture — le test ne prouve rien")
+	}
+
+	out := annuler(t, r, "f1")
+	res := out["results"].([]any)[0].(map[string]any)
+	if res["outcome"] != "cancelled" {
+		t.Fatalf("issue %q, attendu « cancelled » — %v", res["outcome"], res["detail"])
+	}
+	extourne, _ := res["reversal_entry_id"].(string)
+	if extourne == "" {
+		t.Fatal("aucune écriture d'extourne rendue")
+	}
+
+	var estExtourne int
+	var annule sql.NullString
+	if err := database.QueryRow(
+		`SELECT is_reversal, reversal_of_id FROM journal_entries WHERE id = ?`,
+		extourne).Scan(&estExtourne, &annule); err != nil {
+		t.Fatal(err)
+	}
+	if estExtourne != 1 {
+		t.Errorf("is_reversal = %d, attendu 1 — l'extourne passe pour une écriture "+
+			"ordinaire dans l'archive légale", estExtourne)
+	}
+	if !annule.Valid || annule.String != origine {
+		t.Errorf("reversal_of_id = %q, attendu %q — l'extourne ne dit pas ce qu'elle annule",
+			annule.String, origine)
+	}
+
+	// Et elle reste comptabilisée : le marquage ne doit pas avoir été posé
+	// APRÈS, où le déclencheur d'immuabilité (migration 0001) l'aurait refusé.
+	var statut string
+	if err := database.QueryRow(
+		`SELECT status FROM journal_entries WHERE id = ?`, extourne).Scan(&statut); err != nil {
+		t.Fatal(err)
+	}
+	if statut != "posted" {
+		t.Errorf("statut %q, attendu « posted »", statut)
+	}
+}
