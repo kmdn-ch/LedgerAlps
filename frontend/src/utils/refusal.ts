@@ -13,8 +13,16 @@ const LEAD: Record<string, string> = {
     "Impossible : vous ne pouvez pas facturer de TVA sans numéro de TVA.",
 }
 
+// La forme d'une erreur axios, réduite à ce qu'on en lit.
+//
+// `any` disait « je ne sais pas », ce qui est faux : on sait exactement
+// quels deux champs comptent. Le dire rend la lecture vérifiable par le
+// compilateur, et c'est le seul endroit du frontend où cette forme est
+// déballée — les autres écrans passent par cette fonction.
+type RefusHTTP = { response?: { data?: { reason?: string; error?: string } } }
+
 export function refusalMessage(error: unknown, fallback: string): string {
-  const data = (error as any)?.response?.data
+  const data = (error as RefusHTTP | null | undefined)?.response?.data
   if (!data) return fallback
   const lead = data.reason ? LEAD[data.reason] : undefined
   const detail: string = data.error ?? ''

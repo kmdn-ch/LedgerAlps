@@ -13,6 +13,7 @@ import { PageHeader, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import type { Contact } from '@/types'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 import { useT, useTv } from '@/i18n/useT'
+import { refusalMessage } from '@/utils/refusal'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -125,7 +126,7 @@ export function ContactDetailPage() {
 
       {save.isError && (
         <ErrorBanner message={
-          (save.error as any)?.response?.data?.error ?? t('co.erreurSauvegarde')
+          refusalMessage(save.error, t('co.erreurSauvegarde'))
         } />
       )}
       {save.isSuccess && !isDirty && (

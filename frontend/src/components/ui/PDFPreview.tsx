@@ -20,6 +20,14 @@ export function PDFPreview({ fetchPDF, filename, className, onClose }: PDFPrevie
   const [error,   setError]   = useState<string | null>(null)
   const prevUrl = useRef<string | null>(null)
 
+  // Tableau de dépendances vide, délibérément : le PDF se charge une fois,
+  // au montage. `fetchPDF` est réécrite à chaque rendu du parent — la mettre
+  // en dépendance relancerait le téléchargement à chaque frappe dans un
+  // champ voisin, et révoquerait l'URL du blob en cours d'affichage.
+  //
+  // Une directive `eslint-disable-next-line react-hooks/exhaustive-deps`
+  // tenait ici lieu d'explication. Elle n'expliquait rien, et depuis le
+  // retrait d'ESLint (v1.5.7) elle ne désactivait plus rien non plus.
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -46,7 +54,6 @@ export function PDFPreview({ fetchPDF, filename, className, onClose }: PDFPrevie
         prevUrl.current = null
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (

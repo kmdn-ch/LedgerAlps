@@ -60,7 +60,6 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   // « annulé » passait à vrai, setRestoring(false) était sauté, et l'écran
   // restait bloqué sur « Restauration de la session… » alors que l'appel avait
   // pourtant réussi.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!restoring) return
     let monte = true

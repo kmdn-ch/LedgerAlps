@@ -15,6 +15,7 @@ import { contactsApi, maintenanceApi } from '@/api/client'
 import { SectionTitle, ErrorBanner } from '@/components/ui'
 import type { Contact, SystemHealth, AnonymiseResult } from '@/types'
 import { useT } from '@/i18n/useT'
+import { refusalMessage } from '@/utils/refusal'
 
 // ─── Données personnelles (nLPD) ──────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ export function PersonalDataPanel() {
       qc.invalidateQueries({ queryKey: ['contacts'] })
       qc.invalidateQueries({ queryKey: ['maintenance'] })
     },
-    onError: (e: any) => setError(e?.response?.data?.error ?? t('dp.echecAnonymisation')),
+    onError: (e) => setError(refusalMessage(e, t('dp.echecAnonymisation'))),
   })
 
   const pd = health.data?.personal_data

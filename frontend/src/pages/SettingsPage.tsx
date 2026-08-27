@@ -75,6 +75,7 @@ import { LanguagePanel } from '@/components/settings/LanguagePanel'
 import { MaintenancePanel } from '@/components/settings/MaintenancePanel'
 import { ReconciliationPanel } from '@/components/settings/ReconciliationPanel'
 import { useAuthStore } from '@/store/auth'
+import { refusalMessage } from '@/utils/refusal'
 
 export function SettingsPage() {
   const t = useT()
@@ -250,7 +251,7 @@ export function SettingsPage() {
       />
 
       {save.isError && (
-        <ErrorBanner message={(save.error as any)?.response?.data?.error ?? t('pr.erreurSauvegarde')} />
+        <ErrorBanner message={refusalMessage(save.error, t('pr.erreurSauvegarde'))} />
       )}
 
       {/* IBAN missing warning — shown until an IBAN is saved */}
@@ -378,7 +379,7 @@ export function SettingsPage() {
                       )}
                       {uploadLogo.isError && (
                         <p className="text-xs text-danger-700">
-                          {(uploadLogo.error as any)?.response?.data?.error ?? t('pr.erreurTelechargement')}
+                          {refusalMessage(uploadLogo.error, t('pr.erreurTelechargement'))}
                         </p>
                       )}
                     </div>

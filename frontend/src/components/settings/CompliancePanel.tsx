@@ -21,6 +21,7 @@ import { formatDate } from '@/utils'
 import type { FiscalYear } from '@/types'
 import { useT } from '@/i18n/useT'
 import { AttestationVerifyPanel } from '@/components/settings/AttestationVerifyPanel'
+import { refusalMessage } from '@/utils/refusal'
 
 export function CompliancePanel() {
   const t = useT()
@@ -42,7 +43,7 @@ export function CompliancePanel() {
       qc.invalidateQueries({ queryKey: ['maintenance'] })
       qc.invalidateQueries({ queryKey: ['audit-logs'] })
     },
-    onError: (e: any) => setError(e?.response?.data?.error ?? t('cf.echecCloture')),
+    onError: (e) => setError(refusalMessage(e, t('cf.echecCloture'))),
   })
 
   return (
@@ -193,7 +194,7 @@ function CreateFiscalYearForm({ onDone }: { onDone: () => void }) {
   const create = useMutation({
     mutationFn: () => fiscalYearsApi.create({ name, start_date: start, end_date: end }),
     onSuccess: onDone,
-    onError: (e: any) => setError(e?.response?.data?.error ?? t('cf.echecCreationExercice')),
+    onError: (e) => setError(refusalMessage(e, t('cf.echecCreationExercice'))),
   })
 
   return (
@@ -236,9 +237,11 @@ function DownloadRow({ icon: Icon, title, description, filename, fetcher }: {
   title: string
   description: string
   filename: string
-  // Le type de réponse d'axios n'est pas resserré ici : les en-têtes y sont
-  // partiels par nature, et seul content-disposition nous intéresse.
-  fetcher: () => Promise<{ data: Blob; headers: any }>
+  // Les en-têtes d'axios sont PARTIELS par nature : chaque valeur peut être
+  // absente, et seul content-disposition nous intéresse. Le type le dit —
+  // `any` le taisait, et laissait croire que la lecture ne peut pas rendre
+  // undefined. C'est le `?? ''` en dessous qui traite ce cas.
+  fetcher: () => Promise<{ data: Blob; headers: Partial<Record<string, unknown>> }>
 }) {
   const t = useT()
   const [busy, setBusy] = useState(false)
@@ -251,7 +254,7 @@ function DownloadRow({ icon: Icon, title, description, filename, fetcher }: {
     setBusy(true); setError(null)
     try {
       const res = await fetcher()
-      const disposition: string = res.headers['content-disposition'] ?? ''
+      const disposition = String(res.headers['content-disposition'] ?? '')
       const match = /filename="([^"]+)"/.exec(disposition)
       const url = URL.createObjectURL(res.data)
       const a = document.createElement('a')

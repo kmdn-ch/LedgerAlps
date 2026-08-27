@@ -10,6 +10,7 @@ import { contactsApi } from '@/api/client'
 import { ErrorBanner, ConfirmDialog } from '@/components/ui'
 import { useBeforeUnload } from '@/hooks/useUnsavedGuard'
 import { useT, useTv } from '@/i18n/useT'
+import { refusalMessage } from '@/utils/refusal'
 
 // Convert empty strings to undefined so optional fields don't trip validation.
 const opt = <T extends z.ZodTypeAny>(s: T) =>
@@ -103,7 +104,7 @@ export function NewContactModal({ onClose }: Props) {
         <form onSubmit={handleSubmit(d => create.mutate(d))} className="px-6 py-5 space-y-5">
           {create.error && (
             <ErrorBanner message={
-              (create.error as any)?.response?.data?.error
+              refusalMessage(create.error, t('co.erreurCreation'))
                 ?? t('co.erreurCreation')
             } />
           )}
