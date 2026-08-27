@@ -41,7 +41,8 @@ RT_ICON, RT_GROUP_ICON = 3, 14
 LANGUE = 0x0409  # anglais (US) — la langue de la RESSOURCE, pas de l'interface
 
 # ── Lire le .ico ─────────────────────────────────────────────────────────────
-b = io.open(SOURCE, "rb").read()
+with io.open(SOURCE, "rb") as f:
+    b = f.read()
 _, typ, nb = struct.unpack("<HHH", b[:6])
 if typ != 1:
     raise SystemExit("ce fichier n'est pas un .ico")
@@ -147,7 +148,8 @@ for adresse in relocalisations:
 symboles = struct.pack("<8sIhHBB", b".rsrc\0\0\0", 0, 1, 0, 3, 0)  # classe 3 = STATIC
 chaines = struct.pack("<I", 4)                    # table de chaînes vide
 
-io.open(SORTIE, "wb").write(entete + section + s + reloc + symboles + chaines)
+with io.open(SORTIE, "wb") as f:
+    f.write(entete + section + s + reloc + symboles + chaines)
 print(f"{SORTIE}")
 print(f"  {len(images)} images, {len(relocalisations)} relocalisations, "
       f"{os.path.getsize(SORTIE)} octets")

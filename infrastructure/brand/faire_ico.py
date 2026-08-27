@@ -33,7 +33,8 @@ EN_PNG = {128, 256}  # au-delà de 64 px, le PNG évite un .ico obèse
 
 def lire_png(chemin):
     """Rend (largeur, hauteur, pixels RGBA) d'un PNG écrit par un navigateur."""
-    brut = io.open(chemin, "rb").read()
+    with io.open(chemin, "rb") as f:
+        brut = f.read()
     if brut[:8] != b"\x89PNG\r\n\x1a\n":
         raise SystemExit(f"{chemin} n'est pas un PNG")
     pos, larg, haut, idat, profondeur, couleur = 8, 0, 0, b"", 0, 0
@@ -100,7 +101,8 @@ images = []
 for t in TAILLES:
     chemin = os.path.join(ICO, f"icon-{t}.png")
     if t in EN_PNG:
-        images.append((t, io.open(chemin, "rb").read()))
+        with io.open(chemin, "rb") as f:
+            images.append((t, f.read()))
     else:
         l, h, px = lire_png(chemin)
         if (l, h) != (t, t):
@@ -119,7 +121,8 @@ for t, data in images:
     decalage += len(data)
 
 sortie = os.path.join(ICO, "ledgeralps.ico")
-io.open(sortie, "wb").write(entete + repertoire + corps)
+with io.open(sortie, "wb") as f:
+    f.write(entete + repertoire + corps)
 print(f"{sortie} : {len(images)} tailles, {len(entete + repertoire + corps)} octets")
 for t, d in images:
     print(f"  {t:>3} px — {'PNG' if t in EN_PNG else 'DIB'} — {len(d)} o")

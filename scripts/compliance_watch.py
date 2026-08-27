@@ -57,6 +57,25 @@ class CheckError(Exception):
     """The source could not be checked. Not the same as 'the source changed'."""
 
 
+class _HTTPSSeulement(urllib.request.HTTPRedirectHandler):
+    """Suit les redirections, mais jamais hors de https.
+
+    La garde de schema ci-dessous ne porte que sur l'URL DE DEPART.
+    urlopen suit ensuite les redirections avec son gestionnaire par defaut,
+    qui accepte http, https et ftp : une source qui redirige vers http://
+    serait suivie en clair, et la garde n'aurait ferme que la porte
+    d'entree.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urllib.parse.urlparse(newurl).scheme != "https":
+            raise CheckError(f"redirection refusee vers {newurl!r} -- https uniquement")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OUVREUR = urllib.request.build_opener(_HTTPSSeulement())
+
+
 def _get(url: str, headers: dict | None = None) -> bytes:
     # Le registre est un fichier suivi, donc de confiance -- mais urlopen
     # accepte file:// et ftp://, et une entree malformee lirait alors un
@@ -66,7 +85,7 @@ def _get(url: str, headers: dict | None = None) -> bytes:
         raise CheckError(f"schema d'URL refuse : {url!r} -- https uniquement")
 
     req = urllib.request.Request(url, headers={**UA, **(headers or {})})
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+    with _OUVREUR.open(req, timeout=TIMEOUT) as r:
         body = r.read()
         # Throttling has to be named as throttling. EUR-Lex answers 202 with an
         # empty body when it is rate-limiting; that used to reach the regex,
