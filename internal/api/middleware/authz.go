@@ -15,9 +15,12 @@ package middleware
 // faire se demande à la base, au moment où il le fait.
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/core/authz"
@@ -25,6 +28,18 @@ import (
 )
 
 const roleKey = "authz_role"
+
+// delaiLectureDroits borne les deux lectures de ce fichier.
+//
+// Elles sont sur le chemin de CHAQUE requête authentifiée. Sans borne, un
+// verrou d'écriture SQLite — une sauvegarde volumineuse, une restauration, une
+// migration — bloque indéfiniment tout ce qui arrive, et la seule chose que
+// voit l'utilisateur est une application qui ne répond plus.
+//
+// Trois secondes : une lecture par clé primaire sur une base locale se compte
+// en microsecondes. Au-delà, ce n'est plus de la lenteur, c'est un blocage, et
+// refuser en le disant vaut mieux qu'attendre sans terme.
+const delaiLectureDroits = 3 * time.Second
 
 // Authorizer résout le rôle courant d'un compte.
 type Authorizer struct {
@@ -44,20 +59,31 @@ func NewAuthorizer(database *sql.DB, usePostgres bool, jwtSecret string) *Author
 // pas seulement à la connexion est ce qui fait que désactiver quelqu'un le
 // déconnecte vraiment, au lieu de le laisser travailler jusqu'à l'expiration de
 // son jeton.
-func (a *Authorizer) currentRole(userID string) (authz.Role, bool) {
-	role, ok, _ := a.currentState(userID)
+func (a *Authorizer) currentRole(ctx context.Context, userID string) (authz.Role, bool) {
+	role, ok, _ := a.currentState(ctx, userID)
 	return role, ok
 }
 
 // currentState rend le rôle, l'activité et l'obligation de changer le mot de
 // passe, en une seule lecture.
-func (a *Authorizer) currentState(userID string) (authz.Role, bool, bool) {
+func (a *Authorizer) currentState(ctx context.Context, userID string) (authz.Role, bool, bool) {
+	ctx, cancel := context.WithTimeout(ctx, delaiLectureDroits)
+	defer cancel()
+
 	q := db.Rebind(
 		`SELECT role, is_active, COALESCE(must_change_password,0) FROM users WHERE id = ?`,
 		a.usePostgres)
 	var role string
 	var active, mustChange int
-	if err := a.db.QueryRow(q, userID).Scan(&role, &active, &mustChange); err != nil {
+	if err := a.db.QueryRowContext(ctx, q, userID).Scan(&role, &active, &mustChange); err != nil {
+		// Refuser, jamais deviner — mais le DIRE quand ce n'est pas simplement
+		// un compte inconnu. Sans cette trace, une base momentanément
+		// indisponible se présente à l'utilisateur comme « droits
+		// insuffisants », et le ticket de support qui suit part sur une fausse
+		// piste : on cherche un rôle mal réglé là où il y avait un verrou.
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("WARNING: lecture des droits de %s impossible: %v", userID, err)
+		}
 		return "", false, false
 	}
 	if active != 1 {
@@ -92,7 +118,7 @@ func (a *Authorizer) RequirePasswordChanged() gin.HandlerFunc {
 			c.Next() // route publique : l'authentification est le problème d'un autre filtre
 			return
 		}
-		_, ok, mustChange := a.currentState(claims.UserID)
+		_, ok, mustChange := a.currentState(c.Request.Context(), claims.UserID)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized,
 				gin.H{"error": "ce compte n'est plus actif"})
@@ -142,7 +168,7 @@ func (a *Authorizer) RequireMFAEnrolled() gin.HandlerFunc {
 			c.Next() // route publique : ce filtre ne se prononce pas
 			return
 		}
-		role, ok, _ := a.currentState(claims.UserID)
+		role, ok, _ := a.currentState(c.Request.Context(), claims.UserID)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized,
 				gin.H{"error": "ce compte n'est plus actif"})
@@ -152,7 +178,7 @@ func (a *Authorizer) RequireMFAEnrolled() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		if a.mfaConfirmed(claims.UserID) {
+		if a.mfaConfirmed(c.Request.Context(), claims.UserID) {
 			c.Next()
 			return
 		}
@@ -169,12 +195,15 @@ func (a *Authorizer) RequireMFAEnrolled() gin.HandlerFunc {
 // Confirmée, et pas seulement commencée : un secret créé puis abandonné en cours
 // d'assistant ne doit pas compter, sinon quelqu'un qui ferme l'onglet au milieu
 // se retrouverait à devoir fournir un code qu'aucun téléphone ne calcule.
-func (a *Authorizer) mfaConfirmed(userID string) bool {
+func (a *Authorizer) mfaConfirmed(ctx context.Context, userID string) bool {
+	ctx, cancel := context.WithTimeout(ctx, delaiLectureDroits)
+	defer cancel()
+
 	q := db.Rebind(
 		`SELECT COUNT(*) FROM user_mfa WHERE user_id = ? AND confirmed_at IS NOT NULL`,
 		a.usePostgres)
 	var n int
-	if err := a.db.QueryRow(q, userID).Scan(&n); err != nil {
+	if err := a.db.QueryRowContext(ctx, q, userID).Scan(&n); err != nil {
 		// Le motif d'origine — table absente, base antérieure à la migration —
 		// a disparu : la migration 0022 s'applique au démarrage, avant qu'une
 		// seule requête soit servie. Ne reste qu'un défaut de lecture (verrou
@@ -203,7 +232,7 @@ func (a *Authorizer) Require(p authz.Permission) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "session invalide"})
 			return
 		}
-		role, ok := a.currentRole(claims.UserID)
+		role, ok := a.currentRole(c.Request.Context(), claims.UserID)
 		if !ok {
 			// Ne pas distinguer « compte supprimé » de « compte désactivé » :
 			// la différence n'aide que celui qui sonde les comptes.
@@ -247,7 +276,7 @@ func (a *Authorizer) DenyWritesWithoutPermission() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		role, ok := a.currentRole(claims.UserID)
+		role, ok := a.currentRole(c.Request.Context(), claims.UserID)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized,
 				gin.H{"error": "ce compte n'est plus actif"})
