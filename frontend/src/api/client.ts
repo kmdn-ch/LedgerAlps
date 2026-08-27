@@ -362,6 +362,40 @@ export const securityApi = {
     api.put('/settings/security', body),
 }
 
+/**
+ * ContactCreatePayload — ce que le serveur accepte réellement à la création.
+ *
+ * Ce paramètre était typé `unknown`, et cela avait un coût : la fenêtre de
+ * création rapide de `NewInvoicePage` envoyait un champ `currency` que la table
+ * `contacts` ne possède pas. Gin le jetait en silence (pas de
+ * `DisallowUnknownFields`), et rien — ni `tsc`, ni la revue — ne pouvait le
+ * signaler. L'écart n'a été trouvé qu'en comparant deux copies du même
+ * composant.
+ *
+ * Les champs reprennent `createContactRequest` de
+ * `internal/api/handlers/contacts.go`. `address`, `postal_code` et `city` sont
+ * optionnels ICI parce qu'un fournisseur pur n'en a pas besoin ; le serveur les
+ * exige pour un `customer`/`both`, et c'est lui qui fait foi.
+ */
+export interface ContactCreatePayload {
+  contact_type: 'customer' | 'supplier' | 'both'
+  name: string
+  is_company?: boolean
+  legal_name?: string
+  email?: string
+  phone?: string
+  address?: string
+  postal_code?: string
+  city?: string
+  country?: string
+  iban?: string
+  qr_iban?: string
+  vat_number?: string
+  uid_number?: string
+  payment_term_days?: number
+  notes?: string
+}
+
 export const contactsApi = {
   list:   (params?: { contact_type?: string; page?: number; page_size?: number }) =>
     api.get('/contacts', { params }),
@@ -369,7 +403,7 @@ export const contactsApi = {
   // Anonymisation (nLPD art. 6 al. 4 et 32). Irréversible, et c'est le but :
   // c'est ce qui a été promis à la personne concernée.
   anonymise: (id: string)        => api.post(`/contacts/${id}/anonymise`),
-  create: (data: unknown)        => api.post('/contacts', data),
+  create: (data: ContactCreatePayload) => api.post('/contacts', data),
   update: (id: string, data: unknown) => api.patch(`/contacts/${id}`, data),
 }
 
