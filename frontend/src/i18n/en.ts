@@ -1013,6 +1013,7 @@ export const en: Catalogue = {
   'ss.deconnexionDesactivee': 'Disabled: an open session stays open as long as the window is.',
   'ss.rotationTitre': 'Automatic regeneration of the signing key',
   'ss.rotationAide': 'Caps the value of a past leak: a configuration file that went out in a support ticket last week is worth nothing today. The key is regenerated at start-up, never mid-session — you will simply have to log in again.',
+  'ss.rotationBloqueeEnv': 'Disabled by your installation method: the key is set by the JWT_SECRET variable, which the service reloads at every start. It therefore never changes. To restore daily rotation, remove JWT_SECRET from the service configuration and let LedgerAlps manage the key.',
   'ss.rotationCadence': 'Automatic, every day. It is not configurable: the other possible intervals only weakened it.',
   'ss.regenerationImmediate': 'Regenerate now, without waiting for tomorrow',
   'ss.derniereRegeneration': 'Last regeneration: {date}',

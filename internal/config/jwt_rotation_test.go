@@ -209,3 +209,98 @@ func TestLeCheminDuFichierEstBienIsole(t *testing.T) {
 		t.Fatalf("chemin inattendu: %s", got)
 	}
 }
+
+// ─── Rotation et JWT_SECRET d'environnement (audit 4, É-2) ───────────────────
+//
+// Deux des trois chemins d'installation livrés posent JWT_SECRET dans
+// l'environnement du service : Linux/systemd via `EnvironmentFile=`, et
+// Windows Service via la valeur REG_MULTI_SZ `Environment` posée par
+// `scripts/install.ps1`. Sur ces deux chemins, `applyEnvOverrides` réimpose la
+// valeur statique par-dessus toute clé tournée relue du fichier — et cette
+// préséance est VOULUE, documentée dans config.go après un incident réel
+// (SQLITE_PATH d'une restauration écrasé par le fichier).
+//
+// La rotation écrivait donc un secret dans config.json, faisait avancer
+// `jwt_secret_rotated_at`, et l'écran affichait une date crédible — pendant que
+// la clé RÉELLEMENT utilisée pour signer restait figée depuis l'installation.
+// Une promesse que le mode de déploiement empêche de tenir est pire qu'une
+// promesse absente : elle décourage de chercher ailleurs.
+
+// TestLaRotationNeMentPasQuandLeSecretVientDeLEnvironnement reproduit le cycle
+// complet de DEUX démarrages, qui est le seul endroit où le défaut se voit.
+func TestLaRotationNeMentPasQuandLeSecretVientDeLEnvironnement(t *testing.T) {
+	const secretStatique = "secret-statique-de-l-environnement-assez-long-pour-passer"
+	writeConfigFile(t, map[string]any{
+		"jwt_secret": "une-cle-de-fichier-suffisamment-longue-pour-la-validation",
+	})
+	t.Setenv("JWT_SECRET", secretStatique)
+
+	// Premier démarrage : la clé n'a jamais tourné.
+	cfg := Load()
+	if cfg.JWTSecret != secretStatique {
+		t.Fatalf("préséance changée : la clé devrait venir de l'environnement, pas du fichier")
+	}
+	tourne, err := MaybeRotateJWTSecret(cfg, time.Now())
+	if err != nil {
+		t.Fatalf("rotation: %v", err)
+	}
+	if tourne {
+		t.Error("la rotation s'est déclarée effectuée alors que l'environnement " +
+			"réimposera la clé statique au prochain démarrage")
+	}
+	if cfg.JWTSecret != secretStatique {
+		t.Error("la clé en mémoire a été remplacée par une clé qui ne survivra pas au redémarrage")
+	}
+
+	// Second démarrage : c'est ici que le mensonge se voyait.
+	cfg2 := Load()
+	if cfg2.JWTSecret != secretStatique {
+		t.Errorf("clé au second démarrage = %q, attendu la valeur statique — "+
+			"c'est bien elle qui signe, quoi qu'affiche l'écran", cfg2.JWTSecret)
+	}
+	st := RotationStatus(cfg2)
+	if st.RotatedAt != nil || st.NextAt != nil {
+		t.Errorf("l'écran annonce encore une rotation (rotated=%v next=%v) alors "+
+			"qu'aucune ne peut avoir lieu sur ce déploiement", st.RotatedAt, st.NextAt)
+	}
+	if !st.BloqueeParEnvironnement {
+		t.Error("l'état ne dit pas que l'environnement bloque la rotation : " +
+			"l'interface ne peut donc pas l'expliquer")
+	}
+}
+
+// Le chemin NSIS/lanceur (config.json pur, aucune variable d'environnement)
+// doit continuer de tourner normalement — c'est le seul des trois qui tenait
+// réellement la promesse, et il ne doit pas être puni par le correctif.
+func TestLaRotationFonctionneToujoursSansVariableDEnvironnement(t *testing.T) {
+	writeConfigFile(t, map[string]any{
+		"jwt_secret": "une-cle-de-fichier-suffisamment-longue-pour-la-validation",
+	})
+	os.Unsetenv("JWT_SECRET")
+
+	cfg := Load()
+	ancienne := cfg.JWTSecret
+	tourne, err := MaybeRotateJWTSecret(cfg, time.Now())
+	if err != nil {
+		t.Fatalf("rotation: %v", err)
+	}
+	if !tourne {
+		t.Fatal("la rotation aurait dû avoir lieu : aucune variable d'environnement ne la bloque")
+	}
+	if cfg.JWTSecret == ancienne {
+		t.Error("la clé n'a pas changé")
+	}
+	st := RotationStatus(cfg)
+	if st.BloqueeParEnvironnement {
+		t.Error("l'état signale un blocage alors qu'aucune variable n'est posée")
+	}
+	if st.RotatedAt == nil || st.NextAt == nil {
+		t.Error("après une vraie rotation, l'écran doit pouvoir afficher les deux dates")
+	}
+
+	// Et la nouvelle clé doit survivre au redémarrage.
+	cfg2 := Load()
+	if cfg2.JWTSecret != cfg.JWTSecret {
+		t.Error("la clé tournée n'a pas été relue au démarrage suivant")
+	}
+}

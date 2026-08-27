@@ -1057,6 +1057,7 @@ export const fr = {
   'ss.deconnexionDesactivee': 'Désactivée : une session ouverte le reste tant que la fenêtre l’est.',
   'ss.rotationTitre': 'Régénération automatique de la clé de signature',
   'ss.rotationAide': 'Borne la valeur d’une fuite passée : un fichier de configuration parti dans un ticket de support la semaine dernière ne permet plus rien aujourd’hui. La clé est régénérée au démarrage, jamais en cours de session — vous aurez simplement à vous reconnecter.',
+  'ss.rotationBloqueeEnv': 'Désactivée par votre mode d’installation : la clé est fixée par la variable JWT_SECRET, que le service recharge à chaque démarrage. Elle ne change donc jamais. Pour rétablir la rotation quotidienne, retirez JWT_SECRET de la configuration du service et laissez LedgerAlps gérer la clé.',
   'ss.rotationCadence': 'Automatique, chaque jour. Ce n’est pas réglable : les autres périodicités possibles ne faisaient qu’affaiblir celle-ci.',
   'ss.regenerationImmediate': 'Régénérer maintenant, sans attendre demain',
   'ss.derniereRegeneration': 'Dernière régénération : {date}',

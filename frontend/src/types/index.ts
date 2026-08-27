@@ -485,6 +485,9 @@ export interface SecuritySettings {
   rotation: {
     rotated_at?: string
     next_at?: string
+    // Vrai quand JWT_SECRET vient de l'environnement : aucune rotation ne peut
+    // aboutir, car elle est réimposée à chaque démarrage du service.
+    bloquee_par_environnement?: boolean
   }
   // 0 = déconnexion automatique désactivée.
   idle_logout_minutes: number

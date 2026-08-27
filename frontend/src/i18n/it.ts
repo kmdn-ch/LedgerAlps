@@ -1013,6 +1013,7 @@ export const it: Catalogue = {
   'ss.deconnexionDesactivee': 'Disattivata: una sessione aperta resta tale finché lo è la finestra.',
   'ss.rotationTitre': 'Rigenerazione automatica della chiave di firma',
   'ss.rotationAide': 'Limita il valore di una fuga passata: un file di configurazione finito la settimana scorsa in un ticket di supporto non permette più nulla oggi. La chiave è rigenerata all’avvio, mai durante una sessione — dovrete semplicemente riconnettervi.',
+  'ss.rotationBloqueeEnv': 'Disattivata dal metodo di installazione: la chiave è fissata dalla variabile JWT_SECRET, che il servizio ricarica a ogni avvio. Non cambia quindi mai. Per ripristinare la rotazione quotidiana, rimuovere JWT_SECRET dalla configurazione del servizio e lasciare che LedgerAlps gestisca la chiave.',
   'ss.rotationCadence': 'Automatica, ogni giorno. Non è regolabile: le altre periodicità possibili non facevano che indebolirla.',
   'ss.regenerationImmediate': 'Rigenera adesso, senza aspettare domani',
   'ss.derniereRegeneration': 'Ultima rigenerazione: {date}',

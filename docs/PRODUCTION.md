@@ -41,6 +41,34 @@ permettrait de forger des jetons d'authentification.
 export JWT_SECRET=$(openssl rand -hex 32)
 ```
 
+### Ce que fixer `JWT_SECRET` désactive
+
+Poser `JWT_SECRET` dans l'environnement du service — c'est ce que font
+`EnvironmentFile=` sous systemd et la valeur `Environment` du service Windows —
+**désactive la rotation quotidienne de la clé de signature**.
+
+Ce n'est pas un défaut, c'est une conséquence de la préséance : la variable
+d'environnement l'emporte sur le fichier de configuration (voulu, pour que
+`SQLITE_PATH` et consorts restent atteignables), et le service la recharge à
+chaque démarrage. Une clé régénérée serait donc réécrasée au redémarrage
+suivant.
+
+LedgerAlps ne fait plus semblant : dans ce cas, l'écran *Paramètres →
+Sécurité des sessions* affiche « rotation désactivée par votre mode
+d'installation » au lieu d'une date qui avancerait sans effet.
+
+Deux choix, tous deux défendables :
+
+- **Garder `JWT_SECRET` dans l'environnement.** La clé est stable, connue de
+  votre gestionnaire de configuration, et vous la faites tourner vous-même
+  quand vous le décidez. Convient à un parc administré.
+- **Le retirer après le premier démarrage.** LedgerAlps écrit alors sa propre
+  clé dans `config.json` et la fait tourner chaque jour. Convient à une
+  installation autonome.
+
+Ce qu'il ne faut pas faire, c'est laisser la variable en place *en croyant*
+que la rotation opère.
+
 ## 3. Choisir la base de données
 
 **SQLite (recommandé)** — aucun serveur à administrer, sauvegarde = un fichier.
@@ -102,6 +130,36 @@ printf 'JWT_SECRET=%s\nSQLITE_PATH=/var/lib/ledgeralps/ledgeralps.db\n' "$(opens
 sudo chmod 0600 /etc/ledgeralps/env
 sudo systemctl enable --now ledgeralps
 ```
+
+## 5 bis. Service Windows
+
+Il existe **trois** façons d'installer LedgerAlps sous Windows. Deux étaient
+documentées, la troisième vivait dans le dépôt sans que rien ne la mentionne —
+elle l'est maintenant, parce qu'elle change le modèle de données et le
+comportement de la rotation.
+
+| Chemin | Ce qu'il installe | Où vivent les données | Rotation de la clé |
+|---|---|---|---|
+| **Installeur `.exe` (NSIS)** — le choix par défaut | Lanceur + serveur + CLI, application de bureau | `%APPDATA%\LedgerAlps` (par utilisateur) | **Active**, quotidienne |
+| **Archive `.zip`** — décompression manuelle | Les binaires, rien d'autre | où vous lancez le serveur | Active si vous ne posez pas `JWT_SECRET` |
+| **`scripts/install.ps1`** — service Windows | Serveur + CLI, **sans lanceur ni assistant** | `C:\ProgramData\LedgerAlps` (machine entière) | **Désactivée** (voir §2) |
+
+`install.ps1` enregistre un véritable service Windows sous un compte de service
+virtuel dédié (`NT SERVICE\LedgerAlps`), avec des ACL restreintes, et vérifie
+l'empreinte SHA-256 de l'archive avant de l'installer.
+
+```powershell
+irm https://raw.githubusercontent.com/kmdn-ch/ledgeralps/main/scripts/install.ps1 | iex
+```
+
+Choisissez-le pour un poste partagé ou un petit serveur, où LedgerAlps doit
+tourner sans session ouverte. Choisissez l'installeur `.exe` pour un poste de
+travail : c'est le seul des trois à fournir l'assistant de configuration et la
+rotation automatique de la clé.
+
+**Ne mélangez pas les deux sur la même machine** : ils écrivent à des endroits
+différents (`%APPDATA%` contre `C:\ProgramData`), et vous vous retrouveriez avec
+deux comptabilités distinctes sans le voir.
 
 ## 6. Accès réseau
 

@@ -58,6 +58,22 @@ type Config struct {
 	// compte comme « jamais tournée » : on ignore l'âge de cette clé, et sur une
 	// installation qui date, la réponse est « longtemps ».
 	JWTSecretRotatedAt time.Time
+	// JWTSecretDepuisEnv dit que la clé vient de la variable d'environnement
+	// JWT_SECRET, et non du fichier de configuration.
+	//
+	// Sur les deux chemins d'installation « service » — Linux/systemd via
+	// `EnvironmentFile=`, Windows Service via la valeur REG_MULTI_SZ
+	// `Environment` posée par scripts/install.ps1 — cette variable est chargée
+	// à chaque démarrage. `applyEnvOverrides` la réimpose alors par-dessus toute
+	// clé tournée relue du fichier, et cette préséance est VOULUE (voir le
+	// commentaire de Load : le fichier gagnait, ce qui rendait SQLITE_PATH et
+	// consorts inatteignables).
+	//
+	// Conséquence : sur ces déploiements, la rotation ne peut pas aboutir. Elle
+	// écrivait pourtant un secret dans config.json et faisait avancer la date
+	// affichée — une promesse que le mode de déploiement empêche de tenir.
+	// Ce drapeau permet de ne plus la faire.
+	JWTSecretDepuisEnv bool
 	// La périodicité de la rotation n'est pas un réglage : voir
 	// JWTSecretRotationDays.
 	//
@@ -202,6 +218,11 @@ func Load() *Config {
 		// Only variables actually present in the environment override, so an
 		// unset variable never wipes a configured value.
 		applyEnvOverrides(cfg)
+		// Relevé APRÈS applyEnvOverrides, qui est l'étape qui décide : si la
+		// variable est posée, c'est elle qui a gagné, et elle regagnera à chaque
+		// démarrage. La rotation en tiendra compte plutôt que de promettre ce
+		// qu'elle ne peut pas tenir.
+		_, cfg.JWTSecretDepuisEnv = os.LookupEnv("JWT_SECRET")
 		cfg.validateSecrets()
 		return cfg
 	}
@@ -225,6 +246,11 @@ func Load() *Config {
 		TrustedProxies:    listeDeProxies(getEnv("TRUSTED_PROXIES", "")),
 		UpdateCheck:       getEnv("UPDATE_CHECK", "true") != "false",
 	}
+	// Sans fichier de configuration, la clé ne peut venir que de
+	// l'environnement — c'est le cas du tout premier démarrage d'un service
+	// Linux ou Windows. La rotation écrirait un config.json que le démarrage
+	// suivant relirait pour rien : la variable regagnerait.
+	_, cfg.JWTSecretDepuisEnv = os.LookupEnv("JWT_SECRET")
 	cfg.validateSecrets()
 	return cfg
 }

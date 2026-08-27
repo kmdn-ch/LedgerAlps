@@ -148,14 +148,28 @@ export function SessionSecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
               <p className="text-alpine-600 mt-0.5">
                 {t('ss.rotationAide')}
               </p>
-              <p className="mt-2 text-success-700">
-                {t('ss.rotationCadence')}
-              </p>
-              <p className="mt-1 text-xs text-alpine-500">
-                {t('ss.derniereRegeneration', { date: formatDateTime(s.rotation.rotated_at, loc) })}
-                {s.rotation.next_at
-                  && t('ss.prochaineAu', { date: formatDateTime(s.rotation.next_at, loc) })}
-              </p>
+              {/* Dire la vérité plutôt qu'afficher une date qui avance sans
+                  effet. Quand JWT_SECRET vient de l'environnement — les
+                  installations en service Linux/systemd et Windows Service —
+                  la clé est réimposée à chaque démarrage : la rotation ne peut
+                  pas aboutir, et l'annoncer quand même décourageait de
+                  chercher ailleurs une protection qu'on croyait acquise. */}
+              {s.rotation.bloquee_par_environnement ? (
+                <p className="mt-2 text-warning-700">
+                  {t('ss.rotationBloqueeEnv')}
+                </p>
+              ) : (
+                <>
+                  <p className="mt-2 text-success-700">
+                    {t('ss.rotationCadence')}
+                  </p>
+                  <p className="mt-1 text-xs text-alpine-500">
+                    {t('ss.derniereRegeneration', { date: formatDateTime(s.rotation.rotated_at, loc) })}
+                    {s.rotation.next_at
+                      && t('ss.prochaineAu', { date: formatDateTime(s.rotation.next_at, loc) })}
+                  </p>
+                </>
+              )}
 
               {/* La seule commande de l'écran. Tout le reste se fait sans elle ;
                   elle ne sert qu'au cas que la périodicité ne couvre pas — on

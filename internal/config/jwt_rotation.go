@@ -63,6 +63,14 @@ const JWTSecretRotationDays = 1
 type JWTRotationStatus struct {
 	RotatedAt *time.Time `json:"rotated_at,omitempty"`
 	NextAt    *time.Time `json:"next_at,omitempty"`
+	// BloqueeParEnvironnement dit que la clé vient de la variable
+	// JWT_SECRET, donc qu'aucune rotation ne peut aboutir sur ce déploiement.
+	//
+	// L'écran affichait auparavant une date de rotation qui avançait
+	// normalement, alors que la clé réellement en service était figée depuis
+	// l'installation. Mieux vaut dire « la rotation est désactivée par votre
+	// mode d'installation » que laisser croire à une protection absente.
+	BloqueeParEnvironnement bool `json:"bloquee_par_environnement,omitempty"`
 }
 
 // RotationStatus reports the current rotation state.
@@ -72,6 +80,13 @@ type JWTRotationStatus struct {
 // démarrage : MaybeRotateJWTSecret fait précisément tourner celle-là.
 func RotationStatus(cfg *Config) JWTRotationStatus {
 	var st JWTRotationStatus
+	// Quand l'environnement impose la clé, les deux dates n'ont aucun sens :
+	// celle du fichier décrit une rotation qui n'a jamais pris effet. On rend
+	// donc l'état nu, plus le motif — l'interface a de quoi l'expliquer.
+	if cfg.JWTSecretDepuisEnv {
+		st.BloqueeParEnvironnement = true
+		return st
+	}
 	if !cfg.JWTSecretRotatedAt.IsZero() {
 		t := cfg.JWTSecretRotatedAt
 		st.RotatedAt = &t
@@ -93,6 +108,22 @@ func RotationStatus(cfg *Config) JWTRotationStatus {
 // pu écrire un fichier de configuration laisserait l'utilisateur sans ses
 // livres, ce qui est pire que de garder la clé un jour de plus.
 func MaybeRotateJWTSecret(cfg *Config, now time.Time) (bool, error) {
+	// Une clé imposée par l'environnement ne peut pas tourner : `applyEnvOverrides`
+	// la réimposera au démarrage suivant, par-dessus tout ce qu'on écrirait ici.
+	//
+	// Tourner quand même avait un coût réel, pas seulement cosmétique : on
+	// écrivait un secret inutile dans config.json, on faisait avancer
+	// `jwt_secret_rotated_at`, et l'écran affichait une date crédible pendant
+	// que la clé en service restait celle de l'installation. Ne rien faire et
+	// le DIRE (voir RotationStatus) vaut mieux qu'une promesse intenable.
+	//
+	// Deux des trois chemins d'installation livrés sont dans ce cas :
+	// Linux/systemd et Windows Service. Le chemin NSIS/lanceur, lui, n'utilise
+	// aucune variable d'environnement et continue de tourner normalement.
+	if cfg.JWTSecretDepuisEnv {
+		return false, nil
+	}
+
 	const maxAge = JWTSecretRotationDays * 24 * time.Hour
 	if !cfg.JWTSecretRotatedAt.IsZero() && now.Sub(cfg.JWTSecretRotatedAt) < maxAge {
 		return false, nil
