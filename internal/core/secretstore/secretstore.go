@@ -105,9 +105,6 @@ func New(dir string) *Store {
 	return &Store{path: filepath.Join(dir, "secrets.json")}
 }
 
-// Path is where the secrets live, for diagnostics and for the uninstaller.
-func (s *Store) Path() string { return s.path }
-
 // Mechanism names what protects the stored secrets, for the interface to show.
 func Mechanism() string {
 	if sealAvailable() {

@@ -44,8 +44,6 @@ func (h *ISO20022Handler) WithAudit(database *sql.DB, usePostgres bool) *ISO2002
 	return h
 }
 
-func NewISO20022Handler() *ISO20022Handler { return &ISO20022Handler{} }
-
 // WithPaymentRun branche la selection de factures fournisseurs.
 func (h *ISO20022Handler) WithPaymentRun(run *PaymentRunHandler) *ISO20022Handler {
 	h.run = run
@@ -53,8 +51,12 @@ func (h *ISO20022Handler) WithPaymentRun(run *PaymentRunHandler) *ISO20022Handle
 }
 
 // NewISO20022HandlerWithReconciliation branche la conservation des écritures.
-// Le constructeur sans service reste, pour les tests qui n'exercent que
-// l'analyse du XML.
+//
+// Un constructeur sans service a existé à côté de celui-ci, gardé — disait le
+// commentaire — « pour les tests qui n'exercent que l'analyse du XML ». Le
+// troisième audit a établi que la justification était fausse : sa seule
+// occurrence dans tout le dépôt était sa propre définition. Aucun test ne
+// l'appelait, aucun code de production non plus.
 func NewISO20022HandlerWithReconciliation(svc *banking.Service) *ISO20022Handler {
 	return &ISO20022Handler{reconcile: svc}
 }

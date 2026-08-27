@@ -30,7 +30,3 @@ func BundledFeed() (*Feed, error) {
 	})
 	return bundledFeed, bundledErr
 }
-
-// BundledFeedRaw exposes the embedded bytes, for tooling that needs to sign or
-// diff the feed without re-reading it from disk.
-func BundledFeedRaw() []byte { return bundledFeedJSON }

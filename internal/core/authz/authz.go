@@ -163,17 +163,3 @@ func IsWriteMethod(method string) bool {
 	}
 	return true
 }
-
-// RoleFromLegacyAdmin traduit l'ancien interrupteur booléen.
-//
-// Avant les rôles, un compte était administrateur ou ne l'était pas. Le second
-// cas devient « comptable » et non « lecture seule » : ces comptes écrivaient
-// des factures, et les rétrograder en lecture seule casserait des installations
-// existantes du jour au lendemain. Élargir un droit acquis serait pire —
-// personne ne devient administrateur par une migration.
-func RoleFromLegacyAdmin(isAdmin bool) Role {
-	if isAdmin {
-		return RoleAdmin
-	}
-	return RoleAccountant
-}

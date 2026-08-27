@@ -59,6 +59,53 @@ jobs:
           verify: false
           args: --timeout=5m --config=.golangci.yml
 
+  deadcode:
+    name: Code inatteignable
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # Pourquoi ce job EN PLUS de golangci-lint.
+      #
+      # Le linteur « unused » est bien active dans .golangci.yml, et il est
+      # vert. Mais il ne signale que les identifiants NON EXPORTES : une
+      # fonction exportee que plus rien n'appelle lui echappe par construction.
+      #
+      # Le troisieme audit en a trouve sept, dont un constructeur garde par un
+      # commentaire qui le justifiait « pour les tests qui n'exercent que
+      # l'analyse du XML » — alors que sa seule occurrence dans tout le depot
+      # etait sa propre definition. Un commentaire faux coute plus cher qu'un
+      # commentaire absent : il fait renoncer a verifier.
+      #
+      # deadcode raisonne par ATTEIGNABILITE depuis les points d'entree, ce qui
+      # est le seul angle qui attrape ce cas. Le drapeau -test compte les tests
+      # comme points d'entree : sans lui, tout ce qui n'est appele que par un
+      # test serait signale a tort.
+      #
+      # Version epinglee, comme golangci-lint et les actions : un outil qui
+      # change sous nos pieds rend rouge une CI qu'aucune ligne du depot n'a
+      # fait bouger.
+      - name: deadcode
+        run: |
+          go install golang.org/x/tools/cmd/deadcode@v0.38.0
+          sortie=$(deadcode -test ./...)
+          if [ -n "$sortie" ]; then
+            echo "Fonctions inatteignables :"
+            echo "$sortie"
+            echo
+            echo "Retirez-les, ou expliquez pourquoi elles restent — mais"
+            echo "verifiez d'abord que l'explication est vraie."
+            exit 1
+          fi
+          echo "Aucune fonction inatteignable."
+
   mod-check:
     name: Module hygiene
     runs-on: ubuntu-latest
