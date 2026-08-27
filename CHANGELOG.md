@@ -7,6 +7,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-08-28
+
 ### Corrigé
 
 - **La déclaration TVA ne ventilait jamais par taux.** Le formulaire AFC 318 demande le chiffre d'affaires et l'impôt répartis sur trois lignes (302 normal, 312 réduit, 342 spécial). Aucune facture n'y arrivait : la comparaison confrontait un taux lu en **pourcentage** (8.1, format de `invoices.vat_rate` depuis la migration 0005) à des constantes en **fraction** (0.081). L'écart valant 8.019 pour une tolérance de 0.001, tout tombait dans le cas par défaut, empilé sur « taux normal ». Un hôtel (3.8 % hébergement + 8.1 % restauration) ou un commerce vendant des denrées à 2.6 % déclarait 100 % de son chiffre sur la ligne 302. Le montant total dû restait juste — ce qui est précisément ce qui a laissé le défaut passer inaperçu, y compris par les tests, dont les fixtures mélangeaient les deux notations.
