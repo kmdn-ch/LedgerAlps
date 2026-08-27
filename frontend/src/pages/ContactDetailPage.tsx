@@ -37,6 +37,21 @@ const schema = z.object({
   iban:              opt(z.string()),
   qr_iban:           opt(z.string()),
   notes:             opt(z.string()),
+}).superRefine((data, ctx) => {
+  // Symétrique de NewContactModal : la règle d'adresse QR doit tenir à la
+  // MODIFICATION comme à la création. Elle ne l'était pas — cet écran laissait
+  // vider l'adresse d'un client complet sans le moindre avertissement, et le
+  // serveur ne la revérifiait pas non plus.
+  if (data.contact_type === 'supplier') return
+  if (!data.address) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['address'], message: 'val.adresseRequise' })
+  }
+  if (!data.postal_code) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['postal_code'], message: 'val.npaRequis' })
+  }
+  if (!data.city) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['city'], message: 'val.villeRequise' })
+  }
 })
 
 type FormData = z.infer<typeof schema>
@@ -58,7 +73,7 @@ export function ContactDetailPage() {
   })
 
   const {
-    register, handleSubmit, reset,
+    register, handleSubmit, reset, watch,
     formState: { errors, isDirty },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -100,6 +115,12 @@ export function ContactDetailPage() {
       qc.invalidateQueries({ queryKey: ['contacts'] })
     },
   })
+
+  // L'adresse n'est exigée que si le contact peut être débiteur d'une facture
+  // QR. On suit le type SÉLECTIONNÉ, pas celui stocké : l'astérisque doit
+  // apparaître au moment où l'utilisateur bascule le menu, pas après
+  // l'enregistrement.
+  const adresseRequise = watch('contact_type') !== 'supplier'
 
   if (isLoading) return <LoadingSpinner />
   if (error || !contact) return <ErrorBanner message={t('co.introuvable')} />
@@ -218,11 +239,23 @@ export function ContactDetailPage() {
           </div>
           <div className="card-body space-y-4">
             <div>
-              <label className="label">{t('co.adresse')}</label>
-              <input className="input mb-2" placeholder={t('co.placeholderRue')} {...register('address')} />
+              <label className="label">{t('co.adresse')}{adresseRequise && ' *'}</label>
+              <input className={`input mb-2 ${errors.address ? 'input-error' : ''}`}
+                placeholder={t('co.placeholderRue')} {...register('address')} />
+              {errors.address && <p className="error-msg mb-2">{tv(errors.address.message)}</p>}
               <div className="grid grid-cols-3 gap-3">
-                <input className="input" placeholder={t('pr.npa')} {...register('postal_code')} />
-                <input className="input col-span-2" placeholder={t('co.placeholderLocalite')} {...register('city')} />
+                <div>
+                  <input className={`input ${errors.postal_code ? 'input-error' : ''}`}
+                    placeholder={adresseRequise ? `${t('pr.npa')} *` : t('pr.npa')}
+                    {...register('postal_code')} />
+                  {errors.postal_code && <p className="error-msg">{tv(errors.postal_code.message)}</p>}
+                </div>
+                <div className="col-span-2">
+                  <input className={`input w-full ${errors.city ? 'input-error' : ''}`}
+                    placeholder={adresseRequise ? `${t('co.placeholderLocalite')} *` : t('co.placeholderLocalite')}
+                    {...register('city')} />
+                  {errors.city && <p className="error-msg">{tv(errors.city.message)}</p>}
+                </div>
               </div>
               <p className="text-xs text-alpine-400 mt-1.5">
                 {t('co.adresseQRAide')}

@@ -258,6 +258,15 @@ var catalogue = map[string]map[Lang]string{
 		IT: "IBAN: ",
 		EN: "IBAN: ",
 	},
+	// Le destinataire d'une facture doit être nommé (LTVA art. 26 al. 2).
+	// Vider le nom d'un client produisait un PDF sans destinataire nulle
+	// part : `validateQRBillData` traite un débiteur sans nom comme « non
+	// identifié » et saute alors tous ses contrôles d'adresse.
+	"le nom d'un client ne peut pas être vidé : la facture QR doit nommer son destinataire (LTVA art. 26 al. 2)": {
+		DE: "Der Name eines Kunden darf nicht geleert werden: Die QR-Rechnung muss ihren Empfänger nennen (MWSTG Art. 26 Abs. 2)",
+		IT: "Il nome di un cliente non può essere svuotato: la fattura QR deve indicare il destinatario (LIVA art. 26 cpv. 2)",
+		EN: "A customer's name cannot be cleared: the QR-bill must name its recipient (VAT Act art. 26 para. 2)",
+	},
 	// Un client (ou un contact « les deux ») devient le débiteur d'une
 	// facture QR : sans adresse structurée complète, le bulletin de
 	// versement suisse ne peut pas s'imprimer (SPC 0200 §4.2.2).

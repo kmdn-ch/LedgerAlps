@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -227,6 +228,16 @@ func (h *ContactsHandler) CreateContact(c *gin.Context) {
 }
 
 type updateContactRequest struct {
+	// Le type était absent de cette structure depuis la réécriture du backend,
+	// alors que l'écran d'édition offre un menu déroulant pour le changer :
+	// Gin jetait silencieusement le champ, et basculer un contact de « client »
+	// à « fournisseur » semblait fonctionner sans rien changer en base.
+	//
+	// Le rétablir ferme aussi une porte dérobée à la règle d'adresse : sans
+	// lui, on pourrait passer un client en fournisseur, vider son adresse, puis
+	// le repasser en client — trois modifications dont aucune ne déclenchait
+	// la règle.
+	ContactType     *string `json:"contact_type" binding:"omitempty,oneof=customer supplier both"`
 	IsCompany       *bool   `json:"is_company"`
 	Name            *string `json:"name"`
 	LegalName       *string `json:"legal_name"`
@@ -267,12 +278,60 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	// Verify contact exists
-	existsQ := db.Rebind("SELECT id FROM contacts WHERE id = ?", h.usePostgres)
-	var existing string
-	if err := h.db.QueryRowContext(ctx, existsQ, id).Scan(&existing); err == sql.ErrNoRows {
+	// On relit l'état actuel, pas seulement l'existence.
+	//
+	// Un PATCH est partiel : « adresse vide » ne se juge qu'en regardant ce que
+	// la fiche contiendra APRÈS la modification, en superposant les champs
+	// envoyés à ceux déjà stockés. Sans cette lecture, la règle posée à la
+	// création était contournable par un simple PATCH.
+	existsQ := db.Rebind(`
+		SELECT contact_type, name, address, postal_code, city
+		FROM contacts WHERE id = ?`, h.usePostgres)
+	var (
+		typeActuel, nomActuel                        string
+		adresseActuelle, npaActuel, localiteActuelle sql.NullString
+	)
+	err := h.db.QueryRowContext(ctx, existsQ, id).Scan(
+		&typeActuel, &nomActuel, &adresseActuelle, &npaActuel, &localiteActuelle)
+	if errors.Is(err, sql.ErrNoRows) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "contact introuvable"})
 		return
+	} else if err != nil {
+		// Cette branche manquait : une panne de base passait inaperçue et la
+		// modification s'appliquait quand même, sur un état jamais lu.
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+		return
+	}
+
+	// La règle d'adresse QR, à la modification comme à la création.
+	//
+	// Elle ne se déclenche que si le PATCH touche l'identité ou l'adresse. Une
+	// fiche créée AVANT que cette règle existe est forcément incomplète : exiger
+	// sa réparation pour changer un numéro de téléphone l'enfermerait sans rien
+	// corriger. On refuse de DÉGRADER, on n'exige pas de réparer.
+	//
+	// Un changement de TYPE compte aussi : faire d'un fournisseur un client le
+	// rend débiteur d'une facture QR, donc son adresse devient exigible au
+	// moment même de la bascule.
+	typeResultant := valeurResultante(req.ContactType, typeActuel)
+	toucheIdentite := req.Name != nil || req.Address != nil ||
+		req.PostalCode != nil || req.City != nil ||
+		(req.ContactType != nil && *req.ContactType != typeActuel)
+	if toucheIdentite && (typeResultant == "customer" || typeResultant == "both") {
+		nom := valeurResultante(req.Name, nomActuel)
+		if strings.TrimSpace(nom) == "" {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": "le nom d'un client ne peut pas être vidé : " +
+					"la facture QR doit nommer son destinataire (LTVA art. 26 al. 2)"})
+			return
+		}
+		adresse := valeurResultante(req.Address, adresseActuelle.String)
+		npa := valeurResultante(req.PostalCode, npaActuel.String)
+		localite := valeurResultante(req.City, localiteActuelle.String)
+		if err := requireQRAddress(&adresse, &localite, &npa); err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	// Build partial SET clause
@@ -281,6 +340,9 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 	addField := func(col string, val any) {
 		sets = append(sets, col+" = ?")
 		args = append(args, val)
+	}
+	if req.ContactType != nil {
+		addField("contact_type", *req.ContactType)
 	}
 	if req.IsCompany != nil {
 		v := 0
@@ -380,6 +442,17 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 
 	// Return updated contact
 	h.GetContact(c)
+}
+
+// valeurResultante rend ce que vaudra un champ après un PATCH partiel : la
+// valeur envoyée si elle l'a été, celle déjà stockée sinon. Un pointeur nil
+// signifie « champ absent du corps de la requête », ce qui n'est pas la même
+// chose qu'une chaîne vide envoyée exprès pour effacer.
+func valeurResultante(envoye *string, stocke string) string {
+	if envoye != nil {
+		return *envoye
+	}
+	return stocke
 }
 
 // ─── Adresse requise pour la facturation QR ──────────────────────────────────
