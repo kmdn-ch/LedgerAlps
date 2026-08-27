@@ -208,22 +208,22 @@ func Load() *Config {
 
 	// No config file: environment variables only (Linux, systemd, CI).
 	cfg := &Config{
-		Host:                getEnv("HOST", "127.0.0.1"),
-		Port:                getEnv("PORT", "8000"),
-		TLSCert:             getEnv("TLS_CERT", ""),
-		TLSKey:              getEnv("TLS_KEY", ""),
-		AllowInsecureHTTP:   getEnv("ALLOW_INSECURE_HTTP", "false") == "true",
-		Debug:               getEnv("DEBUG", "false") == "true",
-		SQLitePath:          getEnv("SQLITE_PATH", "ledgeralps.db"),
-		PostgresDSN:         getEnv("POSTGRES_DSN", ""),
-		JWTSecret:           getEnv("JWT_SECRET", ""),
-		JWTAccessMinutes:    60,
-		JWTRefreshDays:      30,
-		IdleLogoutMinutes:   DefaultIdleLogoutMinutes,
-		LogLevel:            getEnv("LOG_LEVEL", "INFO"),
-		AllowedOrigins:      getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
-		TrustedProxies:      listeDeProxies(getEnv("TRUSTED_PROXIES", "")),
-		UpdateCheck:         getEnv("UPDATE_CHECK", "true") != "false",
+		Host:              getEnv("HOST", "127.0.0.1"),
+		Port:              getEnv("PORT", "8000"),
+		TLSCert:           getEnv("TLS_CERT", ""),
+		TLSKey:            getEnv("TLS_KEY", ""),
+		AllowInsecureHTTP: getEnv("ALLOW_INSECURE_HTTP", "false") == "true",
+		Debug:             getEnv("DEBUG", "false") == "true",
+		SQLitePath:        getEnv("SQLITE_PATH", "ledgeralps.db"),
+		PostgresDSN:       getEnv("POSTGRES_DSN", ""),
+		JWTSecret:         getEnv("JWT_SECRET", ""),
+		JWTAccessMinutes:  60,
+		JWTRefreshDays:    30,
+		IdleLogoutMinutes: DefaultIdleLogoutMinutes,
+		LogLevel:          getEnv("LOG_LEVEL", "INFO"),
+		AllowedOrigins:    getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
+		TrustedProxies:    listeDeProxies(getEnv("TRUSTED_PROXIES", "")),
+		UpdateCheck:       getEnv("UPDATE_CHECK", "true") != "false",
 	}
 	cfg.validateSecrets()
 	return cfg
