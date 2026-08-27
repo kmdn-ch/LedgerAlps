@@ -104,16 +104,39 @@ func (s *Service) GenerateDeclaration(ctx context.Context, periodStart, periodEn
 		decl.TotalRevenue += totalHT
 
 		if method == "effective" {
-			// Assign VAT to the correct bucket by rate (tolerance ±0.001)
+			// Deux notations coexistent, et les confondre vidait les lignes
+			// 312 et 342 du formulaire.
+			//
+			// `invoices.vat_rate` est stocké en POURCENTAGE (8.1) depuis la
+			// migration 0005 — « new inserts always use percentages » — ce que
+			// confirme le calcul de invoicing/service.go (`base * VATRate/100`).
+			// Les constantes de `compliance`, elles, sont en FRACTION (0.081),
+			// forme dont la méthode TDFN a besoin plus bas pour multiplier un
+			// chiffre d'affaires. Les comparer directement donnait un écart de
+			// 8.019 pour toute facture au taux normal : aucun `case` ne pouvait
+			// jamais matcher, et TOUT tombait dans le `default`.
+			//
+			// On ramène donc la valeur lue à la même échelle que les
+			// constantes, plutôt que de changer celles-ci : la ligne 137 en
+			// dépend sous leur forme fractionnaire.
+			rateFraction := vatRate / 100
+
+			// Assign VAT to the correct bucket by rate (tolerance ±0.001,
+			// soit ±0.1 point de pourcentage — assez large pour absorber un
+			// arrondi de stockage, assez étroite pour ne pas confondre 2.6 %,
+			// 3.8 % et 8.1 %, séparés d'au moins 1.2 point).
 			switch {
-			case absFloat(vatRate-compliance.VATRateStandard) < 0.001:
+			case absFloat(rateFraction-compliance.VATRateStandard) < 0.001:
 				decl.VATCollected.Standard += totalVAT
-			case absFloat(vatRate-compliance.VATRateReduced) < 0.001:
+			case absFloat(rateFraction-compliance.VATRateReduced) < 0.001:
 				decl.VATCollected.Reduced += totalVAT
-			case absFloat(vatRate-compliance.VATRateSpecial) < 0.001:
+			case absFloat(rateFraction-compliance.VATRateSpecial) < 0.001:
 				decl.VATCollected.Special += totalVAT
 			default:
-				// Unknown rate: aggregate into standard bucket
+				// Taux inconnu (facture antérieure à un changement de taux,
+				// taux étranger) : on l'agrège au taux normal plutôt que de le
+				// perdre. Mieux vaut une ligne discutable qu'un montant absent
+				// de la déclaration.
 				decl.VATCollected.Standard += totalVAT
 			}
 		}

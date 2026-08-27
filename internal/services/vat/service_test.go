@@ -105,7 +105,7 @@ func TestDeductibleInputVATReducesAmountPayable(t *testing.T) {
 	supplier := seedSupplier(t, database)
 
 	// Sales: 10'000 HT, 810.00 collected VAT at 8.1%.
-	seedSalesInvoice(t, database, "sent", 10000, 810, 0.081, "2026-03-15")
+	seedSalesInvoice(t, database, "sent", 10000, 810, 8.1, "2026-03-15")
 	// Purchases: 2'000 HT, 162.00 input VAT at 8.1%.
 	seedSupplierInvoice(t, database, supplier, "booked", 2000, 162, 0.081, "2026-03-20")
 
@@ -184,7 +184,7 @@ func TestTDFNDoesNotClaimInputVAT(t *testing.T) {
 	database := newTestDB(t)
 	supplier := seedSupplier(t, database)
 
-	seedSalesInvoice(t, database, "sent", 10000, 810, 0.081, "2026-03-15")
+	seedSalesInvoice(t, database, "sent", 10000, 810, 8.1, "2026-03-15")
 	seedSupplierInvoice(t, database, supplier, "booked", 2000, 162, 0.081, "2026-03-20")
 
 	start, end := period()
@@ -199,7 +199,7 @@ func TestTDFNDoesNotClaimInputVAT(t *testing.T) {
 
 func TestNoSupplierInvoicesYieldsZeroDeductible(t *testing.T) {
 	database := newTestDB(t)
-	seedSalesInvoice(t, database, "sent", 1000, 81, 0.081, "2026-02-01")
+	seedSalesInvoice(t, database, "sent", 1000, 81, 8.1, "2026-02-01")
 
 	start, end := period()
 	decl, err := vat.New(database, false).GenerateDeclaration(context.Background(), start, end, "effective")
@@ -320,5 +320,129 @@ func seedCreditNote(t *testing.T, database *sql.DB, ht, vatAmt, rate float64, is
 		db.NewID(), "NC-"+db.NewID()[:8], contactID, issued, issued,
 		ht, vatAmt, ht+vatAmt, rate, userID); err != nil {
 		t.Fatalf("seed credit note: %v", err)
+	}
+}
+
+// ─── Classement par taux (AFC 318, lignes 302 / 312 / 342) ───────────────────
+//
+// Le formulaire AFC 318 ne demande pas un total : il demande le chiffre
+// d'affaires ET l'impôt VENTILÉS par taux, sur trois lignes distinctes. Une
+// déclaration dont le total est juste mais dont les trois lignes sont fausses
+// reste une déclaration fausse.
+//
+// Ce test existe parce que rien ne tenait cet invariant : les fixtures de ce
+// fichier mélangeaient les deux notations (0.081 et 8.1) et n'assertionnaient
+// que des totaux, insensibles au classement. La base, elle, stocke des
+// POURCENTAGES depuis la migration 0005 (« new inserts always use
+// percentages »), ce que confirme le calcul de invoicing/service.go
+// (`base * l.VATRate / 100`).
+
+// seedSalesInvoiceAt est un alias explicite : le taux passé ici est celui que
+// la base contient réellement, en pourcentage.
+func seedSalesInvoiceAt(t *testing.T, database *sql.DB, ht, vatAmt, ratePct float64, issued string) {
+	t.Helper()
+	seedSalesInvoice(t, database, "sent", ht, vatAmt, ratePct, issued)
+}
+
+func TestDeclarationVentileParTaux(t *testing.T) {
+	database := newTestDB(t)
+	svc := vat.New(database, false)
+
+	// Un hôtel avec restauration : les trois taux suisses coexistent sur le
+	// même exercice. C'est exactement le cas que la méthode effective doit
+	// savoir ventiler.
+	seedSalesInvoiceAt(t, database, 10000, 810, 8.1, "2026-03-15") // restauration
+	seedSalesInvoiceAt(t, database, 5000, 190, 3.8, "2026-04-10")  // hébergement
+	seedSalesInvoiceAt(t, database, 2000, 52, 2.6, "2026-05-20")   // denrées
+
+	decl, err := svc.GenerateDeclaration(context.Background(),
+		mustDate("2026-01-01"), mustDate("2026-12-31"), "effective")
+	if err != nil {
+		t.Fatalf("GenerateDeclaration: %v", err)
+	}
+
+	if got, want := decl.VATCollected.Standard, 810.0; !nearly(got, want) {
+		t.Errorf("ligne 302 (taux normal) = %.2f, attendu %.2f", got, want)
+	}
+	if got, want := decl.VATCollected.Special, 190.0; !nearly(got, want) {
+		t.Errorf("ligne 342 (taux spécial) = %.2f, attendu %.2f — "+
+			"un taux réel de la base ne doit pas retomber dans le seau « normal »", got, want)
+	}
+	if got, want := decl.VATCollected.Reduced, 52.0; !nearly(got, want) {
+		t.Errorf("ligne 312 (taux réduit) = %.2f, attendu %.2f — "+
+			"un taux réel de la base ne doit pas retomber dans le seau « normal »", got, want)
+	}
+	// Le total reste juste dans TOUS les cas, y compris quand le classement est
+	// faux : c'est précisément ce qui a permis au défaut de passer inaperçu.
+	if got, want := decl.VATCollected.Total, 1052.0; !nearly(got, want) {
+		t.Errorf("total collecté = %.2f, attendu %.2f", got, want)
+	}
+}
+
+// Un taux inconnu (une facture ancienne, un taux étranger) doit continuer de
+// retomber dans le seau « normal » plutôt que d'être perdu : mieux vaut une
+// ligne discutable qu'un montant qui disparaît de la déclaration.
+func TestUnTauxInconnuRetombeSurLeTauxNormal(t *testing.T) {
+	database := newTestDB(t)
+	svc := vat.New(database, false)
+
+	seedSalesInvoiceAt(t, database, 1000, 77, 7.7, "2026-03-15") // ancien taux 2023
+
+	decl, err := svc.GenerateDeclaration(context.Background(),
+		mustDate("2026-01-01"), mustDate("2026-12-31"), "effective")
+	if err != nil {
+		t.Fatalf("GenerateDeclaration: %v", err)
+	}
+	if got, want := decl.VATCollected.Standard, 77.0; !nearly(got, want) {
+		t.Errorf("un taux inconnu doit rejoindre le seau normal : %.2f, attendu %.2f", got, want)
+	}
+	if got, want := decl.VATCollected.Total, 77.0; !nearly(got, want) {
+		t.Errorf("total = %.2f, attendu %.2f — aucun montant ne doit être perdu", got, want)
+	}
+}
+
+func mustDate(s string) time.Time {
+	d, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
+func nearly(a, b float64) bool {
+	d := a - b
+	if d < 0 {
+		d = -d
+	}
+	return d < 0.005
+}
+
+// Le montant TDFN lui-même doit rester pinné.
+//
+// La méthode TDFN multiplie un chiffre d'affaires par
+// `compliance.VATRateStandard * 0.8`, donc elle a besoin des constantes sous
+// leur forme FRACTIONNAIRE (0.081). Le classement par taux, lui, compare à des
+// valeurs lues en POURCENTAGE. Les deux usages coexistent dans le même fichier.
+//
+// Sans ce test, « corriger » le classement en passant les constantes en
+// pourcentage — le raccourci tentant — ferait calculer 648'000 au lieu de 648
+// sans qu'aucun test ne bronche : l'ancien test TDFN ne vérifiait que le
+// déductible à zéro.
+func TestLeMontantTDFNResteCalculeSurLaFraction(t *testing.T) {
+	database := newTestDB(t)
+	svc := vat.New(database, false)
+
+	seedSalesInvoiceAt(t, database, 10000, 810, 8.1, "2026-03-15")
+
+	decl, err := svc.GenerateDeclaration(context.Background(),
+		mustDate("2026-01-01"), mustDate("2026-12-31"), "tdfn")
+	if err != nil {
+		t.Fatalf("GenerateDeclaration: %v", err)
+	}
+
+	// 10'000 HT × (8.1 % × 0.8) = 10'000 × 0.0648 = 648.00
+	if got, want := decl.VATCollected.Total, 648.0; !nearly(got, want) {
+		t.Errorf("TVA due en TDFN = %.2f, attendu %.2f — "+
+			"les constantes compliance.VATRate* doivent rester en fraction", got, want)
 	}
 }
