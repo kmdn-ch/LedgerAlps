@@ -243,3 +243,43 @@ func TestBackfillLeavesAnEmptyDatabaseAlone(t *testing.T) {
 		t.Fatalf("%d exercice(s) créé(s) sur une base vide", years)
 	}
 }
+
+// ─── Liste blanche des identifiants SQL (audit 4, F-1) ──────────────────────
+//
+// `attachOrphans` interpole un nom de table et un nom de colonne avec
+// `fmt.Sprintf` — chose que les paramètres liés ne peuvent pas faire. Ce n'est
+// pas exploitable aujourd'hui (deux sites d'appel, tous deux avec des
+// littéraux, jamais atteints depuis une route HTTP), mais c'était un piège
+// posé pour la prochaine réutilisation.
+
+func TestAttachOrphansRefuseUneTableHorsListeBlanche(t *testing.T) {
+	database := newBackfillDB(t)
+
+	cas := []struct{ table, col string }{
+		{"users", "created_at"},                         // table réelle, mais pas rattachable
+		{"journal_entries; DROP TABLE users--", "date"}, // tentative d'injection
+		{"journal_entries", "id"},                       // bonne table, mauvaise colonne
+		{"", ""},
+	}
+	for _, c := range cas {
+		if _, err := attachOrphans(database, false, c.table, c.col); err == nil {
+			t.Errorf("attachOrphans(%q, %q) a été accepté", c.table, c.col)
+		}
+	}
+
+	// La table users doit être intacte : rien n'a atteint le SQL.
+	var n int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&n); err != nil {
+		t.Fatalf("la table users a disparu ou est illisible: %v", err)
+	}
+}
+
+func TestAttachOrphansAccepteLesDeuxTablesPrevues(t *testing.T) {
+	database := newBackfillDB(t)
+	for _, c := range tablesRattachables {
+		if _, err := attachOrphans(database, false, c.table, c.dateCol); err != nil {
+			t.Errorf("attachOrphans(%q, %q) refusé alors qu'il est dans la liste: %v",
+				c.table, c.dateCol, err)
+		}
+	}
+}

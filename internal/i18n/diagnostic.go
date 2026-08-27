@@ -34,7 +34,12 @@ var diagnostic = map[string]string{
 	"advisory %q has unknown severity %q": "chargement du flux, au démarrage",
 	"advisory feed schema version %d is not supported by this build (expects %d)": "chargement du flux, au démarrage",
 	"advisory feed signature verification failed — refusing to load":              "chargement du flux, au démarrage",
-	"invalid advisory public key length %d":                                       "chargement du flux, au démarrage",
+	// La liste blanche des tables rattachables refuse un identifiant que le
+	// PROGRAMME lui passe, pas l'utilisateur : aucun clic ne peut l'atteindre,
+	// et le message doit rester lisible dans le journal de démarrage.
+	"table non rattachable à un exercice: %q/%q — cette fonction n'accepte que des identifiants figés dans le programme, jamais une valeur reçue": "erreur de programmation, au démarrage",
+
+	"invalid advisory public key length %d": "chargement du flux, au démarrage",
 
 	// ── Outil en ligne de commande ────────────────────────────────────────────
 	"automatic backup is only supported for SQLite; use pg_dump for PostgreSQL": "outil en ligne de commande",

@@ -29,7 +29,7 @@ import { AuditTrailPanel } from '@/components/settings/AuditTrailPanel'
 import { PersonalDataPanel } from '@/components/settings/PersonalDataPanel'
 import { SecurityPanel } from '@/components/settings/SecurityPanel'
 import { NetworkSettings } from '@/components/settings/NetworkSettings'
-import { useAuthStore } from '@/store/auth'
+import { useCanAdmin } from '@/hooks/usePermissions'
 import type { IntegrityReport, SystemHealth } from '@/types'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
@@ -59,8 +59,7 @@ export function MaintenancePanel() {
   // refuse déjà ces routes, mais afficher l'entrée produisait pire qu'un
   // refus — un panneau dont chaque requête échouait, dont une restait bloquée
   // sur « chargement » indéfiniment.
-  const role = useAuthStore(st => st.role)
-  const isAdmin = role === 'admin'
+  const isAdmin = useCanAdmin()
   const sections = SECTIONS.filter(sec => isAdmin || sec.key !== 'security')
 
   // Une adresse ou un rechargement pointant sur une section devenue interdite

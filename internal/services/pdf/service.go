@@ -135,7 +135,10 @@ func Generate(inv InvoiceData) ([]byte, error) {
 		pdf.SetY(-12)
 		pdf.SetFont("Helvetica", "", 8)
 		pdf.SetTextColor(120, 120, 120)
-		pdf.CellFormat(0, 6, latin1(fmt.Sprintf("Page %d/{nb}", pdf.PageNo())),
+		// La traduction existait au catalogue, ce libellé ne la traversait
+		// simplement pas : c'était le SEUL texte affiché du PDF à sortir en
+		// français quelle que soit la langue du document.
+		pdf.CellFormat(0, 6, latin1(inv.t("Page %d/{nb}", pdf.PageNo())),
 			"", 0, "C", false, 0, "")
 		pdf.SetTextColor(0, 0, 0)
 	})

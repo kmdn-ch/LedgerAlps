@@ -27,10 +27,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/kmdn-ch/ledgeralps/internal/core/semver"
 )
 
 const (
@@ -201,8 +201,8 @@ func (c *Checker) fetchLatest(ctx context.Context) (*githubRelease, error) {
 // prompt: a developer running from source is not a user who needs to download
 // an installer.
 func IsNewer(candidate, current string) bool {
-	cand, candOK := parseVersion(candidate)
-	cur, curOK := parseVersion(current)
+	cand, candOK := semver.Parse(candidate)
+	cur, curOK := semver.Parse(current)
 	if !candOK || !curOK {
 		return false
 	}
@@ -212,30 +212,4 @@ func IsNewer(candidate, current string) bool {
 		}
 	}
 	return false
-}
-
-func parseVersion(v string) ([3]int, bool) {
-	var out [3]int
-	v = strings.TrimSpace(v)
-	v = strings.TrimPrefix(v, "v")
-	// A pre-release suffix is dropped: 1.4.0-rc1 compares as 1.4.0, and the
-	// GitHub endpoint already filters pre-releases out.
-	if i := strings.IndexAny(v, "-+"); i >= 0 {
-		v = v[:i]
-	}
-	if v == "" {
-		return out, false
-	}
-	parts := strings.Split(v, ".")
-	if len(parts) > 3 {
-		return out, false
-	}
-	for i, p := range parts {
-		n, err := strconv.Atoi(p)
-		if err != nil || n < 0 {
-			return out, false
-		}
-		out[i] = n
-	}
-	return out, true
 }

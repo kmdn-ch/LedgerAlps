@@ -30,7 +30,10 @@ func seal(secret []byte) ([]byte, error) {
 		windows.CRYPTPROTECT_UI_FORBIDDEN, &out); err != nil {
 		return nil, err
 	}
-	defer windows.LocalFree(windows.Handle(unsafe.Pointer(out.Data)))
+	// Retour ignore volontairement : LocalFree n'echoue qu'en cas de handle
+	// invalide, et la copie du secret a deja eu lieu (ligne suivante). Au pire
+	// une fuite de quelques octets locaux au processus, jamais du secret.
+	defer func() { _, _ = windows.LocalFree(windows.Handle(unsafe.Pointer(out.Data))) }()
 	// The blob belongs to Windows until LocalFree; copy before releasing it.
 	return append([]byte(nil), unsafe.Slice(out.Data, out.Size)...), nil
 }
@@ -43,6 +46,9 @@ func unseal(sealed []byte) ([]byte, error) {
 		windows.CRYPTPROTECT_UI_FORBIDDEN, &out); err != nil {
 		return nil, err
 	}
-	defer windows.LocalFree(windows.Handle(unsafe.Pointer(out.Data)))
+	// Retour ignore volontairement : LocalFree n'echoue qu'en cas de handle
+	// invalide, et la copie du secret a deja eu lieu (ligne suivante). Au pire
+	// une fuite de quelques octets locaux au processus, jamais du secret.
+	defer func() { _, _ = windows.LocalFree(windows.Handle(unsafe.Pointer(out.Data))) }()
 	return append([]byte(nil), unsafe.Slice(out.Data, out.Size)...), nil
 }

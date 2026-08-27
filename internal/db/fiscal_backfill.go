@@ -59,15 +59,49 @@ func BackfillFiscalYears(database *sql.DB, usePostgres bool) error {
 	return nil
 }
 
+// ─── Liste blanche des tables rattachables à un exercice ────────────────────
+//
+// Les requêtes de ce fichier interpolent un NOM DE TABLE et un NOM DE COLONNE
+// avec `fmt.Sprintf` — ce que les paramètres liés ne peuvent pas faire : un `?`
+// porte une valeur, jamais un identifiant.
+//
+// Aujourd'hui aucune entrée externe n'atteint ces paramètres : les deux sites
+// d'appel passent des littéraux, et `BackfillFiscalYears` n'est appelée qu'une
+// fois au démarrage du serveur, jamais depuis une route HTTP. Le risque est
+// celui d'une réutilisation future — un `?table=` branché là un jour, et
+// l'injection serait immédiate et invisible aux tests actuels.
+//
+// La liste blanche ferme la porte par construction plutôt que par vigilance :
+// un nom hors de cet ensemble est refusé, il ne peut pas atteindre le SQL.
+type tableRattachable struct{ table, dateCol string }
+
+var tablesRattachables = []tableRattachable{
+	{"journal_entries", "date"},
+	{"invoices", "issue_date"},
+}
+
+// resoudreTable refuse tout couple qui n'est pas dans la liste blanche.
+//
+// Elle rend le couple issu de la CONSTANTE, jamais celui reçu en argument :
+// même si l'appelant fournissait une chaîne équivalente construite autrement,
+// c'est le littéral du programme qui part dans la requête.
+func resoudreTable(table, dateCol string) (tableRattachable, error) {
+	for _, t := range tablesRattachables {
+		if t.table == table && t.dateCol == dateCol {
+			return t, nil
+		}
+	}
+	return tableRattachable{}, fmt.Errorf(
+		"table non rattachable à un exercice: %q/%q — cette fonction n'accepte que "+
+			"des identifiants figés dans le programme, jamais une valeur reçue", table, dateCol)
+}
+
 // collectYears retourne les années civiles concernées par des lignes orphelines.
 func collectYears(database *sql.DB, usePostgres bool) ([]int, error) {
 	seen := map[int]bool{}
-	for _, q := range []struct{ table, col string }{
-		{"journal_entries", "date"},
-		{"invoices", "issue_date"},
-	} {
+	for _, q := range tablesRattachables {
 		query := fmt.Sprintf(
-			"SELECT %s FROM %s WHERE fiscal_year_id IS NULL", q.col, q.table)
+			"SELECT %s FROM %s WHERE fiscal_year_id IS NULL", q.dateCol, q.table)
 		rows, err := database.Query(query)
 		if err != nil {
 			return nil, fmt.Errorf("collect %s: %w", q.table, err)
@@ -132,6 +166,13 @@ func ensureCalendarYear(database *sql.DB, usePostgres bool, year int) (bool, err
 
 // attachOrphans rattache les lignes sans exercice à celui qui couvre leur date.
 func attachOrphans(database *sql.DB, usePostgres bool, table, dateCol string) (int64, error) {
+	// Les identifiants passent par la liste blanche AVANT d'atteindre le SQL.
+	t, err := resoudreTable(table, dateCol)
+	if err != nil {
+		return 0, err
+	}
+	table, dateCol = t.table, t.dateCol
+
 	// Sous-requête corrélée : portable SQLite/PostgreSQL, et sans effet sur une
 	// ligne dont la date n'est couverte par aucun exercice — elle reste NULL
 	// plutôt que d'être rattachée au hasard.

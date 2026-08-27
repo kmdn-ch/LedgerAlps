@@ -101,7 +101,14 @@ type Service struct {
 	accountingSvc AccountingServiceInterface
 }
 
-// New creates a Service without an accounting dependency (backward compatible).
+// New cree un Service sans dependance comptable.
+//
+// « backward compatible » disait ce commentaire, ce qui n'est plus vrai :
+// aucun appelant externe ne subsiste. Le seul site de production,
+// internal/api/handlers/invoices.go, passe par NewWithAccounting. Ce
+// constructeur ne sert plus qu'aux fixtures de test, qui preferent une forme
+// courte — c'est legitime, mais autant le dire plutot que de laisser croire a
+// une compatibilite qu'on devrait preserver.
 func New(database *sql.DB, usePostgres bool) *Service {
 	return &Service{db: database, usePostgres: usePostgres}
 }

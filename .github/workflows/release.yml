@@ -207,10 +207,7 @@ jobs:
 
       - name: Stage installer files
         shell: bash
-        env:
-          VERSION: ${{ needs.goreleaser.outputs.version }}
         run: |
-          VERSION_NUM="${VERSION#v}"
           STAGE="infrastructure/windows"
           # Binaries only — frontend is embedded inside ledgeralps-server.exe
           cp installer-work/ledgeralps-server.exe "$STAGE/"

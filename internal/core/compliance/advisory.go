@@ -25,9 +25,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
-	"strings"
 	"time"
+
+	"github.com/kmdn-ch/ledgeralps/internal/core/semver"
 )
 
 // Severity ranks how urgently a user must act.
@@ -155,7 +155,7 @@ func VerifySignedFeed(data, signature []byte, publicKey ed25519.PublicKey) (*Fee
 func (f *Feed) Relevant(currentVersion string, now time.Time, horizon time.Duration) []Advisory {
 	var out []Advisory
 	for _, a := range f.Advisories {
-		if a.ResolvedInVersion != "" && versionAtLeast(currentVersion, a.ResolvedInVersion) {
+		if a.ResolvedInVersion != "" && semver.AuMoins(currentVersion, a.ResolvedInVersion) {
 			continue
 		}
 		if a.EffectiveFrom != "" {
@@ -194,48 +194,4 @@ func Localised(m map[string]string, lang string) string {
 		}
 	}
 	return ""
-}
-
-// versionAtLeast reports whether current >= target, comparing dotted numeric
-// versions. A leading "v" is ignored and any pre-release suffix is dropped.
-// An unparseable current version (a dev build) is treated as newest, so
-// developers are not nagged about advisories they have already fixed.
-func versionAtLeast(current, target string) bool {
-	cur, curOK := parseVersion(current)
-	tgt, tgtOK := parseVersion(target)
-	if !tgtOK {
-		return false
-	}
-	if !curOK {
-		return true // "dev" and similar: assume up to date
-	}
-	for i := 0; i < 3; i++ {
-		if cur[i] != tgt[i] {
-			return cur[i] > tgt[i]
-		}
-	}
-	return true
-}
-
-func parseVersion(v string) ([3]int, bool) {
-	var out [3]int
-	v = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(v), "v"))
-	if i := strings.IndexAny(v, "-+"); i >= 0 {
-		v = v[:i]
-	}
-	if v == "" {
-		return out, false
-	}
-	parts := strings.Split(v, ".")
-	if len(parts) > 3 {
-		parts = parts[:3]
-	}
-	for i, p := range parts {
-		n, err := strconv.Atoi(p)
-		if err != nil {
-			return out, false
-		}
-		out[i] = n
-	}
-	return out, true
 }

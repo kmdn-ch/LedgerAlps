@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kmdn-ch/ledgeralps/internal/core/semver"
 )
 
 func feedJSON(t *testing.T, advisories ...Advisory) []byte {
@@ -186,8 +188,8 @@ func TestVersionAtLeast(t *testing.T) {
 		{"1.3", "1.3.0", true},         // short form
 	}
 	for _, c := range cases {
-		if got := versionAtLeast(c.current, c.target); got != c.want {
-			t.Errorf("versionAtLeast(%q, %q) = %v, want %v", c.current, c.target, got, c.want)
+		if got := semver.AuMoins(c.current, c.target); got != c.want {
+			t.Errorf("semver.AuMoins(%q, %q) = %v, want %v", c.current, c.target, got, c.want)
 		}
 	}
 }

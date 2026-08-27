@@ -54,11 +54,6 @@ export function useCanWrite(): boolean {
   return !enLectureSeule(useAuthStore(s => s.role))
 }
 
-/** L'inverse, quand la phrase se lit mieux ainsi. */
-export function useIsReadOnly(): boolean {
-  return enLectureSeule(useAuthStore(s => s.role))
-}
-
 /**
  * Administration du logiciel : comptes utilisateurs, sécurité, sauvegardes.
  *

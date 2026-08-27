@@ -17,9 +17,15 @@
 infrastructure/brand/LOGO.svg -text
 infrastructure/brand/icon.svg -text
 
-# Le script de l'installeur porte un BOM UTF-8 et des CRLF, tous deux porteurs :
-# sans le BOM, NSIS lit le fichier dans la page de codes ANSI et massacre les
-# accents. La CI le vérifie ; autant que git ne s'en mêle pas non plus.
+# Le script de l'installeur porte un BOM UTF-8, et il est porteur : sans lui,
+# NSIS lit le fichier dans la page de codes ANSI et massacre les accents. La CI
+# le vérifie (release.yml) ; autant que git ne s'en mêle pas non plus.
+#
+# Ce commentaire annonçait aussi « des CRLF, tous deux porteurs ». C'était faux
+# sur les deux points : le fichier est en LF pur (454 lignes, zéro CR dans le
+# blob), makensis accepte indifféremment les deux, et la CI ne teste que le BOM.
+# L'attribut `-text` rendait l'écart invisible pour toujours — git ne signale
+# jamais rien sur un fichier qu'il ne convertit pas.
 infrastructure/windows/installer.nsi -text
 
 # Les sources Go sont stockees ET extraites en LF.
@@ -39,3 +45,14 @@ infrastructure/windows/installer.nsi -text
 # Apres quoi « gofmt -l . » redevient utilisable localement sous Windows --
 # c'est precisement la verification que son absence avait fait desactiver.
 *.go text eol=lf
+
+# Les scripts shell sont stockes ET extraits en LF.
+#
+# Rien ne l'imposait : sur un poste Windows en autocrlf=false, un
+# contributeur committerait du CRLF sans s'en apercevoir, et un `#!/bin/bash`
+# est un interpreteur introuvable sur la machine qui execute le script -- une
+# installation Linux qui echoue sur une ligne que personne ne relit.
+#
+# Les blobs actuels sont deja en LF pur (verifie octet par octet sur les 5
+# fichiers) ; cette ligne empeche la derive, elle ne corrige rien.
+*.sh text eol=lf

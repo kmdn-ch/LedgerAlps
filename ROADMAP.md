@@ -87,6 +87,7 @@ validation · ⏳ planifié · ⛔ bloqué, décision à prendre
 | 13c | Traçabilité : couverture du journal, attestation automatique **et vérifiable** | ✅ | [↓](#13c--traçabilité) |
 | 13d | Retirer une facture de la liste des paiements | ✅ | [↓](#13d--vider-la-liste-des-paiements) |
 | 15 | Trouver ses marques : mise en route, statut TVA, aide par écran | ✅ | [↓](#15--trouver-ses-marques) |
+| 16 | Montée react-router v6 → v7 (redirection ouverte amont) | 💡 à planifier | [↓](#16--montée-react-router-v7) |
 | 14 | **Modules métier** | 💡 à trancher | [↓](#14--modules-métier) |
 
 ---
@@ -1067,3 +1068,33 @@ avec leur raison.
 > **Versionnage.** `vX.Y.0` livre un milestone complet ; `vX.Y.Z` groupe les
 > correctifs d'un cycle. Jamais de tag par commit isolé. Les numéros de version
 > des milestones planifiés sont attribués **à la livraison**, pas à l'avance.
+
+---
+
+### 16 — Montée react-router v7
+
+**État : à planifier. Pas urgent, pas à oublier non plus.**
+
+`npm audit` signale sur `react-router-dom` 6.30.3 une redirection ouverte via
+backslash dans `<Link>`/`useNavigate` — un contournement de CVE-2025-68470. Le
+second avis du même paquet (`deserializeErrors`) concerne le rendu côté serveur,
+que LedgerAlps n'utilise pas.
+
+**Ce qui a été vérifié** (audit 4, M-1) : la revue du routage actuel ne trouve
+aucun lien interne construit depuis une donnée non fiable. Aucun chemin
+d'exploitation n'existe aujourd'hui dans ce produit. La PR Dependabot qui
+proposait la montée a été fermée sur cette base.
+
+**Pourquoi ça reste au tableau** : la vulnérabilité n'est pas corrigée en amont
+avant la v7, et l'absence de chemin d'exploitation est une propriété du code
+ACTUEL, pas une garantie. La première route qui construira un chemin de
+navigation depuis une entrée utilisateur la rendra atteignable, sans que rien ne
+le signale.
+
+**Ce que la montée demande** : v6 → v7 est un changement majeur. Ce n'est pas un
+bump de version — les composants de routage, les chargeurs et la gestion
+d'erreur changent de contrat. Il faut prévoir une revalidation écran par écran,
+pas un `npm update` suivi d'un `tsc` vert.
+
+`vite`/`esbuild`, signalés par le même audit npm, sont des dépendances de
+**build** : jamais livrées dans le binaire, aucune action requise.

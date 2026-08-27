@@ -74,7 +74,6 @@ import { MFAPanel } from '@/components/settings/MFAPanel'
 import { LanguagePanel } from '@/components/settings/LanguagePanel'
 import { MaintenancePanel } from '@/components/settings/MaintenancePanel'
 import { ReconciliationPanel } from '@/components/settings/ReconciliationPanel'
-import { useAuthStore } from '@/store/auth'
 import { refusalMessage } from '@/utils/refusal'
 
 export function SettingsPage() {
@@ -205,7 +204,10 @@ export function SettingsPage() {
   // ce que React refuse (erreur #310, « Rendered more hooks than during the
   // previous render »). L'écran cassait alors entièrement, avec une trace
   // minifiée illisible.
-  const role = useAuthStore(st => st.role)
+  // `useCanWrite` porte exactement cette regle (admin ou comptable) et la
+  // tient a jour avec le serveur : la recalculer ici la faisait diverger en
+  // silence le jour ou un role serait ajoute.
+  const canManage = useCanWrite()
 
   if (isLoading) return null
 
@@ -217,7 +219,6 @@ export function SettingsPage() {
   // copie fait partie de son métier. Ce qui reste réservé à l'administrateur est
   // à l'intérieur de ces écrans — restauration, chiffrement, réseau, comptes —
   // et le serveur le refuse indépendamment de ce qui s'affiche.
-  const canManage = role === 'admin' || role === 'accountant'
   const visibleTabs = TABS.filter(t => canManage || !ADMIN_ONLY.has(t.key))
 
   // Un onglet réservé sélectionné par un lien ou un rechargement ne doit pas

@@ -16,11 +16,12 @@
 
 import { ShieldAlert, Eye, Calculator } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
+import { useRole } from '@/hooks/usePermissions'
 import { useT } from '@/i18n/useT'
 
 export function AccountBanner() {
   const t = useT()
-  const role = useAuthStore(s => s.role)
+  const role = useRole()
   const name = useAuthStore(s => s.user?.name)
 
   if (!role) return null

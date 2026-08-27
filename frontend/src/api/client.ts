@@ -451,10 +451,6 @@ export const invoicesApi = {
     api.get(`/invoices/${id}/six-validation`, { responseType: 'blob' }),
 }
 
-// ─── TVA ──────────────────────────────────────────────────────────────────────
-export const vatApi = {
-  rates: () => api.get('/vat/rates'),
-}
 
 // ─── ISO 20022 ────────────────────────────────────────────────────────────────
 // Rapprochement bancaire. Les écritures d'un relevé, leurs suggestions, et la
