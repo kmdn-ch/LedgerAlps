@@ -242,9 +242,32 @@ export function EditInvoicePage() {
           onClose={() => setShowContactModal(false)}
           onCreated={(contact) => {
             setShowContactModal(false)
-            qc.invalidateQueries({ queryKey: ['contacts'] }).then(() => {
-              setValue('contact_id', contact.id, { shouldValidate: true })
-            })
+            // Poser le contact dans le cache, PUIS le selectionner apres rendu.
+            //
+            // Deux ecueils se referment ici. L'ordre d'origine attendait le
+            // rechargement avant de selectionner : le champ restait vide le
+            // temps de l'appel reseau, et pour toujours si celui-ci echouait,
+            // puisque rien n'attrapait le rejet. Mais selectionner sans plus
+            // attendre ne suffit pas non plus : tant que la liste n'a pas ete
+            // rechargee, le <select> n'a AUCUNE option portant cet
+            // identifiant, et la valeur posee ne s'affiche pas -- verifie en
+            // navigateur, le champ restait sur « Selectionnez un contact ».
+            //
+            // On insere donc le contact dans le cache, ce qui cree l'option
+            // immediatement et sans reseau. La modale a deja demande le
+            // rechargement de son cote : la liste faisant foi arrive juste
+            // apres et remplace celle-ci.
+            //
+            // La selection, elle, attend le tour de rendu suivant. setValue
+            // ecrit dans l'element du DOM, et React n'a pas encore pose la
+            // nouvelle option quand la ligne au-dessus rend la main : le
+            // <select> refusait la valeur en silence. Le .finally donne ce
+            // tour, et il s'execute que le rechargement reussisse ou non --
+            // l'option existe de toute facon, elle vient du cache.
+            qc.setQueryData<Contact[]>(['contacts'], (liste) =>
+              liste ? [...liste, contact] : [contact])
+            void qc.invalidateQueries({ queryKey: ['contacts'] })
+              .finally(() => setValue('contact_id', contact.id, { shouldValidate: true }))
           }}
         />
       )}
