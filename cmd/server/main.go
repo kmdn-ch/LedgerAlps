@@ -125,6 +125,14 @@ func main() {
 		log.Fatalf("FATAL: invoice recipient backfill failed: %v", err)
 	}
 
+	// Extournes fournisseur marquées comme telles. Le troisième audit a
+	// établi que ce chemin ne renseignait ni is_reversal ni reversal_of_id,
+	// contrairement à celui des factures clientes — ce qui partait tel quel
+	// dans l'archive légale remise à la fiduciaire. Voir migration 0028.
+	if err := db.BackfillSupplierReversalMarkers(database, cfg.UsePostgres()); err != nil {
+		log.Fatalf("FATAL: supplier reversal marker backfill failed: %v", err)
+	}
+
 	// Rétention des données personnelles (nLPD art. 6 al. 4). Les adresses IP
 	// des verrouillages de connexion s'accumulaient sans terme, alors que le
 	// schéma annonçait une durée limitée. Un échec ici ne doit pas empêcher le

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -188,4 +189,149 @@ func BackfillInvoiceRecipients(database *sql.DB, usePostgres bool) error {
 			"depuis la fiche contact actuelle, faute d'instantané d'époque", n)
 	}
 	return nil
+}
+
+// BackfillSupplierReversalMarkers marque comme extourne les écritures
+// d'annulation FOURNISSEUR passées avant le troisième audit, qui n'étaient
+// pas conformes : `is_reversal` restait à 0 et `reversal_of_id` à NULL, alors
+// que le chemin des factures CLIENTES renseignait déjà les deux.
+//
+// Ces deux colonnes partent dans l'archive légale (CO art. 958f) remise à la
+// fiduciaire. Une extourne fournisseur non marquée s'y lisait comme une
+// écriture ordinaire — bien qu'elle se décrive elle-même comme une extourne
+// dans son libellé — sans qu'aucun lien ne pointe vers l'écriture qu'elle
+// annule.
+//
+// La migration 0028 ouvre l'exception, étroite et à sens unique, qui rend
+// cette réparation possible malgré le déclencheur d'immuabilité
+// (CO art. 957a). Le code applicatif est corrigé séparément
+// (supplier_cancel.go) : ce rattrapage ne concerne que ce qui a déjà été
+// écrit avec le défaut.
+//
+// # Comment une extourne candidate est identifiée
+//
+// Le libellé d'une extourne fournisseur suit un format fixe
+// (supplier_cancel.go) : « Extourne facture fournisseur <référence> —
+// <motif> ». Aucun autre chemin du dépôt ne produit ce préfixe — celui des
+// factures clientes écrit « Contrepassation facture <numéro> ».
+//
+// # Comment elle est rattachée à SON écriture d'origine
+//
+// La comparaison se fait en Go, par préfixe exact — jamais par SQL LIKE sur
+// une référence non échappée, qui contiendrait des caractères génériques
+// (`%`, `_`) si le fournisseur les avait utilisés dans sa numérotation.
+// `supplier_invoices.journal_entry_id` continue de pointer vers l'écriture
+// D'ORIGINE après l'annulation (jamais réécrit) : c'est la source du
+// rattachement.
+//
+// Une candidate qui ne trouve AUCUNE origine, ou qui en trouve PLUSIEURS
+// (deux fournisseurs différents ayant utilisé la même référence et le même
+// motif), n'est pas touchée : deviner un lien comptable serait pire que n'en
+// écrire aucun, et le cas est journalisé pour être traité à la main.
+//
+// Idempotent : une candidate corrigée porte `is_reversal = 1` et disparaît de
+// la sélection au passage suivant.
+func BackfillSupplierReversalMarkers(database *sql.DB, usePostgres bool) error {
+	if usePostgres {
+		// L'exception posée par la migration 0028 est écrite en syntaxe de
+		// déclencheur SQLite. PostgreSQL n'est pas le moteur exercé par ce
+		// rattrapage : ne rien faire plutôt que deviner une syntaxe non
+		// vérifiée sur une opération qui touche des écritures comptabilisées.
+		return nil
+	}
+
+	origines, err := collectCancelledSupplierEntries(database)
+	if err != nil {
+		return fmt.Errorf("collect cancelled supplier invoices: %w", err)
+	}
+	if len(origines) == 0 {
+		return nil
+	}
+
+	rows, err := database.Query(`
+		SELECT id, description FROM journal_entries
+		WHERE is_reversal = 0 AND description LIKE 'Extourne facture fournisseur %'`)
+	if err != nil {
+		return fmt.Errorf("collect legacy supplier reversals: %w", err)
+	}
+	type candidate struct{ id, description string }
+	var candidates []candidate
+	for rows.Next() {
+		var c candidate
+		if err := rows.Scan(&c.id, &c.description); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan legacy supplier reversal: %w", err)
+		}
+		candidates = append(candidates, c)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("collect legacy supplier reversals: %w", err)
+	}
+	rows.Close()
+
+	fixed, ambiguous, orphelines := 0, 0, 0
+	for _, c := range candidates {
+		trouve := ""
+		multiple := false
+		for _, o := range origines {
+			prefixe := "Extourne facture fournisseur " + o.reference + " — "
+			if strings.HasPrefix(c.description, prefixe) {
+				if trouve != "" && trouve != o.entryID {
+					multiple = true
+					break
+				}
+				trouve = o.entryID
+			}
+		}
+		switch {
+		case multiple:
+			ambiguous++
+			log.Printf("[migration] extourne fournisseur %s : plusieurs origines possibles, "+
+				"laissée telle quelle — %q", c.id, c.description)
+		case trouve == "":
+			orphelines++
+			log.Printf("[migration] extourne fournisseur %s : aucune origine trouvée, "+
+				"laissée telle quelle — %q", c.id, c.description)
+		default:
+			updQ := Rebind(
+				`UPDATE journal_entries SET is_reversal = 1, reversal_of_id = ? WHERE id = ?`,
+				usePostgres)
+			if _, err := database.Exec(updQ, trouve, c.id); err != nil {
+				return fmt.Errorf("mark supplier reversal %s: %w", c.id, err)
+			}
+			fixed++
+		}
+	}
+
+	if fixed > 0 || ambiguous > 0 || orphelines > 0 {
+		log.Printf("[migration] extournes fournisseur marquées : %d corrigée(s), "+
+			"%d ambiguë(s), %d sans origine trouvée", fixed, ambiguous, orphelines)
+	}
+	return nil
+}
+
+type supplierOrigine struct{ reference, entryID string }
+
+// collectCancelledSupplierEntries rend, pour chaque facture fournisseur
+// annulée, la référence telle qu'elle a été saisie et l'écriture d'origine
+// que la comptabilisation avait laissée — jamais réécrite par l'annulation.
+func collectCancelledSupplierEntries(database *sql.DB) ([]supplierOrigine, error) {
+	rows, err := database.Query(`
+		SELECT supplier_reference, journal_entry_id FROM supplier_invoices
+		WHERE status = 'cancelled' AND journal_entry_id IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []supplierOrigine
+	for rows.Next() {
+		var o supplierOrigine
+		if err := rows.Scan(&o.reference, &o.entryID); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
 }

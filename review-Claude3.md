@@ -354,7 +354,7 @@ Et l'unique appelant, `supplier_cancel.go:222` :
 
 **Test de non-régression suggéré.** Le dépôt possède déjà le bon modèle avec `internal/frontend/audit_actions_test.go`, qui échoue si une action d'audit déclarée n'est câblée nulle part. Le même esprit s'applique : un test qui annule une facture fournisseur comptabilisée et **assert que l'écriture produite porte `is_reversal = 1` et `reversal_of_id` = l'écriture d'origine**. Sans lui, rien n'empêche la divergence de revenir.
 
-**Question ouverte pour vous.** Les installations existantes portent des extournes fournisseur non marquées. Une migration correctrice est possible — l'écriture d'origine se retrouve par le `journal_entry_id` de la facture annulée — mais elle **modifie des écritures comptabilisées**, ce que le déclencheur d'immuabilité interdit précisément. C'est une décision qui vous revient, pas une correction que je proposerais de moi-même.
+**Question ouverte pour vous — tranchée depuis.** Les installations existantes portaient des extournes fournisseur non marquées, ce qui exigeait de modifier des écritures comptabilisées, interdit par le déclencheur d'immuabilité. Aucune installation n'étant en production, vous avez autorisé la rectification (27 août 2026) : voir § 8.5.
 
 ---
 
@@ -777,3 +777,77 @@ maintenance — avec des changements de comportement réels (`v7_startTransition
 `v7_relativeSplatPath`, et le dépôt a une route attrape-tout) qui demandent de
 reparcourir chaque écran. Elle reste à planifier, pas à faire dans le même
 mouvement que des corrections de sécurité.
+
+### 8.5 — La rectification des extournes fournisseur historiques
+
+Aucune installation de LedgerAlps n'étant en production, la contrainte notée
+au § 3.1 — corriger les extournes déjà passées exige de modifier des écritures
+comptabilisées, ce que le déclencheur refuse — cesse de peser contre un risque
+réel. Vous avez autorisé la rectification le 27 août 2026.
+
+**La méthode retenue suit un précédent du dépôt.** La migration `0013` avait
+déjà ouvert, pour `fiscal_year_id`, une exception étroite et **à sens unique**
+au déclencheur d'immuabilité : uniquement de NULL vers une valeur, toute autre
+colonne devant rester identique. La nouvelle migration `0028` ajoute une
+seconde exception de la même forme, combinée à la première par un `OR` — ni
+l'une ni l'autre n'affaiblit ce que l'autre protège :
+
+```sql
+WHEN OLD.status = 'posted' AND NOT (
+    ( -- 0013 : fiscal_year_id, NULL -> valeur
+        OLD.fiscal_year_id IS NULL AND NEW.fiscal_year_id IS NOT NULL AND …
+    )
+    OR
+    ( -- 0028 : is_reversal, 0 -> 1, ET reversal_of_id, NULL -> valeur
+        OLD.is_reversal = 0 AND NEW.is_reversal = 1
+        AND OLD.reversal_of_id IS NULL AND NEW.reversal_of_id IS NOT NULL AND …
+    )
+)
+```
+
+**Ni `is_reversal` ni `reversal_of_id` n'entrent dans l'empreinte d'intégrité**
+(§ 3 de la migration 0013 établit la même chose pour `fiscal_year_id`, par le
+même raisonnement) : la vérification de chaîne rend le même résultat avant et
+après la rectification.
+
+**L'identification d'une candidate ne devine jamais.** Une extourne fournisseur
+historique se reconnaît à son libellé — `Extourne facture fournisseur
+<référence> — <motif>`, un format qu'aucun autre chemin du dépôt ne produit — et
+se rattache à son origine par la référence de la facture `cancelled`
+correspondante, comparée en Go par préfixe exact (jamais par `LIKE` sur une
+référence non échappée). **Une correspondance ambiguë — deux fournisseurs
+distincts ayant utilisé la même référence et le même motif — n'est jamais
+résolue au hasard** : l'écriture reste non marquée, le cas est journalisé.
+Couvert par `TestBackfillNeDevinePasSurUneReferenceAmbigue`.
+
+**Vérifié en quatre temps :**
+
+1. Six tests unitaires (`internal/db/supplier_reversal_backfill_test.go`) : le
+   cas nominal, l'idempotence, la non-altération d'une extourne cliente déjà
+   correcte, le refus de deviner sur une référence ambiguë, l'écriture sans
+   origine trouvée, et la confirmation que le déclencheur continue de refuser
+   toute AUTRE modification.
+2. Mutation : la migration `0028` retirée, le test nominal échoue sur le
+   déclencheur — la dépendance est prouvée, pas supposée.
+3. Suite complète du dépôt (`go test ./...`) verte, `deadcode` muet.
+4. **Preuve d'exécution.** Sur un serveur réel : facture fournisseur créée et
+   comptabilisée par l'API, écriture d'extourne insérée *directement en
+   base* — une `INSERT`, que le déclencheur ne borne pas — pour reproduire
+   EXACTEMENT ce que l'ancien code aurait écrit, sans passer par lui. Premier
+   redémarrage :
+
+   ```
+   [migration] extournes fournisseur marquées : 1 corrigée(s), 0 ambiguë(s), 0 sans origine trouvée
+   ```
+
+   Second redémarrage : journal silencieux — idempotence confirmée. L'écriture
+   corrigée, relue dans l'**archive légale** produite par le binaire :
+
+   ```json
+   { "description":    "Extourne facture fournisseur LEG-001 — verification legacy",
+     "is_reversal":    true,
+     "reversal_of_id": "4e2ab370737fffbab0677a6fb4247bf7" }
+   ```
+
+   `reversal_of_id` pointe exactement sur l'écriture rendue par la
+   comptabilisation initiale.
