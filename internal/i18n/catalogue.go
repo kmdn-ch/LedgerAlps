@@ -258,6 +258,15 @@ var catalogue = map[string]map[Lang]string{
 		IT: "IBAN: ",
 		EN: "IBAN: ",
 	},
+	// PostgreSQL a été documenté et câblé, jamais porté : les migrations sont
+	// en SQLite pur. Le refus arrive au démarrage, donc dans un journal que
+	// l'exploitant lit — il doit y trouver la sortie, pas seulement le
+	// constat.
+	"PostgreSQL n'est pas supporté par cette version : les migrations sont écrites en SQLite et échoueraient à la première. Retirez POSTGRES_DSN et utilisez SQLITE_PATH — le moteur prévu pour ce produit, qui tient la comptabilité d'une PME sans serveur à administrer": {
+		DE: "PostgreSQL wird von dieser Version nicht unterstützt: Die Migrationen sind in SQLite geschrieben und würden bereits bei der ersten fehlschlagen. Entfernen Sie POSTGRES_DSN und verwenden Sie SQLITE_PATH — die für dieses Produkt vorgesehene Datenbank, die die Buchhaltung eines KMU ohne zu verwaltenden Server führt",
+		IT: "PostgreSQL non è supportato da questa versione: le migrazioni sono scritte in SQLite e fallirebbero già alla prima. Rimuovere POSTGRES_DSN e utilizzare SQLITE_PATH — il motore previsto per questo prodotto, che tiene la contabilità di una PMI senza server da amministrare",
+		EN: "PostgreSQL is not supported by this version: the migrations are written in SQLite and would fail at the very first one. Remove POSTGRES_DSN and use SQLITE_PATH — the engine this product was built for, which keeps an SME's books with no server to administer",
+	},
 	// Le destinataire d'une facture doit être nommé (LTVA art. 26 al. 2).
 	// Vider le nom d'un client produisait un PDF sans destinataire nulle
 	// part : `validateQRBillData` traite un débiteur sans nom comme « non

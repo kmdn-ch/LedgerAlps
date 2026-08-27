@@ -44,8 +44,7 @@ Voir [ROADMAP.md](../ROADMAP.md#14--modules-métier).
 │   Migrations SQL embarquées, appliquées au démarrage     │
 └────────────────────────┬─────────────────────────────────┘
                          │
-              SQLite (WAL) par défaut
-              PostgreSQL si POSTGRES_DSN est défini
+              SQLite (WAL), chiffrée ou non
 ```
 
 ## Organisation du code
@@ -156,10 +155,18 @@ Deux pièges rencontrés en migrant, tous deux invisibles à la compilation :
   sauvegardes ; sans le voir, la migration les aurait cassées en silence. La
   cible est désormais nommée `file:…?vfs=` — le VFS par défaut, explicitement.
 
-**SQLite par défaut, PostgreSQL possible.** Le mode WAL autorise des lectures
-concurrentes avec un rédacteur sérialisé, ce qui suffit largement à une PME.
-`db.Rebind` traduit les paramètres `?` en `$1` pour PostgreSQL : une seule
-requête écrite couvre les deux moteurs.
+**SQLite, et seulement SQLite.** Le mode WAL autorise des lectures concurrentes
+avec un rédacteur sérialisé, ce qui suffit largement à une PME.
+
+PostgreSQL a longtemps été annoncé comme moteur alternatif — `POSTGRES_DSN`,
+`db.Rebind` qui traduit `?` en `$1`, un booléen `usePostgres` passé à une
+trentaine de constructeurs. Il n'a jamais fonctionné : les migrations forment un
+jeu unique appliqué verbatim, et la première utilise `randomblob()`,
+`CREATE TRIGGER IF NOT EXISTS` et `RAISE(ABORT, …)`, tous absents de PostgreSQL.
+`Open` refuse désormais ce moteur en le disant. La plomberie (`Rebind`,
+`usePostgres`) reste en place : la retirer traverserait tout le code des
+handlers, et ce sera le premier geste du jour où le moteur sera porté pour de
+bon — ou abandonné pour de bon.
 
 **Chaîne de hachage d'audit.** Chaque écriture validée reçoit un SHA-256 chaîné
 au précédent (`entry_hash`, `prev_hash`, `sequence_number`). Une modification

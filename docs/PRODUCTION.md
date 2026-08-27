@@ -77,12 +77,20 @@ que la rotation opère.
 export SQLITE_PATH=/var/lib/ledgeralps/ledgeralps.db
 ```
 
-**PostgreSQL** — si vous en avez déjà un. Définir `POSTGRES_DSN` bascule
-automatiquement le moteur.
+**PostgreSQL — non supporté.** Ce document annonçait le contraire : définir
+`POSTGRES_DSN` était présenté comme une bascule de moteur. Elle n'a jamais
+fonctionné. Les migrations embarquées sont écrites en SQLite pur — valeurs par
+défaut `randomblob()`, `CREATE TRIGGER IF NOT EXISTS`, corps de déclencheur
+`RAISE(ABORT, …)` — et la toute première échoue sur PostgreSQL.
 
-```bash
-export POSTGRES_DSN="postgres://ledgeralps:motdepasse@localhost:5432/ledgeralps"
-```
+Le serveur refuse désormais de démarrer si `POSTGRES_DSN` est défini, en le
+disant, plutôt que d'échouer sur une erreur de syntaxe après avoir commencé à
+écrire dans votre base.
+
+SQLite n'est pas un pis-aller ici : LedgerAlps tient la comptabilité d'une PME
+dans un fichier unique, chiffrable, sauvegardable par copie, sans serveur à
+administrer ni à mettre à jour. C'est le moteur pour lequel le produit est
+conçu.
 
 > Les migrations sont embarquées dans le binaire et s'appliquent au démarrage.
 > Rien à lancer manuellement.
@@ -532,7 +540,7 @@ export UPDATE_CHECK=false
 |---|---|---|
 | `JWT_SECRET` | — | **Obligatoire**, ≥ 32 caractères |
 | `SQLITE_PATH` | `ledgeralps.db` | Chemin de la base SQLite |
-| `POSTGRES_DSN` | vide | Si défini, PostgreSQL remplace SQLite |
+| `POSTGRES_DSN` | vide | **Non supporté** — s'il est défini, le serveur refuse de démarrer (voir §3) |
 | `PORT` | `8000` | Port d'écoute |
 | `ALLOWED_ORIGINS` | `http://localhost:5173` | Origines CORS, séparées par des virgules |
 | `DEBUG` | `false` | Journalisation verbeuse |

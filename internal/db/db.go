@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	_ "github.com/ncruces/go-sqlite3/driver"
 	// L'ancien paquet .../embed n'est plus importe : il est deprecie, sa seule
@@ -29,42 +28,68 @@ import (
 //go:embed migrations
 var migrationsFS embed.FS
 
-// Open returns an *sql.DB connected to SQLite (WAL mode) or PostgreSQL depending
-// on configuration. Connection pool defaults are set for typical SME workloads.
+// Open returns an *sql.DB connected to SQLite (WAL mode), chiffrée ou non.
+//
+// PostgreSQL est refusé avec une raison lisible : le moteur a été documenté et
+// câblé, mais jamais porté — voir le détail dans le corps de la fonction.
 func Open(cfg *config.Config) (*sql.DB, error) {
 	var driver, dsn string
 
 	if cfg.UsePostgres() {
-		driver = "pgx"
-		dsn = cfg.PostgresDSN
-	} else {
-		encrypted, encErr := shouldOpenEncrypted(cfg)
-		if encErr != nil {
-			return nil, encErr
-		}
-		if encrypted {
-			return openEncrypted(cfg)
-		}
-		driver = SQLiteDriver
-		dsn = sqliteDSN(cfg.SQLitePath, livePragmas...)
+		// PostgreSQL n'a jamais fonctionné, et le prétendre coûtait plus cher
+		// que de le dire.
+		//
+		// `POSTGRES_DSN` était documenté comme bascule de moteur, et
+		// `usePostgres bool` traverse une trentaine de constructeurs — mais les
+		// migrations embarquées forment un jeu UNIQUE, appliqué verbatim aux
+		// deux moteurs (voir Migrate : `tx.Exec(string(content))`, sans
+		// traduction de dialecte au-delà des `?` que gère rebind.go).
+		//
+		// La toute première migration utilise trois constructions que
+		// PostgreSQL ne connaît pas : `randomblob()`/`hex()` en valeur par
+		// défaut, `CREATE TRIGGER IF NOT EXISTS`, et `SELECT RAISE(ABORT, …)`
+		// en corps de déclencheur — là où PostgreSQL exige une fonction
+		// PL/pgSQL. Le démarrage échouait donc sur une erreur SQL brute, APRÈS
+		// avoir ouvert une connexion et commencé à écrire dans la base.
+		//
+		// Refuser ici plutôt que là-bas ne retire aucune fonctionnalité : il
+		// n'y en avait pas. Cela remplace une erreur de syntaxe illisible par
+		// une phrase qui dit quoi faire, et cela évite de laisser un schéma à
+		// moitié créé derrière soi.
+		//
+		// Porter le moteur pour de bon demande de réécrire les 28 migrations en
+		// dialecte PostgreSQL — dont le déclencheur d'immuabilité (CO art.
+		// 957a), le contrôle le plus critique du produit — et d'ajouter un job
+		// CI qui les exécute réellement. C'est un chantier, pas un correctif.
+		return nil, fmt.Errorf(
+			"PostgreSQL n'est pas supporté par cette version : les migrations sont " +
+				"écrites en SQLite et échoueraient à la première. Retirez POSTGRES_DSN " +
+				"et utilisez SQLITE_PATH — le moteur prévu pour ce produit, qui tient " +
+				"la comptabilité d'une PME sans serveur à administrer")
 	}
+	encrypted, encErr := shouldOpenEncrypted(cfg)
+	if encErr != nil {
+		return nil, encErr
+	}
+	if encrypted {
+		return openEncrypted(cfg)
+	}
+	driver = SQLiteDriver
+	dsn = sqliteDSN(cfg.SQLitePath, livePragmas...)
 
 	database, err := sql.Open(driver, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("opening database (%s): %w", driver, err)
 	}
 
-	// Connection pool tuning
-	if cfg.UsePostgres() {
-		database.SetMaxOpenConns(50)
-		database.SetMaxIdleConns(10)
-		database.SetConnMaxLifetime(5 * time.Minute)
-	} else {
-		// SQLite WAL: concurrent readers, serialised writers
-		database.SetMaxOpenConns(25)
-		database.SetMaxIdleConns(5)
-		database.SetConnMaxLifetime(10 * time.Minute)
-	}
+	// SQLite WAL: concurrent readers, serialised writers.
+	//
+	// Le réglage PostgreSQL qui vivait ici est parti avec le moteur : il était
+	// devenu inatteignable, et du code que rien n'exécute finit par mentir sur
+	// ce que le programme sait faire.
+	database.SetMaxOpenConns(25)
+	database.SetMaxIdleConns(5)
+	database.SetConnMaxLifetime(10 * time.Minute)
 
 	// Ping with timeout to catch misconfigured DSNs at startup
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -78,7 +103,13 @@ func Open(cfg *config.Config) (*sql.DB, error) {
 
 // Migrate applies all pending SQL migration files embedded in the binary.
 // Each migration is applied atomically in a transaction (DDL is transactional
-// in both SQLite and PostgreSQL).
+// in SQLite).
+//
+// Le paramètre usePostgres subsiste — il ne sert plus qu'à Rebind, et vaut
+// toujours faux depuis qu'Open refuse ce moteur. Le retirer traverserait une
+// trentaine de constructeurs de handlers : ce sera le premier geste du jour où
+// PostgreSQL sera porté pour de bon, ou abandonné pour de bon.
+//
 // Files must follow the naming convention: NNNN_description.up.sql
 func Migrate(database *sql.DB, usePostgres bool) error {
 	// Ensure the migrations tracking table exists (outside the per-migration tx)
