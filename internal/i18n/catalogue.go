@@ -258,6 +258,14 @@ var catalogue = map[string]map[Lang]string{
 		IT: "IBAN: ",
 		EN: "IBAN: ",
 	},
+	// Un client (ou un contact « les deux ») devient le débiteur d'une
+	// facture QR : sans adresse structurée complète, le bulletin de
+	// versement suisse ne peut pas s'imprimer (SPC 0200 §4.2.2).
+	"adresse incomplète pour un client (nécessaire à la facture QR) : %s manquant(e)": {
+		DE: "unvollständige Adresse für einen Kunden (für die QR-Rechnung erforderlich): %s fehlt",
+		IT: "indirizzo incompleto per un cliente (necessario per la fattura QR): %s mancante",
+		EN: "incomplete address for a customer (required for the QR-bill): %s missing",
+	},
 	"IDE / N° TVA : ": {
 		DE: "UID / MWST-Nr.: ",
 		IT: "IDI / N. IVA: ",

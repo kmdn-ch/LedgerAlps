@@ -7,6 +7,12 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Modifié
+
+- **L'adresse d'un client est désormais obligatoire.** Rue, NPA et localité conditionnent l'impression du bulletin de versement QR (SPC 0200 §4.2.2) : les laisser vides produisait un client qu'on ne pouvait plus jamais facturer par QR sans repasser par sa fiche. Obligatoire à la création d'un contact client (ou « les deux »), aux deux endroits qui la permettent — l'écran Contacts et la création rapide depuis une facture ou une offre. Un fournisseur pur, jamais débiteur d'une facture émise par LedgerAlps, n'est pas concerné. La création ou la modification d'une facture ou d'une offre refuse désormais aussi de s'enregistrer si le client sélectionné n'a pas cette adresse complète — l'avertissement existait déjà, il ne bloquait rien.
+
+- **Le logo LedgerAlps, en haut à droite, agrandi d'une fois et demie** (20px → 30px de hauteur).
+
 ## [1.5.8] — 2026-08-27
 
 ### Corrigé

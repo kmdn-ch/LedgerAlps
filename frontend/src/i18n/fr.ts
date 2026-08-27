@@ -417,6 +417,9 @@ export const fr = {
   // ─── Validation et paramètres ───
   'val.requis': 'Requis',
   'val.nomRequis': 'Nom requis',
+  'val.adresseRequise': 'Adresse requise pour la facture QR',
+  'val.npaRequis': 'NPA requis pour la facture QR',
+  'val.villeRequise': 'Ville requise pour la facture QR',
   'val.emailInvalide': 'E-mail invalide',
   'val.contactRequis': 'Sélectionnez un contact',
   'val.dateRequise': 'Date requise',

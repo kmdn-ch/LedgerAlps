@@ -158,6 +158,19 @@ func (h *ContactsHandler) CreateContact(c *gin.Context) {
 	if req.PaymentTermDays == 0 {
 		req.PaymentTermDays = 30
 	}
+	// Un client (ou un contact "both", qui l'est aussi) devient le débiteur
+	// d'une facture QR : sans adresse structurée complète, le bulletin de
+	// versement suisse (SPC 0200 §4.2.2) ne peut pas s'imprimer. Un
+	// fournisseur pur n'est jamais débiteur d'une facture émise par
+	// LedgerAlps — sa fiche reste allégée (cf. saisie rapide sur l'écran des
+	// achats, qui ne connaît souvent que le nom et l'IBAN au moment de créer
+	// le contact).
+	if req.ContactType == "customer" || req.ContactType == "both" {
+		if err := requireQRAddress(req.Address, req.City, req.PostalCode); err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+	}
 	// IBAN : structure, longueur imposée par le pays, puis clé de contrôle
 	// (ISO 13616). Un formulaire envoie une chaîne vide pour un champ non
 	// rempli : la traiter comme un IBAN invalide empêcherait d'enregistrer un
@@ -367,6 +380,31 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 
 	// Return updated contact
 	h.GetContact(c)
+}
+
+// ─── Adresse requise pour la facturation QR ──────────────────────────────────
+
+// requireQRAddress vérifie que les trois champs qu'exige le bulletin de
+// versement structuré ("S", SPC 0200 §4.2.2) sont présents : rue, NPA,
+// localité. Le pays a déjà une valeur par défaut ("CH") posée plus haut, donc
+// il n'est pas revérifié ici.
+func requireQRAddress(address, city, postalCode *string) error {
+	missing := []string{}
+	if address == nil || strings.TrimSpace(*address) == "" {
+		missing = append(missing, "adresse")
+	}
+	if postalCode == nil || strings.TrimSpace(*postalCode) == "" {
+		missing = append(missing, "NPA")
+	}
+	if city == nil || strings.TrimSpace(*city) == "" {
+		missing = append(missing, "localité")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf(
+			"adresse incomplète pour un client (nécessaire à la facture QR) : %s manquant(e)",
+			strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // ─── IBAN : validation à la frontière du schéma ──────────────────────────────

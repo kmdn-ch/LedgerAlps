@@ -52,8 +52,16 @@ function computeLineTotals(line: Partial<FormData['lines'][0]>) {
 }
 
 // ── Mini-modal création rapide de contact ─────────────────────────────────────
+//
+// Ce contact devient toujours le débiteur d'une facture QR (contact_type
+// fixé à 'customer') : l'adresse complète est donc obligatoire ici, pas
+// seulement conseillée — sans elle le bulletin de versement ne s'imprime pas
+// (SPC 0200 §4.2.2).
 
-const EMPTY_CONTACT = { name: '', is_company: false, email: '', phone: '', city: '', country: 'CH' }
+const EMPTY_CONTACT = {
+  name: '', is_company: false, email: '', phone: '',
+  address: '', postal_code: '', city: '', country: 'CH',
+}
 
 function NewContactModal({
   onClose,
@@ -63,20 +71,31 @@ function NewContactModal({
   const qc = useQueryClient()
   const [fields, setFields] = useState(EMPTY_CONTACT)
   const [err, setErr] = useState<string | null>(null)
+  const [tried, setTried] = useState(false)
 
   const create = useMutation({
     mutationFn: () => contactsApi.create({
       contact_type: 'customer', is_company: fields.is_company,
       name: fields.name.trim(), email: fields.email || undefined,
-      phone: fields.phone || undefined, city: fields.city || undefined,
-      country: fields.country || 'CH', payment_term_days: 30,
+      phone: fields.phone || undefined,
+      address: fields.address.trim(), postal_code: fields.postal_code.trim(),
+      city: fields.city.trim(), country: fields.country || 'CH', payment_term_days: 30,
     }),
     onSuccess: (res) => { qc.invalidateQueries({ queryKey: ['contacts'] }); onCreated(res.data as Contact) },
-    onError:   () => setErr(t('nf.erreurContact')),
+    onError:   (e) => setErr(refusalMessage(e, t('nf.erreurContact'))),
   })
 
   const set = (k: keyof typeof EMPTY_CONTACT, v: string | boolean) =>
     setFields(f => ({ ...f, [k]: v }))
+
+  const champsQrManquants =
+    !fields.name.trim() || !fields.address.trim() || !fields.postal_code.trim() || !fields.city.trim()
+
+  const submit = () => {
+    setTried(true)
+    if (champsQrManquants) return
+    create.mutate()
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -97,7 +116,8 @@ function NewContactModal({
           </div>
           <div>
             <label className="label">{t('nf.nom')}</label>
-            <input className="input" placeholder={fields.is_company ? t('nf.placeholderRaisonSociale') : t('nf.placeholderPrenomNom')}
+            <input className={`input ${tried && !fields.name.trim() ? 'input-error' : ''}`}
+              placeholder={fields.is_company ? t('nf.placeholderRaisonSociale') : t('nf.placeholderPrenomNom')}
               value={fields.name} onChange={e => set('name', e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -108,19 +128,35 @@ function NewContactModal({
               <input type="tel" className="input" value={fields.phone}
                 onChange={e => set('phone', e.target.value)} /></div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2"><label className="label">{t('nf.ville')}</label>
-              <input className="input" value={fields.city}
-                onChange={e => set('city', e.target.value)} /></div>
-            <div><label className="label">{t('nf.pays')}</label>
-              <input className="input" maxLength={2} value={fields.country}
-                onChange={e => set('country', e.target.value.toUpperCase())} /></div>
+          <div>
+            <label className="label">{t('co.adresse')} *</label>
+            <input className={`input ${tried && !fields.address.trim() ? 'input-error' : ''}`}
+              placeholder={t('co.placeholderRue')}
+              value={fields.address} onChange={e => set('address', e.target.value)} />
           </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div><label className="label">{t('pr.npa')} *</label>
+              <input className={`input ${tried && !fields.postal_code.trim() ? 'input-error' : ''}`}
+                value={fields.postal_code}
+                onChange={e => set('postal_code', e.target.value)} /></div>
+            <div className="col-span-2"><label className="label">{t('nf.ville')} *</label>
+              <input className={`input ${tried && !fields.city.trim() ? 'input-error' : ''}`}
+                value={fields.city}
+                onChange={e => set('city', e.target.value)} /></div>
+          </div>
+          <div>
+            <label className="label">{t('nf.pays')}</label>
+            <input className="input w-24" maxLength={2} value={fields.country}
+              onChange={e => set('country', e.target.value.toUpperCase())} />
+          </div>
+          {tried && champsQrManquants && (
+            <p className="text-xs text-danger-700">{t('nf.qrIncomplet')}</p>
+          )}
         </div>
         <div className="flex justify-end gap-2 px-5 py-4 border-t border-alpine-200">
           <button type="button" onClick={onClose} className="btn-secondary btn-sm">{t('action.annuler')}</button>
-          <button type="button" disabled={!fields.name.trim() || create.isPending}
-            onClick={() => create.mutate()} className="btn-primary btn-sm">
+          <button type="button" disabled={create.isPending}
+            onClick={submit} className="btn-primary btn-sm">
             {create.isPending ? t('fd.creationEnCours') : t('nf.creerContact')}
           </button>
         </div>
@@ -196,10 +232,15 @@ export function EditInvoicePage() {
 
   const totals     = (watchedLines ?? []).map(computeLineTotals)
 
-  // QR bill readiness: check what's missing so the payment slip can be generated.
+  // QR bill readiness: check what's missing so the payment slip can be
+  // generated. Une offre devient une facture d'un clic : elle a besoin des
+  // mêmes garanties, sinon le blocage n'apparaît qu'après acceptation.
   const selectedContact = contacts.find(c => c.id === watchedContactId)
+  const applyQrGate = watchedDocType === 'invoice' || watchedDocType === 'quote'
   const qrIssues: string[] = []
-  if (watchedDocType === 'invoice') {
+  const clientAddressIncomplete = !!selectedContact &&
+    (!selectedContact.address || !selectedContact.postal_code || !selectedContact.city)
+  if (applyQrGate) {
     if (!company?.iban) qrIssues.push(t('nf.qrSansIban'))
     if (selectedContact) {
       if (!selectedContact.address) qrIssues.push(t('nf.qrSansAdresse'))
@@ -336,13 +377,24 @@ export function EditInvoicePage() {
           </div>
         </div>
 
-        {/* QR bill readiness warning */}
-        {watchedDocType === 'invoice' && qrIssues.length > 0 && (
-          <div className="flex items-start gap-2.5 rounded-lg border border-warning-100 bg-warning-100/70 px-4 py-3 text-sm">
-            <AlertTriangle size={15} className="mt-0.5 flex-shrink-0 text-warning-500" />
+        {/* QR bill readiness warning — bloquant si l'adresse du client manque,
+            simple avertissement si seul l'IBAN de la société manque encore. */}
+        {applyQrGate && qrIssues.length > 0 && (
+          <div className={`flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm ${
+            clientAddressIncomplete
+              ? 'border-danger-200 bg-danger-100/70'
+              : 'border-warning-100 bg-warning-100/70'
+          }`}>
+            <AlertTriangle size={15} className={`mt-0.5 flex-shrink-0 ${
+              clientAddressIncomplete ? 'text-danger-500' : 'text-warning-500'
+            }`} />
             <div>
-              <p className="font-medium text-warning-700">{t('nf.qrIncomplet')}</p>
-              <ul className="mt-1 space-y-0.5 list-disc list-inside text-xs text-warning-700">
+              <p className={`font-medium ${clientAddressIncomplete ? 'text-danger-700' : 'text-warning-700'}`}>
+                {t('nf.qrIncomplet')}
+              </p>
+              <ul className={`mt-1 space-y-0.5 list-disc list-inside text-xs ${
+                clientAddressIncomplete ? 'text-danger-700' : 'text-warning-700'
+              }`}>
                 {qrIssues.map((issue, i) => <li key={i}>{issue}</li>)}
               </ul>
             </div>
@@ -476,7 +528,8 @@ export function EditInvoicePage() {
         <div className="flex justify-end gap-3 pb-6">
           <button type="button" onClick={() => navigate(`/invoices/${invoiceId}`)}
             className="btn-secondary">{t('action.annuler')}</button>
-          <button type="submit" className="btn-primary" disabled={save.isPending}>
+          <button type="submit" className="btn-primary"
+            disabled={save.isPending || (applyQrGate && clientAddressIncomplete)}>
             <Save size={15} />
             {save.isPending ? t('etat.enregistrement') : t('ach.enregistrerModifs')}
           </button>

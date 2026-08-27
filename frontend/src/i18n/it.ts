@@ -373,6 +373,9 @@ export const it: Catalogue = {
   // ─── Validation et paramètres ───
   'val.requis': 'Obbligatorio',
   'val.nomRequis': 'Nome obbligatorio',
+  'val.adresseRequise': 'Indirizzo obbligatorio per la fattura QR',
+  'val.npaRequis': 'NPA obbligatorio per la fattura QR',
+  'val.villeRequise': 'Località obbligatoria per la fattura QR',
   'val.emailInvalide': 'Indirizzo e-mail non valido',
   'val.contactRequis': 'Selezionare un contatto',
   'val.dateRequise': 'Data obbligatoria',

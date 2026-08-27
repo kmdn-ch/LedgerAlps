@@ -32,6 +32,21 @@ const schema = z.object({
   payment_term_days: z.coerce.number().int().min(0).max(365).default(30),
   iban:              opt(z.string()),
   notes:             opt(z.string()),
+}).superRefine((data, ctx) => {
+  // Un client (ou un contact « les deux ») devient le débiteur d'une facture
+  // QR : sans adresse structurée complète, le bulletin de versement suisse
+  // ne peut pas s'imprimer. Un fournisseur pur n'est jamais débiteur d'une
+  // facture émise par LedgerAlps — sa fiche reste allégée.
+  if (data.contact_type === 'supplier') return
+  if (!data.address) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['address'], message: 'val.adresseRequise' })
+  }
+  if (!data.postal_code) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['postal_code'], message: 'val.npaRequis' })
+  }
+  if (!data.city) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['city'], message: 'val.villeRequise' })
+  }
 })
 
 type FormData = z.infer<typeof schema>
@@ -43,7 +58,7 @@ export function NewContactModal({ onClose }: Props) {
   const tv = useTv()
   const qc = useQueryClient()
   const {
-    register, handleSubmit,
+    register, handleSubmit, watch,
     formState: { errors, isDirty },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -62,6 +77,11 @@ export function NewContactModal({ onClose }: Props) {
       onClose()
     },
   })
+
+  // L'adresse n'est exigée que pour un client : un fournisseur pur n'est
+  // jamais débiteur d'une facture QR émise par LedgerAlps.
+  const watchedType = watch('contact_type')
+  const addressRequise = watchedType !== 'supplier'
 
   // Le voile ferme au moindre clic. C'est commode pour consulter, destructeur
   // pour une saisie : LedgerAlps n'enregistre aucun brouillon, et une fiche à
@@ -143,12 +163,24 @@ export function NewContactModal({ onClose }: Props) {
 
           {/* Adresse */}
           <div>
-            <label className="label">{t('co.adresse')}</label>
-            <input className="input mb-2" placeholder={t('co.placeholderRue')}
+            <label className="label">{t('co.adresse')}{addressRequise && ' *'}</label>
+            <input className={`input mb-2 ${errors.address ? 'input-error' : ''}`}
+              placeholder={t('co.placeholderRue')}
               {...register('address')} />
+            {errors.address && <p className="error-msg mb-2">{tv(errors.address.message)}</p>}
             <div className="grid grid-cols-3 gap-3">
-              <input className="input" placeholder={t('pr.npa')} {...register('postal_code')} />
-              <input className="input col-span-2" placeholder={t('co.placeholderLocalite')} {...register('city')} />
+              <div>
+                <input className={`input ${errors.postal_code ? 'input-error' : ''}`}
+                  placeholder={addressRequise ? `${t('pr.npa')} *` : t('pr.npa')}
+                  {...register('postal_code')} />
+                {errors.postal_code && <p className="error-msg">{tv(errors.postal_code.message)}</p>}
+              </div>
+              <div className="col-span-2">
+                <input className={`input w-full ${errors.city ? 'input-error' : ''}`}
+                  placeholder={addressRequise ? `${t('co.placeholderLocalite')} *` : t('co.placeholderLocalite')}
+                  {...register('city')} />
+                {errors.city && <p className="error-msg">{tv(errors.city.message)}</p>}
+              </div>
             </div>
           </div>
 

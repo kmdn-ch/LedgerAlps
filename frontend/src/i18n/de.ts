@@ -374,6 +374,9 @@ export const de: Catalogue = {
   // ─── Validation et paramètres ───
   'val.requis': 'Erforderlich',
   'val.nomRequis': 'Name erforderlich',
+  'val.adresseRequise': 'Adresse für die QR-Rechnung erforderlich',
+  'val.npaRequis': 'PLZ für die QR-Rechnung erforderlich',
+  'val.villeRequise': 'Ort für die QR-Rechnung erforderlich',
   'val.emailInvalide': 'Ungültige E-Mail-Adresse',
   'val.contactRequis': 'Wählen Sie einen Kontakt',
   'val.dateRequise': 'Datum erforderlich',

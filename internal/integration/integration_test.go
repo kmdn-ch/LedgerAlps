@@ -431,6 +431,9 @@ func TestContactCreate(t *testing.T) {
 	w := doJSON(t, r, "POST", "/api/v1/contacts", mustJSON(t, map[string]any{
 		"contact_type": "customer",
 		"name":         "Test AG",
+		"address":      "Bahnhofstrasse 1",
+		"postal_code":  "8001",
+		"city":         "Zürich",
 		"country":      "CH",
 	}), token)
 	assertStatus(t, w, http.StatusCreated)
@@ -450,6 +453,9 @@ func TestInvoiceCreateAndTransition(t *testing.T) {
 	contactW := doJSON(t, r, "POST", "/api/v1/contacts", mustJSON(t, map[string]any{
 		"contact_type": "customer",
 		"name":         "Test AG",
+		"address":      "Bahnhofstrasse 1",
+		"postal_code":  "8001",
+		"city":         "Zürich",
 		"country":      "CH",
 	}), token)
 	assertStatus(t, contactW, http.StatusCreated)

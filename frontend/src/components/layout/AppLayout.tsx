@@ -23,7 +23,7 @@ export function AppLayout() {
               nuit : c'est sur les fonds SOMBRES — barre latérale, écran de
               connexion — qu'il lui faut une plaque claire. */}
           <div className="flex justify-end mb-3">
-            <LedgerAlpsLogo className="h-5 w-auto" />
+            <LedgerAlpsLogo className="h-[30px] w-auto" />
           </div>
           {/* Les évolutions légales concernent toute l'application, pas une
               page en particulier : la bannière est donc montée dans le layout. */}
