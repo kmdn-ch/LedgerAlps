@@ -248,27 +248,10 @@ func BackfillSupplierReversalMarkers(database *sql.DB, usePostgres bool) error {
 		return nil
 	}
 
-	rows, err := database.Query(`
-		SELECT id, description FROM journal_entries
-		WHERE is_reversal = 0 AND description LIKE 'Extourne facture fournisseur %'`)
+	candidates, err := collectLegacySupplierReversals(database)
 	if err != nil {
-		return fmt.Errorf("collect legacy supplier reversals: %w", err)
+		return err
 	}
-	type candidate struct{ id, description string }
-	var candidates []candidate
-	for rows.Next() {
-		var c candidate
-		if err := rows.Scan(&c.id, &c.description); err != nil {
-			rows.Close()
-			return fmt.Errorf("scan legacy supplier reversal: %w", err)
-		}
-		candidates = append(candidates, c)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return fmt.Errorf("collect legacy supplier reversals: %w", err)
-	}
-	rows.Close()
 
 	fixed, ambiguous, orphelines := 0, 0, 0
 	for _, c := range candidates {
@@ -309,6 +292,33 @@ func BackfillSupplierReversalMarkers(database *sql.DB, usePostgres bool) error {
 			"%d ambiguë(s), %d sans origine trouvée", fixed, ambiguous, orphelines)
 	}
 	return nil
+}
+
+type legacySupplierReversal struct{ id, description string }
+
+// collectLegacySupplierReversals rend les écritures d'extourne fournisseur
+// non marquées — celles au libellé caractéristique et à `is_reversal = 0`.
+func collectLegacySupplierReversals(database *sql.DB) ([]legacySupplierReversal, error) {
+	rows, err := database.Query(`
+		SELECT id, description FROM journal_entries
+		WHERE is_reversal = 0 AND description LIKE 'Extourne facture fournisseur %'`)
+	if err != nil {
+		return nil, fmt.Errorf("collect legacy supplier reversals: %w", err)
+	}
+	defer rows.Close()
+
+	var out []legacySupplierReversal
+	for rows.Next() {
+		var c legacySupplierReversal
+		if err := rows.Scan(&c.id, &c.description); err != nil {
+			return nil, fmt.Errorf("scan legacy supplier reversal: %w", err)
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("collect legacy supplier reversals: %w", err)
+	}
+	return out, nil
 }
 
 type supplierOrigine struct{ reference, entryID string }
