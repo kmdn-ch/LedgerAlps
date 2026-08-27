@@ -7,6 +7,27 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Corrigé
+
+- **La déclaration TVA ne ventilait jamais par taux.** Le formulaire AFC 318 demande le chiffre d'affaires et l'impôt répartis sur trois lignes (302 normal, 312 réduit, 342 spécial). Aucune facture n'y arrivait : la comparaison confrontait un taux lu en **pourcentage** (8.1, format de `invoices.vat_rate` depuis la migration 0005) à des constantes en **fraction** (0.081). L'écart valant 8.019 pour une tolérance de 0.001, tout tombait dans le cas par défaut, empilé sur « taux normal ». Un hôtel (3.8 % hébergement + 8.1 % restauration) ou un commerce vendant des denrées à 2.6 % déclarait 100 % de son chiffre sur la ligne 302. Le montant total dû restait juste — ce qui est précisément ce qui a laissé le défaut passer inaperçu, y compris par les tests, dont les fixtures mélangeaient les deux notations.
+
+- **Une facture rouverte, corrigée puis renvoyée n'était jamais recomptabilisée.** L'annulation crée bien une extourne, mais ne réécrivait pas `journal_entry_id`, qui continuait de désigner l'écriture d'origine — celle que l'extourne venait de neutraliser. Au renvoi, les deux garde-fous indépendants lisaient ce lien et concluaient « déjà comptabilisé ». La version corrigée partait au client sans qu'aucune écriture ne la porte, pendant que la déclaration TVA — qui agrège la table des factures, pas le journal — l'incluait bien : bilan et TVA divergeaient en silence. Le lien est désormais effacé **à la réouverture**, pas à l'annulation : tant que la facture reste annulée, l'archive légale (CO art. 958f) garde la trace de l'écriture qui l'a portée.
+
+- **L'adresse obligatoire d'un client pouvait être vidée par une simple modification.** La règle posée en 1.5.9 n'avait qu'un seul point d'application : la création. `PATCH /contacts/:id` ne validait que l'IBAN, et le champ « nom » n'y portait aucune contrainte. Un client complet pouvait donc être vidé sans avertissement — jusqu'à produire une facture QR sans destinataire nulle part sur le document, le bulletin traitant un débiteur sans nom comme « non identifié » et sautant alors tous ses contrôles d'adresse. La règle porte maintenant sur l'état **résultant**, et l'écran d'édition affiche les mêmes exigences que celui de création.
+
+  *Le type d'un contact était par ailleurs ignoré en modification* : l'écran offrait un menu pour le changer, le serveur jetait le champ en silence. Le rétablir ferme une porte dérobée — on pouvait passer un client en fournisseur, vider l'adresse, puis revenir en client.
+
+- **La rotation quotidienne de la clé de signature ne pouvait pas aboutir sur deux des trois modes d'installation.** Quand `JWT_SECRET` vient de l'environnement — service Linux/systemd et service Windows — il est réimposé à chaque démarrage par-dessus toute clé tournée. L'écran affichait pourtant une date qui avançait normalement. LedgerAlps ne fait plus semblant : il indique « rotation désactivée par votre mode d'installation » et explique comment la rétablir. Le mode installeur `.exe`, qui la tenait réellement, n'est pas touché.
+
+- **PostgreSQL était documenté et n'a jamais fonctionné.** Les migrations sont écrites en SQLite pur et la première échoue sur PostgreSQL. Le serveur refuse désormais de démarrer si `POSTGRES_DSN` est défini, en le disant, au lieu d'échouer sur une erreur de syntaxe après avoir commencé à écrire dans la base.
+
+### Modifié
+
+- Le formulaire de facture avait son schéma, son calcul de totaux et sa fenêtre de création rapide de contact **en double** dans les écrans de création et de modification — environ 345 lignes. Les deux copies avaient déjà divergé. Une seule demeure.
+- `scripts/install.ps1`, un installeur Windows en service complet, n'était documenté nulle part. `docs/PRODUCTION.md` compare désormais les trois modes d'installation Windows : ils n'écrivent pas au même endroit, et les mélanger donnerait deux comptabilités distinctes.
+- Sept dépendances npm jamais importées retirées, ainsi que du code mort côté interface et serveur.
+
+
 ## [1.5.9] — 2026-08-27
 
 ### Modifié
