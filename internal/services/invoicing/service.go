@@ -505,6 +505,37 @@ func (s *Service) TransitionBy(ctx context.Context, invoiceID string, to models.
 				}
 			}
 
+			// Réouverture pour correction : annulée → brouillon.
+			//
+			// L'annulation a laissé `journal_entry_id` sur l'écriture d'ORIGINE,
+			// et c'est voulu : tant que la facture reste annulée, l'archive
+			// légale (CO art. 958f) doit pouvoir dire quelle écriture l'avait
+			// portée. Mais dès qu'on la rouvre pour la corriger, ce lien décrit
+			// une version qui n'existe plus — et l'extourne l'a déjà neutralisée.
+			//
+			// Le laisser en place faisait conclure « déjà comptabilisé » aux DEUX
+			// garde-fous du renvoi (celui de TransitionBy et celui, indépendant,
+			// de PostIssuedDocument) : la version corrigée partait au client sans
+			// qu'aucune écriture ne la porte, pendant que la déclaration TVA —
+			// qui agrège la table `invoices`, pas le journal — l'incluait bien.
+			//
+			// On efface donc le lien ICI, et nulle part ailleurs : le document
+			// redevient un brouillon non comptabilisé, ce qu'il est réellement.
+			// Les écritures d'origine et d'extourne restent au journal, liées
+			// entre elles par `reversal_of_id` et nommant toutes deux le numéro
+			// de la facture — la piste reste entière.
+			if models.InvoiceStatus(current) == models.InvoiceStatusCancelled &&
+				to == models.InvoiceStatusDraft &&
+				journalEntryID != "" {
+
+				clearQ := db.Rebind(
+					`UPDATE invoices SET journal_entry_id = NULL, updated_at = ? WHERE id = ?`,
+					s.usePostgres)
+				if _, err := s.db.ExecContext(ctx, clearQ, time.Now().UTC(), invoiceID); err != nil {
+					return fmt.Errorf("réouverture: le lien comptable n'a pas pu être effacé: %w", err)
+				}
+			}
+
 			return nil
 		}
 	}

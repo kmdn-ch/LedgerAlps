@@ -287,3 +287,157 @@ func TestLEcritureEstEquilibree(t *testing.T) {
 		t.Fatalf("débit %.2f ≠ crédit %.2f", d, c)
 	}
 }
+
+// ─── Réouverture d'une facture annulée (audit 4, C-3) ────────────────────────
+//
+// `cancelled → draft` est une transition autorisée : elle sert à corriger une
+// facture envoyée par erreur, puis à la renvoyer. Mais l'annulation ne
+// réécrivait jamais `invoices.journal_entry_id`, qui continuait de désigner
+// l'écriture d'ORIGINE — celle que l'extourne venait justement de neutraliser.
+//
+// Au renvoi, deux garde-fous indépendants (`TransitionBy` et
+// `PostIssuedDocument`) lisaient ce même lien, toujours non vide, et en
+// concluaient chacun « déjà comptabilisé ». La version corrigée partait donc
+// au client sans qu'aucune écriture ne la porte, pendant que la déclaration
+// TVA — qui agrège la table `invoices`, pas le journal — l'incluait bien.
+// Le bilan et la TVA divergeaient en silence sur ce document.
+
+func TestUneFactureRouverteEtCorrigeeEstRecomptabilisee(t *testing.T) {
+	s, database, contactID := postingService(t, true)
+	ctx := context.Background()
+	actor := Actor{UserID: "u1", IP: "127.0.0.1"}
+
+	invID := makeInvoice(t, s, contactID, 1000, 0)
+
+	// 1. Émission : première écriture, 1'000 au débit des débiteurs.
+	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusSent, actor); err != nil {
+		t.Fatalf("émission: %v", err)
+	}
+	if d, _ := balance(t, database, accountReceivables); d != 1000 {
+		t.Fatalf("après émission, débiteurs = %.2f, attendu 1000", d)
+	}
+
+	// 2. Annulation : extourne automatique, solde net nul.
+	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusCancelled, actor); err != nil {
+		t.Fatalf("annulation: %v", err)
+	}
+	d, c := balance(t, database, accountReceivables)
+	if d-c != 0 {
+		t.Fatalf("après annulation, solde débiteurs = %.2f, attendu 0 (extourne)", d-c)
+	}
+
+	// 3. Réouverture pour correction.
+	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusDraft, actor); err != nil {
+		t.Fatalf("réouverture: %v", err)
+	}
+
+	// 4. Correction du montant : 1'000 → 1'200.
+	if _, err := s.UpdateInvoiceBy(ctx, invID, CreateInvoiceRequest{
+		ContactID: contactID,
+		IssueDate: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC),
+		DueDate:   time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC),
+		Currency:  "CHF",
+		Lines:     []LineInput{{Description: "Prestation corrigée", Quantity: 1, UnitPrice: 1200, VATRate: 0}},
+	}, actor); err != nil {
+		t.Fatalf("correction: %v", err)
+	}
+
+	// 5. Renvoi : une NOUVELLE écriture doit porter les 1'200 corrigés.
+	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusSent, actor); err != nil {
+		t.Fatalf("renvoi: %v", err)
+	}
+
+	d, c = balance(t, database, accountReceivables)
+	if solde := d - c; solde != 1200 {
+		t.Errorf("après renvoi, solde débiteurs = %.2f, attendu 1200 — "+
+			"la version corrigée n'a pas été portée au journal", solde)
+	}
+	if _, cr := balance(t, database, accountRevenue); cr-1000 != 1200 {
+		// 1000 (émission) + 1200 (renvoi) au crédit, moins 1000 extourné au débit.
+		t.Errorf("produits nets = %.2f, attendu 1200", cr-1000)
+	}
+}
+
+// L'annulation seule — de loin le cas courant — ne doit RIEN changer au lien
+// comptable : la facture reste annulée, et l'archive légale (CO art. 958f)
+// doit continuer de montrer quelle écriture l'avait portée.
+func TestUneAnnulationSeuleConserveLeLienComptable(t *testing.T) {
+	s, database, contactID := postingService(t, true)
+	ctx := context.Background()
+	actor := Actor{UserID: "u1", IP: "127.0.0.1"}
+
+	invID := makeInvoice(t, s, contactID, 500, 0)
+	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusSent, actor); err != nil {
+		t.Fatalf("émission: %v", err)
+	}
+	var lienApresEmission string
+	if err := database.QueryRow(
+		`SELECT COALESCE(journal_entry_id,'') FROM invoices WHERE id = ?`, invID,
+	).Scan(&lienApresEmission); err != nil {
+		t.Fatal(err)
+	}
+	if lienApresEmission == "" {
+		t.Fatal("aucune écriture liée après émission")
+	}
+
+	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusCancelled, actor); err != nil {
+		t.Fatalf("annulation: %v", err)
+	}
+
+	var lienApresAnnulation string
+	if err := database.QueryRow(
+		`SELECT COALESCE(journal_entry_id,'') FROM invoices WHERE id = ?`, invID,
+	).Scan(&lienApresAnnulation); err != nil {
+		t.Fatal(err)
+	}
+	if lienApresAnnulation != lienApresEmission {
+		t.Errorf("le lien comptable a changé à l'annulation (%q → %q) : "+
+			"une facture annulée doit garder la trace de l'écriture qui l'a portée",
+			lienApresEmission, lienApresAnnulation)
+	}
+}
+
+// Cas limite : une facture PARTIELLEMENT PAYÉE, annulée puis rouverte.
+//
+// `TransitionBy` ne garde pas sur `amount_paid` (seul `UpdateInvoiceBy` le
+// fait), donc ce chemin est atteignable. Avant le correctif, le renvoi ne
+// produisait aucune écriture : les livres montraient un produit nul alors que
+// la facture était « envoyée » pour 1'000 avec 400 encaissés — un état que
+// personne ne peut expliquer. Le correctif rétablit la créance à l'émission,
+// ce qui redonne des livres cohérents avec le document.
+func TestUneFacturePartiellementPayeeRouverteEstRecomptabilisee(t *testing.T) {
+	s, database, contactID := postingService(t, true)
+	ctx := context.Background()
+	actor := Actor{UserID: "u1", IP: "127.0.0.1"}
+
+	invID := makeInvoice(t, s, contactID, 1000, 0)
+	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusSent, actor); err != nil {
+		t.Fatalf("émission: %v", err)
+	}
+	// Un encaissement partiel a eu lieu. On pose seulement le montant : le
+	// mouvement de trésorerie appartient au service des paiements, pas ici.
+	if _, err := database.Exec(`UPDATE invoices SET amount_paid = 400 WHERE id = ?`, invID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusCancelled, actor); err != nil {
+		t.Fatalf("annulation: %v", err)
+	}
+	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusDraft, actor); err != nil {
+		t.Fatalf("réouverture: %v", err)
+	}
+	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusSent, actor); err != nil {
+		t.Fatalf("renvoi: %v", err)
+	}
+
+	// Émission (1000) − extourne (1000) + réémission (1000) = 1000 au débit net.
+	d, c := balance(t, database, accountReceivables)
+	if solde := d - c; solde != 1000 {
+		t.Errorf("solde débiteurs = %.2f, attendu 1000 — la réémission doit "+
+			"rétablir la créance que l'extourne avait annulée", solde)
+	}
+	if _, cr := balance(t, database, accountRevenue); cr-1000 != 1000 {
+		t.Errorf("produits nets = %.2f, attendu 1000 — des livres à zéro sur une "+
+			"facture envoyée seraient inexplicables", cr-1000)
+	}
+}
