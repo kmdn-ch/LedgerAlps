@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -101,6 +102,26 @@ type githubRelease struct {
 // It never returns an error: an unreachable network is the expected condition
 // for local-first software, and the honest answer in that case is "no update
 // known", not a failure the user must interpret.
+// urlDePublication ne laisse passer qu'une adresse https, avec un hote.
+//
+// La garde porte sur le SCHEMA et non sur l'hote : le point d'acces est
+// configurable (voir New), et epingler github.com condamnerait un miroir
+// interne ou un depot d'entreprise -- une installation local-first a de
+// bonnes raisons de ne pas interroger GitHub.
+//
+// C'est aussi la propriete qui compte pour la destination : cette chaine
+// finit dans un attribut href, ou « javascript: », « data: » et « file: »
+// sont le danger. Meme regle que scripts/compliance_watch.py sur ses
+// sources. Une adresse refusee devient vide, et l'interface n'affiche
+// alors aucun lien -- mieux vaut pas de lien qu'un mauvais.
+func urlDePublication(brut string) string {
+	u, err := url.Parse(brut)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return ""
+	}
+	return brut
+}
+
 func (c *Checker) Check(ctx context.Context, currentVersion string) Result {
 	if !c.enabled {
 		return Result{CurrentVersion: currentVersion, Enabled: false}
@@ -127,7 +148,15 @@ func (c *Checker) Check(ctx context.Context, currentVersion string) Result {
 	}
 
 	res.LatestVersion = latest.TagName
-	res.ReleaseURL = latest.HTMLURL
+	// Cette URL vient du reseau et finit dans un attribut href. React 18
+	// avertit sur un href en « javascript: » mais le rend tout de meme --
+	// le blocage n'arrive qu'en React 19. On n'accepte donc que https, et
+	// seulement vers l'hote de publication.
+	//
+	// Meme raisonnement que scripts/compliance_watch.py, qui valide deja le
+	// schema de ses sources : « la garde coute deux lignes et ferme la
+	// classe entiere ». Elle manquait ici, sur la meme espece de donnee.
+	res.ReleaseURL = urlDePublication(latest.HTMLURL)
 	res.ReleaseNotes = latest.Body
 	res.CheckedAt = now.UTC().Format(time.RFC3339)
 	res.UpdateAvailable = IsNewer(latest.TagName, currentVersion)

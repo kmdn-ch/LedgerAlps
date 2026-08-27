@@ -132,6 +132,14 @@ func main() {
 	if _, err := db.ApplyRetention(database, cfg.UsePostgres(), time.Now().UTC()); err != nil {
 		log.Printf("WARNING: passe de rétention échouée: %v", err)
 	}
+	// Le contexte de la DUREE DE VIE de l'application.
+	//
+	// Les taches de fond s'y raccrochent toutes : la retention ci-dessous et
+	// l'attestation plus bas. Deux contextes distincts pour la meme duree de
+	// vie etaient une occasion d'en oublier un -- ce qui etait arrive.
+	ctxApp, arreterTachesDeFond := context.WithCancel(context.Background())
+	defer arreterTachesDeFond()
+
 	// Puis chaque jour, et pas seulement au démarrage.
 	//
 	// Une passe unique tient la promesse sur un poste qu'on éteint le soir, et
@@ -143,9 +151,17 @@ func main() {
 	go func() {
 		t := time.NewTicker(24 * time.Hour)
 		defer t.Stop()
-		for range t.C {
-			if _, err := db.ApplyRetention(database, cfg.UsePostgres(), time.Now().UTC()); err != nil {
-				log.Printf("WARNING: passe de rétention échouée: %v", err)
+		for {
+			// Ecouter l'annulation, comme le fait la goroutine d'attestation.
+			// Sans elle, un declenchement pendant un arret propre ecrivait dans
+			// une base deja fermee et journalisait un avertissement sans objet.
+			select {
+			case <-ctxApp.Done():
+				return
+			case <-t.C:
+				if _, err := db.ApplyRetention(database, cfg.UsePostgres(), time.Now().UTC()); err != nil {
+					log.Printf("WARNING: passe de rétention échouée: %v", err)
+				}
 			}
 		}
 	}()
@@ -243,6 +259,10 @@ func main() {
 		log.Printf("PANIC recovered: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 	}))
+	// AVANT SecurityHeaders : celui-ci decide d'emettre HSTS d'apres
+	// X-Forwarded-Proto, et cet en-tete ne vaut que d'un mandataire declare.
+	// Sans ce verdict pose en premier, la question se poserait sans reponse.
+	r.Use(middleware.ConfianceMandataire(cfg.TrustedProxies))
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS(strings.Split(cfg.AllowedOrigins, ",")...))
 	r.Use(middleware.ErrorHandler())
@@ -706,9 +726,7 @@ func main() {
 	//
 	// Le fichier est déposé à côté des sauvegardes : il part donc avec elles
 	// vers le NAS ou la clé USB, et c'est ce déplacement qui vaut ancrage.
-	attestationCtx, arreterAttestation := context.WithCancel(context.Background())
-	defer arreterAttestation()
-	alh.StartAttestationScheduler(attestationCtx, config.AppDataDir())
+	alh.StartAttestationScheduler(ctxApp, config.AppDataDir())
 
 	// ── 9. Start ──────────────────────────────────────────────────────────────
 	addr := net.JoinHostPort(cfg.Host, cfg.Port)

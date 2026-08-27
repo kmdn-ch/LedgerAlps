@@ -152,3 +152,32 @@ func TestIsNewer(t *testing.T) {
 		}
 	}
 }
+
+// Une adresse de publication vient du RESEAU et finit dans un attribut href.
+// React 18 avertit sur « javascript: » mais le rend tout de meme -- le blocage
+// n'arrive qu'en React 19. La garde doit donc etre ici.
+func TestUneAdresseDePublicationDouteuseNEstPasRendue(t *testing.T) {
+	douteuses := map[string]string{
+		"javascript:alert(1)":               "schema javascript",
+		"JaVaScRiPt:alert(1)":               "schema javascript, casse melangee",
+		"data:text/html,<script>x</script>": "schema data",
+		"file:///C:/Windows/System32":       "schema file",
+		"http://exemple.ch/r/1.5.0":         "http en clair",
+		"//exemple.ch/r/1.5.0":              "sans schema",
+		"https://":                          "sans hote",
+	}
+	for brut, pourquoi := range douteuses {
+		corps := `{"tag_name":"v9.0.0","html_url":"` + brut +
+			`","body":"x","prerelease":false,"draft":false}`
+		srv, _ := stubServer(t, corps, http.StatusOK)
+		res := New(true, srv.URL, time.Hour).Check(context.Background(), "1.0.0")
+		if res.ReleaseURL != "" {
+			t.Errorf("adresse rendue %q — %s", res.ReleaseURL, pourquoi)
+		}
+		// La version, elle, reste annoncee : refuser le lien ne doit pas
+		// cacher qu'une mise a jour existe.
+		if res.LatestVersion != "v9.0.0" {
+			t.Errorf("version perdue avec le lien (%s)", pourquoi)
+		}
+	}
+}
