@@ -30,6 +30,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +67,29 @@ func reinstalledMarkerPath() string {
 	return filepath.Join(appDataDir(), ".reinstalled")
 }
 
+// portValide n'accepte qu'un nombre de port.
+//
+// La valeur finit à DEUX endroits qui la réinterprètent :
+//
+//   - `exec.Command("cmd", "/c", "start", "", url)` — Go échappe ses arguments
+//     avec syscall.EscapeArg, qui met entre guillemets ce qui contient un
+//     espace, mais PAS ce qui contient « & », « | » ou « ^ ». Une valeur sans
+//     espace traverse donc intacte jusqu'à cmd.exe, qui la découpe. Vérifié :
+//     un port valant `8000&…` fait exécuter ce qui suit l'esperluette ;
+//   - `template.JS("\"" + appURL + "\"")` — cette conversion dit à html/template
+//     de ne rien échapper. C'est sa raison d'être, et c'est pourquoi ce qu'on y
+//     met doit être sûr AVANT.
+//
+// Échapper deux fois, avec deux règles différentes, serait deux occasions de se
+// tromper. Valider une fois à la lecture ferme les deux d'un coup.
+func portValide(p string) bool {
+	if p == "" || len(p) > 5 {
+		return false
+	}
+	n, err := strconv.Atoi(p)
+	return err == nil && n > 0 && n <= 65535
+}
+
 func loadConfig() (*config, error) {
 	f, err := os.Open(configFilePath())
 	if err != nil {
@@ -73,7 +97,17 @@ func loadConfig() (*config, error) {
 	}
 	defer f.Close()
 	var c config
-	return &c, json.NewDecoder(f).Decode(&c)
+	if err := json.NewDecoder(f).Decode(&c); err != nil {
+		return nil, err
+	}
+	// Un port absent est légitime — l'appelant retombe sur son défaut. Un port
+	// présent et illisible ne l'est pas : mieux vaut refuser de démarrer, en le
+	// disant, que composer une URL avec.
+	if c.Port != "" && !portValide(c.Port) {
+		return nil, fmt.Errorf("port invalide dans %s: %q — attendu un nombre de 1 à 65535",
+			configFilePath(), c.Port)
+	}
+	return &c, nil
 }
 
 func saveConfig(c *config) error {
@@ -1113,8 +1147,16 @@ func runSetupWizard() {
 			jsonError(w, "Le mot de passe doit contenir au moins 8 caractères.", http.StatusBadRequest)
 			return
 		}
+		// Le port vient du formulaire, donc du réseau. Il finira dans une URL
+		// passée à « cmd /c start » et dans un template.JS — voir portValide.
+		// Le valider ICI ferme la porte à l'entrée, plutôt que de compter sur
+		// la relecture du fichier pour rattraper ce qu'on y a écrit soi-même.
 		if req.Port == "" {
 			req.Port = "8000"
+		}
+		if !portValide(req.Port) {
+			jsonError(w, "Port invalide : indiquez un nombre de 1 à 65535.", http.StatusBadRequest)
+			return
 		}
 
 		// Generate a strong JWT secret.

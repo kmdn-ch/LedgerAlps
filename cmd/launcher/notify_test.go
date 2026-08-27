@@ -89,3 +89,39 @@ func TestLEcranDitQueLesDonneesSontConservees(t *testing.T) {
 		}
 	}
 }
+
+// Le port traverse deux interpreteurs : cmd.exe (via « cmd /c start ») et
+// html/template (via template.JS, qui n'echappe rien par construction).
+//
+// Le troisieme audit a etabli qu'une valeur SANS ESPACE contenant « & »
+// traverse EscapeArg intacte et se fait decouper par cmd.exe. Les cas ci-dessous
+// couvrent donc les metacaracteres de shell ET la sortie de chaine JavaScript.
+func TestPortValideRefuseCeQuiNEstPasUnNombre(t *testing.T) {
+	valides := []string{"1", "80", "8000", "65535"}
+	for _, p := range valides {
+		if !portValide(p) {
+			t.Errorf("port %q refuse alors qu'il est valide", p)
+		}
+	}
+
+	refuses := map[string]string{
+		"":                  "vide",
+		"0":                 "hors bornes",
+		"65536":             "hors bornes",
+		"-1":                "negatif",
+		"8000&cd>x":         "injection cmd.exe — le cas prouve par l'audit",
+		"8000|calc":         "tube cmd.exe",
+		"8000^&calc":        "echappement cmd.exe",
+		`8000";alert(1);//`: "sortie de chaine JavaScript",
+		"8000 & calc":       "avec espaces",
+		"08000000":          "trop long",
+		"80a":               "non numerique",
+		" 8000":             "espace de tete",
+		"8000\n":            "saut de ligne",
+	}
+	for p, pourquoi := range refuses {
+		if portValide(p) {
+			t.Errorf("port %q accepte — %s", p, pourquoi)
+		}
+	}
+}
