@@ -7,6 +7,7 @@ qui en dérive mécaniquement. Rien n'y est redessiné.
 |---|---|
 | `LOGO.png` | Le logotype « LedgerAlps ». **Fourni, intact.** C'est la référence. |
 | `LOGO.svg` | Le même, vectorisé depuis `LOGO.png`. C'est ce que l'interface affiche. |
+| `readme-hero.svg` | Le logotype sur une carte blanche arrondie. Pour le README uniquement — voir plus bas. |
 | `icon.svg` | Le monogramme « LA ». **Original, intact.** C'est l'icône du bureau. |
 | `ledgeralps.ico` | L'icône Windows, sept tailles, produite depuis `icon.svg`. |
 | `faire_ico.py` | Assemble le `.ico` à partir des rendus PNG. |
@@ -56,6 +57,14 @@ ne distingue LedgerAlps d'un exécutable anonyme.
 
 **Dans l'installeur** — `installer.nsi` pointe sur `ledgeralps.ico` par
 `MUI_ICON` / `MUI_UNICON`.
+
+**Dans le README** — `readme-hero.svg` reprend les mêmes tracés que
+`LOGO.svg`, sur un fond blanc arrondi qui alimente aussi le badge de la
+carte. GitHub rend la page en clair ou en sombre selon le thème du
+lecteur, et le mot est en bleu nuit : sur fond transparent, il
+disparaîtrait en thème sombre. La carte le rend lisible dans les deux
+cas, sans dépendre d'un `<picture>` à bascule de thème — que certains
+rendus Markdown (application mobile, IDE) ne respectent pas.
 
 ## Refaire les fichiers dérivés
 

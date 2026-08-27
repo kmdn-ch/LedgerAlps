@@ -1,54 +1,20 @@
 <div align="center">
 
-# LedgerAlps
+<img src="infrastructure/brand/readme-hero.svg" alt="LedgerAlps" width="420">
 
-**Facturation et comptabilité pour les indépendants et PME de Suisse.**
+### Facturation et comptabilité pour les indépendants et PME de Suisse.
 
 *Vos données restent sur votre machine. Pas de cloud, pas d'abonnement,
 pas de compte à créer chez qui que ce soit.*
 
+[![Télécharger](https://img.shields.io/github/v/release/kmdn-ch/LedgerAlps?label=t%C3%A9l%C3%A9charger&color=success&style=for-the-badge)](https://github.com/kmdn-ch/LedgerAlps/releases/latest)
+
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/kmdn-ch/LedgerAlps/actions/workflows/test.yml/badge.svg)](https://github.com/kmdn-ch/LedgerAlps/actions/workflows/test.yml)
-[![Télécharger](https://img.shields.io/github/v/release/kmdn-ch/LedgerAlps?label=t%C3%A9l%C3%A9charger&color=success)](https://github.com/kmdn-ch/LedgerAlps/releases/latest)
+[![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Windows & Linux](https://img.shields.io/badge/plateformes-Windows%20%C2%B7%20Linux-0F172A)](https://github.com/kmdn-ch/LedgerAlps/releases/latest)
 
 </div>
-
----
-
-## Installation
-
-Téléchargez `LedgerAlps_Setup_<version>_windows_amd64.exe` depuis la page
-**[Releases](https://github.com/kmdn-ch/LedgerAlps/releases/latest)**, puis
-double-cliquez.
-
-Au premier lancement, LedgerAlps ouvre votre navigateur et vous demande de créer
-votre compte. **Il n'y a rien d'autre à configurer.**
-
-> Vos données sont enregistrées dans `C:\Users\<vous>\AppData\Roaming\LedgerAlps\`
-> — ce que Windows appelle `%APPDATA%` — et survivent aux
-> mises à jour comme aux désinstallations.
-
-*Linux : voir le [guide de déploiement](docs/PRODUCTION.md).*
-
----
-
-## Où vont vos données
-
-```mermaid
-flowchart LR
-    U["👤 Vous"] <--> N["🌐 Navigateur<br/>localhost"]
-    N <--> S["⚙️ LedgerAlps<br/>un seul fichier .exe"]
-    S <--> DB[("💾 ledgeralps.db<br/>votre disque")]
-    S -.->|"jamais"| C["☁️ Internet"]
-
-    style DB fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
-    style C fill:#fafafa,stroke:#bdbdbd,stroke-dasharray:4 3
-    style S fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
-```
-
-Le serveur, la base et l'interface tiennent dans **un seul exécutable**, écouté
-sur votre machine. Aucun appel réseau n'est fait — les avis de conformité
-eux-mêmes sont livrés avec l'application et fonctionnent hors ligne.
 
 ---
 
@@ -128,49 +94,6 @@ remplacée.
 </td>
 </tr>
 </table>
-
-**Achats et paiements.** Déposez le PDF d'une facture reçue : LedgerAlps lit son
-QR-facture *et* le texte du document, puis remplit le fournisseur, son IBAN, le
-montant, le numéro de la facture, sa date, son échéance et le taux de TVA.
-Chaque valeur est affichée avec l'étiquette d'où elle vient, pour que vous
-puissiez la vérifier d'un coup d'œil. Rien n'est enregistré sans votre confirmation, et rien ne sort de votre
-machine — le fichier est lu sur place, jamais envoyé.
-
-Saisissez les factures que vous recevez : la TVA payée à
-vos fournisseurs se déduit de celle que vous encaissez, et la charge entre dans
-votre résultat. Une fois comptabilisées, cochez celles à régler — LedgerAlps
-produit le fichier de paiement **ISO 20022 pain.001** que vous déposez dans votre
-e-banking (UBS, PostFinance, Raiffeisen, Banques cantonales).
-
-Le fichier est téléchargé sur votre poste, jamais transmis : LedgerAlps ne parle
-à aucune banque. Et générer le fichier ne marque rien comme payé — c'est le
-relevé bancaire, importé au format camt.053, qui l'établit.
-
-**Ce que vous remettez à votre fiduciaire.** Journal général, grand livre et
-balance de vérification s'exportent en CSV depuis l'onglet Rapports — ouvrables
-directement dans Excel, accents compris. L'archive légale ZIP contient dix ans de
-pièces en JSON *et* en CSV. Un compte en lecture seule peut produire tout cela
-sans pouvoir rien modifier.
-
-**Comptes et accès.** Trois rôles — administrateur, comptable, lecture seule —
-pour ouvrir vos livres à votre fiduciaire sans lui donner les clés. Le compte
-administrateur est protégé par un **second facteur** : un code à six chiffres
-calculé par votre téléphone, hors ligne, avec l'application de votre choix
-(Aegis, KeePassXC, FreeOTP conviennent et sont libres). Dix codes de secours sont
-remis à l'activation — notez-les : sans eux, la perte de l'application ferme la porte
-définitivement.
-
-Un mot de passe oublié se règle depuis Paramètres → Sécurité : l'administrateur
-réinitialise l'accès, ce qui remplace le mot de passe par un mot de passe
-temporaire — sans jamais lire l'ancien — que la personne devra changer à sa
-connexion suivante.
-
-> À la première connexion après la mise à jour, l'administrateur devra inscrire
-> son téléphone avant de pouvoir travailler.
-
-**Vos données sont les vôtres.** L'archive légale contient dix ans de pièces en
-JSON *et* en CSV — ouvrable dans un tableur, importable ailleurs. Le verrouillage
-fournisseur ne tient pas au refus d'exporter, il tient au format de l'export.
 
 ---
 
@@ -336,16 +259,6 @@ un conseil fiscal** : votre fiduciaire reste votre interlocuteur.
 
 ---
 
-## Plateformes
-
-**Windows x86-64** et **Linux x86-64**. Sur un PC Windows ARM, l'installeur
-x86-64 fonctionne par émulation. Pour macOS ou ARM, il faut compiler depuis les
-sources — le [pourquoi](ROADMAP.md#plateformes-prises-en-charge) tient en une
-phrase : publier un binaire, c'est promettre qu'il fonctionne, et ceux-là
-n'étaient pas testés.
-
----
-
 ## Documentation
 
 | Document | Pour qui |
@@ -361,10 +274,9 @@ n'étaient pas testés.
 
 ---
 
-## Contribuer
+<div align="center">
 
-Les contributions sont bienvenues — voir
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) pour compiler le projet et
-[docs/BRANCHING.md](docs/BRANCHING.md) pour le processus.
+**Contributions bienvenues** — [compiler le projet](docs/DEVELOPMENT.md) ·
+[processus de release](docs/BRANCHING.md) · **Licence MIT** — [LICENSE](LICENSE)
 
-**Licence MIT** — voir [LICENSE](LICENSE).
+</div>

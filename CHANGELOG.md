@@ -7,6 +7,16 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Modifié
+
+- **Le README est reconstruit autour de ce qui reste : le produit, pas la procédure.** Les sections « Installation », « Où vont vos données » et « Plateformes » sont retirées — la première fait double emploi avec le badge de téléchargement, déjà en tête de page ; le schéma de la deuxième répétait ce que dit déjà le sous-titre ; la troisième était une explication technique que peu de lecteurs venaient chercher là. Le mur de texte qui suivait le tableau « Ce que fait LedgerAlps » — achats, paiements, comptes et accès, en plusieurs paragraphes denses — est retiré : ce qu'il couvrait vit déjà dans `docs/DROITS.md`, `docs/ARCHITECTURE.md` et la FAQ, qui restent. La page ouvre maintenant sur le logotype, vectorisé sur une carte lisible en thème clair comme sombre.
+
+### Retiré
+
+- **Trois fichiers scratch d'audit à la racine du dépôt** (`review.md`, `review-Claude.md`, `review-Claude2.md`) — jamais suivis par git, laissés là par les deux premiers audits. Un troisième audit produira son propre rapport.
+- **Des artefacts de build oubliés à la racine** — deux exécutables (`launcher.exe`, `server.exe`, ~75 Mo), les dossiers `build-test/` et `dist/` (~220 Mo, datant d'avril et juillet), et `.env.go.example`, un doublon anglais et périmé de `.env.example` que rien ne référençait. Tous étaient déjà hors du suivi git — aucun n'avait de conséquence sur le dépôt, seulement sur ce qu'on y trouve en l'ouvrant.
+- **Le script `npm run lint` du frontend, et les trois dépendances `eslint*` qui ne servaient qu'à lui.** Aucun fichier de configuration ESLint n'existe dans le dépôt et n'en a jamais existé : la commande échouait dès qu'on l'exécutait. Ni la CI, ni le `Makefile`, ni `docs/DEVELOPMENT.md` ne l'appellent — seul `golangci-lint` (Go) est réellement branché. Cent dix paquets de moins dans `node_modules`.
+
 ## [1.5.6] — 2026-08-27
 
 ### Modifié

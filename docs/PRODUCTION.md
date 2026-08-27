@@ -1,9 +1,11 @@
 # Déploiement serveur
 
 > **La plupart des utilisateurs n'ont pas besoin de ce document.** Sur Windows,
-> l'installeur fait tout : voir le [README](../README.md). Cette page s'adresse
-> à qui veut faire tourner LedgerAlps sur un serveur Linux x86-64, par exemple
-> pour y accéder depuis plusieurs postes du bureau.
+> l'installeur fait tout : téléchargez-le depuis la page
+> [Releases](https://github.com/kmdn-ch/LedgerAlps/releases/latest) et
+> double-cliquez — rien d'autre à configurer. Cette page s'adresse à qui veut
+> faire tourner LedgerAlps sur un serveur Linux x86-64, par exemple pour y
+> accéder depuis plusieurs postes du bureau.
 
 LedgerAlps reste **local-first** : même déployé sur un serveur, il est conçu
 pour votre réseau, pas pour être exposé sur Internet.

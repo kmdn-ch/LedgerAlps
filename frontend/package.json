@@ -7,7 +7,6 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -42,9 +41,6 @@
     "vite": "^5.3.3",
     "tailwindcss": "^3.4.6",
     "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.39",
-    "eslint": "^8.57.0",
-    "@typescript-eslint/eslint-plugin": "^7.16.0",
-    "@typescript-eslint/parser": "^7.16.0"
+    "postcss": "^8.4.39"
   }
 }
