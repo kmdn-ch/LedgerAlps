@@ -7,6 +7,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+## [1.5.6] — 2026-08-27
+
 ### Modifié
 
 - **L'import camt.053 n'a plus qu'un seul point d'entrée.** Il vivait à deux endroits — Rapports et Paramètres → Banque — pour la même route et le même effet : les deux ÉCRIVAIENT en base. Mais celui de Rapports présentait une liste de lecture, « voilà ce que j'ai lu », sans dire que les écritures étaient persistées au passage : on croyait consulter un fichier, on alimentait la file de rapprochement. Deux boutons pour un même geste, dont l'un cache ce qu'il fait, ne sont pas une commodité. L'import vit désormais là où se fait le travail qui le suit, et Rapports porte un renvoi vers cet écran.
