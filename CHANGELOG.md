@@ -7,6 +7,12 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+## [1.6.1] — 2026-09-07
+
+### Corrigé
+
+- **Deux alertes de sécurité Dependabot** sur des dépendances de l'outillage de build frontend, aucune des deux jamais livrée dans le binaire (`0` import dans `frontend/src`, vérifié) : `browserslist` (avis HIGH — écrasement de prototype / plantage non capturé via un `browserslist-stats.json` non fiable) et `postcss-selector-parser` (déni de service par récursion d'AST non bornée). Corrigées par `npm audit fix` sans changement cassant — seules des dépendances transitives (via `autoprefixer`/`tailwindcss` et `babel`/`@vitejs/plugin-react`) sont concernées, aucune entrée de `package.json` à toucher.
+
 ## [1.6.0] — 2026-08-28
 
 ### Corrigé
