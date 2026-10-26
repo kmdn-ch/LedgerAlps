@@ -166,6 +166,13 @@ func (s *Store) Get(name string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("secret %q illisible: %w", name, err)
 	}
+	// Set refuse un secret vide et DPAPI ne rend jamais un blob vide : une entrée
+	// sans données vient d'un fichier tronqué ou édité à la main. Sous Windows,
+	// unseal en prenait l'adresse du premier octet (&sealed[0]) et le processus
+	// tombait sur une panique « index out of range » au lieu d'une erreur.
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("secret %q illisible: entrée vide dans %s", name, filepath.Base(s.path))
+	}
 	if e.Seal == sealDPAPI {
 		out, unsealErr := unseal(raw)
 		if unsealErr != nil {

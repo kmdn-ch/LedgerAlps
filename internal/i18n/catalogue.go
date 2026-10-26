@@ -284,6 +284,14 @@ var catalogue = map[string]map[Lang]string{
 		IT: "indirizzo incompleto per un cliente (necessario per la fattura QR): %s mancante",
 		EN: "incomplete address for a customer (required for the QR-bill): %s missing",
 	},
+	// secrets.json porte une entrée sans données : fichier tronqué ou édité à la
+	// main, puisque l'écriture refuse un secret vide. Avant ce message, Windows
+	// tombait sur une panique « index out of range » au lieu de le dire.
+	"secret %q illisible: entrée vide dans %s": {
+		DE: "Geheimnis %q unlesbar: leerer Eintrag in %s",
+		IT: "Segreto %q illeggibile: voce vuota in %s",
+		EN: "Secret %q unreadable: empty entry in %s",
+	},
 	"IDE / N° TVA : ": {
 		DE: "UID / MWST-Nr.: ",
 		IT: "IDI / N. IVA: ",

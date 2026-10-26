@@ -173,3 +173,24 @@ func TestSecretVideRefuse(t *testing.T) {
 		t.Fatal("un secret vide a été accepté")
 	}
 }
+
+// Set refuse un secret vide, donc une entrée sans données ne peut venir que d'un
+// fichier tronqué ou édité à la main. Get doit répondre par une erreur lisible :
+// sous Windows, unseal en prenait l'adresse du premier octet et le processus
+// tombait sur une panique « index out of range ». Hors DPAPI (« none »), la même
+// entrée aurait rendu un secret vide sans erreur — une clé de base vide prise pour
+// valide.
+func TestEntreeSansDonneesRendUneErreur(t *testing.T) {
+	for _, mode := range []string{sealDPAPI, sealNone} {
+		dir := t.TempDir()
+		contenu := `{"version":1,"entries":{"` + NameDatabaseKey +
+			`":{"seal":"` + mode + `","data":""}}}`
+		if err := os.WriteFile(filepath.Join(dir, "secrets.json"), []byte(contenu), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := New(dir).Get(NameDatabaseKey)
+		if err == nil {
+			t.Fatalf("scellement %q : Get a rendu %q sans erreur sur une entrée vide", mode, got)
+		}
+	}
+}
