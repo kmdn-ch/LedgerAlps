@@ -222,21 +222,31 @@ LangString UninstallDone ${LANG_ITALIAN} "LedgerAlps è stato disinstallato."
 ; CRÉERAIT un fichier vide. Au plus 10 s, puis on laisse `File` rendre son     ;
 ; propre verdict — l'attente est un confort, pas un verrou.                   ;
 ; --------------------------------------------------------------------------- ;
+;
+; Les étiquettes doivent être UNIQUES par insertion : la macro est insérée deux
+; fois. Et `${__LINE__}` ne peut pas servir directement dans chaque étiquette —
+; à l'intérieur d'une macro il vaut « ligne d'insertion.ligne dans la macro »,
+; donc une valeur DIFFÉRENTE à chaque ligne : « lbl_libre_345.1 » à l'appel et
+; « lbl_libre_345.14 » à la définition, que makensis refuse de rapprocher (c'est
+; ce que la répétition « Release (dry run) » a rendu le jour où cette macro est
+; née). On fige donc l'identifiant UNE fois, en tête, dans un define.
 !macro AttendreLiberation fichier
-  IfFileExists "${fichier}" 0 lbl_libre_${__LINE__}
+  !define AL_ID "AL${__LINE__}"
+  IfFileExists "${fichier}" 0 ${AL_ID}_libre
     StrCpy $R9 0
-  lbl_essai_${__LINE__}:
+  ${AL_ID}_essai:
     ClearErrors
     FileOpen $R8 "${fichier}" a
-    IfErrors lbl_occupe_${__LINE__}
+    IfErrors ${AL_ID}_occupe
     FileClose $R8
-    Goto lbl_libre_${__LINE__}
-  lbl_occupe_${__LINE__}:
+    Goto ${AL_ID}_libre
+  ${AL_ID}_occupe:
     IntOp $R9 $R9 + 1
-    IntCmp $R9 40 lbl_libre_${__LINE__} 0 lbl_libre_${__LINE__}
+    IntCmp $R9 40 ${AL_ID}_libre 0 ${AL_ID}_libre
     Sleep 250
-    Goto lbl_essai_${__LINE__}
-  lbl_libre_${__LINE__}:
+    Goto ${AL_ID}_essai
+  ${AL_ID}_libre:
+  !undef AL_ID
 !macroend
 
 ; --------------------------------------------------------------------------- ;
