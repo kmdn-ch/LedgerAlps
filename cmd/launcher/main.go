@@ -69,19 +69,17 @@ func reinstalledMarkerPath() string {
 
 // portValide n'accepte qu'un nombre de port.
 //
-// La valeur finit à DEUX endroits qui la réinterprètent :
+// La valeur finit dans `exec.Command("cmd", "/c", "start", "", url)` — Go
+// échappe ses arguments avec syscall.EscapeArg, qui met entre guillemets ce qui
+// contient un espace, mais PAS ce qui contient « & », « | » ou « ^ ». Une valeur
+// sans espace traverse donc intacte jusqu'à cmd.exe, qui la découpe. Vérifié :
+// un port valant `8000&…` fait exécuter ce qui suit l'esperluette.
 //
-//   - `exec.Command("cmd", "/c", "start", "", url)` — Go échappe ses arguments
-//     avec syscall.EscapeArg, qui met entre guillemets ce qui contient un
-//     espace, mais PAS ce qui contient « & », « | » ou « ^ ». Une valeur sans
-//     espace traverse donc intacte jusqu'à cmd.exe, qui la découpe. Vérifié :
-//     un port valant `8000&…` fait exécuter ce qui suit l'esperluette ;
-//   - `template.JS("\"" + appURL + "\"")` — cette conversion dit à html/template
-//     de ne rien échapper. C'est sa raison d'être, et c'est pourquoi ce qu'on y
-//     met doit être sûr AVANT.
-//
-// Échapper deux fois, avec deux règles différentes, serait deux occasions de se
-// tromper. Valider une fois à la lecture ferme les deux d'un coup.
+// Elle passait aussi dans un `template.JS`, qui dit à html/template de ne rien
+// échapper ; la page de mise à jour ne l'affichait plus, la conversion a été
+// retirée avec elle. Si un gabarit en réclame un jour, ce qu'on y met doit être
+// sûr AVANT : valider une fois à la lecture, ici, vaut mieux qu'échapper deux
+// fois avec deux règles différentes.
 func portValide(p string) bool {
 	if p == "" || len(p) > 5 {
 		return false
@@ -435,10 +433,9 @@ func runReinstallNotification(appURL string) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		type data struct{ AppURL template.JS }
 		t, _ := template.New("notify").Parse(notifyHTML)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = t.Execute(w, data{AppURL: template.JS(`"` + appURL + `"`)})
+		_ = t.Execute(w, nil)
 	})
 
 	// Le clic. La redirection part AVANT la fermeture du serveur, sans quoi le

@@ -20,24 +20,23 @@ import (
 	"testing"
 )
 
-// rendre produit la page telle que le navigateur la reçoit.
-func rendre(t *testing.T, appURL string) string {
+// rendre produit la page telle que le navigateur la reçoit : le gabarit n'a
+// aucune donnée à recevoir, le serveur l'exécute avec nil.
+func rendre(t *testing.T) string {
 	t.Helper()
 	tpl, err := template.New("notify").Parse(notifyHTML)
 	if err != nil {
 		t.Fatalf("gabarit illisible : %v", err)
 	}
 	var b strings.Builder
-	if err := tpl.Execute(&b, struct{ AppURL template.JS }{
-		AppURL: template.JS(`"` + appURL + `"`),
-	}); err != nil {
+	if err := tpl.Execute(&b, nil); err != nil {
 		t.Fatalf("rendu : %v", err)
 	}
 	return b.String()
 }
 
 func TestLEcranDeMiseAJourNeSeFermePasToutSeul(t *testing.T) {
-	page := rendre(t, "http://localhost:8000")
+	page := rendre(t)
 
 	// Aucun mécanisme d'auto-navigation. Chacun de ces motifs a suffi, un jour,
 	// à faire disparaître la page sans que personne n'ait rien demandé.
@@ -79,7 +78,7 @@ func TestLeBoutonRedirigeVersLApplication(t *testing.T) {
 
 // La phrase qui justifie tout l'écran doit y être.
 func TestLEcranDitQueLesDonneesSontConservees(t *testing.T) {
-	page := rendre(t, "http://localhost:8000")
+	page := rendre(t)
 	for _, attendu := range []string{
 		"LedgerAlps mis à jour",
 		"vos données comptables ont été conservées",
@@ -90,8 +89,11 @@ func TestLEcranDitQueLesDonneesSontConservees(t *testing.T) {
 	}
 }
 
-// Le port traverse deux interpreteurs : cmd.exe (via « cmd /c start ») et
-// html/template (via template.JS, qui n'echappe rien par construction).
+// Le port traverse cmd.exe (via « cmd /c start »). Il traversait aussi
+// html/template, via un template.JS qui n'echappe rien par construction : cette
+// conversion a ete retiree, mais les cas de sortie de chaine JavaScript restent
+// refuses — la validation a la lecture ne doit pas dependre de ce que la page
+// affiche aujourd'hui.
 //
 // Le troisieme audit a etabli qu'une valeur SANS ESPACE contenant « & »
 // traverse EscapeArg intacte et se fait decouper par cmd.exe. Les cas ci-dessous

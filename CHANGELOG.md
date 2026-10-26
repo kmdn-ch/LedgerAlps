@@ -11,6 +11,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 - **Un `secrets.json` à entrée vide faisait tomber le processus au lieu de le dire.** `secretstore.Get` passait le contenu décodé d'une entrée DPAPI à `unseal` sans vérifier qu'il n'était pas vide ; `unseal` en prend l'adresse du premier octet, et Windows s'arrêtait sur une panique `index out of range`. `Set` refuse un secret vide et DPAPI ne rend jamais un blob vide : une telle entrée ne vient que d'un fichier tronqué ou édité à la main — aucune protection n'était contournée, mais le message d'erreur manquait. Hors DPAPI, la même entrée rendait un secret vide **sans erreur**, c'est-à-dire une clé de base vide prise pour valide. `Get` refuse maintenant, dans les deux cas, avec un message traduit. Le test échoue sur le code précédent et passe sur le nouveau (audit 6, N-1).
 
+### Modifié
+
+- **Le lanceur ne fabrique plus de valeur `template.JS` que sa page de mise à jour n'affiche pas.** Depuis que cette page attend un clic au lieu d'une minuterie, elle ne référence plus l'adresse de l'application ; la valeur, construite par concaténation, partait au gabarit pour rien. Ce n'était pas exploitable — le port est validé numérique à la lecture de la configuration — mais `template.JS` n'échappe rien, et la prochaine personne à brancher `{{.AppURL}}` en aurait hérité. La page s'exécute avec `nil`, comme la page d'installation (audit 6, N-2).
+
 ## [1.6.2] — 2026-10-26
 
 ### Sécurité
