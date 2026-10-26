@@ -32,7 +32,10 @@ type RefusHTTP = { response?: { data?: { reason?: string; error?: string } } }
 export function businessRefusal(error: unknown): string | null {
   const data = (error as RefusHTTP | null | undefined)?.response?.data
   if (!data?.reason) return null
-  return refusalMessage(error, '') || null
+  const message = refusalMessage(error, '')
+  // Les messages du serveur s'écrivent « minuscule en tête », comme toute erreur
+  // Go ; seuls dans un bandeau, ils ouvrent une phrase.
+  return message ? message.charAt(0).toUpperCase() + message.slice(1) : null
 }
 
 export function refusalMessage(error: unknown, fallback: string): string {
