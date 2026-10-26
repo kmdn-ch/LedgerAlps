@@ -24,7 +24,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 ### Non corrigé, avec la raison
 
 - **`zod` (GHSA-mrhx-c7xc-m3w5, HIGH) ne s'applique pas.** L'avis vise le moteur v4 (`$ZodArray`, `handleArrayResult`) ; nous livrons zod **3.25.76**, importé par `'zod'`, et le bundle ne contient aucune de ces deux symboles. L'intervalle « < 4.6.6 » de l'avis englobe à tort la 3.x. Une migration 3 → 4 serait un chantier sans bénéfice ici.
-- **Versions majeures, déjà suivies** : `vite`/`esbuild` (serveur de développement, jamais livré), `tailwindcss` 4 (`postcss-selector-parser`, outillage de build), `react-router` 7 (ROADMAP n° 16).
+- **Versions majeures, déjà suivies** : `vite`/`esbuild` (serveur de développement, jamais livré), `react-router` 7 (ROADMAP n° 16).
+- **`tailwindcss` 4 n'est plus nécessaire pour `postcss-selector-parser`.** `npm audit` le propose encore, sur l'ancienne plage de l'avis (GHSA-rj75-hqrm-r3gf). L'avis a été corrigé le 26 octobre 2026 : la branche 6.x y est corrigée en **6.1.5**, version que cette release livre. C'est de l'outillage de build, jamais livré.
 - **Reportés à la 1.6.3, par décision à la publication** (ROADMAP n° 17) : le magasin de secrets panique au lieu de renvoyer une erreur quand une entrée de `secrets.json` est vide (fichier tronqué ou édité à la main — aucune protection contournée, le processus s'arrête) ; le lanceur passe à son gabarit une valeur `template.JS` qu'il ne rend plus ; NSIS est installé sans version épinglée dans le job de l'installeur ; l'adresse du destinataire n'est vérifiée que côté client (audit 5, M-1) ; des nettoyages mécaniques (`ruff`, `mypy`, un `export` superflu) ; deux points de l'installeur (témoin `.reinstalled` écrit avant le consentement, `Sleep 1000`).
 
 ## [1.6.1] — 2026-09-07
