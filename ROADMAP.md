@@ -78,6 +78,7 @@ flowchart TB
 | 13d | Retirer une facture de la liste des paiements | ✅ |
 | 15 | Trouver ses marques : mise en route, statut TVA | ✅ |
 | 16 | Montée react-router v6 → v7 | 💡 à planifier |
+| 17 | Correctifs d'audit reportés (1.6.3) | ⏳ |
 | 14 | **Modules métier** | 💡 à trancher |
 
 ---
@@ -184,6 +185,16 @@ ouverte (CVE-2025-68470) sur `react-router-dom` 6.30.3. Aucun chemin
 d'exploitation identifié dans le routage actuel (audit 4, M-1), mais le correctif
 n'existe qu'en v7 — changement majeur demandant une revalidation écran par écran,
 pas un simple bump.
+
+**17 — Correctifs d'audit reportés (1.6.3).** Constats des audits 5 et 6 que la
+publication de la 1.6.2 a laissés de côté pour ne livrer que le correctif de
+sécurité de la bibliothèque standard : le magasin de secrets doit renvoyer une
+erreur, et non paniquer, sur une entrée vide de `secrets.json` ; le gabarit du
+lanceur ne reçoit plus de `template.JS` qu'il ne rend pas ; NSIS s'installe à
+version épinglée dans le job de l'installeur ; l'adresse du destinataire se
+vérifie aussi côté serveur à l'émission (audit 5, M-1) ; nettoyages `ruff`,
+`mypy` et export superflu de `lineSchema` ; témoin `.reinstalled` écrit après le
+consentement et `Sleep 1000` de l'installeur.
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions

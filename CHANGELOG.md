@@ -7,6 +7,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+## [1.6.2] — 2026-10-26
+
 ### Sécurité
 
 - **Les binaires publiés embarquaient une bibliothèque standard Go vieille de neuf correctifs.** Les releases v1.6.0 et v1.6.1 sont compilées avec Go **1.26.1** (vérifié sur l'artefact : `go version ledgeralps-server.exe`), parce que tous les workflows lisent `go-version-file: go.mod` et que `go.mod` disait `go 1.26.1`. Elles n'avaient reçu aucun des correctifs de Go 1.26.2 à 1.26.10. `govulncheck`, en mode source avec la toolchain exacte de la CI, trouvait **34 vulnérabilités atteignables par un chemin d'appel** depuis le code de LedgerAlps — `net/http` et HTTP/2 (épuisement mémoire, plantage, désynchronisation de connexion), `crypto/x509`, `crypto/tls`, `html/template`, `mime/multipart`. Aucune n'a été exploitée à notre connaissance ; l'exposition réelle dépend du mode : l'installation par défaut n'écoute que sur `127.0.0.1` en HTTP/1.1, alors que le mode réseau (`HOST` externe, TLS, donc HTTP/2) expose les défauts HTTP/2 à toute machine du réseau local, avant authentification.
@@ -23,6 +25,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 - **`zod` (GHSA-mrhx-c7xc-m3w5, HIGH) ne s'applique pas.** L'avis vise le moteur v4 (`$ZodArray`, `handleArrayResult`) ; nous livrons zod **3.25.76**, importé par `'zod'`, et le bundle ne contient aucune de ces deux symboles. L'intervalle « < 4.6.6 » de l'avis englobe à tort la 3.x. Une migration 3 → 4 serait un chantier sans bénéfice ici.
 - **Versions majeures, déjà suivies** : `vite`/`esbuild` (serveur de développement, jamais livré), `tailwindcss` 4 (`postcss-selector-parser`, outillage de build), `react-router` 7 (ROADMAP n° 16).
+- **Reportés à la 1.6.3, par décision à la publication** (ROADMAP n° 17) : le magasin de secrets panique au lieu de renvoyer une erreur quand une entrée de `secrets.json` est vide (fichier tronqué ou édité à la main — aucune protection contournée, le processus s'arrête) ; le lanceur passe à son gabarit une valeur `template.JS` qu'il ne rend plus ; NSIS est installé sans version épinglée dans le job de l'installeur ; l'adresse du destinataire n'est vérifiée que côté client (audit 5, M-1) ; des nettoyages mécaniques (`ruff`, `mypy`, un `export` superflu) ; deux points de l'installeur (témoin `.reinstalled` écrit avant le consentement, `Sleep 1000`).
 
 ## [1.6.1] — 2026-09-07
 
