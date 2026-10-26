@@ -62,6 +62,38 @@ sous Linux à chaque push.
 Les tests d'intégration créent une base SQLite temporaire par test — ils ne
 touchent jamais votre base réelle.
 
+## Vulnérabilités
+
+```bash
+go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+govulncheck ./...                          # 0 = rien d'atteignable · 3 = à corriger
+GOTOOLCHAIN=go1.26.10 govulncheck ./...    # avec la toolchain exacte de la release
+```
+
+`govulncheck` raisonne par **chemin d'appel** : il ne signale que ce que le code
+appelle réellement, pas tout module qui porterait un avis. La CI l'exécute à
+chaque push **et chaque lundi** (workflow `Vulnérabilités`) : une faille de la
+bibliothèque standard est publiée sans qu'aucune ligne du dépôt ne change.
+
+**La bibliothèque standard livrée est celle de `go.mod`.** Tous les workflows
+lisent `go-version-file: go.mod` : la directive `go` fixe la toolchain qui
+compile les binaires publiés, donc la version de `net/http`, `crypto/tls` et
+`html/template` qu'ils embarquent. Quand le contrôle rougit sans qu'on ait
+touché au code, la réponse est de la monter au dernier correctif de la ligne :
+
+```bash
+go mod edit -go=1.26.N && go mod tidy && go test ./...
+```
+
+Dependabot ne surveille ici que npm : sans ce contrôle, rien ne signale le
+serveur.
+
+**Piège.** Après une mise à jour de Go sur le poste, recompilez `govulncheck`
+(`go install` ci-dessus). Compilé avec l'ancienne version, il échoue sur les
+sources (`file requires newer Go version`) et sort en erreur **sans verdict** —
+ce qui, lu vite, ressemble à « zéro vulnérabilité ». Vérifiez toujours le code de
+sortie, pas l'absence de texte.
+
 ## Base de données
 
 Les migrations vivent dans `internal/db/migrations/`, sont embarquées dans le

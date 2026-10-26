@@ -7,6 +7,23 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Sécurité
+
+- **Les binaires publiés embarquaient une bibliothèque standard Go vieille de neuf correctifs.** Les releases v1.6.0 et v1.6.1 sont compilées avec Go **1.26.1** (vérifié sur l'artefact : `go version ledgeralps-server.exe`), parce que tous les workflows lisent `go-version-file: go.mod` et que `go.mod` disait `go 1.26.1`. Elles n'avaient reçu aucun des correctifs de Go 1.26.2 à 1.26.10. `govulncheck`, en mode source avec la toolchain exacte de la CI, trouvait **34 vulnérabilités atteignables par un chemin d'appel** depuis le code de LedgerAlps — `net/http` et HTTP/2 (épuisement mémoire, plantage, désynchronisation de connexion), `crypto/x509`, `crypto/tls`, `html/template`, `mime/multipart`. Aucune n'a été exploitée à notre connaissance ; l'exposition réelle dépend du mode : l'installation par défaut n'écoute que sur `127.0.0.1` en HTTP/1.1, alors que le mode réseau (`HOST` externe, TLS, donc HTTP/2) expose les défauts HTTP/2 à toute machine du réseau local, avant authentification.
+
+  Corrigé en montant `go` à **1.26.10** (les 30 défauts de la bibliothèque standard) et `golang.org/x/net` à **0.60.0** (les 4 de HTTP/2, tirés par gin). `x/net` 0.60.0 n'exige que Go 1.26.0 : pas de passage forcé à Go 1.27. Après correction : **0 vulnérabilité atteignable**. Reste un avis sur `x/crypto/openpgp`, paquet abandonné sans correctif possible, jamais importé.
+
+  Rien ne l'avait signalé : Dependabot ne surveille ici que npm (les 14 alertes affichées ne disaient rien du serveur), et aucun job n'exécutait `govulncheck`.
+
+- **Nouveau contrôle : workflow `Vulnérabilités`.** Exécute `govulncheck` sur la toolchain de `go.mod` — c'est-à-dire celle de la release — à chaque push, sur chaque PR, et **chaque lundi**. La minuterie est le point central : une faille de la bibliothèque standard est publiée sans qu'aucune ligne du dépôt ne change. Vérifié dans les deux sens : rouge (sortie 3, 34 vulnérabilités) sur l'état v1.6.1, vert (sortie 0) après correction.
+
+- **14 alertes Dependabot npm, dont 10 sur axios.** `axios` 1.19.0 → 1.20.0, `follow-redirects` 1.16.0 → 1.16.2, `source-map-js` 1.2.1 → 1.2.2, `postcss-selector-parser` 6.1.4 → 6.1.5 (`npm audit fix`, sans changement cassant, dans la plage déclarée `^1.7.2`). Étiquetées « runtime » par GitHub, mais l'atteignabilité réelle a été vérifiée **dans le bundle de production** : tout le code de l'adaptateur Node d'axios (`follow-redirects`, `http2`, `fromDataURI`, `NO_PROXY`, `createConnection`) y est absent — 0 occurrence — et l'adaptateur `fetch` y est présent mais jamais sélectionné (la liste par défaut est `["xhr","http","fetch"]`, `xhr` existe en navigateur, aucun `adapter:` n'est configuré). Corrigé quand même : la montée est mineure et gratuite. Vérifié sur un serveur réel : connexion et second facteur, restauration de session par cookie `HttpOnly`, création de contact, téléchargement puis renvoi d'une attestation (`blob` puis `multipart/form-data`).
+
+### Non corrigé, avec la raison
+
+- **`zod` (GHSA-mrhx-c7xc-m3w5, HIGH) ne s'applique pas.** L'avis vise le moteur v4 (`$ZodArray`, `handleArrayResult`) ; nous livrons zod **3.25.76**, importé par `'zod'`, et le bundle ne contient aucune de ces deux symboles. L'intervalle « < 4.6.6 » de l'avis englobe à tort la 3.x. Une migration 3 → 4 serait un chantier sans bénéfice ici.
+- **Versions majeures, déjà suivies** : `vite`/`esbuild` (serveur de développement, jamais livré), `tailwindcss` 4 (`postcss-selector-parser`, outillage de build), `react-router` 7 (ROADMAP n° 16).
+
 ## [1.6.1] — 2026-09-07
 
 ### Corrigé

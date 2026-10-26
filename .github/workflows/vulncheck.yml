@@ -1,0 +1,74 @@
+name: Vulnérabilités
+
+# Pourquoi ce workflow existe.
+#
+# Les binaires publiés en v1.6.1 etaient compiles avec Go 1.26.1 : tous les
+# workflows lisent `go-version-file: go.mod`, et go.mod disait `go 1.26.1`. La
+# bibliotheque standard embarquee n'avait donc recu AUCUN des correctifs de
+# securite sortis de Go 1.26.2 a 1.26.10 — 34 vulnerabilites atteignables par un
+# chemin d'appel depuis le code de LedgerAlps (net/http, HTTP/2, crypto/x509,
+# crypto/tls, html/template).
+#
+# Rien ne l'a signale, pour deux raisons independantes :
+#
+#   - Dependabot ne surveille ici que npm. Les 14 alertes que GitHub affichait
+#     ne disaient rien du serveur, qui est pourtant le produit.
+#   - Aucun job n'executait govulncheck. golangci-lint et deadcode lisent le
+#     code ; aucun ne confronte la toolchain et les modules a la base des
+#     vulnerabilites connues.
+#
+# Ce job comble les deux. Il echoue des qu'une vulnerabilite est ATTEIGNABLE —
+# govulncheck raisonne par chemin d'appel, pas par simple presence d'un module,
+# donc un module vulnerable dont on n'appelle pas le code ne rougit pas la CI.
+#
+# La toolchain scannee est celle de go.mod, c'est-a-dire celle de la release :
+# on mesure ce qui sera reellement embarque, pas ce qui est installe sur le
+# poste de quelqu'un.
+#
+# Le declenchement hebdomadaire est le point central. Une vulnerabilite de la
+# stdlib est publiee SANS qu'aucune ligne du depot ne change : sans minuterie,
+# la CI reste verte jusqu'au prochain commit, alors que le risque, lui, est ne.
+# Quand ce job rougit sans commit, la reponse est de monter la directive `go`
+# de go.mod vers le dernier correctif de la ligne.
+
+on:
+  push:
+    branches: [main, test]
+  pull_request:
+  schedule:
+    # Le lundi, hors des heures rondes ou les files d'attente se creusent.
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # Scanner a version epinglee, comme deadcode et golangci-lint : un outil
+      # qui change sous nos pieds rend rouge une CI qu'aucune ligne du depot n'a
+      # fait bouger. La BASE de vulnerabilites, elle, est volontairement lue en
+      # direct — c'est tout l'interet de l'outil.
+      - name: govulncheck
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          go version
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          govulncheck ./...
