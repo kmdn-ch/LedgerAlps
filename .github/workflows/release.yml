@@ -157,32 +157,52 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
+      # Version de NSIS ÉPINGLÉE. `winget install NSIS.NSIS` sans --version prenait la
+      # dernière publiée : le compilateur de l'installeur changeait sans qu'aucune
+      # ligne du dépôt ne bouge, dans le job qui produit le fichier que les
+      # utilisateurs lancent en administrateur. winget compare l'empreinte du
+      # programme d'installation à celle de son manifeste ; épingler dit QUEL
+      # manifeste. Chocolatey écrit la même version « 3.13.0 ».
+      #
+      # Pour la monter : changer les DEUX variables, puis lancer « Release (dry
+      # run) » — la vérification qui suit échoue bruyamment sur un écart, y compris
+      # si l'image du runner embarquait un jour un autre NSIS.
       - name: Install NSIS
         shell: pwsh
+        env:
+          NSIS_VERSION: "3.13"
+          NSIS_CHOCO_VERSION: "3.13.0"
         run: |
-          # Check if NSIS is already present (pre-installed on some runner images)
-          if (Test-Path 'C:\Program Files (x86)\NSIS\makensis.exe') {
-            Write-Host "NSIS already installed at default path"; exit 0
-          }
-          # Try winget (built-in on all GitHub Windows runners, no rate-limit)
-          Write-Host "Installing NSIS via winget..."
-          winget install NSIS.NSIS `
-            --silent --accept-package-agreements `
-            --accept-source-agreements --disable-interactivity 2>&1
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "winget install succeeded"
+          $makensis = 'C:\Program Files (x86)\NSIS\makensis.exe'
+          if (Test-Path $makensis) {
+            Write-Host "NSIS already installed at default path"
           } else {
-            # Fall back: choco with 3 retries and 15 s back-off
-            Write-Host "winget failed, retrying with choco..."
-            $installed = $false
-            for ($i = 1; $i -le 3; $i++) {
-              choco install nsis -y --no-progress 2>&1
-              if ($LASTEXITCODE -eq 0) { $installed = $true; break }
-              Write-Host "choco attempt $i failed — waiting 15 s..."
-              Start-Sleep -Seconds 15
+            # Try winget (built-in on all GitHub Windows runners, no rate-limit)
+            Write-Host "Installing NSIS $env:NSIS_VERSION via winget..."
+            winget install NSIS.NSIS --version $env:NSIS_VERSION `
+              --silent --accept-package-agreements `
+              --accept-source-agreements --disable-interactivity 2>&1
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "winget install succeeded"
+            } else {
+              # Fall back: choco with 3 retries and 15 s back-off
+              Write-Host "winget failed, retrying with choco..."
+              $installed = $false
+              for ($i = 1; $i -le 3; $i++) {
+                choco install nsis --version $env:NSIS_CHOCO_VERSION -y --no-progress 2>&1
+                if ($LASTEXITCODE -eq 0) { $installed = $true; break }
+                Write-Host "choco attempt $i failed — waiting 15 s..."
+                Start-Sleep -Seconds 15
+              }
+              if (-not $installed) { exit 1 }
             }
-            if (-not $installed) { exit 1 }
           }
+          # Le compilateur doit être CELUI qu'on a épinglé, quelle que soit son origine.
+          $annonce = (& $makensis /VERSION | Out-String).Trim()
+          if ($annonce -ne "v$env:NSIS_VERSION") {
+            throw "makensis annonce '$annonce', attendu 'v$env:NSIS_VERSION'"
+          }
+          Write-Host "makensis $annonce"
           # Ensure NSIS directory is on PATH for the build step
           $nsisDir = 'C:\Program Files (x86)\NSIS'
           if (Test-Path $nsisDir) {

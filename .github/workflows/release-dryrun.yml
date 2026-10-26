@@ -149,20 +149,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
+      # Mêmes versions épinglées que release.yml, et même vérification : c'est CE
+      # fichier qui répète la publication, il doit échouer exactement là où elle
+      # échouerait. Les deux variables se changent ensemble, dans les deux fichiers.
       - name: Install NSIS
         shell: pwsh
+        env:
+          NSIS_VERSION: "3.13"
+          NSIS_CHOCO_VERSION: "3.13.0"
         run: |
-          if (Test-Path 'C:\Program Files (x86)\NSIS\makensis.exe') {
+          $makensis = 'C:\Program Files (x86)\NSIS\makensis.exe'
+          if (Test-Path $makensis) {
             Write-Host "NSIS already installed at default path"
           } else {
-            winget install NSIS.NSIS `
+            winget install NSIS.NSIS --version $env:NSIS_VERSION `
               --silent --accept-package-agreements `
               --accept-source-agreements --disable-interactivity 2>&1
             if ($LASTEXITCODE -ne 0) {
-              choco install nsis -y --no-progress 2>&1
+              choco install nsis --version $env:NSIS_CHOCO_VERSION -y --no-progress 2>&1
               if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
             }
           }
+          $annonce = (& $makensis /VERSION | Out-String).Trim()
+          if ($annonce -ne "v$env:NSIS_VERSION") {
+            throw "makensis annonce '$annonce', attendu 'v$env:NSIS_VERSION'"
+          }
+          Write-Host "makensis $annonce"
           $nsisDir = 'C:\Program Files (x86)\NSIS'
           if (Test-Path $nsisDir) { Add-Content -Path $env:GITHUB_PATH -Value $nsisDir }
 

@@ -7,7 +7,7 @@
 | Go | 1.26+ (voir `go.mod`) | Serveur, CLI, lanceur |
 | Node.js | 20+ | Frontend React |
 | Python | 3.12+ (bibliothèque standard seule) | Veille de conformité |
-| NSIS | 3.x | Installeur Windows — **optionnel**, la CI s'en charge |
+| NSIS | 3.13 (épinglée en CI) | Installeur Windows — **optionnel**, la CI s'en charge |
 
 ## Démarrage rapide
 
@@ -116,7 +116,10 @@ go run ./cmd/cli restore --file=… --sqlite-path=/tmp/essai.db --confirm
 
 ## Installeur Windows
 
-Construit par la CI. Pour le reproduire localement, NSIS 3.x est nécessaire :
+Construit par la CI, qui installe la version **épinglée** de NSIS (`NSIS_VERSION`
+dans `release.yml` et `release-dryrun.yml`, à changer ensemble) et échoue si le
+`makensis` trouvé en annonce une autre. Pour le reproduire localement, prenez la
+même version :
 
 ```bash
 make build-windows && make build-frontend
