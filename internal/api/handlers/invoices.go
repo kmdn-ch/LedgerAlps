@@ -390,6 +390,13 @@ func (h *InvoicesHandler) TransitionInvoice(c *gin.Context) {
 		actor.UserID = claims.UserID
 	}
 	if err := h.svc.TransitionBy(c.Request.Context(), id, models.InvoiceStatus(body.Status), actor); err != nil {
+		// 409 et non 422 : la demande est bien formée, elle se heurte à une règle
+		// légale (adresse du destinataire, LTVA art. 26 al. 2). Le `reason` stable
+		// permet à l'interface d'afficher le motif au lieu d'un échec générique.
+		if errors.Is(err, invoicing.ErrRecipientAddressIncomplete) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "recipient_address_incomplete"})
+			return
+		}
 		switch err {
 		case invoicing.ErrInvoiceNotFound:
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

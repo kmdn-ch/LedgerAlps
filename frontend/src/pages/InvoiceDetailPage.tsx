@@ -16,6 +16,7 @@ import { useCanWrite } from '@/hooks/usePermissions'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
+import { businessRefusal } from '@/utils/refusal'
 import type { DocumentStatus, Invoice, QuoteOutcome } from '@/types'
 
 // La fonction de traduction telle que `useT()` la rend.
@@ -409,7 +410,9 @@ export function InvoiceDetailPage() {
       </div>
 
       {transition.isError && (
-        <ErrorBanner message={t('fd.erreurStatut')} />
+        // Un refus métier (adresse du client incomplète, par exemple) dit quoi
+        // corriger ; tout autre échec garde le message générique.
+        <ErrorBanner message={businessRefusal(transition.error) ?? t('fd.erreurStatut')} />
       )}
       {convert.isError && (
         <ErrorBanner message={t('fd.erreurConversion')} />

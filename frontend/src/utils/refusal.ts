@@ -21,6 +21,20 @@ const LEAD: Record<string, string> = {
 // déballée — les autres écrans passent par cette fonction.
 type RefusHTTP = { response?: { data?: { reason?: string; error?: string } } }
 
+// Le message d'un refus MÉTIER seulement, ou null.
+//
+// Un refus métier est celui que le serveur a marqué d'un `reason` : une règle
+// légale que l'utilisateur peut corriger (adresse du client incomplète, TVA sans
+// numéro). Son message, déjà traduit par le serveur, dit quoi faire — il vaut
+// mieux que « erreur lors du changement de statut ». Les autres échecs
+// (transition impossible, base indisponible) gardent le message générique de
+// l'écran : leur texte brut n'aide personne.
+export function businessRefusal(error: unknown): string | null {
+  const data = (error as RefusHTTP | null | undefined)?.response?.data
+  if (!data?.reason) return null
+  return refusalMessage(error, '') || null
+}
+
 export function refusalMessage(error: unknown, fallback: string): string {
   const data = (error as RefusHTTP | null | undefined)?.response?.data
   if (!data) return fallback

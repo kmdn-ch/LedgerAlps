@@ -227,6 +227,29 @@ Le type n'est pas cosmétique — il détermine trois comportements :
   dessus. Sa machine à états est distincte : `draft → sent → cancelled |
   archived`.
 
+### Envoyer un document : l'identité du destinataire
+
+`POST /invoices/:id/transition` avec `{"status": "sent"}` fait passer un
+brouillon à « envoyée ». C'est le moment où l'**identité du destinataire est
+figée** sur le document (`recipient_*`) : le serveur relit la fiche du client,
+vérifie son adresse, puis la copie. Renommer le client plus tard ne réécrit pas
+une pièce envoyée (CO art. 958f).
+
+| Code | Cas |
+|---|---|
+| `200` | Document envoyé, identité figée |
+| `409` | L'adresse du client est incomplète — `reason: "recipient_address_incomplete"`. Rue, NPA et localité sont exigés sur une **facture** et une **offre** (LTVA art. 26 al. 2, bulletin QR) ; une note de crédit n'est pas concernée |
+| `422` | Transition interdite par la machine à états, ou document introuvable côté contact |
+
+Le `409` ne change rien : le document reste un brouillon, et repart tel quel
+dès que la fiche du client est complétée — inutile de le rouvrir. Le message
+d'erreur est traduit selon `Accept-Language`.
+
+Tant que le document est un brouillon, son identité suit la fiche : elle est
+relevée à la création, relue à chaque `PATCH` et à l'envoi. Une fois envoyé, elle
+ne bouge plus, sauf si le document est re-adressé à un autre `contact_id`. Une
+note de crédit recopie l'identité de la facture qu'elle corrige.
+
 ### Convertir une offre en facture
 
 `POST /invoices/:id/convert` — corps optionnel :

@@ -284,6 +284,16 @@ var catalogue = map[string]map[Lang]string{
 		IT: "indirizzo incompleto per un cliente (necessario per la fattura QR): %s mancante",
 		EN: "incomplete address for a customer (required for the QR-bill): %s missing",
 	},
+	// Un document ne part pas vers un client dont l'adresse est incomplète
+	// (LTVA art. 26 al. 2 ; SPC 0200 §4.2.2). La règle vivait dans les
+	// formulaires ; le serveur la refuse désormais à l'émission. Phrase FIXE :
+	// une liste de champs composée en français resterait française au milieu
+	// d'une phrase allemande.
+	"l'adresse du client est incomplète : la rue, le NPA et la localité sont requis (LTVA art. 26 al. 2) — complétez sa fiche dans Contacts, puis recommencez": {
+		DE: "Die Adresse des Kunden ist unvollständig: Strasse, PLZ und Ort sind erforderlich (MWSTG Art. 26 Abs. 2) — ergänzen Sie die Angaben des Kunden unter Kontakte und versuchen Sie es erneut",
+		IT: "L'indirizzo del cliente è incompleto: via, NPA e località sono obbligatori (LIVA art. 26 cpv. 2) — completare i dati del cliente in Contatti, poi riprovare",
+		EN: "The customer's address is incomplete: street, postal code and town are required (VAT Act art. 26 para. 2) — complete the customer's details under Contacts, then try again",
+	},
 	// secrets.json porte une entrée sans données : fichier tronqué ou édité à la
 	// main, puisque l'écriture refuse un secret vide. Avant ce message, Windows
 	// tombait sur une panique « index out of range » au lieu de le dire.

@@ -53,7 +53,10 @@ func newFixture(t *testing.T) *fixture {
 	}
 	contactID := db.NewID()
 	if _, err := database.Exec(
-		`INSERT INTO contacts (id, name, contact_type) VALUES (?, ?, 'customer')`,
+		// Adresse complète : l'émission la vérifie (ErrRecipientAddressIncomplete),
+		// et ces tests parlent d'autre chose que de l'adresse.
+		`INSERT INTO contacts (id, name, contact_type, address, postal_code, city, country)
+		 VALUES (?, ?, 'customer', 'Rue du Lac 1', '1000', 'Lausanne', 'CH')`,
 		contactID, "Client SA"); err != nil {
 		t.Fatalf("seed contact: %v", err)
 	}

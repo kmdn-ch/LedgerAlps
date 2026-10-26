@@ -52,8 +52,8 @@ func newGuardDB(t *testing.T, vatNumber string) (*Service, *sql.DB, string) {
 		t.Fatal(err)
 	}
 	if _, err := database.Exec(
-		`INSERT INTO contacts (id,contact_type,name,country,payment_term_days,is_active)
-		 VALUES ('c1','customer','Client','CH',30,1)`); err != nil {
+		`INSERT INTO contacts (id,contact_type,name,address,postal_code,city,country,payment_term_days,is_active)
+		 VALUES ('c1','customer','Client','Rue du Lac 1','1000','Lausanne','CH',30,1)`); err != nil {
 		t.Fatal(err)
 	}
 	return New(database, false), database, "c1"

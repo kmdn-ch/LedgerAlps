@@ -203,19 +203,15 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 		return nil, err
 	}
 
-	// Identité du destinataire figée à l'émission. Sans cela, le PDF relit le
-	// contact vivant : renommer un client réécrit toutes ses factures passées,
-	// alors que le CO art. 958f impose de conserver la pièce telle qu'elle est
-	// et que la LTVA art. 26 exige qu'elle nomme son destinataire.
-	var rcp recipientSnapshot
-	rcpQ := db.Rebind(`
-		SELECT COALESCE(name,''), COALESCE(address,''), COALESCE(postal_code,''),
-		       COALESCE(city,''), COALESCE(country,''), COALESCE(vat_number,'')
-		FROM contacts WHERE id = ?`, s.usePostgres)
-	if err := tx.QueryRowContext(ctx, rcpQ, req.ContactID).Scan(
-		&rcp.Name, &rcp.Address, &rcp.PostalCode, &rcp.City, &rcp.Country, &rcp.VATNumber,
-	); err != nil {
-		return nil, fmt.Errorf("load recipient: %w", err)
+	// Identité du destinataire, relevée à la création pour que le brouillon soit
+	// imprimable, puis relue et FIGÉE à l'émission (voir issue). Sans cette
+	// copie, le PDF relirait le contact vivant : renommer un client réécrirait
+	// toutes ses factures passées, alors que le CO art. 958f impose de conserver
+	// la pièce telle qu'elle est et que la LTVA art. 26 exige qu'elle nomme son
+	// destinataire.
+	rcp, err := s.loadRecipient(ctx, tx, req.ContactID)
+	if err != nil {
+		return nil, err
 	}
 
 	insertInv := db.Rebind(`
@@ -313,8 +309,9 @@ func (s *Service) UpdateInvoice(ctx context.Context, invoiceID string, req Creat
 func (s *Service) UpdateInvoiceBy(ctx context.Context, invoiceID string, req CreateInvoiceRequest, actor Actor) (*models.Invoice, error) {
 	// Guard: check payment status before touching anything.
 	var amountPaid float64
-	chkQ := db.Rebind("SELECT amount_paid FROM invoices WHERE id = ?", s.usePostgres)
-	if err := s.db.QueryRowContext(ctx, chkQ, invoiceID).Scan(&amountPaid); err == sql.ErrNoRows {
+	var previousContactID, previousStatus string
+	chkQ := db.Rebind("SELECT amount_paid, COALESCE(contact_id, ''), status FROM invoices WHERE id = ?", s.usePostgres)
+	if err := s.db.QueryRowContext(ctx, chkQ, invoiceID).Scan(&amountPaid, &previousContactID, &previousStatus); err == sql.ErrNoRows {
 		return nil, ErrInvoiceNotFound
 	} else if err != nil {
 		return nil, fmt.Errorf("load invoice: %w", err)
@@ -406,6 +403,29 @@ func (s *Service) UpdateInvoiceBy(ctx context.Context, invoiceID string, req Cre
 		}
 	}
 
+	// L'identité du destinataire suit la fiche tant que le document est un
+	// brouillon, et suit le CONTACT dès qu'il en change.
+	//
+	// `contact_id` était réécrit ci-dessus sans que l'identité figée le soit :
+	// une facture re-adressée à un autre client partait donc au nom du premier,
+	// le PDF imprimant l'identité figée et non le contact. Vérifié sur la base
+	// avant correction : contact_id changé, recipient_name inchangé.
+	//
+	// Un document déjà émis dont le contact ne change pas n'est PAS touché :
+	// renommer le client ensuite ne doit pas réécrire une pièce envoyée (CO
+	// art. 958f). Une note de crédit garde l'identité de la facture qu'elle
+	// corrige.
+	if followsContact(req.DocumentType) &&
+		(models.InvoiceStatus(previousStatus) == models.InvoiceStatusDraft || previousContactID != req.ContactID) {
+		rcp, err := s.loadRecipient(ctx, tx, req.ContactID)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.storeRecipient(ctx, tx, invoiceID, rcp); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
@@ -442,12 +462,12 @@ func (s *Service) TransitionBy(ctx context.Context, invoiceID string, to models.
 	// Load current status, invoice_number, journal_entry_id, created_by_id, and issue_date.
 	getQ := db.Rebind(`
 		SELECT status, invoice_number, COALESCE(journal_entry_id, ''), created_by_id, issue_date,
-		       COALESCE(document_type, 'invoice')
+		       COALESCE(document_type, 'invoice'), COALESCE(contact_id, '')
 		FROM invoices WHERE id = ?`, s.usePostgres)
-	var current, invoiceNumber, journalEntryID, createdByID, documentType string
+	var current, invoiceNumber, journalEntryID, createdByID, documentType, contactID string
 	var issueDate time.Time
 	if err := s.db.QueryRowContext(ctx, getQ, invoiceID).Scan(
-		&current, &invoiceNumber, &journalEntryID, &createdByID, &issueDate, &documentType,
+		&current, &invoiceNumber, &journalEntryID, &createdByID, &issueDate, &documentType, &contactID,
 	); err == sql.ErrNoRows {
 		return ErrInvoiceNotFound
 	} else if err != nil {
@@ -458,9 +478,16 @@ func (s *Service) TransitionBy(ctx context.Context, invoiceID string, to models.
 	for _, a := range allowed {
 		if a == to {
 			// Apply the status transition.
-			updateQ := db.Rebind("UPDATE invoices SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", s.usePostgres)
-			if _, err := s.db.ExecContext(ctx, updateQ, string(to), invoiceID); err != nil {
-				return fmt.Errorf("update invoice status: %w", err)
+			if models.InvoiceStatus(current) == models.InvoiceStatusDraft && to == models.InvoiceStatusSent {
+				// L'émission fige l'identité du destinataire et vérifie son adresse.
+				if err := s.issue(ctx, invoiceID, contactID, documentType); err != nil {
+					return err
+				}
+			} else {
+				updateQ := db.Rebind("UPDATE invoices SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", s.usePostgres)
+				if _, err := s.db.ExecContext(ctx, updateQ, string(to), invoiceID); err != nil {
+					return fmt.Errorf("update invoice status: %w", err)
+				}
 			}
 
 			// Comptabilisation à l'émission : brouillon → envoyée.
@@ -776,6 +803,17 @@ func (s *Service) ConvertQuote(ctx context.Context, quoteID, userID string, req 
 		}
 	}
 
+	// La facture née de l'offre porte une identité dès sa création, comme toute
+	// autre. Sans elle, rien ne la relevait avant le prochain démarrage du
+	// serveur, qui la « reconstituait » alors depuis le contact vivant.
+	rcp, err := s.loadRecipient(ctx, tx, contactID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.storeRecipient(ctx, tx, invoiceID, rcp); err != nil {
+		return nil, err
+	}
+
 	// The offer keeps its status; what changed is its commercial outcome.
 	outQ := db.Rebind(
 		"UPDATE invoices SET quote_outcome = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", s.usePostgres)
@@ -984,6 +1022,23 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 		}
 	}
 
+	// La note de crédit porte l'identité de la facture qu'elle corrige — celle
+	// qui a été envoyée —, pas celle que la fiche du client a prise depuis. Une
+	// facture sans identité figée (antérieure à la migration 0014) retombe sur
+	// la fiche.
+	rcp, err := s.loadRecipientOf(ctx, tx, invoiceID)
+	if err != nil {
+		return nil, err
+	}
+	if rcp.Name == "" {
+		if rcp, err = s.loadRecipient(ctx, tx, contactID); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.storeRecipient(ctx, tx, creditNoteID, rcp); err != nil {
+		return nil, err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
@@ -1022,10 +1077,14 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 	}, nil
 }
 
-// recipientSnapshot est l'identité du destinataire au moment de l'émission.
-// Elle est copiée sur la facture et n'en bouge plus : c'est ce qui fait de
-// celle-ci une pièce comptable autonome, et ce qui permet d'anonymiser un
-// contact sans effacer l'identité portée par ses factures.
+// recipientSnapshot est l'identité du destinataire copiée sur un document.
+//
+// Tant que le document est un brouillon, elle suit la fiche du contact : elle
+// est relevée à la création et à chaque enregistrement. À l'émission elle est
+// relue une dernière fois puis FIGÉE — elle n'en bouge plus, sauf si on
+// change de destinataire. C'est ce qui fait de la facture une pièce comptable
+// autonome, et ce qui permet d'anonymiser un contact sans effacer l'identité
+// portée par ses factures.
 type recipientSnapshot struct {
 	Name       string
 	Address    string
@@ -1074,6 +1133,143 @@ var ErrVATNotLiable = errors.New(
 
 type querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// ─── Identité du destinataire ────────────────────────────────────────────────
+
+// ErrRecipientAddressIncomplete refuse d'émettre un document dont le
+// destinataire n'a pas l'adresse complète — rue, NPA, localité — que le
+// bulletin de versement structuré exige (SPC 0200 §4.2.2) et que la LTVA
+// art. 26 al. 2 demande sur la facture.
+//
+// La règle n'existait que dans les formulaires : un appel direct à l'API
+// (import, intégration maison) créait puis envoyait un document que seul le PDF
+// refusait ensuite, loin de la cause. Elle se vérifie à l'ÉMISSION et non à la
+// création : un brouillon incomplet est un travail en cours légitime, alors que
+// l'émission est le moment où le document devient une pièce qui doit nommer et
+// situer son destinataire.
+//
+// Le message est une phrase FIXE, sans liste de champs manquants : le
+// catalogue de traduction (internal/i18n) la rend en quatre langues par
+// correspondance exacte, alors qu'une liste « adresse, NPA » composée en
+// français resterait française au milieu d'une phrase allemande.
+var ErrRecipientAddressIncomplete = errors.New(
+	"l'adresse du client est incomplète : la rue, le NPA et la localité sont requis " +
+		"(LTVA art. 26 al. 2) — complétez sa fiche dans Contacts, puis recommencez")
+
+// recipientAddressComplete dit si une adresse porte les trois champs que le
+// bulletin de versement structuré exige : rue, NPA, localité.
+func recipientAddressComplete(r recipientSnapshot) bool {
+	return strings.TrimSpace(r.Address) != "" &&
+		strings.TrimSpace(r.PostalCode) != "" &&
+		strings.TrimSpace(r.City) != ""
+}
+
+// followsContact dit si l'identité d'un type de document suit la fiche du
+// contact tant que le document n'est pas émis.
+//
+// Une note de crédit n'en fait pas partie : elle corrige une facture, donc elle
+// porte l'identité de CETTE facture — celle qui a été envoyée —, pas celle que
+// la fiche du client a pu prendre depuis. Elle la recopie à sa création.
+func followsContact(documentType string) bool {
+	return documentType == DocumentTypeInvoice || documentType == DocumentTypeQuote
+}
+
+// loadRecipient lit l'identité COURANTE d'un contact.
+func (s *Service) loadRecipient(ctx context.Context, q querier, contactID string) (recipientSnapshot, error) {
+	var rcp recipientSnapshot
+	err := q.QueryRowContext(ctx, db.Rebind(`
+		SELECT COALESCE(name,''), COALESCE(address,''), COALESCE(postal_code,''),
+		       COALESCE(city,''), COALESCE(country,''), COALESCE(vat_number,'')
+		FROM contacts WHERE id = ?`, s.usePostgres), contactID,
+	).Scan(&rcp.Name, &rcp.Address, &rcp.PostalCode, &rcp.City, &rcp.Country, &rcp.VATNumber)
+	if err != nil {
+		return recipientSnapshot{}, fmt.Errorf("load recipient: %w", err)
+	}
+	return rcp, nil
+}
+
+// loadRecipientOf lit l'identité déjà figée sur un document — celle qui a été
+// imprimée, et non celle que le contact porte aujourd'hui.
+func (s *Service) loadRecipientOf(ctx context.Context, q querier, documentID string) (recipientSnapshot, error) {
+	var rcp recipientSnapshot
+	err := q.QueryRowContext(ctx, db.Rebind(`
+		SELECT COALESCE(recipient_name,''), COALESCE(recipient_address,''),
+		       COALESCE(recipient_postal_code,''), COALESCE(recipient_city,''),
+		       COALESCE(recipient_country,''), COALESCE(recipient_vat_number,'')
+		FROM invoices WHERE id = ?`, s.usePostgres), documentID,
+	).Scan(&rcp.Name, &rcp.Address, &rcp.PostalCode, &rcp.City, &rcp.Country, &rcp.VATNumber)
+	if err != nil {
+		return recipientSnapshot{}, fmt.Errorf("load document recipient: %w", err)
+	}
+	return rcp, nil
+}
+
+// storeRecipient inscrit une identité sur un document. Elle a été relevée MAINTENANT
+// depuis une fiche ou recopiée d'une pièce : ce n'est pas une reconstitution,
+// d'où recipient_backfilled remis à 0.
+func (s *Service) storeRecipient(ctx context.Context, e execer, documentID string, r recipientSnapshot) error {
+	_, err := e.ExecContext(ctx, db.Rebind(`
+		UPDATE invoices
+		SET recipient_name = ?, recipient_address = ?, recipient_postal_code = ?,
+		    recipient_city = ?, recipient_country = ?, recipient_vat_number = ?,
+		    recipient_backfilled = 0
+		WHERE id = ?`, s.usePostgres),
+		r.Name, r.Address, r.PostalCode, r.City, r.Country, r.VATNumber, documentID)
+	if err != nil {
+		return fmt.Errorf("store recipient: %w", err)
+	}
+	return nil
+}
+
+// issue fait passer un brouillon à « envoyée » et FIGE l'identité de son
+// destinataire dans la même transaction.
+//
+// C'est ce que disait la migration 0014 — « figée à son émission » — et que le
+// code ne faisait pas : l'identité était copiée à la création du brouillon et
+// n'était jamais relue. Trois défauts en découlaient :
+//   - un brouillon dont on changeait le client partait avec le nom de l'ancien ;
+//   - un client dont on complétait la fiche après coup partait avec l'ancienne
+//     adresse, ou, si elle était incomplète, ne pouvait plus partir du tout ;
+//   - une offre convertie ou une note de crédit n'avait aucune identité figée.
+//
+// Relire la fiche ICI règle les trois, et c'est le seul endroit où la règle
+// d'adresse peut se vérifier sur ce qui va réellement être figé.
+func (s *Service) issue(ctx context.Context, invoiceID, contactID, documentType string) error {
+	var frozen *recipientSnapshot
+	if followsContact(documentType) {
+		rcp, err := s.loadRecipient(ctx, s.db, contactID)
+		if err != nil {
+			return err
+		}
+		if !recipientAddressComplete(rcp) {
+			return ErrRecipientAddressIncomplete
+		}
+		frozen = &rcp
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+	if frozen != nil {
+		if err := s.storeRecipient(ctx, tx, invoiceID, *frozen); err != nil {
+			return err
+		}
+	}
+	updateQ := db.Rebind("UPDATE invoices SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", s.usePostgres)
+	if _, err := tx.ExecContext(ctx, updateQ, string(models.InvoiceStatusSent), invoiceID); err != nil {
+		return fmt.Errorf("update invoice status: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
 }
 
 // checkVATAllowed refuse la TVA à qui n'a pas de numéro de TVA.

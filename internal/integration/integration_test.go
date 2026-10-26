@@ -62,6 +62,9 @@ func newTestServer(t *testing.T) (*gin.Engine, *sql.DB, *config.Config) {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.ErrorHandler())
+	// Comme en production (cmd/server) : sans lui, le refus d'une règle légale
+	// ne serait jamais vu dans la langue demandée par l'interface.
+	r.Use(middleware.Langue())
 
 	v1 := r.Group("/api/v1")
 
@@ -614,5 +617,95 @@ func TestSettingsReturnsBootstrappedCompany(t *testing.T) {
 	body := parseBody(t, w)
 	if body["company_name"] != "KMDN" {
 		t.Errorf("company_name = %v, want KMDN", body["company_name"])
+	}
+}
+
+// ─── Adresse du destinataire à l'émission (audit 5, M-1) ─────────────────────
+
+// La règle d'adresse n'existait que dans les formulaires : un appel direct à
+// l'API créait puis envoyait un document pour un client sans adresse, que seul
+// le PDF refusait ensuite. Le serveur la refuse désormais à l'émission — 409,
+// parce que la demande est bien formée et se heurte à une règle légale — avec
+// un `reason` stable pour l'interface, et dans la langue demandée.
+func TestEnvoiRefuseUnClientSansAdresse(t *testing.T) {
+	r, database, _ := newTestServer(t)
+	token := loginAdmin(t, r)
+
+	contactW := doJSON(t, r, "POST", "/api/v1/contacts", mustJSON(t, map[string]any{
+		"contact_type": "customer", "name": "Client Test AG", "address": "Bahnhofstrasse 1",
+		"postal_code": "8001", "city": "Zürich", "country": "CH",
+	}), token)
+	assertStatus(t, contactW, http.StatusCreated)
+	contactID, _ := parseBody(t, contactW)["id"].(string)
+
+	today := time.Now().Format("2006-01-02")
+	invW := doJSON(t, r, "POST", "/api/v1/invoices", mustJSON(t, map[string]any{
+		"contact_id": contactID, "issue_date": today,
+		"due_date": time.Now().AddDate(0, 0, 30).Format("2006-01-02"),
+		"currency": "CHF", "vat_rate": 0.0,
+		"lines": []map[string]any{{"description": "Service", "quantity": 1.0, "unit_price": 100.0, "vat_rate": 0.0}},
+	}), token)
+	assertStatus(t, invW, http.StatusCreated)
+	invoiceID, _ := parseBody(t, invW)["id"].(string)
+
+	// L'API refuse de créer un client sans adresse ; une fiche ancienne, importée
+	// ou vidée en base, le peut. C'est ce cas-là que la règle serveur couvre.
+	if _, err := database.Exec(
+		`UPDATE contacts SET address = '', postal_code = '', city = '' WHERE id = ?`, contactID); err != nil {
+		t.Fatal(err)
+	}
+
+	envoyer := func(langue string) *httptest.ResponseRecorder {
+		req, err := http.NewRequest("POST", "/api/v1/invoices/"+invoiceID+"/transition",
+			strings.NewReader(`{"status":"sent"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		if langue != "" {
+			req.Header.Set("Accept-Language", langue)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	w := envoyer("")
+	assertStatus(t, w, http.StatusConflict)
+	body := parseBody(t, w)
+	if body["reason"] != "recipient_address_incomplete" {
+		t.Errorf("reason = %v, attendu recipient_address_incomplete", body["reason"])
+	}
+	if msg, _ := body["error"].(string); !strings.Contains(msg, "adresse du client est incomplète") {
+		t.Errorf("message = %q", msg)
+	}
+
+	// Dans la langue de l'interface, par le même chemin que tous les refus.
+	if msg, _ := parseBody(t, envoyer("de"))["error"].(string); !strings.Contains(msg, "Adresse des Kunden ist unvollständig") {
+		t.Errorf("message allemand = %q", msg)
+	}
+
+	// Le refus ne change rien : le document reste un brouillon.
+	var statut string
+	if err := database.QueryRow(`SELECT status FROM invoices WHERE id = ?`, invoiceID).Scan(&statut); err != nil {
+		t.Fatal(err)
+	}
+	if statut != "draft" {
+		t.Fatalf("statut = %q après refus, attendu draft", statut)
+	}
+
+	// La fiche complétée, le même document part, sans qu'on l'ait rouvert.
+	if _, err := database.Exec(
+		`UPDATE contacts SET address = 'Rue Neuve 9', postal_code = '1700', city = 'Fribourg' WHERE id = ?`, contactID); err != nil {
+		t.Fatal(err)
+	}
+	assertStatus(t, envoyer(""), http.StatusOK)
+	var ville string
+	if err := database.QueryRow(`SELECT recipient_city FROM invoices WHERE id = ?`, invoiceID).Scan(&ville); err != nil {
+		t.Fatal(err)
+	}
+	if ville != "Fribourg" {
+		t.Errorf("identité figée : ville = %q, attendu Fribourg (la fiche relue à l'émission)", ville)
 	}
 }
