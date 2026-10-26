@@ -18,7 +18,7 @@
 
 import { z } from 'zod'
 
-export const lineSchema = z.object({
+const lineSchema = z.object({
   description:  z.string().min(1, 'val.requis'),
   quantity:     z.coerce.number().positive(),
   unit:         z.string().optional(),

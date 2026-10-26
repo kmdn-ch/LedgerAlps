@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Assemble un .ico Windows à partir des PNG rendus depuis icon.svg.
 
 # Le format, et le choix qui compte
@@ -18,7 +17,6 @@ Chaque taille est rendue depuis le SVG, jamais rééchantillonnée depuis une
 autre : agrandir un 32 px en 256 px donnerait une bouillie là où le vecteur
 donne un trait net.
 """
-import io
 import os
 import struct
 import sys
@@ -33,7 +31,7 @@ EN_PNG = {128, 256}  # au-delà de 64 px, le PNG évite un .ico obèse
 
 def lire_png(chemin):
     """Rend (largeur, hauteur, pixels RGBA) d'un PNG écrit par un navigateur."""
-    with io.open(chemin, "rb") as f:
+    with open(chemin, "rb") as f:
         brut = f.read()
     if brut[:8] != b"\x89PNG\r\n\x1a\n":
         raise SystemExit(f"{chemin} n'est pas un PNG")
@@ -101,7 +99,7 @@ images = []
 for t in TAILLES:
     chemin = os.path.join(ICO, f"icon-{t}.png")
     if t in EN_PNG:
-        with io.open(chemin, "rb") as f:
+        with open(chemin, "rb") as f:
             images.append((t, f.read()))
     else:
         l, h, px = lire_png(chemin)
@@ -121,8 +119,8 @@ for t, data in images:
     decalage += len(data)
 
 sortie = os.path.join(ICO, "ledgeralps.ico")
-with io.open(sortie, "wb") as f:
-    f.write(entete + repertoire + corps)
+with open(sortie, "wb") as ico:
+    ico.write(entete + repertoire + corps)
 print(f"{sortie} : {len(images)} tailles, {len(entete + repertoire + corps)} octets")
 for t, d in images:
     print(f"  {t:>3} px — {'PNG' if t in EN_PNG else 'DIB'} — {len(d)} o")

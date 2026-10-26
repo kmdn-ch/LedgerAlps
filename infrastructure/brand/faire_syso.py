@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Fabrique le .syso qui donne son icône à ledgeralps.exe.
 
 # Pourquoi un fichier objet et pas un outil
@@ -26,7 +25,6 @@ sur ce champ : l'éditeur y ajoutera l'adresse de la section. Sans ces
 relocalisations, l'exécutable se construit sans broncher et Windows n'affiche
 aucune icône — la ressource pointe dans le vide.
 """
-import io
 import os
 import struct
 import sys
@@ -41,7 +39,7 @@ RT_ICON, RT_GROUP_ICON = 3, 14
 LANGUE = 0x0409  # anglais (US) — la langue de la RESSOURCE, pas de l'interface
 
 # ── Lire le .ico ─────────────────────────────────────────────────────────────
-with io.open(SOURCE, "rb") as f:
+with open(SOURCE, "rb") as f:
     b = f.read()
 _, typ, nb = struct.unpack("<HHH", b[:6])
 if typ != 1:
@@ -66,7 +64,7 @@ ressources.append((RT_GROUP_ICON, 1, groupe))
 
 # ── Poser l'arbre ────────────────────────────────────────────────────────────
 DIR, ENT, DATA = 16, 8, 16
-par_type = {}
+par_type: dict[int, list[tuple[int, bytes]]] = {}
 for t, ident, d in ressources:
     par_type.setdefault(t, []).append((ident, d))
 types = sorted(par_type)
@@ -148,7 +146,7 @@ for adresse in relocalisations:
 symboles = struct.pack("<8sIhHBB", b".rsrc\0\0\0", 0, 1, 0, 3, 0)  # classe 3 = STATIC
 chaines = struct.pack("<I", 4)                    # table de chaînes vide
 
-with io.open(SORTIE, "wb") as f:
+with open(SORTIE, "wb") as f:
     f.write(entete + section + s + reloc + symboles + chaines)
 print(f"{SORTIE}")
 print(f"  {len(images)} images, {len(relocalisations)} relocalisations, "

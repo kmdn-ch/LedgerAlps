@@ -107,7 +107,7 @@ def fetch_fedlex(source: dict) -> str:
         rows = json.loads(raw.decode("utf-8"))["results"]["bindings"]
     except CheckError:
         raise  # already carries a precise message
-    except Exception as e:  # noqa: BLE001 - any failure is a check failure
+    except Exception as e:  # any failure is a check failure
         raise CheckError(f"{type(e).__name__}: {e}") from e
     if not rows:
         raise CheckError(f"no consolidation found for RS {sr}")
@@ -119,7 +119,7 @@ def fetch_sha256(source: dict) -> str:
         body = _get(source["url"])
     except CheckError:
         raise
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise CheckError(f"{type(e).__name__}: {e}") from e
     # Short digest keeps the registry readable; 16 hex chars is ample to detect
     # an edit, and this is change detection, not a security boundary.
@@ -132,7 +132,7 @@ def fetch_links(source: dict) -> str:
         body = _get(source["url"]).decode("utf-8", errors="replace")
     except CheckError:
         raise
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise CheckError(f"{type(e).__name__}: {e}") from e
     matches = re.findall(source["link_pattern"], body)
     if not matches:

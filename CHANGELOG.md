@@ -23,6 +23,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 ### Modifié
 
 - **Le lanceur ne fabrique plus de valeur `template.JS` que sa page de mise à jour n'affiche pas.** Depuis que cette page attend un clic au lieu d'une minuterie, elle ne référence plus l'adresse de l'application ; la valeur, construite par concaténation, partait au gabarit pour rien. Ce n'était pas exploitable — le port est validé numérique à la lecture de la configuration — mais `template.JS` n'échappe rien, et la prochaine personne à brancher `{{.AppURL}}` en aurait hérité. La page s'exécute avec `nil`, comme la page d'installation (audit 6, N-2).
+- **Nettoyages mécaniques relevés par l'audit 5, sans effet sur le comportement (F-2, F-3, F-4).** Dix constats `ruff` sur les trois scripts Python — `io.open` pour `open`, déclaration d'encodage devenue inutile, trois `# noqa: BLE001` posés sur une règle qui n'est pas activée —, et l'`import io` qui devenait inutile avec eux ; deux constats réels de `mypy` (une annotation manquante, un nom de fichier réutilisé entre un lecteur et un écrivain) ; l'`export` de `lineSchema`, que seul son propre module utilise. Les deux autres constats `mypy` sont une imprécision des stubs typeshed (`sys.stdout.reconfigure` existe bien à l'exécution) et restent.
 
 ## [1.6.2] — 2026-10-26
 
