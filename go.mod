@@ -1,6 +1,6 @@
 module github.com/kmdn-ch/ledgeralps
 
-go 1.26.1
+go 1.26.10
 
 require (
 	github.com/gin-gonic/gin v1.12.0
@@ -10,9 +10,9 @@ require (
 	github.com/ncruces/go-sqlite3 v0.35.3
 	github.com/pdfcpu/pdfcpu v0.14.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
-	golang.org/x/crypto v0.54.0
+	golang.org/x/crypto v0.57.0
 	golang.org/x/image v0.45.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 )
 
 require (
@@ -48,8 +48,8 @@ require (
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/arch v0.22.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	lukechampine.com/adiantum v1.1.1 // indirect
