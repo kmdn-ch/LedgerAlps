@@ -20,6 +20,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
   Une pièce déjà envoyée n'est pas réécrite : renommer le client ensuite ne touche pas la facture (CO art. 958f), sauf si on la re-adresse à un autre client.
 
+- **L'installeur n'écrit plus son témoin de réinstallation avant que l'installation soit confirmée.** `.onInit` créait `.reinstalled` au lancement de l'installeur — avant la page de bienvenue, avant la licence. Qui annulait à la licence gardait ce fichier dans son profil, et l'écran « configuration préservée » s'affichait au prochain lancement d'une installation qui n'avait pas eu lieu. L'arrêt de l'application avait déjà quitté `.onInit` pour la même raison ; l'écriture du témoin le suit, dans la section d'installation, avant le passage au contexte « tous les utilisateurs » (où `$APPDATA` désigne `C:\ProgramData`) (audit 5, F-7).
+
+- **L'installeur attend que Windows ait rendu les fichiers au lieu de parier sur une seconde.** `taskkill /f` rend la main avant que le système relâche l'image de l'exécutable ; tant qu'elle est mappée, les commandes `File` qui suivent échouent. Un `Sleep 1000` fixe était trop court sur un disque lent ou sous un antivirus qui scrute le fichier. Chaque exécutable est maintenant interrogé — l'ouvrir en ajout échoue tant qu'il tourne — pendant 10 secondes au plus, sans jamais le modifier ni en créer un sur une installation neuve (audit 5, F-8).
+
 ### Modifié
 
 - **Le lanceur ne fabrique plus de valeur `template.JS` que sa page de mise à jour n'affiche pas.** Depuis que cette page attend un clic au lieu d'une minuterie, elle ne référence plus l'adresse de l'application ; la valeur, construite par concaténation, partait au gabarit pour rien. Ce n'était pas exploitable — le port est validé numérique à la lecture de la configuration — mais `template.JS` n'échappe rien, et la prochaine personne à brancher `{{.AppURL}}` en aurait hérité. La page s'exécute avec `nil`, comme la page d'installation (audit 6, N-2).

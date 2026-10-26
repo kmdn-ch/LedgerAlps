@@ -208,6 +208,38 @@ LangString UninstallDone ${LANG_GERMAN}  "LedgerAlps wurde deinstalliert."
 LangString UninstallDone ${LANG_ITALIAN} "LedgerAlps è stato disinstallato."
 
 ; --------------------------------------------------------------------------- ;
+; Attendre que Windows rende réellement un fichier                            ;
+;                                                                             ;
+; `taskkill /f` rend la main avant que le système ait relâché l'image de       ;
+; l'exécutable : tant qu'elle est mappée, ni `File` ni `Delete` ne peuvent le  ;
+; remplacer. Un `Sleep` fixe parie sur la rapidité de la machine — trop court ;
+; sur un disque lent ou sous un antivirus qui scrute le fichier, il laissait   ;
+; les commandes `File` qui suivent échouer.                                    ;
+;                                                                             ;
+; On interroge donc le fichier lui-même : l'ouvrir en ajout échoue tant qu'il  ;
+; est en cours d'exécution, réussit dès qu'il est libre, et ne l'altère pas    ;
+; (rien n'est écrit). Garde IfFileExists : sur une installation neuve, `a`     ;
+; CRÉERAIT un fichier vide. Au plus 10 s, puis on laisse `File` rendre son     ;
+; propre verdict — l'attente est un confort, pas un verrou.                   ;
+; --------------------------------------------------------------------------- ;
+!macro AttendreLiberation fichier
+  IfFileExists "${fichier}" 0 lbl_libre_${__LINE__}
+    StrCpy $R9 0
+  lbl_essai_${__LINE__}:
+    ClearErrors
+    FileOpen $R8 "${fichier}" a
+    IfErrors lbl_occupe_${__LINE__}
+    FileClose $R8
+    Goto lbl_libre_${__LINE__}
+  lbl_occupe_${__LINE__}:
+    IntOp $R9 $R9 + 1
+    IntCmp $R9 40 lbl_libre_${__LINE__} 0 lbl_libre_${__LINE__}
+    Sleep 250
+    Goto lbl_essai_${__LINE__}
+  lbl_libre_${__LINE__}:
+!macroend
+
+; --------------------------------------------------------------------------- ;
 ; Arrêter un processus SANS recopier ce qu'il écrit sur sa console            ;
 ;                                                                             ;
 ; `nsExec::ExecToLog` reversait la sortie de `taskkill` dans le journal. Cette ;
@@ -289,23 +321,11 @@ Function .onInit
   StrCmp $R0 "" +2 0
     StrCpy $INSTDIR $R0
 
-  ; Temoin de reinstallation. LIMITE CONNUE, et c'est le meme piege que
-  ; celui documente pour les raccourcis plus bas : sous une elevation UAC
-  ; par identifiants, $APPDATA designe le profil de L'ADMINISTRATEUR. Le
-  ; temoin est alors ecrit dans un profil que le lanceur ne lira jamais, et
-  ; la notification « configuration preservee » ne s'affiche pas.
-  ;
-  ; Il n'existe pas de moyen NSIS de nommer le profil de l'utilisateur reel
-  ; depuis un processus eleve sans plugin. La notification est confortable,
-  ; pas fonctionnelle : son absence ne perd AUCUNE donnee. On l'ecrit quand
-  ; on peut, on ne pretend rien quand on ne peut pas — d'ou le IfErrors,
-  ; qui evite de laisser une poignee de fichier ouverte sur echec.
-  IfFileExists "$APPDATA\LedgerAlps\config.json" 0 lbl_no_reinstall
-    ClearErrors
-    FileOpen $0 "$APPDATA\LedgerAlps\.reinstalled" w
-    IfErrors lbl_no_reinstall
-    FileClose $0
-  lbl_no_reinstall:
+  ; Le temoin de reinstallation n'est PAS ecrit ici : il l'est dans la section
+  ; d'installation, une fois l'installation confirmee. Ecrit au lancement de
+  ; l'installeur — avant la page de bienvenue, avant la licence —, il restait
+  ; dans le profil de quelqu'un qui avait annule : meme entorse que l'arret de
+  ; l'application, deja sorti de cette fonction pour la meme raison.
 FunctionEnd
 
 ; --------------------------------------------------------------------------- ;
@@ -320,7 +340,10 @@ Section "LedgerAlps (required)" SecMain
   DetailPrint "$(StoppingApp)"
   !insertmacro ArreterProcessus "${SERVER_EXE}"
   !insertmacro ArreterProcessus "${LAUNCHER_EXE}"
-  Sleep 1000
+  ; Attendre que Windows ait réellement rendu les deux fichiers, plutôt que de
+  ; parier sur une seconde fixe (voir la macro).
+  !insertmacro AttendreLiberation "$INSTDIR\${SERVER_EXE}"
+  !insertmacro AttendreLiberation "$INSTDIR\${LAUNCHER_EXE}"
 
   SetOutPath "$INSTDIR"
   File "${LAUNCHER_EXE}"
@@ -338,6 +361,31 @@ Section "LedgerAlps (required)" SecMain
   ; uninstall. Clearing them here retires the leftovers on the next upgrade.
   Delete "$INSTDIR\index.html"
   RMDir /r "$INSTDIR\assets"
+
+  ; Témoin de réinstallation. Écrit ICI — une fois l'installation confirmée — et
+  ; non dans .onInit : au lancement de l'installeur, avant la page de bienvenue,
+  ; il restait dans le profil de quelqu'un qui annulait à la licence.
+  ;
+  ; AVANT `SetShellVarContext all` plus bas : dans ce contexte, $APPDATA désigne
+  ; les données COMMUNES (C:\ProgramData), pas celles de l'utilisateur.
+  ;
+  ; LIMITE CONNUE, et c'est le même piège que celui documenté pour les
+  ; raccourcis plus bas : sous une élévation UAC par identifiants, $APPDATA
+  ; désigne le profil de L'ADMINISTRATEUR. Le témoin est alors écrit dans un
+  ; profil que le lanceur ne lira jamais, et la notification « configuration
+  ; préservée » ne s'affiche pas.
+  ;
+  ; Il n'existe pas de moyen NSIS de nommer le profil de l'utilisateur réel
+  ; depuis un processus élevé sans plugin. La notification est confortable, pas
+  ; fonctionnelle : son absence ne perd AUCUNE donnée. On l'écrit quand on peut,
+  ; on ne prétend rien quand on ne peut pas — d'où le IfErrors, qui évite de
+  ; laisser une poignée de fichier ouverte sur échec.
+  IfFileExists "$APPDATA\LedgerAlps\config.json" 0 lbl_no_reinstall
+    ClearErrors
+    FileOpen $0 "$APPDATA\LedgerAlps\.reinstalled" w
+    IfErrors lbl_no_reinstall
+    FileClose $0
+  lbl_no_reinstall:
 
   ; ── Shortcuts ──────────────────────────────────────────────────────────── ;
   ; Installation PAR MACHINE ($PROGRAMFILES64 + HKLM) : les raccourcis doivent
