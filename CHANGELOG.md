@@ -7,6 +7,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+## [1.6.3] — 2026-10-27
+
 ### Corrigé
 
 - **Un `secrets.json` à entrée vide faisait tomber le processus au lieu de le dire.** `secretstore.Get` passait le contenu décodé d'une entrée DPAPI à `unseal` sans vérifier qu'il n'était pas vide ; `unseal` en prend l'adresse du premier octet, et Windows s'arrêtait sur une panique `index out of range`. `Set` refuse un secret vide et DPAPI ne rend jamais un blob vide : une telle entrée ne vient que d'un fichier tronqué ou édité à la main — aucune protection n'était contournée, mais le message d'erreur manquait. Hors DPAPI, la même entrée rendait un secret vide **sans erreur**, c'est-à-dire une clé de base vide prise pour valide. `Get` refuse maintenant, dans les deux cas, avec un message traduit. Le test échoue sur le code précédent et passe sur le nouveau (audit 6, N-1).

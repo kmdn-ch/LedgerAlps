@@ -78,7 +78,7 @@ flowchart TB
 | 13d | Retirer une facture de la liste des paiements | ✅ |
 | 15 | Trouver ses marques : mise en route, statut TVA | ✅ |
 | 16 | Montée react-router v6 → v7 | 💡 à planifier |
-| 17 | Correctifs d'audit reportés (1.6.3) | ⏳ |
+| 17 | Correctifs d'audit reportés (1.6.3) | 🔎 parcours de l'installeur à valider |
 | 14 | **Modules métier** | 💡 à trancher |
 
 ---
