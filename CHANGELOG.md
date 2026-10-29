@@ -7,6 +7,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+## [1.6.4] — 2026-10-29
+
 ### Sécurité
 
 - **`golang.org/x/net` 0.60.0 → 0.62.0** (avec `x/crypto` 0.58, `x/sys` 0.49, `x/text` 0.43). Deux avis publiés après la 1.6.3 — GO-2026-6860 (complexité quadratique de `html.Parse`) et GO-2026-6866 (`html.Render`) — visent `golang.org/x/net/html`. **Aucun n'est atteignable ici** : le serveur n'importe pas ce paquet (aucun importeur dans le graphe, zéro occurrence dans le binaire, `govulncheck` en mode source : 0 vulnérabilité). C'est le mode binaire de `govulncheck`, qui rattache l'avis au module lié pour `http2`, qui les signalait — ce que la barrière d'artefacts a refusé sur la `v1.6.4-rc1`. Un correctif existant, on monte au lieu d'élargir l'exception : elle ne couvre que GO-2026-5932 (`x/crypto/openpgp`, sans correctif possible).
