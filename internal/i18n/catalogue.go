@@ -294,6 +294,15 @@ var catalogue = map[string]map[Lang]string{
 		IT: "L'indirizzo del cliente è incompleto: via, NPA e località sono obbligatori (LIVA art. 26 cpv. 2) — completare i dati del cliente in Contatti, poi riprovare",
 		EN: "The customer's address is incomplete: street, postal code and town are required (VAT Act art. 26 para. 2) — complete the customer's details under Contacts, then try again",
 	},
+	// Une pièce envoyée ne se réécrit pas : la table des factures alimente la
+	// déclaration TVA et le PDF réimprimé, le journal, lui, est immuable. La
+	// correction légale passe par l'annulation puis la réactivation en
+	// brouillon (bouton « Réactiver »), ou par une note de crédit. Phrase FIXE.
+	"un document envoyé ne se modifie plus (CO art. 958f) : pour le corriger, annulez-le puis réactivez-le en brouillon, ou émettez une note de crédit": {
+		DE: "Ein versandtes Dokument wird nicht mehr geändert (OR Art. 958f): Um es zu korrigieren, stornieren Sie es und reaktivieren es als Entwurf, oder stellen Sie eine Gutschrift aus",
+		IT: "Un documento inviato non si modifica più (CO art. 958f): per correggerlo, annullarlo e riattivarlo come bozza, oppure emettere una nota di credito",
+		EN: "A sent document can no longer be edited (CO art. 958f): to correct it, cancel it and reactivate it as a draft, or issue a credit note",
+	},
 	// secrets.json porte une entrée sans données : fichier tronqué ou édité à la
 	// main, puisque l'écriture refuse un secret vide. Avant ce message, Windows
 	// tombait sur une panique « index out of range » au lieu de le dire.

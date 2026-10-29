@@ -293,8 +293,23 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 
 var ErrInvoicePaid = fmt.Errorf("impossible de modifier une facture avec un paiement enregistré")
 
-// UpdateInvoice replaces the editable fields and all lines of an invoice.
-// Blocked if amount_paid > 0 (payment has been validated).
+// ErrDocumentNotDraft refuse de modifier un document qui n'est plus un brouillon.
+//
+// Seul un paiement enregistré arrêtait la modification : une facture ENVOYÉE
+// et comptabilisée pouvait passer de 1 000 à 5 000 CHF en HTTP 200, la table
+// des factures — qui alimente la déclaration TVA, les rapports et le PDF
+// réimprimé — disant 5 000 pendant que le journal, immuable, disait toujours
+// 1 000. La pièce envoyée doit rester celle qui a été envoyée (CO art. 958f) ;
+// la correction légale est l'annulation puis la réactivation en brouillon, ou
+// la note de crédit (LTVA art. 27 al. 4), que le produit sait émettre.
+//
+// Phrase FIXE : le catalogue de traduction la rend par correspondance exacte.
+var ErrDocumentNotDraft = errors.New(
+	"un document envoyé ne se modifie plus (CO art. 958f) : pour le corriger, annulez-le puis " +
+		"réactivez-le en brouillon, ou émettez une note de crédit")
+
+// UpdateInvoice replaces the editable fields and all lines of a DRAFT document.
+// Blocked once it is no longer a draft (ErrDocumentNotDraft) or has a payment.
 //
 // Sans auteur : la modification n'est PAS tracee. Meme decoupage que
 // Transition / TransitionBy, et meme raison -- les tests et les appels
@@ -309,15 +324,18 @@ func (s *Service) UpdateInvoice(ctx context.Context, invoiceID string, req Creat
 func (s *Service) UpdateInvoiceBy(ctx context.Context, invoiceID string, req CreateInvoiceRequest, actor Actor) (*models.Invoice, error) {
 	// Guard: check payment status before touching anything.
 	var amountPaid float64
-	var previousContactID, previousStatus string
-	chkQ := db.Rebind("SELECT amount_paid, COALESCE(contact_id, ''), status FROM invoices WHERE id = ?", s.usePostgres)
-	if err := s.db.QueryRowContext(ctx, chkQ, invoiceID).Scan(&amountPaid, &previousContactID, &previousStatus); err == sql.ErrNoRows {
+	var status string
+	chkQ := db.Rebind("SELECT amount_paid, status FROM invoices WHERE id = ?", s.usePostgres)
+	if err := s.db.QueryRowContext(ctx, chkQ, invoiceID).Scan(&amountPaid, &status); err == sql.ErrNoRows {
 		return nil, ErrInvoiceNotFound
 	} else if err != nil {
 		return nil, fmt.Errorf("load invoice: %w", err)
 	}
 	if amountPaid > 0 {
 		return nil, ErrInvoicePaid
+	}
+	if models.InvoiceStatus(status) != models.InvoiceStatusDraft {
+		return nil, ErrDocumentNotDraft
 	}
 
 	if req.Currency == "" {
@@ -403,20 +421,20 @@ func (s *Service) UpdateInvoiceBy(ctx context.Context, invoiceID string, req Cre
 		}
 	}
 
-	// L'identité du destinataire suit la fiche tant que le document est un
-	// brouillon, et suit le CONTACT dès qu'il en change.
+	// L'identité du destinataire suit la fiche : on n'est ici que sur un brouillon
+	// (garde ErrDocumentNotDraft plus haut), et elle sera relue puis figée à
+	// l'émission.
 	//
 	// `contact_id` était réécrit ci-dessus sans que l'identité figée le soit :
 	// une facture re-adressée à un autre client partait donc au nom du premier,
 	// le PDF imprimant l'identité figée et non le contact. Vérifié sur la base
 	// avant correction : contact_id changé, recipient_name inchangé.
 	//
-	// Un document déjà émis dont le contact ne change pas n'est PAS touché :
-	// renommer le client ensuite ne doit pas réécrire une pièce envoyée (CO
-	// art. 958f). Une note de crédit garde l'identité de la facture qu'elle
+	// Une pièce envoyée ne passe jamais par ici : renommer le client ensuite ne
+	// la réécrit pas (CO art. 958f), et la re-adresser exige de l'annuler puis de
+	// la réactiver. Une note de crédit garde l'identité de la facture qu'elle
 	// corrige.
-	if followsContact(req.DocumentType) &&
-		(models.InvoiceStatus(previousStatus) == models.InvoiceStatusDraft || previousContactID != req.ContactID) {
+	if followsContact(req.DocumentType) {
 		rcp, err := s.loadRecipient(ctx, tx, req.ContactID)
 		if err != nil {
 			return nil, err

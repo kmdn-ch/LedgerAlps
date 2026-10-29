@@ -606,6 +606,7 @@ export const en: Catalogue = {
   // ─── Modification d'une facture ───
   'nf.factureIntrouvable': 'Invoice not found.',
   'nf.paiementEnregistre': 'This invoice has a recorded payment and can no longer be edited.',
+  'nf.documentEnvoye': 'A sent document can no longer be edited. To correct it, cancel it and reactivate it as a draft, or issue a credit note.',
   'nf.modifierFacture': 'Edit invoice {numero}',
   'nf.modifierOffre': 'Edit quote {numero}',
 

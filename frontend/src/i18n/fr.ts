@@ -650,6 +650,7 @@ export const fr = {
   // ─── Modification d'une facture ───
   'nf.factureIntrouvable': 'Facture introuvable.',
   'nf.paiementEnregistre': 'Cette facture a un paiement enregistré et ne peut plus être modifiée.',
+  'nf.documentEnvoye': 'Un document envoyé ne se modifie plus. Pour le corriger, annulez-le puis réactivez-le en brouillon, ou émettez une note de crédit.',
   'nf.modifierFacture': 'Modifier la facture {numero}',
   'nf.modifierOffre': 'Modifier l’offre {numero}',
 

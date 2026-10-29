@@ -321,7 +321,10 @@ export function InvoiceDetailPage() {
             // téléchargement du PDF, plus bas, restent ouverts à tous — c'est
             // exactement ce qu'une fiduciaire vient chercher.
             <div className="flex items-center gap-2">
-              {peutEcrire && invoice.amount_paid === 0 && (
+              {/* Seul un brouillon se modifie : une pièce envoyée reste celle qui a
+                  été envoyée (CO art. 958f). Pour la corriger : annuler puis
+                  réactiver, ou note de crédit — les deux boutons sont ici. */}
+              {peutEcrire && invoice.status === 'draft' && (
                 <Link
                   to={`/invoices/${invoiceId}/edit`}
                   className="btn-secondary btn-sm flex items-center gap-1.5"

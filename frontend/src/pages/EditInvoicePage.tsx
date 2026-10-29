@@ -116,11 +116,13 @@ export function EditInvoicePage() {
   if (isLoading) return <LoadingSpinner />
   if (loadError || !invoice) return <ErrorBanner message={t('nf.factureIntrouvable')} />
 
-  // Block editing if payment has been recorded
-  if (invoice.amount_paid > 0) {
+  // Seul un brouillon se modifie. Le serveur le refuse de toute façon (409) ;
+  // l'écran le dit avant de laisser remplir un formulaire qui serait refusé —
+  // l'adresse de cette page se tape ou se garde en favori.
+  if (invoice.amount_paid > 0 || invoice.status !== 'draft') {
     return (
       <div className="max-w-2xl mx-auto pt-10">
-        <ErrorBanner message={t('nf.paiementEnregistre')} />
+        <ErrorBanner message={t(invoice.amount_paid > 0 ? 'nf.paiementEnregistre' : 'nf.documentEnvoye')} />
         <button onClick={() => navigate(`/invoices/${invoiceId}`)}
           className="btn-secondary mt-4 flex items-center gap-2">
           <ArrowLeft size={15} /> {t('nf.retourFacture')}

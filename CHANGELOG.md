@@ -7,6 +7,11 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Corrigé
+
+- **Une facture envoyée pouvait être réécrite, et son journal ne suivait pas.** `PATCH /invoices/:id` n'exigeait pas le statut brouillon : seul un paiement enregistré l'arrêtait, et l'écran de détail proposait « Modifier » sur une facture envoyée. Prouvé sur la 1.6.3, journal automatique activé : 1 000 CHF envoyés et comptabilisés, `PATCH` à 5 000 → HTTP 200, la table des factures disait 5 000 (elle alimente la déclaration TVA, les rapports et le PDF réimprimé) pendant que le journal, immuable, disait toujours 1 000. Aucune erreur, aucune réconciliation possible ; la modification était tracée dans la chaîne d'audit, ce qui ne remet rien d'équerre. **Seul un brouillon se modifie désormais**, pour les factures, offres et notes de crédit : le serveur répond 409 de motif `document_not_draft`, message traduit dans les quatre langues, l'écran de détail ne propose plus « Modifier » hors brouillon, et l'adresse directe de modification affiche l'explication au lieu d'un formulaire qui serait refusé. La correction légale reste ouverte et déjà dans l'interface : **Annuler** (qui passe l'extourne) puis **Réactiver** en brouillon, ou **Note de crédit** (CO art. 958f ; LTVA art. 27 al. 4). Les notes et l'échéance d'une pièce envoyée ne font pas exception : l'échéance est ce que le client a lu (audit 7, E-1).
+- **Re-adresser une facture déjà envoyée à un client sans adresse était accepté** — le défaut de M-1, par la porte de la modification. Il disparaît avec la règle ci-dessus : le seul chemin pour changer de destinataire passe désormais par le brouillon, où l'identité est relue puis la règle d'adresse vérifiée à l'envoi (audit 7, M-1 bis).
+
 ## [1.6.3] — 2026-10-27
 
 ### Corrigé

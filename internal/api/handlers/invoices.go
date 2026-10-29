@@ -358,6 +358,10 @@ func (h *InvoicesHandler) UpdateInvoice(c *gin.Context) {
 			// Les refus métier arrivaient ici et sortaient en 500, ce qui les
 			// faisait passer pour une panne alors qu'ils sont une décision.
 			switch {
+			// 409 : la demande est bien formée, elle se heurte à une règle légale
+			// (CO art. 958f) — la pièce envoyée ne se réécrit pas.
+			case errors.Is(err, invoicing.ErrDocumentNotDraft):
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "document_not_draft"})
 			case errors.Is(err, invoicing.ErrCreditExceedsInvoice):
 				c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "credit_exceeds_invoice"})
 			case errors.Is(err, invoicing.ErrVATWithoutNumber):

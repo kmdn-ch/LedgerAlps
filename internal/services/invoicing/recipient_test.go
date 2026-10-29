@@ -55,17 +55,23 @@ func (f *fixture) nouveauContact(t *testing.T, nom, rue, npa, ville string) stri
 	return id
 }
 
-func (f *fixture) modifier(t *testing.T, documentID, contactID string, docType string) {
-	t.Helper()
+// essayerModifier tente une modification et rend l'erreur telle quelle.
+func (f *fixture) essayerModifier(documentID, contactID string, docType string) error {
 	issued := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
-	if _, err := f.svc.UpdateInvoice(context.Background(), documentID, CreateInvoiceRequest{
+	_, err := f.svc.UpdateInvoice(context.Background(), documentID, CreateInvoiceRequest{
 		DocumentType: docType,
 		ContactID:    contactID,
 		IssueDate:    issued,
 		DueDate:      issued.AddDate(0, 0, 30),
 		Currency:     "CHF",
-		Lines:        []LineInput{{Description: "Prestation", Quantity: 1, UnitPrice: 100, Sequence: 1}},
-	}); err != nil {
+		Lines:        []LineInput{{Description: "Prestation modifiée", Quantity: 1, UnitPrice: 5000, Sequence: 1}},
+	})
+	return err
+}
+
+func (f *fixture) modifier(t *testing.T, documentID, contactID string, docType string) {
+	t.Helper()
+	if err := f.essayerModifier(documentID, contactID, docType); err != nil {
 		t.Fatalf("UpdateInvoice: %v", err)
 	}
 }
@@ -241,8 +247,8 @@ func TestUneNoteDeCreditPorteLIdentiteDeLaFactureCorrigee(t *testing.T) {
 
 // ─── Après l'émission : plus rien ne bouge ───────────────────────────────────
 
-// Renommer le client, puis modifier une facture déjà envoyée sans changer de
-// client, ne doit pas réécrire la pièce (CO art. 958f).
+// Renommer le client ne réécrit pas une pièce envoyée (CO art. 958f), et la
+// modifier est refusée : l'identité ne peut donc pas bouger.
 func TestUneFactureEnvoyeeNeSuitPlusLaFiche(t *testing.T) {
 	f := newFixture(t)
 	inv := f.create(t, DocumentTypeInvoice)
@@ -254,28 +260,99 @@ func TestUneFactureEnvoyeeNeSuitPlusLaFiche(t *testing.T) {
 	if _, err := f.db.Exec(`UPDATE contacts SET name = 'Autre Nom SA', address = 'Ailleurs 5', city = 'Sion' WHERE id = ?`, f.contactID); err != nil {
 		t.Fatal(err)
 	}
-	f.modifier(t, inv.ID, f.contactID, DocumentTypeInvoice) // même client
+	if err := f.essayerModifier(inv.ID, f.contactID, DocumentTypeInvoice); !errors.Is(err, ErrDocumentNotDraft) {
+		t.Fatalf("modification d'une pièce envoyée : %v, attendu ErrDocumentNotDraft", err)
+	}
 
 	if apres := f.identite(t, inv.ID); apres != avant {
 		t.Fatalf("la pièce envoyée a été réécrite : %+v puis %+v", avant, apres)
 	}
 }
 
-// Mais re-adresser une facture envoyée à un autre client change son
-// destinataire, et l'identité doit le suivre : sans quoi la pièce nommerait
-// quelqu'un d'autre que celui qui la reçoit.
-func TestRedresserUneFactureEnvoyeeChangeSonDestinataire(t *testing.T) {
+// Re-adresser une facture envoyée passe par l'annulation puis la réactivation en
+// brouillon — le chemin légal. L'identité suit alors le nouveau client, et
+// l'envoi suivant la fige : la pièce ne nomme jamais quelqu'un d'autre que celui
+// qui la reçoit.
+func TestRedresserUneFactureEnvoyeePasseParLaReactivation(t *testing.T) {
 	f := newFixture(t)
+	ctx := context.Background()
 	inv := f.create(t, DocumentTypeInvoice)
-	if err := f.svc.Transition(context.Background(), inv.ID, models.InvoiceStatusSent); err != nil {
+	if err := f.svc.Transition(ctx, inv.ID, models.InvoiceStatusSent); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	autre := f.nouveauContact(t, "Autre Client SA", "Rue B 2", "2000", "Neuchâtel")
 
+	if err := f.essayerModifier(inv.ID, autre, DocumentTypeInvoice); !errors.Is(err, ErrDocumentNotDraft) {
+		t.Fatalf("avant réactivation : %v, attendu ErrDocumentNotDraft", err)
+	}
+	for _, to := range []models.InvoiceStatus{models.InvoiceStatusCancelled, models.InvoiceStatusDraft} {
+		if err := f.svc.Transition(ctx, inv.ID, to); err != nil {
+			t.Fatalf("transition vers %s: %v", to, err)
+		}
+	}
 	f.modifier(t, inv.ID, autre, DocumentTypeInvoice)
+	if err := f.svc.Transition(ctx, inv.ID, models.InvoiceStatusSent); err != nil {
+		t.Fatalf("réémission: %v", err)
+	}
 
-	if got := f.identite(t, inv.ID); got.nom != "Autre Client SA" {
-		t.Fatalf("identité = %+v : la facture re-adressée nomme encore l'ancien client", got)
+	if got := f.identite(t, inv.ID); got.nom != "Autre Client SA" || got.ville != "Neuchâtel" {
+		t.Fatalf("identité = %+v : la facture réémise nomme encore l'ancien client", got)
+	}
+}
+
+// Une facture envoyée ne change ni de montant ni de lignes. Sonde de l'audit 7 :
+// 1 000 CHF envoyés et comptabilisés passaient à 5 000 en HTTP 200 pendant que le
+// journal, immuable, disait toujours 1 000.
+func TestUnDocumentEnvoyeNeSeModifiePas(t *testing.T) {
+	for _, docType := range []string{DocumentTypeInvoice, DocumentTypeQuote, DocumentTypeCreditNote} {
+		t.Run(docType, func(t *testing.T) {
+			f := newFixture(t)
+			var id string
+			if docType == DocumentTypeCreditNote {
+				fac := f.create(t, DocumentTypeInvoice)
+				if err := f.svc.Transition(context.Background(), fac.ID, models.InvoiceStatusSent); err != nil {
+					t.Fatal(err)
+				}
+				note, err := f.svc.CreateCreditNote(context.Background(), fac.ID, f.userID, CreateCreditNoteRequest{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				id = note.ID
+			} else {
+				id = f.create(t, docType).ID
+			}
+			if err := f.svc.Transition(context.Background(), id, models.InvoiceStatusSent); err != nil {
+				t.Fatalf("send: %v", err)
+			}
+			var avant float64
+			if err := f.db.QueryRow(`SELECT total_amount FROM invoices WHERE id = ?`, id).Scan(&avant); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := f.essayerModifier(id, f.contactID, docType); !errors.Is(err, ErrDocumentNotDraft) {
+				t.Fatalf("modification après envoi : %v, attendu ErrDocumentNotDraft", err)
+			}
+
+			var apres float64
+			var lignes int
+			f.db.QueryRow(`SELECT total_amount FROM invoices WHERE id = ?`, id).Scan(&apres)
+			f.db.QueryRow(`SELECT COUNT(*) FROM invoice_lines WHERE invoice_id = ?`, id).Scan(&lignes)
+			if apres != avant {
+				t.Fatalf("total %.2f -> %.2f malgré le refus", avant, apres)
+			}
+			if lignes == 0 {
+				t.Fatal("les lignes ont été supprimées malgré le refus")
+			}
+		})
+	}
+}
+
+// Un brouillon reste modifiable : la règle ne ferme que ce qui a été envoyé.
+func TestUnBrouillonResteModifiable(t *testing.T) {
+	f := newFixture(t)
+	inv := f.create(t, DocumentTypeInvoice)
+	if err := f.essayerModifier(inv.ID, f.contactID, DocumentTypeInvoice); err != nil {
+		t.Fatalf("modification d'un brouillon : %v", err)
 	}
 }
 

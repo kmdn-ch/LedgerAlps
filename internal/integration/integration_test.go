@@ -108,6 +108,7 @@ func newTestServer(t *testing.T) (*gin.Engine, *sql.DB, *config.Config) {
 	api.GET("/invoices", ih.ListInvoices)
 	api.POST("/invoices", ih.CreateInvoice)
 	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
+	api.PATCH("/invoices/:id", ih.UpdateInvoice)
 
 	return r, database, cfg
 }
@@ -707,5 +708,79 @@ func TestEnvoiRefuseUnClientSansAdresse(t *testing.T) {
 	}
 	if ville != "Fribourg" {
 		t.Errorf("identité figée : ville = %q, attendu Fribourg (la fiche relue à l'émission)", ville)
+	}
+}
+
+// ─── Une pièce envoyée ne se réécrit pas (audit 7, E-1) ──────────────────────
+
+// Sonde de l'audit : une facture de 1 000 CHF envoyée et comptabilisée passait à
+// 5 000 par un PATCH en HTTP 200, la table des factures — source de la
+// déclaration TVA — disant 5 000 pendant que le journal, immuable, disait 1 000.
+// Le serveur refuse désormais, en 409 de motif stable et dans la langue demandée,
+// sans rien changer ; un brouillon reste modifiable.
+func TestUneFactureEnvoyeeRefuseLaModification(t *testing.T) {
+	r, database, _ := newTestServer(t)
+	token := loginAdmin(t, r)
+	if res, _ := database.Exec(`UPDATE company_settings SET auto_post_invoices = 1`); res != nil {
+		if n, _ := res.RowsAffected(); n == 0 {
+			database.Exec(`INSERT INTO company_settings (id, company_name, auto_post_invoices) VALUES ('cs','Test SA',1)`)
+		}
+	}
+	cw := doJSON(t, r, "POST", "/api/v1/contacts", mustJSON(t, map[string]any{
+		"contact_type": "customer", "name": "Client AG", "address": "Rue 1",
+		"postal_code": "8001", "city": "Zurich", "country": "CH",
+	}), token)
+	cid, _ := parseBody(t, cw)["id"].(string)
+	corps := func(prix float64) string {
+		return mustJSON(t, map[string]any{
+			"contact_id": cid, "issue_date": time.Now().Format("2006-01-02"),
+			"due_date": time.Now().AddDate(0, 0, 30).Format("2006-01-02"),
+			"currency": "CHF", "vat_rate": 0.0,
+			"lines": []map[string]any{{"description": "Service", "quantity": 1.0, "unit_price": prix, "vat_rate": 0.0}},
+		})
+	}
+	iw := doJSON(t, r, "POST", "/api/v1/invoices", corps(1000), token)
+	id, _ := parseBody(t, iw)["id"].(string)
+
+	// Brouillon : modifiable.
+	assertStatus(t, doJSON(t, r, "PATCH", "/api/v1/invoices/"+id, corps(1200), token), http.StatusOK)
+
+	assertStatus(t, doJSON(t, r, "POST", "/api/v1/invoices/"+id+"/transition", `{"status":"sent"}`, token), http.StatusOK)
+
+	modifier := func(langue string) *httptest.ResponseRecorder {
+		req, err := http.NewRequest("PATCH", "/api/v1/invoices/"+id, strings.NewReader(corps(5000)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		if langue != "" {
+			req.Header.Set("Accept-Language", langue)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	w := modifier("")
+	assertStatus(t, w, http.StatusConflict)
+	body := parseBody(t, w)
+	if body["reason"] != "document_not_draft" {
+		t.Errorf("reason = %v, attendu document_not_draft", body["reason"])
+	}
+	if msg, _ := parseBody(t, modifier("de"))["error"].(string); !strings.Contains(msg, "versandtes Dokument") {
+		t.Errorf("message allemand = %q", msg)
+	}
+
+	// Rien n'a bougé : la facture dit toujours ce que le journal dit.
+	var total, debits float64
+	if err := database.QueryRow(`SELECT total_amount FROM invoices WHERE id = ?`, id).Scan(&total); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow(`SELECT COALESCE(SUM(debit_amount),0) FROM journal_lines`).Scan(&debits); err != nil {
+		t.Fatal(err)
+	}
+	if total != 1200 || debits != 1200 {
+		t.Errorf("facture %.2f, journal %.2f : attendu 1200 des deux côtés", total, debits)
 	}
 }

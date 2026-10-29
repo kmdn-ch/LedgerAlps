@@ -198,7 +198,7 @@ est le rôle, pas un filtre par créateur.
 | GET | `/invoices` | auth | Liste paginée. Filtres : `status` (dont `overdue`, déduit), `contact_id`, `document_type`, `from`/`to` sur la date d'émission, `page`, `page_size` |
 | GET | `/invoices/:id` | auth | Détail |
 | POST | `/invoices` | auth | Créer |
-| PATCH | `/invoices/:id` | auth | Modifier |
+| PATCH | `/invoices/:id` | auth | Modifier — **brouillons uniquement** : `409` de motif `document_not_draft` dès que le document est envoyé, annulé ou payé |
 | POST | `/invoices/:id/transition` | auth | Changer de statut |
 | POST | `/invoices/:id/convert` | auth | Convertir une offre en facture |
 | POST | `/invoices/:id/outcome` | auth | Enregistrer l'issue d'une offre (`refused`, `expired`) |
@@ -247,8 +247,18 @@ d'erreur est traduit selon `Accept-Language`.
 
 Tant que le document est un brouillon, son identité suit la fiche : elle est
 relevée à la création, relue à chaque `PATCH` et à l'envoi. Une fois envoyé, elle
-ne bouge plus, sauf si le document est re-adressé à un autre `contact_id`. Une
-note de crédit recopie l'identité de la facture qu'elle corrige.
+ne bouge plus. Une note de crédit recopie l'identité de la facture qu'elle
+corrige.
+
+**Une pièce envoyée ne se modifie pas.** `PATCH /invoices/:id` répond `409`
+(`reason: "document_not_draft"`, message traduit selon `Accept-Language`) pour
+tout document qui n'est plus un brouillon, quel que soit son type : changer le
+montant d'une facture envoyée et comptabilisée laissait le journal, immuable, à
+l'ancien montant, alors que la déclaration TVA lit la table des factures
+(CO art. 958f). La correction légale est l'annulation (`status: "cancelled"`,
+qui passe l'écriture d'extourne) puis la réactivation en brouillon
+(`status: "draft"`), ou une note de crédit (`POST /invoices/:id/credit-note`,
+LTVA art. 27 al. 4).
 
 ### Convertir une offre en facture
 
