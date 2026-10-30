@@ -401,6 +401,12 @@ func (h *InvoicesHandler) TransitionInvoice(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "recipient_address_incomplete"})
 			return
 		}
+		// Une facture déjà encaissée, en tout ou partie, ne s'annule pas : la
+		// correction est la note de crédit.
+		if errors.Is(err, invoicing.ErrInvoiceHasPayments) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "invoice_has_payments"})
+			return
+		}
 		switch err {
 		case invoicing.ErrInvoiceNotFound:
 			refus(c, http.StatusNotFound, err)

@@ -480,12 +480,13 @@ func (s *Service) TransitionBy(ctx context.Context, invoiceID string, to models.
 	// Load current status, invoice_number, journal_entry_id, created_by_id, and issue_date.
 	getQ := db.Rebind(`
 		SELECT status, invoice_number, COALESCE(journal_entry_id, ''), created_by_id, issue_date,
-		       COALESCE(document_type, 'invoice'), COALESCE(contact_id, '')
+		       COALESCE(document_type, 'invoice'), COALESCE(contact_id, ''), amount_paid
 		FROM invoices WHERE id = ?`, s.usePostgres)
 	var current, invoiceNumber, journalEntryID, createdByID, documentType, contactID string
 	var issueDate time.Time
+	var amountPaid float64
 	if err := s.db.QueryRowContext(ctx, getQ, invoiceID).Scan(
-		&current, &invoiceNumber, &journalEntryID, &createdByID, &issueDate, &documentType, &contactID,
+		&current, &invoiceNumber, &journalEntryID, &createdByID, &issueDate, &documentType, &contactID, &amountPaid,
 	); err == sql.ErrNoRows {
 		return ErrInvoiceNotFound
 	} else if err != nil {
@@ -495,6 +496,28 @@ func (s *Service) TransitionBy(ctx context.Context, invoiceID string, to models.
 	allowed := transitionsFor(documentType)[models.InvoiceStatus(current)]
 	for _, a := range allowed {
 		if a == to {
+			// Annuler une facture déjà encaissée, en tout ou partie, extournerait
+			// l'écriture d'émission en laissant les encaissements : voir
+			// ErrInvoiceHasPayments.
+			if models.InvoiceStatus(current) == models.InvoiceStatusSent &&
+				to == models.InvoiceStatusCancelled && amountPaid > soldeTolerance {
+				return ErrInvoiceHasPayments
+			}
+
+			// « Marquer payée » encaisse le solde restant : le statut ne change
+			// pas seul. Il solde la créance au journal, comme tout encaissement
+			// (voir payments.go). RecordPayment pose lui-même le statut et les
+			// traces.
+			if models.InvoiceStatus(current) == models.InvoiceStatusSent && to == models.InvoiceStatusPaid {
+				settled, err := s.settleBalance(ctx, actor, invoiceID)
+				if err != nil {
+					return err
+				}
+				if settled {
+					return nil
+				}
+			}
+
 			// Apply the status transition.
 			if models.InvoiceStatus(current) == models.InvoiceStatusDraft && to == models.InvoiceStatusSent {
 				// L'émission fige l'identité du destinataire et vérifie son adresse.

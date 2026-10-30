@@ -110,6 +110,10 @@ func newTestServer(t *testing.T) (*gin.Engine, *sql.DB, *config.Config) {
 	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
 	api.PATCH("/invoices/:id", ih.UpdateInvoice)
 
+	ph := handlers.NewPaymentsHandler(database, false, accountingSvc)
+	api.POST("/payments", ph.CreatePayment)
+	api.GET("/payments", ph.ListPayments)
+
 	return r, database, cfg
 }
 
@@ -782,5 +786,135 @@ func TestUneFactureEnvoyeeRefuseLaModification(t *testing.T) {
 	}
 	if total != 1200 || debits != 1200 {
 		t.Errorf("facture %.2f, journal %.2f : attendu 1200 des deux côtés", total, debits)
+	}
+}
+
+// ─── Les encaissements entrent dans les livres (audit brutal, MET-01) ────────
+
+// Le défaut du rapport, rejoué par HTTP : deux versements de 600 et 400 sur une
+// facture de 1 000 ne laissaient ni écriture, ni cumul, et une facture « envoyée »
+// à vie. « Marquer payée » ne passait rien non plus, alors que l'écran promettait
+// « passé au journal (banque / débiteurs) ».
+func TestLesEncaissementsSoldentLaCreanceAuJournal(t *testing.T) {
+	r, database, _ := newTestServer(t)
+	token := loginAdmin(t, r)
+	if res, _ := database.Exec(`UPDATE company_settings SET auto_post_invoices = 1`); res != nil {
+		if n, _ := res.RowsAffected(); n == 0 {
+			database.Exec(`INSERT INTO company_settings (id, company_name, auto_post_invoices) VALUES ('cs','Test SA',1)`)
+		}
+	}
+	cw := doJSON(t, r, "POST", "/api/v1/contacts", mustJSON(t, map[string]any{
+		"contact_type": "customer", "name": "Client AG", "address": "Rue 1",
+		"postal_code": "8001", "city": "Zurich", "country": "CH",
+	}), token)
+	cid, _ := parseBody(t, cw)["id"].(string)
+
+	jour := time.Now().Format("2006-01-02")
+	envoyee := func() string {
+		iw := doJSON(t, r, "POST", "/api/v1/invoices", mustJSON(t, map[string]any{
+			"contact_id": cid, "issue_date": jour,
+			"due_date": time.Now().AddDate(0, 0, 30).Format("2006-01-02"),
+			"currency": "CHF", "vat_rate": 0.0,
+			"lines": []map[string]any{{"description": "Service", "quantity": 1.0, "unit_price": 1000.0, "vat_rate": 0.0}},
+		}), token)
+		id, _ := parseBody(t, iw)["id"].(string)
+		assertStatus(t, doJSON(t, r, "POST", "/api/v1/invoices/"+id+"/transition", `{"status":"sent"}`, token), http.StatusOK)
+		return id
+	}
+	creance := func() float64 {
+		var d, c float64
+		if err := database.QueryRow(`
+			SELECT COALESCE(SUM(l.debit_amount),0), COALESCE(SUM(l.credit_amount),0)
+			FROM journal_lines l JOIN accounts a ON a.id = l.account_id
+			JOIN journal_entries e ON e.id = l.entry_id
+			WHERE a.code = '1100' AND e.status = 'posted'`).Scan(&d, &c); err != nil {
+			t.Fatal(err)
+		}
+		return d - c
+	}
+	verser := func(id string, montant float64, langue string) *httptest.ResponseRecorder {
+		req, err := http.NewRequest("POST", "/api/v1/payments", strings.NewReader(mustJSON(t, map[string]any{
+			"invoice_id": id, "amount": montant, "payment_date": jour, "method": "bank_transfer",
+		})))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		if langue != "" {
+			req.Header.Set("Accept-Language", langue)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	a := envoyee()
+	if got := creance(); got != 1000 {
+		t.Fatalf("créance après émission = %.2f, attendu 1000", got)
+	}
+
+	w := verser(a, 600, "")
+	assertStatus(t, w, http.StatusCreated)
+	b := parseBody(t, w)
+	if b["invoice_status"] != "sent" || b["balance"] != 400.0 || b["journal_posted"] != true {
+		t.Fatalf("après 600 : %v, attendu sent / solde 400 / journal passé", b)
+	}
+	if got := creance(); got != 400 {
+		t.Fatalf("créance après 600 = %.2f, attendu 400", got)
+	}
+
+	// Au-dessus du solde : refusé en 409 de motif stable, dans la langue demandée.
+	w = verser(a, 700, "de")
+	assertStatus(t, w, http.StatusConflict)
+	if body := parseBody(t, w); body["reason"] != "payment_exceeds_balance" ||
+		!strings.Contains(body["error"].(string), "Restbetrag") {
+		t.Fatalf("trop-perçu : %v", body)
+	}
+	if got := creance(); got != 400 {
+		t.Fatalf("créance après un refus = %.2f, attendu 400", got)
+	}
+
+	w = verser(a, 400, "")
+	assertStatus(t, w, http.StatusCreated)
+	if b := parseBody(t, w); b["invoice_status"] != "paid" || b["balance"] != 0.0 {
+		t.Fatalf("après 600+400 : %v, attendu paid / solde 0", b)
+	}
+	if got := creance(); got != 0 {
+		t.Fatalf("créance après 600+400 = %.2f, attendu 0", got)
+	}
+
+	// Payée : plus de versement.
+	w = verser(a, 1, "")
+	assertStatus(t, w, http.StatusConflict)
+	if parseBody(t, w)["reason"] != "invoice_not_payable" {
+		t.Fatalf("versement sur une facture payée : %s", w.Body.String())
+	}
+
+	lw := doJSON(t, r, "GET", "/api/v1/payments?invoice_id="+a, "", token)
+	assertStatus(t, lw, http.StatusOK)
+	if total, _ := parseBody(t, lw)["total"].(float64); total != 2 {
+		t.Fatalf("%v paiement(s) listés, attendu 2", total)
+	}
+
+	// « Marquer payée » par l'interface : même chemin, même effet sur la créance.
+	avant := creance()
+	c := envoyee()
+	assertStatus(t, doJSON(t, r, "POST", "/api/v1/invoices/"+c+"/transition", `{"status":"paid"}`, token), http.StatusOK)
+	if got := creance(); got != avant {
+		t.Fatalf("créance après émission puis « Marquer payée » = %.2f, attendu %.2f : la créance doit être soldée", got, avant)
+	}
+	var paye float64
+	if err := database.QueryRow(`SELECT amount_paid FROM invoices WHERE id = ?`, c).Scan(&paye); err != nil || paye != 1000 {
+		t.Fatalf("amount_paid = %.2f (%v), attendu 1000", paye, err)
+	}
+
+	// Une facture encaissée en partie ne s'annule pas : la note de crédit existe pour ça.
+	d := envoyee()
+	assertStatus(t, verser(d, 100, ""), http.StatusCreated)
+	w = doJSON(t, r, "POST", "/api/v1/invoices/"+d+"/transition", `{"status":"cancelled"}`, token)
+	assertStatus(t, w, http.StatusConflict)
+	if parseBody(t, w)["reason"] != "invoice_has_payments" {
+		t.Fatalf("annulation d'une facture encaissée : %s", w.Body.String())
 	}
 }

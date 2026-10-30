@@ -1480,6 +1480,36 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Il conto %s è assente dal piano dei conti: l’acquisto non può essere contabilizzato",
 		EN: "Account %s is missing from the chart of accounts: the purchase cannot be posted",
 	},
+	"le compte %s est absent du plan comptable : l'encaissement ne peut pas être comptabilisé": {
+		DE: "Konto %s fehlt im Kontenplan: der Zahlungseingang kann nicht verbucht werden",
+		IT: "Il conto %s è assente dal piano dei conti: l’incasso non può essere contabilizzato",
+		EN: "Account %s is missing from the chart of accounts: the receipt cannot be posted",
+	},
+	"le compte %s est absent du plan comptable : la facture ne peut pas être comptabilisée": {
+		DE: "Konto %s fehlt im Kontenplan: die Rechnung kann nicht verbucht werden",
+		IT: "Il conto %s è assente dal piano dei conti: la fattura non può essere contabilizzata",
+		EN: "Account %s is missing from the chart of accounts: the invoice cannot be posted",
+	},
+	"seule une facture envoyée accepte un paiement": {
+		DE: "Nur eine versendete Rechnung nimmt eine Zahlung entgegen",
+		IT: "Solo una fattura inviata accetta un pagamento",
+		EN: "Only a sent invoice accepts a payment",
+	},
+	"le paiement dépasse le solde restant de la facture": {
+		DE: "Die Zahlung übersteigt den offenen Restbetrag der Rechnung",
+		IT: "Il pagamento supera il saldo residuo della fattura",
+		EN: "The payment exceeds the invoice’s remaining balance",
+	},
+	"une facture déjà encaissée, en tout ou partie, ne s'annule pas : émettez une note de crédit": {
+		DE: "Eine ganz oder teilweise bezahlte Rechnung wird nicht storniert: Stellen Sie eine Gutschrift aus",
+		IT: "Una fattura già incassata, in tutto o in parte, non si annulla: emettete una nota di credito",
+		EN: "An invoice already paid, in whole or in part, cannot be cancelled: issue a credit note",
+	},
+	"le montant d'un paiement doit être positif": {
+		DE: "Der Betrag einer Zahlung muss positiv sein",
+		IT: "L’importo di un pagamento deve essere positivo",
+		EN: "A payment amount must be positive",
+	},
 	"le compte %s est désactivé": {
 		DE: "Konto %s ist deaktiviert",
 		IT: "Il conto %s è disattivato",

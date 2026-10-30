@@ -3,14 +3,16 @@ package handlers
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
+	"github.com/kmdn-ch/ledgeralps/internal/services/invoicing"
 )
 
 // ─── PaymentsHandler ──────────────────────────────────────────────────────────
@@ -18,11 +20,14 @@ import (
 type PaymentsHandler struct {
 	db          *sql.DB
 	usePostgres bool
-	acctSvc     *accounting.Service
+	svc         *invoicing.Service
 }
 
 func NewPaymentsHandler(database *sql.DB, usePostgres bool, acctSvc *accounting.Service) *PaymentsHandler {
-	return &PaymentsHandler{db: database, usePostgres: usePostgres, acctSvc: acctSvc}
+	return &PaymentsHandler{
+		db: database, usePostgres: usePostgres,
+		svc: invoicing.NewWithAccounting(database, usePostgres, acctSvc),
+	}
 }
 
 // ─── POST /api/v1/payments ────────────────────────────────────────────────────
@@ -33,12 +38,15 @@ type createPaymentRequest struct {
 	PaymentDate   string  `json:"payment_date"   binding:"required"` // YYYY-MM-DD
 	Method        string  `json:"method"         binding:"required,oneof=bank_transfer cash card check other"`
 	Reference     *string `json:"reference"`
-	BankAccountID *string `json:"bank_account_id"` // optional override; defaults to account code 1020
+	BankAccountID *string `json:"bank_account_id"` // optional override; defaults to the cash or bank account
 }
 
 // CreatePayment records a payment receipt against an invoice.
-// If amount >= invoice total, the invoice is transitioned to 'paid' and a
-// journal entry (Dr Bank/Cash → Cr Accounts Receivable) is created and posted.
+//
+// Tout le travail est dans invoicing.RecordPayment, le même chemin que « Marquer
+// payée » : chaque versement — partiel ou non — est plafonné au solde, cumulé,
+// passé au journal (banque ou caisse / débiteurs) et solde la facture quand le
+// cumul atteint le total.
 func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 	var req createPaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -52,199 +60,59 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 		return
 	}
 
-	userID := currentUserID(c)
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	actor := invoicing.Actor{IP: c.ClientIP()}
+	if claims := mw.GetClaims(c); claims != nil {
+		actor.UserID = claims.UserID
+	}
+	bankAccountID := ""
+	if req.BankAccountID != nil {
+		bankAccountID = *req.BankAccountID
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 	defer cancel()
 
-	// 1. Load invoice — must exist and be in status 'sent'.
-	invQ := db.Rebind(`
-		SELECT id, total_amount, status, contact_id, invoice_number
-		FROM invoices WHERE id = ?`, h.usePostgres)
-	var inv struct {
-		ID            string
-		TotalAmount   float64
-		Status        string
-		ContactID     string
-		InvoiceNumber string
-	}
-	if err := h.db.QueryRowContext(ctx, invQ, req.InvoiceID).Scan(
-		&inv.ID, &inv.TotalAmount, &inv.Status, &inv.ContactID, &inv.InvoiceNumber,
-	); err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "facture introuvable"})
-		return
-	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
-		return
-	}
-	if inv.Status != string(models.InvoiceStatusSent) {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{
-			"error": fmt.Sprintf("invoice is in status '%s'; only 'sent' invoices accept payments", inv.Status),
-		})
-		return
-	}
-
-	// 2. Resolve bank/cash account.
-	//    If bank_account_id is supplied use it directly; otherwise look up code 1020.
-	var bankAccountID string
-	if req.BankAccountID != nil && *req.BankAccountID != "" {
-		// Verify the provided account ID exists and is an asset account.
-		baQ := db.Rebind(`SELECT id FROM accounts WHERE id = ? AND account_type = 'asset' AND is_active = 1`, h.usePostgres)
-		if err := h.db.QueryRowContext(ctx, baQ, *req.BankAccountID).Scan(&bankAccountID); err == sql.ErrNoRows {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "le compte bancaire indiqué est introuvable ou n'est pas un compte d'actif actif"})
-			return
-		} else if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
-			return
-		}
-	} else {
-		// Default: Banque compte courant (code 1020).
-		defaultBankQ := db.Rebind(`SELECT id FROM accounts WHERE code = '1020' AND is_active = 1 LIMIT 1`, h.usePostgres)
-		if err := h.db.QueryRowContext(ctx, defaultBankQ).Scan(&bankAccountID); err == sql.ErrNoRows {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "le compte bancaire par défaut (1020) est absent du plan comptable : indiquez explicitement le compte à débiter"})
-			return
-		} else if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
-			return
-		}
-	}
-
-	// 3. Resolve Accounts Receivable account (code 1100 — Débiteurs suisses).
-	var arAccountID string
-	arQ := db.Rebind(`SELECT id FROM accounts WHERE code = '1100' AND is_active = 1 LIMIT 1`, h.usePostgres)
-	if err := h.db.QueryRowContext(ctx, arQ).Scan(&arAccountID); err == sql.ErrNoRows {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "le compte clients (1100) est absent du plan comptable"})
-		return
-	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
-		return
-	}
-
-	// 4. Insert payment record (outside transaction so we can use the ID in the JE description).
-	paymentID := db.NewID()
-	now := time.Now()
-
-	insertPayQ := db.Rebind(`
-		INSERT INTO payments (id, invoice_id, amount, payment_date, method, reference, created_by_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, h.usePostgres)
-	if _, err := h.db.ExecContext(ctx, insertPayQ,
-		paymentID, req.InvoiceID, req.Amount,
-		paymentDate.Format("2006-01-02"),
-		req.Method, req.Reference,
-		userID, now, now,
-	); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "le paiement n'a pas pu être enregistré"})
-		return
-	}
-
-	payment := models.Payment{
-		ID:          paymentID,
-		InvoiceID:   req.InvoiceID,
-		Amount:      req.Amount,
-		PaymentDate: paymentDate,
-		Method:      models.PaymentMethod(req.Method),
-		Reference:   req.Reference,
-		CreatedByID: userID,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-
-	// Le paiement est enregistre : il entre dans la piste d'audit AVANT le
-	// branchement, pour que la trace existe qu'il solde la facture ou non.
-	//
-	// ActionPaymentRecorded etait declaree depuis longtemps et n'etait ecrite
-	// nulle part : encaisser de l'argent ne laissait aucun maillon, alors que
-	// c'est l'action qui change le solde d'un client.
-	trace(c, h.db, h.usePostgres, accounting.TablePayments,
-		accounting.ActionPaymentRecorded, paymentID, accounting.Creation(map[string]any{
-			"invoice_id":   req.InvoiceID,
-			"amount":       req.Amount,
-			"payment_date": req.PaymentDate,
-			"method":       req.Method,
-			"reference":    req.Reference,
-		}))
-
-	// 5. If payment >= invoice total: create + post journal entry and mark invoice paid.
-	if req.Amount >= inv.TotalAmount {
-		debit := req.Amount
-		credit := req.Amount
-
-		entry, err := h.acctSvc.CreateEntry(ctx, userID, accounting.CreateEntryRequest{
-			Date: paymentDate,
-			Description: fmt.Sprintf("Payment received — invoice %s (payment %s)",
-				inv.InvoiceNumber, paymentID),
-			Lines: []accounting.LineInput{
-				{
-					AccountID:   bankAccountID,
-					DebitAmount: &debit,
-					Description: fmt.Sprintf("Bank receipt — %s %s", req.Method, safeString(req.Reference)),
-					Sequence:    1,
-				},
-				{
-					AccountID:    arAccountID,
-					CreditAmount: &credit,
-					Description:  fmt.Sprintf("Clear A/R — invoice %s", inv.InvoiceNumber),
-					Sequence:     2,
-				},
-			},
-		})
-		if err != nil {
-			// Payment is already inserted; return a partial success with a warning.
-			c.JSON(http.StatusCreated, gin.H{
-				"payment": payment,
-				"warning": fmt.Sprintf("payment recorded but journal entry creation failed: %v", err),
-			})
-			return
-		}
-
-		// Post the journal entry immediately.
-		if err := h.acctSvc.PostEntry(ctx, userID, entry.ID, c.ClientIP()); err != nil {
-			c.JSON(http.StatusCreated, gin.H{
-				"payment": payment,
-				"warning": fmt.Sprintf("payment recorded, journal entry %s created but could not be posted: %v", entry.ID, err),
-			})
-			return
-		}
-
-		// Link journal entry to payment.
-		linkPayQ := db.Rebind(`UPDATE payments SET journal_entry_id = ?, updated_at = ? WHERE id = ?`, h.usePostgres)
-		if _, err := h.db.ExecContext(ctx, linkPayQ, entry.ID, time.Now(), paymentID); err != nil {
-			// Non-fatal; log and continue.
-			_ = err
-		}
-		payment.JournalEntryID = &entry.ID
-
-		// Transition invoice to paid.
-		paidQ := db.Rebind(`UPDATE invoices SET status = 'paid', updated_at = ? WHERE id = ?`, h.usePostgres)
-		if _, err := h.db.ExecContext(ctx, paidQ, time.Now(), req.InvoiceID); err != nil {
-			c.JSON(http.StatusCreated, gin.H{
-				"payment":          payment,
-				"journal_entry_id": entry.ID,
-				"warning":          fmt.Sprintf("payment and journal entry recorded but invoice status update failed: %v", err),
-			})
-			return
-		}
-
-		c.JSON(http.StatusCreated, gin.H{
-			"payment":          payment,
-			"journal_entry_id": entry.ID,
-			"invoice_status":   "paid",
-		})
-		return
-	}
-
-	// Partial payment — payment recorded, no automatic journal entry or status change.
-	c.JSON(http.StatusCreated, gin.H{
-		"payment": payment,
-		"note":    "partial payment recorded; invoice remains in 'sent' status until fully paid",
+	res, err := h.svc.RecordPayment(ctx, actor, invoicing.PaymentRequest{
+		InvoiceID:     req.InvoiceID,
+		Amount:        req.Amount,
+		Date:          paymentDate,
+		Method:        req.Method,
+		Reference:     req.Reference,
+		BankAccountID: bankAccountID,
 	})
-}
-
-// safeString dereferences a *string or returns "".
-func safeString(s *string) string {
-	if s == nil {
-		return ""
+	if err != nil {
+		var missing invoicing.ErrPaymentAccountMissing
+		switch {
+		case errors.Is(err, invoicing.ErrInvoiceNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		// 409 : la demande est bien formée, elle se heurte à l'état de la facture.
+		// Le motif stable laisse l'interface expliquer au lieu d'échouer en général.
+		case errors.Is(err, invoicing.ErrInvoiceNotPayable):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "invoice_not_payable"})
+		case errors.Is(err, invoicing.ErrPaymentExceedsBalance):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "payment_exceeds_balance"})
+		case errors.As(err, &missing):
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		default:
+			refus(c, http.StatusUnprocessableEntity, err)
+		}
+		return
 	}
-	return *s
+
+	body := gin.H{
+		"payment":        res.Payment,
+		"invoice_status": string(res.Status),
+		"amount_paid":    res.AmountPaid,
+		"balance":        res.Balance,
+		// Faux quand l'émission de la facture n'a pas été comptabilisée : la
+		// comptabilité de cette installation est tenue à la main, et passer
+		// l'encaissement seul porterait 1100 au crédit sans débit.
+		"journal_posted": res.JournalEntryID != "",
+	}
+	if res.JournalEntryID != "" {
+		body["journal_entry_id"] = res.JournalEntryID
+	}
+	c.JSON(http.StatusCreated, body)
 }
 
 // ─── GET /api/v1/payments ─────────────────────────────────────────────────────

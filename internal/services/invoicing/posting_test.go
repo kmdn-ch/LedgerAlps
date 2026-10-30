@@ -3,6 +3,7 @@ package invoicing
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -397,15 +398,15 @@ func TestUneAnnulationSeuleConserveLeLienComptable(t *testing.T) {
 	}
 }
 
-// Cas limite : une facture PARTIELLEMENT PAYÉE, annulée puis rouverte.
+// Cas limite : une facture PARTIELLEMENT PAYÉE ne s'annule plus.
 //
-// `TransitionBy` ne garde pas sur `amount_paid` (seul `UpdateInvoiceBy` le
-// fait), donc ce chemin est atteignable. Avant le correctif, le renvoi ne
-// produisait aucune écriture : les livres montraient un produit nul alors que
-// la facture était « envoyée » pour 1'000 avec 400 encaissés — un état que
-// personne ne peut expliquer. Le correctif rétablit la créance à l'émission,
-// ce qui redonne des livres cohérents avec le document.
-func TestUneFacturePartiellementPayeeRouverteEstRecomptabilisee(t *testing.T) {
+// `TransitionBy` ne gardait pas sur `amount_paid`, donc annuler puis rouvrir une
+// facture déjà encaissée en partie était atteignable — et laissait des livres
+// que personne ne pouvait expliquer (l'extourne annulait la créance, les
+// encaissements restaient). Les encaissements sont maintenant de vrais
+// mouvements : annuler extournerait l'émission en laissant 1100 déséquilibré.
+// Le refus ferme le chemin ; la correction prévue est la note de crédit.
+func TestUneFacturePartiellementPayeeNeSAnnulePas(t *testing.T) {
 	s, database, contactID := postingService(t, true)
 	ctx := context.Background()
 	actor := Actor{UserID: "u1", IP: "127.0.0.1"}
@@ -414,30 +415,23 @@ func TestUneFacturePartiellementPayeeRouverteEstRecomptabilisee(t *testing.T) {
 	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusSent, actor); err != nil {
 		t.Fatalf("émission: %v", err)
 	}
-	// Un encaissement partiel a eu lieu. On pose seulement le montant : le
-	// mouvement de trésorerie appartient au service des paiements, pas ici.
-	if _, err := database.Exec(`UPDATE invoices SET amount_paid = 400 WHERE id = ?`, invID); err != nil {
-		t.Fatal(err)
+	if _, err := s.RecordPayment(ctx, actor, PaymentRequest{
+		InvoiceID: invID, Amount: 400, Date: time.Now(), Method: "bank_transfer",
+	}); err != nil {
+		t.Fatalf("encaissement partiel: %v", err)
 	}
 
-	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusCancelled, actor); err != nil {
-		t.Fatalf("annulation: %v", err)
-	}
-	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusDraft, actor); err != nil {
-		t.Fatalf("réouverture: %v", err)
-	}
-	if err := s.TransitionBy(ctx, invID, models.InvoiceStatusSent, actor); err != nil {
-		t.Fatalf("renvoi: %v", err)
+	err := s.TransitionBy(ctx, invID, models.InvoiceStatusCancelled, actor)
+	if !errors.Is(err, ErrInvoiceHasPayments) {
+		t.Fatalf("annulation = %v, attendu ErrInvoiceHasPayments", err)
 	}
 
-	// Émission (1000) − extourne (1000) + réémission (1000) = 1000 au débit net.
-	d, c := balance(t, database, accountReceivables)
-	if solde := d - c; solde != 1000 {
-		t.Errorf("solde débiteurs = %.2f, attendu 1000 — la réémission doit "+
-			"rétablir la créance que l'extourne avait annulée", solde)
+	// Rien n'a bougé : toujours envoyée, créance = 1000 − 400.
+	var status string
+	if err := database.QueryRow(`SELECT status FROM invoices WHERE id = ?`, invID).Scan(&status); err != nil || status != "sent" {
+		t.Fatalf("statut après refus = %q (%v), attendu sent", status, err)
 	}
-	if _, cr := balance(t, database, accountRevenue); cr-1000 != 1000 {
-		t.Errorf("produits nets = %.2f, attendu 1000 — des livres à zéro sur une "+
-			"facture envoyée seraient inexplicables", cr-1000)
+	if d, c := balance(t, database, accountReceivables); d-c != 600 {
+		t.Errorf("solde débiteurs = %.2f, attendu 600", d-c)
 	}
 }
