@@ -491,3 +491,24 @@ func TestFullyCreditedInvoiceReportsItsCreditedAmount(t *testing.T) {
 			credited, inv.TotalAmount)
 	}
 }
+
+// Un trou dans la série ne doit pas bloquer la suivante : avec COUNT(*)+1,
+// retirer FA-2026-0002 alors que FA-2026-0003 existe faisait calculer 0003 pour
+// la facture suivante, et la création échouait sur l'unicité — à chaque essai.
+func TestLaNumerotationSurvitAUnTrouDansLaSerie(t *testing.T) {
+	f := newFixture(t)
+	f.create(t, DocumentTypeInvoice)      // 0001
+	b := f.create(t, DocumentTypeInvoice) // 0002
+	f.create(t, DocumentTypeInvoice)      // 0003
+	if _, err := f.db.Exec(`DELETE FROM invoice_lines WHERE invoice_id = ?`, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.Exec(`DELETE FROM invoices WHERE id = ?`, b.ID); err != nil {
+		t.Fatalf("retrait du brouillon intermédiaire: %v", err)
+	}
+
+	next := f.create(t, DocumentTypeInvoice)
+	if next.InvoiceNumber != "FA-2026-0004" {
+		t.Fatalf("numéro suivant = %q, attendu FA-2026-0004 (le plus grand + 1, pas le nombre de lignes + 1)", next.InvoiceNumber)
+	}
+}

@@ -226,3 +226,28 @@ func TestPostedEntriesFormAContinuousChain(t *testing.T) {
 		t.Fatalf("%d entrées dans la chaîne, attendu 4", seen)
 	}
 }
+
+// Même défaut côté journal : un trou dans les références JN ne doit pas faire
+// recalculer une référence existante.
+func TestLaReferenceSuivanteSurvitAUnTrouDansLaSerie(t *testing.T) {
+	s, database, _, _ := newAccountingDB(t)
+	for _, ref := range []string{"JN-2026-001", "JN-2026-003"} {
+		if _, err := database.Exec(
+			`INSERT INTO journal_entries (id, reference, date, description, status, created_by_id)
+			 VALUES (?, ?, '2026-03-01', 'x', 'draft', 'u1')`, "id-"+ref, ref); err != nil {
+			t.Fatalf("insertion de %s: %v", ref, err)
+		}
+	}
+	tx, err := database.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	got, err := s.nextReference(context.Background(), tx, time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "JN-2026-004" {
+		t.Fatalf("référence suivante = %q, attendu JN-2026-004", got)
+	}
+}

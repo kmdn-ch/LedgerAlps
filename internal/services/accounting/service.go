@@ -473,14 +473,18 @@ func masquerListe(l []any) []any {
 // nextReference generates the next sequential reference for a given year: JN-2026-001
 func (s *Service) nextReference(ctx context.Context, tx *sql.Tx, date time.Time) (string, error) {
 	year := date.Format("2006")
-	countQ := db.Rebind(`
-		SELECT COUNT(*) FROM journal_entries
+	stem := "JN-" + year + "-"
+	// Le plus grand numéro attribué, et non le nombre d'écritures : voir
+	// invoicing.nextInvoiceNumber — un trou dans la série faisait retomber
+	// COUNT(*)+1 sur une référence existante.
+	maxQ := db.Rebind(`
+		SELECT COALESCE(MAX(CAST(SUBSTR(reference, ?) AS INTEGER)), 0) FROM journal_entries
 		WHERE reference LIKE ?`, s.usePostgres)
-	var count int
-	if err := tx.QueryRowContext(ctx, countQ, "JN-"+year+"-%").Scan(&count); err != nil {
-		return "", fmt.Errorf("count references: %w", err)
+	var last int
+	if err := tx.QueryRowContext(ctx, maxQ, len(stem)+1, stem+"%").Scan(&last); err != nil {
+		return "", fmt.Errorf("last reference: %w", err)
 	}
-	return fmt.Sprintf("JN-%s-%03d", year, count+1), nil
+	return fmt.Sprintf("%s%03d", stem, last+1), nil
 }
 
 // validateDoubleEntry returns ErrNotDoubleEntry if sum(debit) ≠ sum(credit).

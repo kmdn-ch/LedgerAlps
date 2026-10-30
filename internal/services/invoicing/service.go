@@ -699,13 +699,19 @@ func (s *Service) nextInvoiceNumber(ctx context.Context, tx *sql.Tx, documentTyp
 		prefix = "NC"
 	}
 	year := date.Format("2006")
-	pattern := prefix + "-" + year + "-%"
-	countQ := db.Rebind("SELECT COUNT(*) FROM invoices WHERE invoice_number LIKE ?", s.usePostgres)
-	var count int
-	if err := tx.QueryRowContext(ctx, countQ, pattern).Scan(&count); err != nil {
-		return "", fmt.Errorf("count invoices: %w", err)
+	stem := prefix + "-" + year + "-"
+	// Le plus grand numéro déjà attribué, et non le nombre de lignes : dès qu'un
+	// numéro manque dans la série (brouillon retiré, base restaurée ou importée),
+	// COUNT(*)+1 retombait sur un numéro existant et la création échouait sur la
+	// contrainte d'unicité, indéfiniment.
+	maxQ := db.Rebind(
+		"SELECT COALESCE(MAX(CAST(SUBSTR(invoice_number, ?) AS INTEGER)), 0) FROM invoices WHERE invoice_number LIKE ?",
+		s.usePostgres)
+	var last int
+	if err := tx.QueryRowContext(ctx, maxQ, len(stem)+1, stem+"%").Scan(&last); err != nil {
+		return "", fmt.Errorf("last invoice number: %w", err)
 	}
-	return fmt.Sprintf("%s-%s-%04d", prefix, year, count+1), nil
+	return fmt.Sprintf("%s%04d", stem, last+1), nil
 }
 
 // ─── Quote lifecycle ──────────────────────────────────────────────────────────
