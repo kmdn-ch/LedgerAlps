@@ -77,8 +77,9 @@ flowchart TB
 | 13c | Traçabilité : couverture du journal, attestation vérifiable | ✅ |
 | 13d | Retirer une facture de la liste des paiements | ✅ |
 | 15 | Trouver ses marques : mise en route, statut TVA | ✅ |
-| 16 | Montée react-router v6 → v7 | 💡 à planifier |
-| 17 | Correctifs d'audit reportés (1.6.3) | 🔎 parcours de l'installeur à valider |
+| 16 | Montée react-router v6 → v7 (et zod 4) | 🔎 à valider |
+| 17 | Correctifs d'audit reportés (1.6.3) | ✅ |
+| 18 | Audit brutal : correctifs (1.6.5) | 🔎 à valider |
 | 14 | **Modules métier** | 💡 à trancher |
 
 ---
@@ -180,11 +181,12 @@ champ concerné. Statut TVA à déclarer explicitement (assujetti / non assujett
 non déclaré). Aide contextuelle par écran. Marque du produit en haut à droite,
 logotype revectorisé aux couleurs officielles (RS 232.21).
 
-**16 — Montée react-router v6 → v7.** `npm audit` signale une redirection
-ouverte (CVE-2025-68470) sur `react-router-dom` 6.30.3. Aucun chemin
-d'exploitation identifié dans le routage actuel (audit 4, M-1), mais le correctif
-n'existe qu'en v7 — changement majeur demandant une revalidation écran par écran,
-pas un simple bump.
+**16 — Montée react-router v6 → v7 (et zod 4).** `npm audit` signalait une
+redirection ouverte (CVE-2025-68470) sur `react-router-dom` 6.30.3 et un avis sur
+`zod` 3. Faits en 1.6.5 : `react-router-dom` 7.18, `zod` 4.6 et
+`@hookform/resolvers` 5, `npm audit` à zéro avis. Revalidés écran par écran dans un
+navigateur (session, navigation, garde de saisie, connexion, factures, réglages,
+contacts). *Reste* : la validation par le propriétaire.
 
 **17 — Correctifs d'audit reportés (1.6.3).** Constats des audits 5 et 6 que la
 publication de la 1.6.2 a laissés de côté pour ne livrer que le correctif de
@@ -194,7 +196,18 @@ lanceur ne reçoit plus de `template.JS` qu'il ne rend pas ; NSIS s'installe à
 version épinglée dans le job de l'installeur ; l'adresse du destinataire se
 vérifie aussi côté serveur à l'émission (audit 5, M-1) ; nettoyages `ruff`,
 `mypy` et export superflu de `lineSchema` ; témoin `.reinstalled` écrit après le
-consentement et `Sleep 1000` de l'installeur.
+consentement et `Sleep 1000` de l'installeur. Parcours de mise à jour de
+l'installeur validé par le propriétaire.
+
+**18 — Audit brutal : correctifs (1.6.5).** Les seize constats de `review-brutal.md`
+(audit de la 1.6.0, jamais traité jusque-là), vérifiés un à un contre le code puis
+corrigés ou classés avec leur preuve. Comptabilité : les encaissements entrent dans
+les livres (versements partiels cumulés, « Marquer payée » qui solde la créance, section
+Paiements sur la facture), exercice suivant d'une année bissextile, lots camt.053,
+doublons d'import bancaire, numérotation, arrondi des négatifs. Sécurité : `MsgId`
+`pain.001` unique, formules CSV neutralisées, causes d'erreur gardées au journal,
+déconnexion sur inactivité tenue par le serveur, plafond des codes de secours.
+Outillage : `react-router` 7, `zod` 4, macro NSIS.
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions

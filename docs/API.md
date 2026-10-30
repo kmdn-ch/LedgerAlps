@@ -34,6 +34,7 @@ Toutes les routes applicatives sont préfixées par `/api/v1`.
 | POST | `/auth/login` | public | Connexion → jetons |
 | POST | `/auth/refresh` | public | Renouveler le jeton d'accès |
 | POST | `/auth/logout` | public | Révoquer le jeton de rafraîchissement |
+| POST | `/auth/activity` | auth | Battement d'activité : note qu'une session est utilisée, sans rien modifier. L'interface l'envoie (au plus une fois par minute) quand quelqu'un se sert du clavier ou de la souris — voir « Déconnexion sur inactivité » |
 | POST | `/auth/change-password` | auth | Choisir son mot de passe. Seule route ouverte à un compte au mot de passe temporaire |
 | POST | `/auth/mfa/verify` | jeton d'attente | Deuxième étape de la connexion : code TOTP ou code de secours |
 | GET | `/auth/mfa` | auth | État du second facteur du compte connecté |
@@ -101,6 +102,32 @@ comptabilité. La **lecture seule** en est dispensée — elle ne peut rien modi
 | 403 + `mfa_enrolment_required` | Compte administrateur sans second facteur inscrit |
 | 409 | Inscription déjà active — retirez-la d'abord pour changer de téléphone |
 | 429 | Trop de codes faux depuis cette adresse |
+
+### Déconnexion sur inactivité
+
+Le délai se règle dans `PUT /settings/security` (`idle_logout_minutes`, 0 pour
+désactiver). Il est tenu **par le serveur** et non seulement par l'interface : une
+requête authentifiée d'un compte resté inactif plus longtemps que le délai
+— plus la minute d'avertissement de l'interface — reçoit `401` avec
+`reason: "session_idle"`, et `POST /auth/refresh` refuse de rendre une session.
+Se reconnecter repart d'un délai complet.
+
+Compte comme activité toute requête authentifiée et `POST /auth/activity`. L'état
+vit en mémoire : un redémarrage du serveur l'oublie.
+
+### Codes de secours
+
+Un code de secours erroné se compare aux dix codes du compte (bcrypt) : c'est
+volontairement coûteux. **Cinq échecs en un quart d'heure ferment la voie « code
+de secours » du compte** (l'événement `mfa_recovery_throttled` est tracé) ; le
+code TOTP reste accepté.
+
+### Erreurs serveur
+
+Une défaillance interne répond `500` avec une phrase fixe, traduite
+(`erreur interne : la cause est consignée au journal du serveur`) ; la cause, la
+méthode et la route vont au journal du serveur. Le corps ne contient jamais de
+nom de table, de colonne ni de chemin du poste.
 
 ## Comptes et rôles
 
@@ -199,7 +226,7 @@ est le rôle, pas un filtre par créateur.
 | GET | `/invoices/:id` | auth | Détail |
 | POST | `/invoices` | auth | Créer |
 | PATCH | `/invoices/:id` | auth | Modifier — **brouillons uniquement** : `409` de motif `document_not_draft` dès que le document est envoyé, annulé ou payé |
-| POST | `/invoices/:id/transition` | auth | Changer de statut |
+| POST | `/invoices/:id/transition` | auth | Changer de statut. `paid` **encaisse le solde restant** à la date du jour, par virement, et le passe au journal comme tout paiement (voir « Paiements »). `cancelled` est refusé (`409`, `reason: "invoice_has_payments"`) sur une facture déjà encaissée en tout ou partie : la correction est la note de crédit |
 | POST | `/invoices/:id/convert` | auth | Convertir une offre en facture |
 | POST | `/invoices/:id/outcome` | auth | Enregistrer l'issue d'une offre (`refused`, `expired`) |
 | POST | `/invoices/:id/credit-note` | auth | Émettre une note de crédit contre une facture |
@@ -603,14 +630,49 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
-| GET | `/payments` | auth | Liste |
+| GET | `/payments` | auth | Liste, `invoice_id` pour une facture |
 | GET | `/payments/:id` | auth | Détail |
-| POST | `/payments` | auth | Enregistrer un paiement |
+| POST | `/payments` | écriture comptable | Enregistrer un paiement — partiel ou non |
 | GET | `/exports/journal.csv` | lecture | Journal général en CSV. `from`, `to`. Point-virgule + BOM UTF-8, ligne de total |
 | GET | `/exports/ledger.csv` | lecture | Grand livre : mouvements par compte avec solde cumulé |
 | GET | `/exports/trial-balance.csv` | lecture | Balance de vérification, comptes sans mouvement omis |
 | GET | `/payments/payable` | lecture | Factures fournisseurs comptabilisées et non réglées, avec le compte à débiter et, le cas échéant, ce qui empêche le paiement |
 | POST | `/payments/export` | écriture comptable | Ordre de virement `pain.001.001.09` |
+
+### Enregistrer un paiement
+
+```json
+{ "invoice_id": "…", "amount": 600, "payment_date": "2026-06-15", "method": "bank_transfer", "reference": "facultatif" }
+```
+
+`method` : `bank_transfer`, `cash`, `card`, `check` ou `other`. `bank_account_id`
+(facultatif) force le compte débité ; à défaut, les espèces entrent en **caisse
+(1000)** et tout le reste à la **banque (1020)**.
+
+Chaque versement, partiel ou non, est traité de la même façon — c'est aussi le
+chemin de « Marquer payée » :
+
+1. il est **plafonné au solde restant** (`409`, `reason: "payment_exceeds_balance"`) ;
+2. il passe **Débit trésorerie / Crédit 1100 Débiteurs** (l'inverse pour une note
+   de crédit, qui se règle par un remboursement) **si l'émission de la facture a
+   été comptabilisée**. Sinon la comptabilité de l'installation est tenue à la
+   main : passer l'encaissement seul porterait 1100 au crédit sans débit, et la
+   réponse porte `journal_posted: false` ;
+3. il s'ajoute à `amount_paid` de la facture ;
+4. la facture passe `paid` quand le cumul atteint le total.
+
+L'écriture est passée **avant** l'enregistrement du paiement : si elle échoue
+(exercice clos, compte absent du plan comptable), rien n'est enregistré.
+
+| Code | Cas |
+|---|---|
+| `201` | Enregistré. Corps : `payment`, `invoice_status`, `amount_paid`, `balance`, `journal_posted`, et `journal_entry_id` si une écriture a été passée |
+| `404` | Facture introuvable |
+| `409` | `invoice_not_payable` (seule une facture **envoyée** reçoit un paiement) ou `payment_exceeds_balance` |
+| `422` | Compte absent du plan comptable, exercice clos, montant non positif |
+
+Un encaissement saisi par erreur ne se défait pas : le journal est immuable. Il se
+corrige par une écriture de contrepassation.
 
 ### Produire un ordre de paiement
 
