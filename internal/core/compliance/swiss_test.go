@@ -15,15 +15,17 @@ func TestRoundTo5Rappen(t *testing.T) {
 		want  float64
 	}{
 		{"10.123 → 10.10", 10.123, 10.10},
-		{"10.125 → 10.15 (round-half-up, not banker's)", 10.125, 10.15},
+		{"10.125 → 10.15 (demi arrondi à l'écart de zéro, pas au pair)", 10.125, 10.15},
+		{"-10.125 → -10.15 (symétrique de 10.125)", -10.125, -10.15},
+		{"-10.123 → -10.10", -10.123, -10.10},
+		{"-99.99 → -100.00", -99.99, -100.00},
 		{"10.127 → 10.15", 10.127, 10.15},
 		{"99.99 → 100.00", 99.99, 100.00},
 		{"0.005 → 0.00 (below half-step)", 0.005, 0.00},
 		{"0.025 → 0.05", 0.025, 0.05},
-		// math.Floor(-0.025*20+0.5)/20 = math.Floor(-0.5+0.5)/20 = math.Floor(0)/20 = 0.00
-		// The formula uses math.Floor (not round-half-away-from-zero), so negatives
-		// at the half-step round toward zero rather than away from zero.
-		{"-0.025 → 0.00 (floor semantics for negatives)", -0.025, 0.00},
+		// Symétrique de 0.025 → 0.05 : un demi négatif s'arrondit à l'écart de zéro.
+		{"-0.025 → -0.05 (symétrique de 0.025)", -0.025, -0.05},
+		{"-0.01 → 0.00 (sous le demi-pas)", -0.01, 0.00},
 		{"100.000 → 100.00", 100.000, 100.00},
 		{"0.00 → 0.00 (zero)", 0.00, 0.00},
 		{"0.05 → 0.05 (exact)", 0.05, 0.05},
@@ -124,5 +126,15 @@ func TestValidateQRIBAN(t *testing.T) {
 				t.Errorf("ValidateQRIBAN(%q): unexpected error: %v", tc.input, err)
 			}
 		})
+	}
+}
+
+// Une facture et sa note de crédit doivent se compenser au centime : arrondir
+// x et -x donne deux montants opposés.
+func TestRoundTo5RappenEstSymetrique(t *testing.T) {
+	for _, x := range []float64{0.025, 0.074, 1.125, 10.125, 10.127, 99.975, 1234.5678} {
+		if a, b := compliance.RoundTo5Rappen(x), compliance.RoundTo5Rappen(-x); a != -b {
+			t.Errorf("RoundTo5Rappen(%v) = %v mais RoundTo5Rappen(%v) = %v : pas opposés", x, a, -x, b)
+		}
 	}
 }

@@ -11,11 +11,21 @@ import (
 // ─── Swiss rounding (0.05 CHF — 5 Rappen rule) ───────────────────────────────
 
 // RoundTo5Rappen rounds amount to the nearest 0.05 CHF as required by Swiss TVA law.
-// Uses floor(x*20 + 0.5)/20 (round-half-up) instead of math.Round which uses
-// banker's rounding (round-half-to-even) and would incorrectly round 10.125 → 10.10.
-// Examples: 10.123 → 10.10, 10.125 → 10.15, 10.127 → 10.15, 99.99 → 100.00
+//
+// Les demis s'arrondissent À L'ÉCART de zéro (math.Round), pour les deux signes :
+// 10.125 → 10.15 et -10.125 → -10.15. Ce n'est pas l'arrondi « au pair » —
+// math.RoundToEven est une autre fonction — et ce n'est pas non plus
+// floor(x*20+0.5), qui arrondissait les demis négatifs vers zéro : une note de
+// crédit de 10.125 sortait à -10.10 quand sa facture sortait à 10.15, et les
+// deux ne se compensaient plus d'un centime.
+//
+// Examples: 10.123 → 10.10, 10.125 → 10.15, -10.125 → -10.15, 99.99 → 100.00
 func RoundTo5Rappen(amount float64) float64 {
-	return math.Floor(amount*20+0.5) / 20
+	r := math.Round(amount*20) / 20
+	if r == 0 {
+		return 0 // pas de « -0.00 » pour un petit négatif
+	}
+	return r
 }
 
 // ─── TVA rates (Swiss 2024) ───────────────────────────────────────────────────
