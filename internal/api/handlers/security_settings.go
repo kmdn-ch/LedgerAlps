@@ -50,13 +50,13 @@ func (h *SystemHandler) UpdateSecuritySettings(c *gin.Context) {
 		IdleLogoutMinutes *int `json:"idle_logout_minutes"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
 	if body.IdleLogoutMinutes != nil {
 		if err := config.SetIdleLogoutMinutes(*body.IdleLogoutMinutes); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 			return
 		}
 		h.cfg.IdleLogoutMinutes = *body.IdleLogoutMinutes

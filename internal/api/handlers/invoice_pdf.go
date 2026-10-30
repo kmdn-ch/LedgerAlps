@@ -30,7 +30,7 @@ func (h *InvoicesHandler) GetInvoicePDF(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "facture introuvable"})
 		return
 	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 

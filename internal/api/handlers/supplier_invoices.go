@@ -278,7 +278,7 @@ func (h *SupplierInvoicesHandler) loadLines(ctx context.Context, invoiceID strin
 func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 	var req createSupplierInvoiceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if _, err := time.Parse("2006-01-02", req.IssueDate); err != nil {
@@ -405,7 +405,7 @@ func (h *SupplierInvoicesHandler) TransitionSupplierInvoice(c *gin.Context) {
 	id := c.Param("id")
 	var req transitionSupplierInvoiceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if !supplierInvoiceStatuses[req.Status] {
@@ -446,7 +446,7 @@ func (h *SupplierInvoicesHandler) TransitionSupplierInvoice(c *gin.Context) {
 		var err error
 		entryID, err = h.postSupplierInvoice(ctx, id, userID, c.ClientIP())
 		if err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 			return
 		}
 	}

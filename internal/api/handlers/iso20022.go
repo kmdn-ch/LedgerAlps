@@ -104,7 +104,7 @@ type pain001Request struct {
 func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 	var req pain001Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -128,7 +128,7 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 			// Le refus nomme la facture et ce qui manque. Produire un fichier
 			// ampute laisserait croire que tout est paye, et le manque ne se
 			// decouvrirait qu'a la relance du fournisseur.
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 			return
 		}
 		txs = built
@@ -191,7 +191,7 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 		Transactions:  txs,
 	})
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -266,7 +266,7 @@ func (h *ISO20022Handler) ImportCamt053(c *gin.Context) {
 
 	entries, err := iso20022.ParseCamt053(xmlData)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 

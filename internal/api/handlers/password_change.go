@@ -94,7 +94,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		NewPassword     string `json:"new_password" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 

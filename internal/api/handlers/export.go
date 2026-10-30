@@ -112,31 +112,31 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 
 	accounts, err := h.fetchAccounts(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "les comptes n'ont pas pu être lus : " + err.Error()})
+		erreurInterne(c, "les comptes n'ont pas pu être lus", err)
 		return
 	}
 
 	journalEntries, err := h.fetchJournalEntries(ctx, filters)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "les écritures n'ont pas pu être lues : " + err.Error()})
+		erreurInterne(c, "les écritures n'ont pas pu être lues", err)
 		return
 	}
 
 	invoices, err := h.fetchInvoices(ctx, filters)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "les factures n'ont pas pu être lues : " + err.Error()})
+		erreurInterne(c, "les factures n'ont pas pu être lues", err)
 		return
 	}
 
 	contacts, err := h.fetchContacts(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "les contacts n'ont pas pu être lus : " + err.Error()})
+		erreurInterne(c, "les contacts n'ont pas pu être lus", err)
 		return
 	}
 
 	fiscalYears, err := h.fetchFiscalYears(ctx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "les exercices n'ont pas pu être lus : " + err.Error()})
+		erreurInterne(c, "les exercices n'ont pas pu être lus", err)
 		return
 	}
 
@@ -177,7 +177,7 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 		"fiscal_years":    fiscalYears,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "le fichier CSV n'a pas pu être produit : " + err.Error()})
+		erreurInterne(c, "le fichier CSV n'a pas pu être produit", err)
 		return
 	}
 	for _, f := range csvFiles {

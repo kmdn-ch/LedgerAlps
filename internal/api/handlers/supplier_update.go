@@ -35,7 +35,7 @@ func (h *SupplierInvoicesHandler) UpdateSupplierInvoice(c *gin.Context) {
 
 	var req createSupplierInvoiceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if _, err := time.Parse("2006-01-02", req.IssueDate); err != nil {

@@ -90,7 +90,7 @@ type cancelResult struct {
 func (h *SupplierInvoicesHandler) CancelSupplierInvoices(c *gin.Context) {
 	var req cancelSupplierInvoicesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if len(req.IDs) == 0 {

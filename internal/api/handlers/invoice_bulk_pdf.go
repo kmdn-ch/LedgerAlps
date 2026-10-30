@@ -48,7 +48,7 @@ type bulkPDFRequest struct {
 func (h *InvoicesHandler) BulkInvoicePDF(c *gin.Context) {
 	var req bulkPDFRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *InvoicesHandler) BulkInvoicePDF(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "document introuvable"})
 			return
 		case err != nil:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			erreurInterne(c, msgErreurInterne, err)
 			return
 		}
 		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
@@ -117,7 +117,7 @@ func (h *InvoicesHandler) BulkInvoicePDF(c *gin.Context) {
 			continue
 		}
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			erreurInterne(c, msgErreurInterne, err)
 			return
 		}
 

@@ -42,7 +42,7 @@ type createPaymentRequest struct {
 func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 	var req createPaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		refus(c, http.StatusBadRequest, err)
 		return
 	}
 

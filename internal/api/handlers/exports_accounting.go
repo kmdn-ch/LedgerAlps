@@ -65,13 +65,13 @@ func writeCSV(c *gin.Context, filename string, rows [][]string) {
 			sure[i] = neutraliserFormule(cell)
 		}
 		if err := w.Write(sure); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture du CSV: " + err.Error()})
+			erreurInterne(c, "écriture du CSV", err)
 			return
 		}
 	}
 	w.Flush()
 	if err := w.Error(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture du CSV: " + err.Error()})
+		erreurInterne(c, "écriture du CSV", err)
 		return
 	}
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))

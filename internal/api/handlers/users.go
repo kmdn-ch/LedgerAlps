@@ -95,7 +95,7 @@ func (h *UsersHandler) CreateUser(c *gin.Context) {
 		Role     string `json:"role" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	role := authz.Role(body.Role)
@@ -161,7 +161,7 @@ func (h *UsersHandler) UpdateUserRole(c *gin.Context) {
 		Role string `json:"role" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	role := authz.Role(body.Role)
@@ -221,7 +221,7 @@ func (h *UsersHandler) SetUserActive(c *gin.Context) {
 		IsActive bool `json:"is_active"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 

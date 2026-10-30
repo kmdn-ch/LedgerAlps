@@ -116,7 +116,7 @@ func (h *AuthHandler) MFASetup(c *gin.Context) {
 
 	secret, err := mfa.NewSecret()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 
@@ -142,7 +142,7 @@ func (h *AuthHandler) MFASetup(c *gin.Context) {
 	uri := mfa.ProvisioningURI("LedgerAlps", email, secret)
 	png, err := qrcode.Encode(uri, qrcode.Medium, 240)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "génération du QR: " + err.Error()})
+		erreurInterne(c, "génération du QR", err)
 		return
 	}
 
@@ -168,7 +168,7 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 		Code string `json:"code" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	claims := mw.GetClaims(c)
@@ -199,7 +199,7 @@ func (h *AuthHandler) MFAConfirm(c *gin.Context) {
 
 	codes, hashes, err := newRecoveryCodes()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 
@@ -266,7 +266,7 @@ func (h *AuthHandler) MFAVerify(c *gin.Context) {
 		RememberDevice bool `json:"remember_device"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	claims := mw.GetClaims(c)
@@ -412,7 +412,7 @@ func (h *AuthHandler) MFADisable(c *gin.Context) {
 		Password string `json:"password" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	claims := mw.GetClaims(c)

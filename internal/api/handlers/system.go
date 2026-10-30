@@ -103,7 +103,7 @@ func (h *SystemHandler) GetServerSettings(c *gin.Context) {
 func (h *SystemHandler) PutServerSettings(c *gin.Context) {
 	var s config.ServerSettings
 	if err := c.ShouldBindJSON(&s); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -129,7 +129,7 @@ func (h *SystemHandler) PutServerSettings(c *gin.Context) {
 	}
 
 	if err := config.SaveServerSettings(s); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 
@@ -168,7 +168,7 @@ func (h *SystemHandler) PutServerSettings(c *gin.Context) {
 func (h *SystemHandler) RotateJWTSecret(c *gin.Context) {
 	length, err := config.RotateJWTSecret()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 

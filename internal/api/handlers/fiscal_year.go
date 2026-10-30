@@ -107,7 +107,7 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 
 	var req createFiscalYearRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -179,7 +179,7 @@ func (h *FiscalYearHandler) CloseFiscalYear(c *gin.Context) {
 	userID := currentUserID(c)
 
 	if err := h.fySvc.CloseYear(c.Request.Context(), fiscalYearID, userID); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -200,7 +200,7 @@ func (h *FiscalYearHandler) GenerateVATDeclaration(c *gin.Context) {
 
 	var req vatDeclarationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -221,7 +221,7 @@ func (h *FiscalYearHandler) GenerateVATDeclaration(c *gin.Context) {
 
 	decl, err := h.vatSvc.GenerateDeclaration(c.Request.Context(), periodStart, periodEnd, req.Method)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 

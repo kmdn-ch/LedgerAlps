@@ -114,7 +114,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	var req companySettingsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 

@@ -41,7 +41,7 @@ func (h *BackupsHandler) SetBackupPolicy(c *gin.Context) {
 		Acknowledged bool `json:"acknowledged"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if !body.Acknowledged {
@@ -53,7 +53,7 @@ func (h *BackupsHandler) SetBackupPolicy(c *gin.Context) {
 
 	policy := db.NewBackupPolicy(config.AppDataDir())
 	if err := policy.Set(body.Passphrase); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *BackupsHandler) ClearBackupPolicy(c *gin.Context) {
 	}
 	policy := db.NewBackupPolicy(config.AppDataDir())
 	if err := policy.Clear(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

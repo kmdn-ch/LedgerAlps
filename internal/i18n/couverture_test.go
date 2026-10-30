@@ -43,7 +43,7 @@ var (
 	// que rien ne le signale. C'est exactement le trou qu'on vient de corriger
 	// pour « identifiants incorrects », reproduit un cran plus loin.
 	reContexte = regexp.MustCompile(
-		`(?:gin\.H\{\s*)?"(?:error|message)":\s*|errors\.New\(\s*|fmt\.Errorf\(\s*|(?:^|[^A-Za-z0-9_])\.?t\(\s*`)
+		`(?:gin\.H\{\s*)?"(?:error|message)":\s*|errors\.New\(\s*|fmt\.Errorf\(\s*|erreurInterne\(\s*c,\s*|(?:^|[^A-Za-z0-9_])\.?t\(\s*`)
 	// Un littéral Go, éventuellement suivi d'autres collés par des `+`.
 	reSuite = regexp.MustCompile(`"(?:[^"\\]|\\.)*"(?:\s*\+\s*"(?:[^"\\]|\\.)*")*`)
 	reBout  = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)

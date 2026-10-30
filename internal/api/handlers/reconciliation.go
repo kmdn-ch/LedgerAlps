@@ -44,7 +44,7 @@ func NewReconciliationHandler(database *sql.DB, usePostgres bool) *Reconciliatio
 func (h *ReconciliationHandler) ListBankEntries(c *gin.Context) {
 	entries, err := h.svc.List(c.Request.Context(), c.Query("all") == "true")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 	if entries == nil {
@@ -59,7 +59,7 @@ func (h *ReconciliationHandler) MatchBankEntry(c *gin.Context) {
 		InvoiceID string `json:"invoice_id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	userID := ""
@@ -67,7 +67,7 @@ func (h *ReconciliationHandler) MatchBankEntry(c *gin.Context) {
 		userID = claims.UserID
 	}
 	if err := h.svc.Match(c.Request.Context(), c.Param("id"), body.InvoiceID, userID); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	trace(c, h.db, h.usePostgres, TableBankEntries,
@@ -83,7 +83,7 @@ func (h *ReconciliationHandler) MatchBankEntry(c *gin.Context) {
 // UnmatchBankEntry DELETE /api/v1/bank-entries/:id/match
 func (h *ReconciliationHandler) UnmatchBankEntry(c *gin.Context) {
 	if err := h.svc.Unmatch(c.Request.Context(), c.Param("id")); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "rapprochement annulé"})
@@ -96,7 +96,7 @@ func (h *ReconciliationHandler) IgnoreBankEntry(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&body)
 	if err := h.svc.Ignore(c.Request.Context(), c.Param("id"), body.Ignored); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "écriture mise à jour"})

@@ -56,7 +56,7 @@ func (h *SimplifiedAccountingHandler) periode(c *gin.Context) (du, au string, ok
 		return "", "", false
 	}
 	if err := simplified.PeriodeValide(du, au); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		refus(c, http.StatusBadRequest, err)
 		return "", "", false
 	}
 	return du, au, true

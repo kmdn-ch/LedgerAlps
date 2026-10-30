@@ -92,11 +92,11 @@ func TestTraduireRéinjecteLesValeurs(t *testing.T) {
 // sources.
 func TestTraduireGardeLaCauseTechnique(t *testing.T) {
 	const cause = "open /var/db: permission denied"
-	got := Traduire(DE, "les comptes n'ont pas pu être lus : "+cause)
+	got := Traduire(DE, "Entrées écrites avant la v1.4.6, dont l'empreinte propre n'est pas recalculable : "+cause)
 	if !strings.HasSuffix(got, cause) {
 		t.Errorf("la cause technique a été perdue : %q", got)
 	}
-	if strings.HasPrefix(got, "les comptes") {
+	if strings.HasPrefix(got, "Entrées") {
 		t.Errorf("l'annonce n'a pas été traduite : %q", got)
 	}
 }

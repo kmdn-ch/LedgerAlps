@@ -81,7 +81,7 @@ func (h *UsersHandler) ResetPassword(c *gin.Context) {
 
 	temp, err := newTemporaryPassword()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 	hash, err := security.HashPassword(temp)

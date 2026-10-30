@@ -52,7 +52,7 @@ func (h *BackupsHandler) GetDatabaseEncryption(c *gin.Context) {
 
 	encrypted, err := db.IsDatabaseEncrypted(h.cfg.SQLitePath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 	st.Encrypted = encrypted
@@ -86,7 +86,7 @@ func (h *BackupsHandler) EnableDatabaseEncryption(c *gin.Context) {
 		Acknowledged       bool   `json:"acknowledged"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if !body.Acknowledged {
@@ -103,7 +103,7 @@ func (h *BackupsHandler) EnableDatabaseEncryption(c *gin.Context) {
 		return
 	}
 	if _, err := keys.Create(body.RecoveryPassphrase); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h *BackupsHandler) EnableDatabaseEncryption(c *gin.Context) {
 		// La clé existe mais rien ne l'utilisera : la retirer plutôt que de
 		// laisser une machine dans un état que l'interface ne sait pas décrire.
 		_ = keys.Forget()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 
@@ -150,7 +150,7 @@ func (h *BackupsHandler) DisableDatabaseEncryption(c *gin.Context) {
 		requestedBy = claims.UserID
 	}
 	if _, err := db.StageEncryption(dir, db.ActionDecrypt, requestedBy); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 	c.JSON(http.StatusAccepted, gin.H{
@@ -189,12 +189,12 @@ func (h *BackupsHandler) RecoverDatabaseKey(c *gin.Context) {
 		RecoveryPassphrase string `json:"recovery_passphrase" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	keys := db.NewDatabaseKeys(config.AppDataDir())
 	if _, err := keys.Recover(body.RecoveryPassphrase); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -216,7 +216,7 @@ func (h *BackupsHandler) ChangeRecoveryPassphrase(c *gin.Context) {
 		RecoveryPassphrase string `json:"recovery_passphrase" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	keys := db.NewDatabaseKeys(config.AppDataDir())
@@ -225,7 +225,7 @@ func (h *BackupsHandler) ChangeRecoveryPassphrase(c *gin.Context) {
 		return
 	}
 	if err := keys.SetRecovery(body.RecoveryPassphrase); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

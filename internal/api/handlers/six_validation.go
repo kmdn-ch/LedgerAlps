@@ -44,13 +44,13 @@ func (h *InvoicesHandler) SixValidationDossier(c *gin.Context) {
 
 	pdfBytes, invoiceNumber, err := h.buildInvoicePDF(c.Request.Context(), id, i18n.Langue(c))
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
 	inv, err := h.invoiceDataFor(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	payload, err := pdfsvc.QRPayload(inv)
@@ -77,19 +77,19 @@ func (h *InvoicesHandler) SixValidationDossier(c *gin.Context) {
 	// contrôle les octets. Un CRLF ferait échouer la validation pour une raison
 	// que personne ne devinerait.
 	if err := add(invoiceNumber+"-payload.txt", []byte(payload)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 	if err := add(invoiceNumber+"-bulletin.pdf", pdfBytes); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 	if err := add("LISEZ-MOI.txt", []byte(dossierReadme(invoiceNumber))); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 	if err := zw.Close(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 

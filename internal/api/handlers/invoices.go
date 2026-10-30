@@ -243,7 +243,7 @@ type lineReq struct {
 func (h *InvoicesHandler) CreateInvoice(c *gin.Context) {
 	var req createInvoiceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -294,7 +294,7 @@ func (h *InvoicesHandler) CreateInvoice(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "vat_without_number"})
 			return
 		}
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	c.JSON(http.StatusCreated, inv)
@@ -305,7 +305,7 @@ func (h *InvoicesHandler) UpdateInvoice(c *gin.Context) {
 	id := c.Param("id")
 	var req createInvoiceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -351,9 +351,9 @@ func (h *InvoicesHandler) UpdateInvoice(c *gin.Context) {
 	if err != nil {
 		switch err {
 		case invoicing.ErrInvoiceNotFound:
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			refus(c, http.StatusNotFound, err)
 		case invoicing.ErrInvoicePaid:
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 		default:
 			// Les refus métier arrivaient ici et sortaient en 500, ce qui les
 			// faisait passer pour une panne alors qu'ils sont une décision.
@@ -367,7 +367,7 @@ func (h *InvoicesHandler) UpdateInvoice(c *gin.Context) {
 			case errors.Is(err, invoicing.ErrVATWithoutNumber):
 				c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "vat_without_number"})
 			default:
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				erreurInterne(c, msgErreurInterne, err)
 			}
 		}
 		return
@@ -382,7 +382,7 @@ func (h *InvoicesHandler) TransitionInvoice(c *gin.Context) {
 		Status string `json:"status" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -403,11 +403,11 @@ func (h *InvoicesHandler) TransitionInvoice(c *gin.Context) {
 		}
 		switch err {
 		case invoicing.ErrInvoiceNotFound:
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			refus(c, http.StatusNotFound, err)
 		case invoicing.ErrInvalidTransition:
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 		default:
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 		}
 		return
 	}
@@ -458,15 +458,15 @@ func (h *InvoicesHandler) ConvertQuote(c *gin.Context) {
 	if err != nil {
 		switch err {
 		case invoicing.ErrInvoiceNotFound:
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			refus(c, http.StatusNotFound, err)
 		case invoicing.ErrQuoteAlreadyConv:
 			// The offer already produced an invoice; billing it twice is the
 			// mistake this status guards against.
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			refus(c, http.StatusConflict, err)
 		case invoicing.ErrNotAQuote, invoicing.ErrQuoteNotConvertible:
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 		default:
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 		}
 		return
 	}
@@ -483,19 +483,19 @@ func (h *InvoicesHandler) SetQuoteOutcome(c *gin.Context) {
 		Outcome string `json:"outcome" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
 	if err := h.svc.SetQuoteOutcome(c.Request.Context(), id, body.Outcome); err != nil {
 		switch err {
 		case invoicing.ErrInvoiceNotFound:
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			refus(c, http.StatusNotFound, err)
 		case invoicing.ErrInvalidQuoteOutcome:
 			c.JSON(http.StatusUnprocessableEntity, gin.H{
 				"error": "issue attendue: 'refused' ou 'expired' — une offre est acceptée en la convertissant en facture"})
 		default:
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 		}
 		return
 	}
@@ -547,13 +547,13 @@ func (h *InvoicesHandler) CreateCreditNote(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, invoicing.ErrInvoiceNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			refus(c, http.StatusNotFound, err)
 		case errors.Is(err, invoicing.ErrCreditExceedsInvoice):
 			// 409: the request is well-formed, it conflicts with what has
 			// already been credited against this invoice.
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			refus(c, http.StatusConflict, err)
 		default:
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 		}
 		return
 	}

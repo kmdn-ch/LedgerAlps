@@ -1146,6 +1146,16 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Errore di base di dati",
 		EN: "Database error",
 	},
+	"image illisible: dimensions %d × %d": {
+		DE: "Bild nicht lesbar: Abmessungen %d × %d",
+		IT: "Immagine illeggibile: dimensioni %d × %d",
+		EN: "Unreadable image: dimensions %d × %d",
+	},
+	"erreur interne : la cause est consignée au journal du serveur": {
+		DE: "Interner Fehler: Die Ursache steht im Serverprotokoll",
+		IT: "Errore interno: la causa è registrata nel giornale del server",
+		EN: "Internal error: the cause is recorded in the server log",
+	},
 	"facture %s (%s) : %s": {
 		DE: "Rechnung %s (%s): %s",
 		IT: "Fattura %s (%s): %s",
@@ -1196,10 +1206,10 @@ var catalogue = map[string]map[Lang]string{
 		IT: "group_by dev’essere year, month o contact",
 		EN: "group_by must be year, month or contact",
 	},
-	"génération du QR: ": {
-		DE: "QR-Erzeugung: ",
-		IT: "Generazione del QR: ",
-		EN: "QR generation: ",
+	"génération du QR": {
+		DE: "QR-Erzeugung",
+		IT: "Generazione del QR",
+		EN: "QR generation",
 	},
 	"identifiants incorrects": {
 		DE: "Falsche Anmeldedaten",
@@ -1510,10 +1520,10 @@ var catalogue = map[string]map[Lang]string{
 		IT: "L’inizio del periodo dev’essere nel formato AAAA-MM-GG",
 		EN: "The period start must be in YYYY-MM-DD format",
 	},
-	"le fichier CSV n'a pas pu être produit : ": {
-		DE: "Die CSV-Datei konnte nicht erzeugt werden: ",
-		IT: "Il file CSV non ha potuto essere prodotto: ",
-		EN: "The CSV file could not be produced: ",
+	"le fichier CSV n'a pas pu être produit": {
+		DE: "Die CSV-Datei konnte nicht erzeugt werden",
+		IT: "Il file CSV non ha potuto essere prodotto",
+		EN: "The CSV file could not be produced",
 	},
 	"le fichier d'attestation n'a pas pu être lu": {
 		DE: "Die Bescheinigungsdatei konnte nicht gelesen werden",
@@ -1640,15 +1650,15 @@ var catalogue = map[string]map[Lang]string{
 		IT: "I caratteri 3 e 4 devono essere la chiave di controllo (due cifre), non %q",
 		EN: "Characters 3 and 4 must be the check digits (two digits), not %q",
 	},
-	"les comptes n'ont pas pu être lus : ": {
-		DE: "Die Konten konnten nicht gelesen werden: ",
-		IT: "I conti non hanno potuto essere letti: ",
-		EN: "The accounts could not be read: ",
+	"les comptes n'ont pas pu être lus": {
+		DE: "Die Konten konnten nicht gelesen werden",
+		IT: "I conti non hanno potuto essere letti",
+		EN: "The accounts could not be read",
 	},
-	"les contacts n'ont pas pu être lus : ": {
-		DE: "Die Kontakte konnten nicht gelesen werden: ",
-		IT: "I contatti non hanno potuto essere letti: ",
-		EN: "The contacts could not be read: ",
+	"les contacts n'ont pas pu être lus": {
+		DE: "Die Kontakte konnten nicht gelesen werden",
+		IT: "I contatti non hanno potuto essere letti",
+		EN: "The contacts could not be read",
 	},
 	"les dates doivent être au format AAAA-MM-JJ": {
 		DE: "Die Daten müssen im Format JJJJ-MM-TT vorliegen",
@@ -1660,15 +1670,15 @@ var catalogue = map[string]map[Lang]string{
 		IT: "I primi due caratteri devono essere il codice del paese (due lettere), non %q",
 		EN: "The first two characters must be the country code (two letters), not %q",
 	},
-	"les exercices n'ont pas pu être lus : ": {
-		DE: "Die Geschäftsjahre konnten nicht gelesen werden: ",
-		IT: "Gli esercizi non hanno potuto essere letti: ",
-		EN: "The financial years could not be read: ",
+	"les exercices n'ont pas pu être lus": {
+		DE: "Die Geschäftsjahre konnten nicht gelesen werden",
+		IT: "Gli esercizi non hanno potuto essere letti",
+		EN: "The financial years could not be read",
 	},
-	"les factures n'ont pas pu être lues : ": {
-		DE: "Die Rechnungen konnten nicht gelesen werden: ",
-		IT: "Le fatture non hanno potuto essere lette: ",
-		EN: "The invoices could not be read: ",
+	"les factures n'ont pas pu être lues": {
+		DE: "Die Rechnungen konnten nicht gelesen werden",
+		IT: "Le fatture non hanno potuto essere lette",
+		EN: "The invoices could not be read",
 	},
 	"les paramètres « from » et « to » sont requis (AAAA-MM-JJ)": {
 		DE: "Die Parameter «from» und «to» sind erforderlich (JJJJ-MM-TT)",
@@ -1680,10 +1690,10 @@ var catalogue = map[string]map[Lang]string{
 		IT: "i tipi esatti, mentre il CSV è testo.\n\n",
 		EN: "the exact types, where the CSV is text.\n\n",
 	},
-	"les écritures n'ont pas pu être lues : ": {
-		DE: "Die Buchungen konnten nicht gelesen werden: ",
-		IT: "Le registrazioni non hanno potuto essere lette: ",
-		EN: "The entries could not be read: ",
+	"les écritures n'ont pas pu être lues": {
+		DE: "Die Buchungen konnten nicht gelesen werden",
+		IT: "Le registrazioni non hanno potuto essere lette",
+		EN: "The entries could not be read",
 	},
 	"limit doit être compris entre 1 et 1000": {
 		DE: "limit muss zwischen 1 und 1000 liegen",
@@ -2025,10 +2035,10 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Scrittura nell’archivio impossibile: ",
 		EN: "Cannot write into the archive: ",
 	},
-	"écriture du CSV: ": {
-		DE: "Schreiben der CSV: ",
-		IT: "Scrittura del CSV: ",
-		EN: "Writing the CSV: ",
+	"écriture du CSV": {
+		DE: "Schreiben der CSV",
+		IT: "Scrittura del CSV",
+		EN: "Writing the CSV",
 	},
 	"écriture du manifeste dans l'archive impossible": {
 		DE: "Schreiben des Manifests ins Archiv nicht möglich",

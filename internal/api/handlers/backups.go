@@ -101,7 +101,7 @@ func (h *BackupsHandler) CreateBackup(c *gin.Context) {
 	// carried off and attacked offline, with no rate limit and nobody watching.
 	if body.Passphrase != "" {
 		if err := db.ValidatePassphrase(body.Passphrase); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 			return
 		}
 	}
@@ -114,7 +114,7 @@ func (h *BackupsHandler) CreateBackup(c *gin.Context) {
 	dir := db.BackupDir()
 	path, err := db.Backup(ctx, h.db, h.cfg, dir, body.Passphrase)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -151,7 +151,7 @@ func (h *BackupsHandler) StageRestore(c *gin.Context) {
 		Confirm    bool   `json:"confirm"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if !body.Confirm {
@@ -222,7 +222,7 @@ func (h *BackupsHandler) StageRestore(c *gin.Context) {
 	if err != nil {
 		// The undo copy is a perfectly good backup on its own; keeping it
 		// costs nothing and losing it could cost everything.
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 

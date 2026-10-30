@@ -67,7 +67,7 @@ func (h *QRBillHandler) ReadSupplierBill(c *gin.Context) {
 
 	data, err := qrbill.ReadAllLimited(f)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 

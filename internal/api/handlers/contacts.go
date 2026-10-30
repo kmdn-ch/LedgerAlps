@@ -150,7 +150,7 @@ type createContactRequest struct {
 func (h *ContactsHandler) CreateContact(c *gin.Context) {
 	var req createContactRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if req.Country == "" {
@@ -168,7 +168,7 @@ func (h *ContactsHandler) CreateContact(c *gin.Context) {
 	// le contact).
 	if req.ContactType == "customer" || req.ContactType == "both" {
 		if err := requireQRAddress(req.Address, req.City, req.PostalCode); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 			return
 		}
 	}
@@ -177,7 +177,7 @@ func (h *ContactsHandler) CreateContact(c *gin.Context) {
 	// rempli : la traiter comme un IBAN invalide empêcherait d'enregistrer un
 	// contact qui n'en a pas, ce qui est le cas courant d'un client.
 	if err := validateOptionalIBAN(req.IBAN, req.QRIBAN); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	req.IBAN = blankToNil(req.IBAN)
@@ -261,7 +261,7 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 	id := c.Param("id")
 	var req updateContactRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	// IBAN : structure, longueur imposée par le pays, puis clé de contrôle
@@ -269,7 +269,7 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 	// rempli : la traiter comme un IBAN invalide empêcherait d'enregistrer un
 	// contact qui n'en a pas, ce qui est le cas courant d'un client.
 	if err := validateOptionalIBAN(req.IBAN, req.QRIBAN); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	req.IBAN = blankToNil(req.IBAN)
@@ -329,7 +329,7 @@ func (h *ContactsHandler) UpdateContact(c *gin.Context) {
 		npa := valeurResultante(req.PostalCode, npaActuel.String)
 		localite := valeurResultante(req.City, localiteActuelle.String)
 		if err := requireQRAddress(&adresse, &localite, &npa); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 			return
 		}
 	}

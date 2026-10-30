@@ -85,7 +85,7 @@ func (h *JournalWriteHandler) CreateEntry(c *gin.Context) {
 					"et ce qui est crédité (CO art. 957)"})
 			return
 		}
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
@@ -160,7 +160,7 @@ func (h *JournalWriteHandler) CreateEntry(c *gin.Context) {
 		Lines:       lines,
 	})
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 	c.JSON(http.StatusCreated, entry)
@@ -179,11 +179,11 @@ func (h *JournalWriteHandler) PostEntry(c *gin.Context) {
 	if err := h.svc.PostEntry(c.Request.Context(), userID, entryID, c.ClientIP()); err != nil {
 		switch err {
 		case accounting.ErrEntryNotFound:
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			refus(c, http.StatusNotFound, err)
 		case accounting.ErrAlreadyPosted:
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			refus(c, http.StatusConflict, err)
 		default:
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			refus(c, http.StatusUnprocessableEntity, err)
 		}
 		return
 	}

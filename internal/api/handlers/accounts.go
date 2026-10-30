@@ -87,7 +87,7 @@ type createAccountRequest struct {
 func (h *AccountsHandler) CreateAccount(c *gin.Context) {
 	var req createAccountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 
