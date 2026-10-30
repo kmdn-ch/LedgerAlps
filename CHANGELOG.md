@@ -7,6 +7,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+## [1.6.5] — 2026-10-30
+
 ### Corrigé — la comptabilité
 
 - **Un encaissement n'entrait pas dans les livres (audit brutal, MET-01).** Deux chemins existaient et aucun ne tenait la créance. « Marquer payée » changeait le statut et rien d'autre — alors que l'écran promettait « passé au journal (banque / débiteurs) » et renvoyait vers un « onglet Paiements » qui n'existait nulle part. `POST /payments` ne passait d'écriture que si le versement **seul** couvrait la facture : deux versements de 600 et 400 sur 1 000 ne laissaient ni écriture, ni cumul, et la facture restait « envoyée » à vie ; l'interface, de toute façon, n'appelait jamais cette route. Prouvé sur la 1.6.4 : après « Marquer payée », la créance au compte 1100 restait à 1 000. **Un chemin unique** (`RecordPayment`) sert maintenant les deux : chaque versement est plafonné au solde restant, cumulé dans `amount_paid`, passé au journal — débit banque (ou caisse pour des espèces) / crédit 1100, l'inverse pour une note de crédit, qui se règle par un remboursement — **quand l'émission de la facture l'a été**, et solde la facture quand le cumul atteint le total. L'écriture est passée **avant** l'enregistrement du paiement : un exercice clos ne laisse plus un paiement sans écriture. La facture porte une section **Paiements** (liste, solde restant, saisie d'un versement avec sa date et son mode), « Marquer payée » annonce le solde qu'elle encaisse, et une facture déjà encaissée en tout ou partie ne s'annule plus (409 `invoice_has_payments`) : annuler extournerait l'émission en laissant les encaissements, la correction est la note de crédit. Vérifié dans un navigateur : 600, solde de 400, « Marquer payée » pour le reste, deux écritures au journal, facture payée.
@@ -30,6 +32,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 - **Les variantes sans auteur de `Transition` et `UpdateInvoice` quittent le code de production (audit 5, F-5).** Elles agissaient avec un auteur vide, donc sans maillon d'audit, et n'avaient aucun appelant hors des tests : elles vivent dans `helpers_test.go`.
 - **Le désinstalleur attend la libération des fichiers au lieu d'un `Sleep 500` (audit 7, I-4)**, comme l'installeur ; **`infrastructure/linux/` est retiré** (orphelin depuis l'abandon des paquets `.deb`/`.rpm` en 1.4.5, audit 4 F-6).
+- **Les suites de tests abaissent le coût de bcrypt** (`security.SetBcryptCostForTests`, qui refuse de s'exécuter hors d'un binaire de test ; un test du paquet verrouille le coût de production à 12). La CI joue `go test -race` : la suite des gestionnaires approchait la limite de dix minutes par paquet (501 s au total sur la dernière CI verte) et les tests ajoutés par cette version la faisaient tomber. Elle passe à 213 s.
 - **Le raccourci « Payer » de la liste annonçait le total de la facture** même après un versement partiel, et son titre comme son bouton étaient en français dans les quatre langues. Il annonce le solde restant et passe par le catalogue ; les accroches des refus métier (`TVA sans numéro`, `crédit supérieur à la facture`) aussi.
 
 ### À savoir en mettant à jour
