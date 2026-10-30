@@ -11,6 +11,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"testing"
 )
 
@@ -107,5 +108,36 @@ func TestUnFichierIllisibleNEstPasUneBombe(t *testing.T) {
 	}
 	if errors.Is(err, ErrTropGrande) {
 		t.Errorf("un fichier illisible est signalé comme trop grand: %v", err)
+	}
+}
+
+// Aucun décodeur standard ne rend une dimension négative ou nulle, mais la
+// garde ne doit pas en dépendre : le produit de deux négatifs est POSITIF et
+// passerait sous PixelsMax. On enregistre donc des formats factices qui
+// annoncent des dimensions absurdes, et on exige un refus avant tout décodage.
+func init() {
+	for _, f := range []struct {
+		magic string
+		w, h  int
+	}{
+		{"ZEROW", 0, 10},
+		{"ZEROH", 10, 0},
+		{"NEGWH", -4000, -4000},
+	} {
+		w, h := f.w, f.h
+		image.RegisterFormat(f.magic, f.magic,
+			func(io.Reader) (image.Image, error) { panic("le décodage complet ne doit pas être atteint") },
+			func(io.Reader) (image.Config, error) {
+				return image.Config{ColorModel: color.GrayModel, Width: w, Height: h}, nil
+			})
+	}
+}
+
+func TestDesDimensionsNonPositivesSontRefuseesAvantDecodage(t *testing.T) {
+	for _, magic := range []string{"ZEROW", "ZEROH", "NEGWH"} {
+		_, _, err := Decode([]byte(magic + " contenu"))
+		if err == nil {
+			t.Fatalf("%s : des dimensions non positives ont été acceptées", magic)
+		}
 	}
 }

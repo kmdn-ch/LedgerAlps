@@ -60,6 +60,12 @@ func Decode(data []byte) (image.Image, string, error) {
 	// int64 et non int : sur une plateforme 32 bits, le produit de deux
 	// dimensions plausibles déborde, et un débordement rendrait un petit
 	// nombre — donc laisserait passer précisément ce qu'on veut refuser.
+	// Des dimensions nulles ou négatives ne décrivent aucune image : on les
+	// refuse avant tout décodage plutôt que de compter sur le décodeur. Le
+	// produit de deux négatifs est positif, et passerait sous PixelsMax.
+	if cfg.Width <= 0 || cfg.Height <= 0 {
+		return nil, format, fmt.Errorf("image illisible: dimensions %d × %d", cfg.Width, cfg.Height)
+	}
 	if px := int64(cfg.Width) * int64(cfg.Height); px > PixelsMax {
 		return nil, format, fmt.Errorf(
 			"%w : %d × %d pixels, %d mégapixels au maximum",
