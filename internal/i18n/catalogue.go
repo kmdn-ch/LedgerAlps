@@ -1151,6 +1151,11 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Immagine illeggibile: dimensioni %d × %d",
 		EN: "Unreadable image: dimensions %d × %d",
 	},
+	"session fermée pour inactivité": {
+		DE: "Sitzung wegen Inaktivität beendet",
+		IT: "Sessione chiusa per inattività",
+		EN: "Session closed because of inactivity",
+	},
 	"erreur interne : la cause est consignée au journal du serveur": {
 		DE: "Interner Fehler: Die Ursache steht im Serverprotokoll",
 		IT: "Errore interno: la causa è registrata nel giornale del server",

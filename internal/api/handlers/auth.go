@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/core/authz"
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
@@ -48,11 +49,38 @@ type AuthHandler struct {
 	// recovery plafonne les essais de code de secours ratés par compte :
 	// voir recoveryThrottle.
 	recovery *recoveryThrottle
+	// activity retient le dernier signe d'activité de chaque compte, pour la
+	// déconnexion sur inactivité côté serveur : voir middleware.IdleLimit.
+	activity *mw.ActivityTracker
 }
 
 func NewAuthHandler(db *sql.DB, cfg *config.Config) *AuthHandler {
-	return &AuthHandler{db: db, cfg: cfg, recovery: newRecoveryThrottle(recoveryMaxFailures, recoveryWindow)}
+	return &AuthHandler{
+		db: db, cfg: cfg,
+		recovery: newRecoveryThrottle(recoveryMaxFailures, recoveryWindow),
+		activity: mw.NewActivityTracker(),
+	}
 }
+
+// Activity rend le suivi d'activité, que le routeur partage avec le filtre
+// d'inactivité : les deux doivent lire le même.
+func (h *AuthHandler) Activity() *mw.ActivityTracker { return h.activity }
+
+// idleLimit est le délai d'inactivité réglé, avec la marge de l'avertissement ;
+// zéro quand la coupure est désactivée.
+func (h *AuthHandler) idleLimit() time.Duration {
+	if h.cfg.IdleLogoutMinutes <= 0 {
+		return 0
+	}
+	return time.Duration(h.cfg.IdleLogoutMinutes)*time.Minute + mw.IdleGrace
+}
+
+// Heartbeat POST /api/v1/auth/activity
+//
+// L'interface l'envoie quand quelqu'un se sert du clavier ou de la souris :
+// c'est ce qui garde la session ouverte pendant une longue saisie sans requête.
+// Le filtre d'inactivité a déjà noté l'activité ; il ne reste qu'à répondre.
+func (h *AuthHandler) Heartbeat(c *gin.Context) { c.Status(http.StatusNoContent) }
 
 type loginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
@@ -190,6 +218,11 @@ func (h *AuthHandler) issueSession(c *gin.Context, userID string, isAdmin bool, 
 	// absent from the body: anything returned here would be readable by script.
 	setRefreshCookie(c, refreshToken, refreshTTL)
 
+	// Se connecter est un signe d'activité : sans lui, une session rouverte
+	// après une longue absence serait refusée par le filtre d'inactivité sur la
+	// base du dernier signe d'AVANT la déconnexion.
+	h.activity.Touch(userID)
+
 	// Le rôle part avec la réponse pour que l'interface sache quoi masquer.
 	// Ce n'est PAS une autorisation : le serveur ne fait aucune confiance à ce
 	// que le navigateur croit, et chaque requête revérifie dans la base. Mais
@@ -258,6 +291,19 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "ce jeton de rafraîchissement a expiré"})
 		return
 	}
+
+	// Inactif depuis plus longtemps que le délai réglé : le cookie de
+	// rafraîchissement ne redonne pas de session. Sans ce refus, le délai
+	// n'aurait qu'à être contourné par un appel ici, avec un cookie volé ou resté
+	// dans un navigateur abandonné.
+	if lim := h.idleLimit(); lim > 0 && h.activity.Expired(claims.UserID, lim) {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":  "session fermée pour inactivité",
+			"reason": "session_idle",
+		})
+		return
+	}
+	h.activity.Touch(claims.UserID)
 
 	ttl := time.Duration(h.cfg.JWTAccessMinutes) * time.Minute
 	accessToken, err := security.GenerateAccessToken(h.cfg.JWTSecret, claims.UserID, claims.IsAdmin, ttl)

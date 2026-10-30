@@ -10,7 +10,7 @@
 // une facture, il doit voir arriver la coupure et pouvoir l'arrêter, pas
 // découvrir un écran de connexion à la place de son travail.
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Clock } from 'lucide-react'
@@ -19,6 +19,13 @@ import { useAuthStore } from '@/store/auth'
 import { useIdleLogout } from '@/hooks/useIdleLogout'
 import type { SecuritySettings } from '@/types'
 import { useT, useFormats } from '@/i18n/useT'
+
+// Au plus un battement par minute : l'avertissement local dure soixante secondes,
+// le serveur ajoute la même marge — une minute de retard ne coupe personne.
+const BEAT_EVERY_MS = 60_000
+// Les mêmes gestes que le compte à rebours local (useIdleLogout) : si l'un tient
+// la session ouverte côté navigateur, l'autre doit la tenir côté serveur.
+const BEAT_EVENTS = ['mousedown', 'mousemove', 'keydown', 'wheel', 'touchstart', 'scroll'] as const
 
 export function IdleGuard() {
   const t = useT()
@@ -46,7 +53,38 @@ export function IdleGuard() {
   }, [logout, navigate])
 
   const minutes = settings.data?.idle_logout_minutes ?? 0
-  const { warning, remaining, stay } = useIdleLogout(isAuth ? minutes : 0, doLogout)
+  const { warning, remaining, stay: resetLocal } = useIdleLogout(isAuth ? minutes : 0, doLogout)
+
+  // Le serveur coupe lui aussi les sessions inactives, en comptant les requêtes.
+  // Quelqu'un qui saisit une longue facture n'en fait aucune : sans signal, le
+  // serveur le croirait parti et refuserait l'enregistrement. On lui dit donc
+  // que quelqu'un est là — au plus une fois par minute, et seulement sur des
+  // gestes humains, comme le compte à rebours local.
+  const lastBeat = useRef(0)
+  const beat = useCallback(() => {
+    const now = Date.now()
+    if (now - lastBeat.current < BEAT_EVERY_MS) return
+    lastBeat.current = now
+    authApi.activity().catch(() => { /* une session déjà fermée le dira à la prochaine requête */ })
+  }, [])
+
+  useEffect(() => {
+    if (!isAuth || minutes <= 0) return
+    const onActivity = () => { if (!warningRef.current) beat() }
+    BEAT_EVENTS.forEach(e => window.addEventListener(e, onActivity, { passive: true }))
+    return () => BEAT_EVENTS.forEach(e => window.removeEventListener(e, onActivity))
+  }, [isAuth, minutes, beat])
+
+  // « Rester connecté » prévient aussi le serveur, sans attendre le prochain geste.
+  const stay = useCallback(() => {
+    resetLocal()
+    lastBeat.current = 0
+    beat()
+  }, [resetLocal, beat])
+
+  // Miroir de `warning` lisible depuis l'écouteur sans le réattacher.
+  const warningRef = useRef(false)
+  useEffect(() => { warningRef.current = warning }, [warning])
 
   // Échap remet la session en marche : c'est le geste réflexe devant un
   // dialogue, et ici il doit vouloir dire « je suis là », pas « ignore-moi ».

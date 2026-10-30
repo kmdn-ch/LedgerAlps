@@ -298,6 +298,10 @@ func main() {
 	// Credential-checking routes sit behind a per-IP rate limiter so an attacker
 	// cannot brute-force a password against a locally exposed instance.
 	authHandler := handlers.NewAuthHandler(database, cfg)
+	// Déconnexion sur inactivité côté serveur : le délai réglé n'était appliqué
+	// que par l'interface. Un jeton copié, ou un onglet fermé sans déconnexion,
+	// restait utilisable toute sa durée de vie.
+	idleGuard := middleware.IdleLimit(authHandler.Activity(), func() int { return cfg.IdleLogoutMinutes })
 	//
 	// Dix échecs verrouillent l'adresse, puis l'attente s'allonge à chaque
 	// nouvelle série : 30 s, 1 min, 5 min, 15 min, 1 h. Une heure de calme
@@ -318,6 +322,12 @@ func main() {
 	// temporaire puisse faire, et la placer dans le groupe la bloquerait
 	// elle-même — le compte serait alors définitivement enfermé.
 	v1.POST("/auth/change-password", middleware.RequireAuth(cfg.JWTSecret), authHandler.ChangePassword)
+
+	// Battement d'activité : l'interface l'envoie quand quelqu'un se sert du
+	// clavier ou de la souris, pour qu'une longue saisie sans requête ne soit pas
+	// prise pour de l'inactivité. Hors du groupe filtré : un compte tenu de
+	// changer son mot de passe doit pouvoir garder sa session pendant qu'il le fait.
+	v1.POST("/auth/activity", middleware.RequireAuth(cfg.JWTSecret), idleGuard, authHandler.Heartbeat)
 
 	// Second facteur.
 	//
@@ -366,6 +376,8 @@ func main() {
 	authorizer := middleware.NewAuthorizer(database, cfg.UsePostgres(), cfg.JWTSecret)
 	api := v1.Group("")
 	api.Use(middleware.RequireAuth(cfg.JWTSecret))
+	// Déconnexion sur inactivité côté serveur (voir idleGuard plus haut).
+	api.Use(idleGuard)
 
 	// Seconde barrière, indépendante des permissions déclarées par route.
 	//

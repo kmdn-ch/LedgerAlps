@@ -53,9 +53,14 @@ var reRouteEcriture = regexp.MustCompile(
 // une DECISION ; en trouver une ici qui n'y figure pas est un accident. La
 // liste se relit ; un oubli ne se relit pas.
 var horsDuGroupe = map[string]bool{
-	"POST /auth/login":           true,
-	"POST /auth/refresh":         true,
-	"POST /auth/logout":          true,
+	"POST /auth/login":   true,
+	"POST /auth/refresh": true,
+	"POST /auth/logout":  true,
+	// Battement d'activité : il ne modifie rien, il note qu'une session est
+	// utilisée. Tout compte connecté doit pouvoir le faire, y compris le rôle en
+	// lecture seule et le compte tenu de changer son mot de passe — sans quoi leur
+	// session serait coupée pour inactivité pendant qu'ils travaillent.
+	"POST /auth/activity":        true,
 	"POST /auth/change-password": true,
 	"POST /auth/mfa/verify":      true,
 	"POST /auth/mfa/setup":       true,

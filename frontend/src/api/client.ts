@@ -90,7 +90,11 @@ api.interceptors.response.use(
     } catch (refreshError) {
       processQueue(refreshError, null)
       logout()
-      window.location.href = '/login'
+      // Le serveur ferme aussi les sessions inactives : l'écran de connexion dit
+      // pourquoi, comme pour la coupure décidée par l'interface.
+      const inactive = (refreshError as { response?: { data?: { reason?: string } } })
+        .response?.data?.reason === 'session_idle'
+      window.location.href = inactive ? '/login?raison=inactivite' : '/login'
       return Promise.reject(refreshError)
     } finally {
       isRefreshing = false
@@ -112,6 +116,9 @@ export const authApi = {
   // et le code n'a aucun moyen de le lire — c'est précisément le but.
   refresh:  () => api.post('/auth/refresh', null),
   logout:   () => api.post('/auth/logout', null),
+  // Battement d'activité : le serveur coupe aussi les sessions inactives, et
+  // une longue saisie sans requête ne doit pas être prise pour de l'inactivité.
+  activity: () => api.post('/auth/activity', null),
   // Seule route qu'un compte au mot de passe temporaire puisse appeler : elle
   // vit hors du groupe filtré, sans quoi le compte serait enfermé.
   changePassword: (current: string, next: string) =>
