@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,13 +75,44 @@ func csvFromRecords(records []map[string]any, skip map[string]bool) ([]byte, err
 	return buf.Bytes(), nil
 }
 
+// nombreSimple reconnaît un nombre décimal ordinaire : « -1234.50 », « +12 ».
+// Un montant négatif commence par « - » sans être une formule, et le préfixer
+// d'une apostrophe en ferait du texte dans le tableur.
+var nombreSimple = regexp.MustCompile(`^[+-]?[0-9]+([.][0-9]+)?$`)
+
+// neutraliserFormule empêche un tableur d'exécuter le contenu d'une cellule.
+//
+// Excel et Calc évaluent comme formule toute cellule qui commence par « = », « + »,
+// « - » ou « @ » (et par une tabulation ou un retour chariot, qui masquent le
+// premier caractère). Une description de facture, un nom de contact ou un
+// libellé saisi par un tiers pouvait donc devenir « =HYPERLINK(…) » ou une
+// commande, exécutée à l'ouverture du fichier par la personne qui le reçoit
+// (CWE-1236). L'apostrophe initiale force la lecture en texte : c'est la
+// neutralisation que recommande l'OWASP.
+//
+// Les nombres décimaux simples restent intacts : un montant négatif doit
+// rester un nombre.
+func neutraliserFormule(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '	', '':
+		if nombreSimple.MatchString(s) {
+			return s
+		}
+		return "'" + s
+	}
+	return s
+}
+
 // csvCell rend une valeur JSON en texte.
 func csvCell(v any) string {
 	switch t := v.(type) {
 	case nil:
 		return ""
 	case string:
-		return t
+		return neutraliserFormule(t)
 	case bool:
 		if t {
 			return "1"

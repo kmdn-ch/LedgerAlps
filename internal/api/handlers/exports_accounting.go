@@ -59,7 +59,12 @@ func writeCSV(c *gin.Context, filename string, rows [][]string) {
 	w := csv.NewWriter(&buf)
 	w.Comma = ';'
 	for _, r := range rows {
-		if err := w.Write(r); err != nil {
+		// Les libellés viennent de la saisie : voir neutraliserFormule.
+		sure := make([]string, len(r))
+		for i, cell := range r {
+			sure[i] = neutraliserFormule(cell)
+		}
+		if err := w.Write(sure); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture du CSV: " + err.Error()})
 			return
 		}

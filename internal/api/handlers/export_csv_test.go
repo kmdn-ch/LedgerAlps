@@ -3,9 +3,12 @@ package handlers
 import (
 	"bytes"
 	"encoding/csv"
-	"github.com/kmdn-ch/ledgeralps/internal/i18n"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 )
 
 func parseCSV(t *testing.T, data []byte) [][]string {
@@ -139,5 +142,67 @@ func TestBuildCSVFilesProducesTheExpectedSet(t *testing.T) {
 	readme := string(csvReadme(i18n.Défaut, files))
 	if !strings.Contains(readme, "journal_lines.entry_id") {
 		t.Error("le LISEZ-MOI ne documente pas les relations : un CSV sans clé de lecture se prête aux contresens")
+	}
+}
+
+// CWE-1236 : une cellule qui commence par = + - @ (ou tabulation, retour
+// chariot) est exécutée comme formule par Excel et Calc. Les textes saisis par
+// des tiers — description, nom de contact — doivent sortir neutralisés, sans
+// que les montants négatifs cessent d'être des nombres.
+func TestCSVNeutraliseLesFormules(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{`=HYPERLINK("http://x","clic")`, `'=HYPERLINK("http://x","clic")`},
+		{`+cmd|' /C calc'!A0`, `'+cmd|' /C calc'!A0`},
+		{`-2+3`, `'-2+3`},
+		{`@SUM(A1:A9)`, `'@SUM(A1:A9)`},
+		{"	=1+1", "'	=1+1"},
+		{"=1+1", "'=1+1"},
+		{`+41 79 123 45 67`, `'+41 79 123 45 67`},
+		// Intacts : texte ordinaire, vide, montants.
+		{`Menuiserie Dupont`, `Menuiserie Dupont`},
+		{``, ``},
+		{`-1234.50`, `-1234.50`},
+		{`+12`, `+12`},
+		{`2026-03-04`, `2026-03-04`},
+		{`a=b`, `a=b`},
+	} {
+		if got := neutraliserFormule(tc.in); got != tc.want {
+			t.Errorf("neutraliserFormule(%q) = %q, attendu %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestCSVFromRecordsNeutraliseLesCellulesTexte(t *testing.T) {
+	data, err := csvFromRecords([]map[string]any{
+		{"description": `=1+1`, "montant": -250.5},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := parseCSV(t, data)
+	if rows[1][0] != `'=1+1` {
+		t.Errorf("description = %q, attendu la formule neutralisée", rows[1][0])
+	}
+	if rows[1][1] != "-250.5" {
+		t.Errorf("montant = %q, un montant négatif doit rester un nombre", rows[1][1])
+	}
+}
+
+// Le second producteur de CSV (journal, grand livre, balance, carnet) passe par
+// writeCSV : il doit neutraliser lui aussi.
+func TestWriteCSVNeutraliseLesFormules(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	writeCSV(c, "x.csv", [][]string{
+		{"Libellé", "Montant"},
+		{`=cmd|' /C calc'!A0`, "-80.00"},
+	})
+	rows := parseCSV(t, w.Body.Bytes())
+	if rows[1][0] != `'=cmd|' /C calc'!A0` {
+		t.Errorf("libellé = %q, attendu la formule neutralisée", rows[1][0])
+	}
+	if rows[1][1] != "-80.00" {
+		t.Errorf("montant = %q, un montant négatif doit rester un nombre", rows[1][1])
 	}
 }
