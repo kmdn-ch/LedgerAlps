@@ -308,19 +308,15 @@ var ErrDocumentNotDraft = errors.New(
 	"un document envoyé ne se modifie plus (CO art. 958f) : pour le corriger, annulez-le puis " +
 		"réactivez-le en brouillon, ou émettez une note de crédit")
 
-// UpdateInvoice replaces the editable fields and all lines of a DRAFT document.
+// UpdateInvoiceBy replaces the editable fields and all lines of a DRAFT document.
 // Blocked once it is no longer a draft (ErrDocumentNotDraft) or has a payment.
 //
-// Sans auteur : la modification n'est PAS tracee. Meme decoupage que
-// Transition / TransitionBy, et meme raison -- les tests et les appels
-// internes n'ont pas d'auteur a fournir, et une trace anonyme ferait croire
-// a une couverture qui n'existe pas.
-func (s *Service) UpdateInvoice(ctx context.Context, invoiceID string, req CreateInvoiceRequest) (*models.Invoice, error) {
-	return s.UpdateInvoiceBy(ctx, invoiceID, req, Actor{})
-}
-
-// UpdateInvoiceBy est la meme chose, en inscrivant l'auteur dans la chaine
-// d'empreintes (ActionDocumentUpdated).
+// L'auteur est inscrit dans la chaine d'empreintes (ActionDocumentUpdated).
+//
+// Il n'existe PAS de variante sans auteur dans le code de production : elle
+// agissait sans laisser de maillon, ce qui est exactement ce que la trace doit
+// interdire. Elle n'avait aucun appelant hors des tests ; elle vit desormais
+// dans les tests (helpers_test.go), ou « sans auteur » se lit dans le nom.
 func (s *Service) UpdateInvoiceBy(ctx context.Context, invoiceID string, req CreateInvoiceRequest, actor Actor) (*models.Invoice, error) {
 	// Guard: check payment status before touching anything.
 	var amountPaid float64
@@ -465,14 +461,14 @@ func (s *Service) UpdateInvoiceBy(ctx context.Context, invoiceID string, req Cre
 
 // ─── Transition ───────────────────────────────────────────────────────────────
 
-// Transition moves an invoice to the next status if the transition is valid.
+// TransitionBy moves an invoice to the next status if the transition is valid,
+// et trace son auteur.
 // When an invoice transitions from sent → cancelled and has a linked journal entry,
 // a reversal entry is automatically created and posted (CO art. 957a).
-func (s *Service) Transition(ctx context.Context, invoiceID string, to models.InvoiceStatus) error {
-	return s.TransitionBy(ctx, invoiceID, to, Actor{})
-}
-
-// TransitionBy applique la transition en traçant son auteur.
+//
+// Il n'existe pas de variante sans auteur dans le code de production : une
+// transition qui n'apparaît nulle part laisse « qui a annulé cette facture » sans
+// réponse. Les tests disposent de Transition (helpers_test.go).
 //
 // Le chemin HTTP passe toujours par ici : sans auteur, une transition
 // n'apparaît nulle part, et « qui a annulé cette facture » reste sans réponse.
