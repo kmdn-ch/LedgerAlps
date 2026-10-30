@@ -45,10 +45,13 @@ var dummyHash, _ = security.HashPassword("ledgeralps-dummy-password-for-timing-a
 type AuthHandler struct {
 	db  *sql.DB
 	cfg *config.Config
+	// recovery plafonne les essais de code de secours ratés par compte :
+	// voir recoveryThrottle.
+	recovery *recoveryThrottle
 }
 
 func NewAuthHandler(db *sql.DB, cfg *config.Config) *AuthHandler {
-	return &AuthHandler{db: db, cfg: cfg}
+	return &AuthHandler{db: db, cfg: cfg, recovery: newRecoveryThrottle(recoveryMaxFailures, recoveryWindow)}
 }
 
 type loginRequest struct {

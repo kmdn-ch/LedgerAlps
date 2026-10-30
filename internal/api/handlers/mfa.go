@@ -348,6 +348,14 @@ func (h *AuthHandler) MFAVerify(c *gin.Context) {
 	h.issueSession(c, claims.UserID, isAdmin, role, mustChange == 1)
 }
 
+// Plafond des essais de code de secours ratés : cinq par quart d'heure et par
+// compte. Cinq laisse largement la place aux fautes de recopie d'un code écrit à
+// la main ; au-delà, ce n'est plus une faute de recopie.
+const (
+	recoveryMaxFailures = 5
+	recoveryWindow      = 15 * time.Minute
+)
+
 // consumeRecoveryCode consomme un code de secours s'il correspond.
 //
 // La comparaison passe par le hachage de mot de passe : les codes sont stockés
@@ -366,6 +374,11 @@ func (h *AuthHandler) consumeRecoveryCode(ctx context.Context, userID, code stri
 		return r
 	}, code))
 	if len(normalised) < 8 {
+		return false, nil
+	}
+	// Voie fermée après trop d'échecs : on s'arrête AVANT tout hachage. C'est
+	// le calcul de dix bcrypt par essai qui coûte, pas la requête.
+	if h.recovery.blocked(userID) {
 		return false, nil
 	}
 	q := db.Rebind(
@@ -397,8 +410,13 @@ func (h *AuthHandler) consumeRecoveryCode(ctx context.Context, userID, code stri
 			if _, err := h.db.ExecContext(ctx, upd, time.Now().UTC(), cd.id); err != nil {
 				return false, err
 			}
+			h.recovery.reset(userID)
 			return true, nil
 		}
+	}
+	if h.recovery.fail(userID) {
+		recordSecurityEvent(ctx, h.db, h.cfg.UsePostgres(),
+			"mfa_recovery_throttled", "", "compte="+userID)
 	}
 	return false, nil
 }
