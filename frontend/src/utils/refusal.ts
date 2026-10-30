@@ -6,11 +6,15 @@
 // des chiffres. Une accroche courte dit d'abord CE QUI est refusé ; le détail
 // du serveur, qui porte les montants, vient ensuite.
 
-const LEAD: Record<string, string> = {
-  credit_exceeds_invoice:
-    "Impossible : le montant dépasse celui de la facture corrigée.",
-  vat_without_number:
-    "Impossible : vous ne pouvez pas facturer de TVA sans numéro de TVA.",
+import { traduire } from '@/i18n/useT'
+import type { Cle } from '@/i18n'
+
+// Les accroches sont des CLÉS du catalogue, résolues à l'affichage : écrites en
+// français ici, elles s'affichaient en français devant un message serveur déjà
+// traduit, et un écran allemand mélangeait les deux langues.
+const LEAD: Record<string, Cle> = {
+  credit_exceeds_invoice: 'rf.creditDepasse',
+  vat_without_number:     'rf.tvaSansNumero',
 }
 
 // La forme d'une erreur axios, réduite à ce qu'on en lit.
@@ -41,7 +45,7 @@ export function businessRefusal(error: unknown): string | null {
 export function refusalMessage(error: unknown, fallback: string): string {
   const data = (error as RefusHTTP | null | undefined)?.response?.data
   if (!data) return fallback
-  const lead = data.reason ? LEAD[data.reason] : undefined
+  const lead = data.reason && LEAD[data.reason] ? traduire(LEAD[data.reason]) : undefined
   const detail: string = data.error ?? ''
   if (lead) return detail ? `${lead} ${detail}` : lead
   return detail || fallback

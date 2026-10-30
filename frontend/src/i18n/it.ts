@@ -542,6 +542,8 @@ export const it: Catalogue = {
   'fd.totalTTC': 'Totale IVA inclusa',
   'fd.dejaPaye': 'Già pagato',
   'fd.soldeRestant': 'Saldo residuo',
+  'rf.creditDepasse': 'Impossibile: l’importo supera quello della fattura corretta.',
+  'rf.tvaSansNumero': 'Impossibile: non potete fatturare IVA senza un numero IVA.',
   'pm.titre': 'Pagamenti',
   'pm.aucun': 'Nessun pagamento registrato.',
   'pm.enregistrer': 'Registrare un pagamento',

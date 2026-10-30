@@ -542,6 +542,8 @@ export const en: Catalogue = {
   'fd.totalTTC': 'Total incl. VAT',
   'fd.dejaPaye': 'Already paid',
   'fd.soldeRestant': 'Remaining balance',
+  'rf.creditDepasse': 'Not possible: the amount exceeds that of the corrected invoice.',
+  'rf.tvaSansNumero': 'Not possible: you cannot charge VAT without a VAT number.',
   'pm.titre': 'Payments',
   'pm.aucun': 'No payment recorded.',
   'pm.enregistrer': 'Record a payment',

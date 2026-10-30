@@ -543,6 +543,8 @@ export const de: Catalogue = {
   'fd.totalTTC': 'Total inkl. MWST',
   'fd.dejaPaye': 'Bereits bezahlt',
   'fd.soldeRestant': 'Restsaldo',
+  'rf.creditDepasse': 'Nicht möglich: Der Betrag übersteigt den der korrigierten Rechnung.',
+  'rf.tvaSansNumero': 'Nicht möglich: Sie können keine MwSt. ohne MwSt.-Nummer in Rechnung stellen.',
   'pm.titre': 'Zahlungen',
   'pm.aucun': 'Keine Zahlung erfasst.',
   'pm.enregistrer': 'Zahlung erfassen',

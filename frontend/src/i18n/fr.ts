@@ -586,6 +586,8 @@ export const fr = {
   'fd.totalTTC': 'Total TTC',
   'fd.dejaPaye': 'Déjà payé',
   'fd.soldeRestant': 'Solde restant',
+  'rf.creditDepasse': 'Impossible : le montant dépasse celui de la facture corrigée.',
+  'rf.tvaSansNumero': 'Impossible : vous ne pouvez pas facturer de TVA sans numéro de TVA.',
   'pm.titre': 'Paiements',
   'pm.aucun': 'Aucun paiement enregistré.',
   'pm.enregistrer': 'Enregistrer un paiement',
