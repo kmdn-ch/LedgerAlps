@@ -466,7 +466,11 @@ Section "Uninstall"
   DetailPrint "$(StoppingApp)"
   !insertmacro ArreterProcessus "${SERVER_EXE}"
   !insertmacro ArreterProcessus "${LAUNCHER_EXE}"
-  Sleep 500
+  ; Attendre que Windows ait réellement rendu les fichiers, comme à l'installation,
+  ; plutôt que de parier sur une demi-seconde : les Delete qui suivent échouent
+  ; en silence sur un exécutable encore tenu.
+  !insertmacro AttendreLiberation "$INSTDIR\${SERVER_EXE}"
+  !insertmacro AttendreLiberation "$INSTDIR\${LAUNCHER_EXE}"
 
   ; ── Ask user whether to delete accounting data ─────────────────────────── ;
   MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 \
