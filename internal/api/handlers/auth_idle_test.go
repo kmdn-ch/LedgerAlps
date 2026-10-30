@@ -17,7 +17,7 @@ import (
 func TestLeRafraichissementRefuseUneSessionInactive(t *testing.T) {
 	database, _, cfg := mfaEnv(t)
 	seedLogin(t, database, "u1", "MotDePasseSolide1", false)
-	cfg.IdleLogoutMinutes = 10
+	cfg.SetIdleMinutes(10)
 
 	now := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
 	tracker := mw.NewActivityTrackerWithClock(func() time.Time { return now })
@@ -64,7 +64,7 @@ func TestLeRafraichissementRefuseUneSessionInactive(t *testing.T) {
 	}
 
 	// Délai désactivé : le même cookie redonne une session.
-	cfg.IdleLogoutMinutes = 0
+	cfg.SetIdleMinutes(0)
 	if w := refresh(); w.Code != http.StatusOK {
 		t.Fatalf("délai désactivé : %d %s", w.Code, w.Body.String())
 	}

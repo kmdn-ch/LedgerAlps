@@ -29,7 +29,7 @@ type securitySettingsResponse struct {
 func (h *SystemHandler) GetSecuritySettings(c *gin.Context) {
 	c.JSON(http.StatusOK, securitySettingsResponse{
 		Rotation:          config.RotationStatus(h.cfg),
-		IdleLogoutMinutes: h.cfg.IdleLogoutMinutes,
+		IdleLogoutMinutes: h.cfg.IdleMinutes(),
 		AccessMinutes:     h.cfg.JWTAccessMinutes,
 	})
 }
@@ -59,12 +59,12 @@ func (h *SystemHandler) UpdateSecuritySettings(c *gin.Context) {
 			refus(c, http.StatusUnprocessableEntity, err)
 			return
 		}
-		h.cfg.IdleLogoutMinutes = *body.IdleLogoutMinutes
+		h.cfg.SetIdleMinutes(*body.IdleLogoutMinutes)
 	}
 
 	c.JSON(http.StatusOK, securitySettingsResponse{
 		Rotation:          config.RotationStatus(h.cfg),
-		IdleLogoutMinutes: h.cfg.IdleLogoutMinutes,
+		IdleLogoutMinutes: h.cfg.IdleMinutes(),
 		AccessMinutes:     h.cfg.JWTAccessMinutes,
 	})
 }

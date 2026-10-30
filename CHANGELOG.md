@@ -7,6 +7,10 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+### Corrigé
+
+- **Le délai d'inactivité se lisait et s'écrivait sans synchronisation.** Le filtre d'inactivité (1.6.5) lit `IdleLogoutMinutes` à chaque requête pendant que le réglage peut le réécrire depuis une autre goroutine : une course de données au sens du modèle mémoire de Go, bénigne en pratique pour un entier mais signalée par le détecteur de concurrence s'il l'exerce. Lecture et écriture passent par `Config.IdleMinutes` / `SetIdleMinutes`, sous verrou, et un test les joue en concurrence.
+
 ## [1.6.5] — 2026-10-30
 
 ### Corrigé — la comptabilité

@@ -69,10 +69,11 @@ func (h *AuthHandler) Activity() *mw.ActivityTracker { return h.activity }
 // idleLimit est le délai d'inactivité réglé, avec la marge de l'avertissement ;
 // zéro quand la coupure est désactivée.
 func (h *AuthHandler) idleLimit() time.Duration {
-	if h.cfg.IdleLogoutMinutes <= 0 {
+	minutes := h.cfg.IdleMinutes()
+	if minutes <= 0 {
 		return 0
 	}
-	return time.Duration(h.cfg.IdleLogoutMinutes)*time.Minute + mw.IdleGrace
+	return time.Duration(minutes)*time.Minute + mw.IdleGrace
 }
 
 // Heartbeat POST /api/v1/auth/activity

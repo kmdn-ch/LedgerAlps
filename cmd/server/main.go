@@ -301,7 +301,7 @@ func main() {
 	// Déconnexion sur inactivité côté serveur : le délai réglé n'était appliqué
 	// que par l'interface. Un jeton copié, ou un onglet fermé sans déconnexion,
 	// restait utilisable toute sa durée de vie.
-	idleGuard := middleware.IdleLimit(authHandler.Activity(), func() int { return cfg.IdleLogoutMinutes })
+	idleGuard := middleware.IdleLimit(authHandler.Activity(), cfg.IdleMinutes)
 	//
 	// Dix échecs verrouillent l'adresse, puis l'attente s'allonge à chaque
 	// nouvelle série : 30 s, 1 min, 5 min, 15 min, 1 h. Une heure de calme

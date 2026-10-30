@@ -45,6 +45,7 @@ package config
 
 import (
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -158,6 +159,28 @@ func MaybeRotateJWTSecret(cfg *Config, now time.Time) (bool, error) {
 // de cinq minutes sans qu'une touche soit frappée. Un délai qui coupe pendant
 // la lecture est un délai qu'on désactive.
 const DefaultIdleLogoutMinutes = 10
+
+// idleMu protège Config.IdleLogoutMinutes : le filtre d'inactivité le lit à
+// CHAQUE requête, pendant que le réglage peut le réécrire depuis une autre
+// goroutine. Un entier lu et écrit sans synchronisation est une course de
+// données au sens du modèle mémoire de Go, même si elle est bénigne en pratique.
+var idleMu sync.RWMutex
+
+// IdleMinutes lit le délai d'inactivité réglé (0 : désactivé). À utiliser à la
+// place du champ partout où le serveur tourne.
+func (c *Config) IdleMinutes() int {
+	idleMu.RLock()
+	defer idleMu.RUnlock()
+	return c.IdleLogoutMinutes
+}
+
+// SetIdleMinutes pose le délai en mémoire, sans l'écrire dans config.json (voir
+// SetIdleLogoutMinutes pour la persistance).
+func (c *Config) SetIdleMinutes(minutes int) {
+	idleMu.Lock()
+	c.IdleLogoutMinutes = minutes
+	idleMu.Unlock()
+}
 
 // SetIdleLogoutMinutes enregistre le délai d'inactivité. Zéro le désactive.
 //

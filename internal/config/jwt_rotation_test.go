@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -302,5 +303,36 @@ func TestLaRotationFonctionneToujoursSansVariableDEnvironnement(t *testing.T) {
 	cfg2 := Load()
 	if cfg2.JWTSecret != cfg.JWTSecret {
 		t.Error("la clé tournée n'a pas été relue au démarrage suivant")
+	}
+}
+
+// Le filtre d'inactivité lit le délai à chaque requête pendant que le réglage le
+// réécrit : sous le détecteur de concurrence de la CI, une lecture ou une
+// écriture directe du champ y serait signalée comme une course de données.
+func TestLeDelaiDInactiviteSeLitEtSEcritSansCourse(t *testing.T) {
+	cfg := &Config{IdleLogoutMinutes: 10}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(2)
+		go func(n int) {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				cfg.SetIdleMinutes(2 + (n+j)%20)
+			}
+		}(i)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				if m := cfg.IdleMinutes(); m < 2 || m > 21 {
+					t.Errorf("délai lu hors des valeurs écrites : %d", m)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	cfg.SetIdleMinutes(0)
+	if cfg.IdleMinutes() != 0 {
+		t.Fatal("zéro (désactivé) n'est pas relu tel quel")
 	}
 }
