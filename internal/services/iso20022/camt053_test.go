@@ -294,3 +294,90 @@ func TestParseDateFormatsAcceptesEtDateAbsente(t *testing.T) {
 		})
 	}
 }
+
+// ─── Lots : plusieurs opérations sous une même écriture ──────────────────────
+
+// lot construit une écriture de crédit de 600.00 portant trois opérations.
+// `montants` dit si chaque opération annonce son propre montant.
+func lot(total string, montants bool) string {
+	tx := func(e2e, nom, montant string) string {
+		amt := ""
+		if montants {
+			amt = `<Amt Ccy="CHF">` + montant + `</Amt>`
+		}
+		return `<TxDtls>
+            <Refs><EndToEndId>` + e2e + `</EndToEndId></Refs>
+            ` + amt + `
+            <RmtInf><Ustrd>Facture ` + e2e + `</Ustrd></RmtInf>
+            <RltdPties>
+              <Dbtr><Pty><Nm>` + nom + `</Nm></Pty></Dbtr>
+              <DbtrAcct><Id><IBAN>CH5604835012345678009</IBAN></Id></DbtrAcct>
+            </RltdPties>
+          </TxDtls>`
+	}
+	return `<Ntry>
+        <Amt Ccy="CHF">` + total + `</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-03-02</Dt></BookgDt>
+        <AcctSvcrRef>LOT-001</AcctSvcrRef>
+        <NtryDtls>` + tx("F-1", "Client Un", "100.00") + tx("F-2", "Client Deux", "200.00") + tx("F-3", "Client Trois", "300.00") + `</NtryDtls>
+      </Ntry>`
+}
+
+// Le défaut : seule la première opération d'un lot était lue, les autres
+// disparaissaient sans erreur, et la première recevait le montant de TOUT le lot.
+func TestParseCamt053UnLotDonneUneEcritureParOperation(t *testing.T) {
+	entries, err := ParseCamt053(releveSquelette(lot("600.00", true)))
+	if err != nil {
+		t.Fatalf("ParseCamt053: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("%d écriture(s), attendu 3 : des opérations du lot ont disparu", len(entries))
+	}
+	want := []struct {
+		montant float64
+		nom     string
+		e2e     string
+	}{{100, "Client Un", "F-1"}, {200, "Client Deux", "F-2"}, {300, "Client Trois", "F-3"}}
+	var somme float64
+	for i, w := range want {
+		e := entries[i]
+		if e.Amount != w.montant || e.CounterpartName != w.nom || e.EndToEndRef != w.e2e {
+			t.Errorf("opération %d = %v / %q / %q, attendu %v / %q / %q",
+				i+1, e.Amount, e.CounterpartName, e.EndToEndRef, w.montant, w.nom, w.e2e)
+		}
+		if !e.IsCredit || e.BankRef != "LOT-001" {
+			t.Errorf("opération %d : sens ou référence de lot perdus (%+v)", i+1, e)
+		}
+		somme += e.Amount
+	}
+	if somme != 600 {
+		t.Errorf("somme des opérations = %v, attendu le total du lot 600", somme)
+	}
+}
+
+// Sans montant par opération, ou si leur somme ne retombe pas sur le total, on
+// n'invente rien : une écriture, au total du lot. Jamais le total donné à la
+// première opération seule, et jamais un total multiplié.
+func TestParseCamt053UnLotSansMontantsRestePorteParSonTotal(t *testing.T) {
+	for nom, xml := range map[string]string{
+		"montants absents":     lot("600.00", false),
+		"somme ne retombe pas": lot("650.00", true),
+	} {
+		entries, err := ParseCamt053(releveSquelette(xml))
+		if err != nil {
+			t.Fatalf("%s: %v", nom, err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("%s : %d écriture(s), attendu 1 (le lot, au total)", nom, len(entries))
+		}
+		if entries[0].CounterpartName != "" {
+			t.Errorf("%s : la contrepartie %q d'UNE opération est attribuée à tout le lot",
+				nom, entries[0].CounterpartName)
+		}
+	}
+	if e, _ := ParseCamt053(releveSquelette(lot("600.00", false))); e[0].Amount != 600 {
+		t.Errorf("montant = %v, attendu le total du lot, 600", e[0].Amount)
+	}
+}

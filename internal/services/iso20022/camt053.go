@@ -3,6 +3,7 @@ package iso20022
 import (
 	"encoding/xml"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -71,35 +72,86 @@ func ParseCamt053(xmlData []byte) ([]BankEntry, error) {
 				be.ValueDate = d
 			}
 
-			// Drill into transaction details
-			for _, txDtls := range ntry.NtryDtls.TxDtls {
-				be.EndToEndRef = txDtls.Refs.EndToEndID
+			txs := ntry.NtryDtls.TxDtls
+			switch {
+			case len(txs) == 1:
+				// Le cas courant : une opération, ses détails complètent l'écriture.
+				entries = append(entries, withTxDetails(be, txs[0]))
 
-				// Remittance info — structured (QRR ref) or unstructured
-				if txDtls.RmtInf.Strd != nil {
-					be.QRReference = strings.TrimSpace(txDtls.RmtInf.Strd.CdtrRefInf.Ref)
-				}
-				if txDtls.RmtInf.Ustrd != "" {
-					be.Unstructured = strings.TrimSpace(txDtls.RmtInf.Ustrd)
-				}
-
-				// Related parties — counterpart depends on direction
-				if be.IsCredit {
-					be.CounterpartName = txDtls.RltdPties.Dbtr.Pty.Nm
-					be.CounterpartIBAN = normalizeIBAN(txDtls.RltdPties.DbtrAcct.ID.IBAN)
+			case len(txs) > 1:
+				// Un lot (paiements groupés, remise d'encaissements) : l'écriture porte
+				// le TOTAL, chaque TxDtls porte une opération. Ne garder que la
+				// première faisait disparaître les autres sans un mot, et donnait au
+				// premier le montant de tout le lot.
+				if parts, ok := splitBatch(be, txs); ok {
+					entries = append(entries, parts...)
 				} else {
-					be.CounterpartName = txDtls.RltdPties.Cdtr.Pty.Nm
-					be.CounterpartIBAN = normalizeIBAN(txDtls.RltdPties.CdtrAcct.ID.IBAN)
+					// Les montants du détail manquent ou ne retombent pas sur le total :
+					// on ne les invente pas. Une seule écriture, au total du lot, sans
+					// la contrepartie d'une seule de ses opérations.
+					entries = append(entries, be)
 				}
 
-				// Only use first TxDtls (most Swiss bank files have one)
-				break
+			default:
+				entries = append(entries, be)
 			}
-
-			entries = append(entries, be)
 		}
 	}
 	return entries, nil
+}
+
+// withTxDetails complète une écriture avec le détail d'une opération :
+// références, motif, contrepartie (qui dépend du sens du mouvement).
+func withTxDetails(be BankEntry, tx c53TxDtls) BankEntry {
+	be.EndToEndRef = tx.Refs.EndToEndID
+
+	// Remittance info — structured (QRR ref) or unstructured
+	if tx.RmtInf.Strd != nil {
+		be.QRReference = strings.TrimSpace(tx.RmtInf.Strd.CdtrRefInf.Ref)
+	}
+	if tx.RmtInf.Ustrd != "" {
+		be.Unstructured = strings.TrimSpace(tx.RmtInf.Ustrd)
+	}
+
+	if be.IsCredit {
+		be.CounterpartName = tx.RltdPties.Dbtr.Pty.Nm
+		be.CounterpartIBAN = normalizeIBAN(tx.RltdPties.DbtrAcct.ID.IBAN)
+	} else {
+		be.CounterpartName = tx.RltdPties.Cdtr.Pty.Nm
+		be.CounterpartIBAN = normalizeIBAN(tx.RltdPties.CdtrAcct.ID.IBAN)
+	}
+	return be
+}
+
+// splitBatch répartit un lot en une écriture par opération.
+//
+// Elle ne réussit que si CHAQUE opération porte son montant et que leur somme
+// retombe sur celui de l'écriture, au centime : c'est la seule preuve qu'on a
+// bien lu le lot en entier. Sinon elle renonce, et l'appelant garde le total.
+func splitBatch(be BankEntry, txs []c53TxDtls) ([]BankEntry, bool) {
+	parts := make([]BankEntry, 0, len(txs))
+	var sum float64
+	for _, tx := range txs {
+		amt := tx.Amt
+		if strings.TrimSpace(amt.Value) == "" {
+			amt = tx.AmtDtls.TxAmt.Amt
+		}
+		v, err := strconv.ParseFloat(strings.TrimSpace(amt.Value), 64)
+		if err != nil || v <= 0 {
+			return nil, false
+		}
+		part := withTxDetails(be, tx)
+		part.Amount = v
+		if amt.Ccy != "" {
+			part.Currency = amt.Ccy
+		}
+		sum += v
+		parts = append(parts, part)
+	}
+	if math.Abs(sum-be.Amount) > 0.005 {
+		return nil, false
+	}
+	return parts, true
 }
 
 // ─── XML structs (camt.053.001.08) ───────────────────────────────────────────
@@ -163,8 +215,16 @@ type c53NtryDtls struct {
 
 type c53TxDtls struct {
 	Refs      c53Refs      `xml:"Refs"`
+	Amt       c53Amt       `xml:"Amt"`
+	AmtDtls   c53AmtDtls   `xml:"AmtDtls"`
 	RmtInf    c53RmtInf    `xml:"RmtInf"`
 	RltdPties c53RltdPties `xml:"RltdPties"`
+}
+
+type c53AmtDtls struct {
+	TxAmt struct {
+		Amt c53Amt `xml:"Amt"`
+	} `xml:"TxAmt"`
 }
 
 type c53Refs struct {
