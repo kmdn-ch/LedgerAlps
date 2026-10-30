@@ -143,7 +143,7 @@ export const en: Catalogue = {
   'fact.aucuneOffre': 'No quotations',
   'fact.premiereFacture': 'Create your first invoice to get started.',
   'fact.premiereOffre': 'Create your first quotation.',
-  'fact.paiementAuJournal': 'The payment is posted to the journal (bank / receivables).',
+  'fact.paiementAuJournal': 'The receipt is posted to the journal (bank / receivables) when the invoice’s issue was posted.',
   'fact.plusModifiable': 'The invoice can no longer be edited.',
 
   // ─── Contacts ───

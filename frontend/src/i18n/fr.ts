@@ -187,7 +187,7 @@ export const fr = {
   'fact.aucuneOffre': 'Aucune offre de prix',
   'fact.premiereFacture': 'Créez votre première facture pour démarrer.',
   'fact.premiereOffre': 'Créez votre première offre de prix.',
-  'fact.paiementAuJournal': 'Le paiement est passé au journal (banque / débiteurs).',
+  'fact.paiementAuJournal': 'L’encaissement est passé au journal (banque / débiteurs) lorsque l’émission de la facture l’a été.',
   'fact.plusModifiable': 'La facture ne sera plus modifiable.',
 
   // ─── Contacts ───

@@ -91,10 +91,12 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
     <div>
       <ConfirmDialog
         open={pendingPaid !== null}
-        title={pendingPaid ? `Marquer la facture ${pendingPaid.invoice_number} comme payée ?` : ''}
+        title={pendingPaid ? t('fd.titrePayee', { numero: pendingPaid.invoice_number }) : ''}
         consequences={[
+          // Le SOLDE restant, pas le total : après un versement partiel, le
+          // raccourci n'encaisse que ce qui reste dû.
           pendingPaid
-            ? `${formatCHF(pendingPaid.total_amount)} encaissé${pendingPaid.contact_name ? ` de ${pendingPaid.contact_name}` : ''}, à la date d'aujourd'hui.`
+            ? t('fd.consPayee1', { montant: formatCHF(pendingPaid.total_amount - pendingPaid.amount_paid) })
             : '',
           t('fact.paiementAuJournal'),
           t('fact.plusModifiable'),
@@ -251,7 +253,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
                         onClick={() => setPendingPaid(inv)}
                         className="btn-ghost btn-sm text-success-700"
                       >
-                        Payer
+                        {t('fact.payer')}
                       </button>
                     )}
                     <button

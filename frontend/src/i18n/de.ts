@@ -144,7 +144,7 @@ export const de: Catalogue = {
   'fact.aucuneOffre': 'Keine Offerte',
   'fact.premiereFacture': 'Erstellen Sie Ihre erste Rechnung, um zu beginnen.',
   'fact.premiereOffre': 'Erstellen Sie Ihre erste Offerte.',
-  'fact.paiementAuJournal': 'Die Zahlung wird verbucht (Bank / Debitoren).',
+  'fact.paiementAuJournal': 'Der Zahlungseingang wird im Journal gebucht (Bank / Debitoren), sofern die Ausstellung der Rechnung gebucht wurde.',
   'fact.plusModifiable': 'Die Rechnung lässt sich danach nicht mehr ändern.',
 
   // ─── Contacts ───

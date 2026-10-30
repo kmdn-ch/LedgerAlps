@@ -143,7 +143,7 @@ export const it: Catalogue = {
   'fact.aucuneOffre': 'Nessuna offerta',
   'fact.premiereFacture': 'Crei la sua prima fattura per iniziare.',
   'fact.premiereOffre': 'Crei la sua prima offerta.',
-  'fact.paiementAuJournal': 'Il pagamento è registrato a giornale (banca / debitori).',
+  'fact.paiementAuJournal': 'L’incasso è contabilizzato a giornale (banca / debitori) quando l’emissione della fattura lo è stata.',
   'fact.plusModifiable': 'La fattura non sarà più modificabile.',
 
   // ─── Contacts ───
