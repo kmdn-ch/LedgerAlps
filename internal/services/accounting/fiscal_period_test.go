@@ -270,3 +270,39 @@ func TestCloseYearRefusesRemainingDrafts(t *testing.T) {
 		t.Fatal("un exercice contenant un brouillon a été clôturé sans protestation")
 	}
 }
+
+// ─── Exercice suivant et années bissextiles ──────────────────────────────────
+
+// Clore 2027 crée 2028, qui est bissextile : l'exercice suivant doit finir le
+// 31 décembre, pas le 30. Avec « fin + 365 jours », le 31.12.2028 n'appartenait
+// à aucun exercice et toute écriture de ce jour était refusée.
+func TestCloseYearCreatesALeapYearInFull(t *testing.T) {
+	for _, tc := range []struct {
+		name, start, end, wantStart, wantEnd string
+	}{
+		{"année civile avant une bissextile", "2027-01-01", "2027-12-31", "2028-01-01", "2028-12-31"},
+		{"exercice décalé traversant le 29 février", "2026-07-01", "2027-06-30", "2027-07-01", "2028-06-30"},
+		{"année bissextile close", "2028-01-01", "2028-12-31", "2029-01-01", "2029-12-31"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, database, _, _ := newAccountingDB(t)
+			if _, err := database.Exec(
+				`INSERT INTO fiscal_years (id, name, start_date, end_date) VALUES ('fy', 'N', ?, ?)`,
+				tc.start, tc.end); err != nil {
+				t.Fatal(err)
+			}
+			if err := NewFiscalYearService(database, false).CloseYear(context.Background(), "fy", "u1"); err != nil {
+				t.Fatalf("clôture: %v", err)
+			}
+			var start, end string
+			if err := database.QueryRow(
+				`SELECT start_date, end_date FROM fiscal_years WHERE id <> 'fy'`).Scan(&start, &end); err != nil {
+				t.Fatalf("l'exercice suivant n'a pas été créé: %v", err)
+			}
+			if start[:10] != tc.wantStart || end[:10] != tc.wantEnd {
+				t.Fatalf("exercice suivant = %s → %s, attendu %s → %s",
+					start[:10], end[:10], tc.wantStart, tc.wantEnd)
+			}
+		})
+	}
+}

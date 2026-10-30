@@ -278,7 +278,11 @@ func (s *FiscalYearService) CloseYear(ctx context.Context, fiscalYearID, userID 
 	}
 	if existingCount == 0 {
 		nextStart := fyEndDate.AddDate(0, 0, 1)
-		nextEnd := fyEndDate.AddDate(0, 0, 365)
+		// Un an civil après le début, moins un jour — et non « fin + 365 jours » :
+		// l'exercice suivant d'un 31.12.2027 est 2028, bissextile, et 365 jours
+		// arrêtaient la nouvelle année au 30.12.2028. Le 31 n'appartenait alors à
+		// aucun exercice, et toute écriture de ce jour était refusée.
+		nextEnd := nextStart.AddDate(1, 0, 0).AddDate(0, 0, -1)
 		insertNext := db.Rebind(`
 			INSERT INTO fiscal_years (id, name, start_date, end_date, is_closed)
 			VALUES (?, ?, ?, ?, 0)
