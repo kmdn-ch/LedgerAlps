@@ -267,6 +267,13 @@ LangString UninstallDone ${LANG_ITALIAN} "LedgerAlps è stato disinstallato."
 ; sont des succès ici ; le reste (accès refusé, par exemple) mérite un mot.   ;
 ; --------------------------------------------------------------------------- ;
 !macro ArreterProcessus exe
+  ; Les étiquettes doivent être uniques par insertion (la macro l'est quatre
+  ; fois) et `${__LINE__}` varie d'une ligne à l'autre de la macro : on fige
+  ; l'identifiant UNE fois, comme dans AttendreLiberation.
+  !define AP_ID "AP${__LINE__}"
+  ; $0 est un registre de l'appelant. nsExec y déposait son code de retour sans
+  ; le rendre : on le sauvegarde, et on le restitue à la fin.
+  Push $0
   ; Chemin ABSOLU obligatoire. Sans lui, CreateProcess (lpApplicationName=NULL)
   ; cherche d'abord dans le repertoire de l'installeur -- le dossier
   ; Telechargements, dans la quasi-totalite des cas --, puis dans le repertoire
@@ -276,9 +283,12 @@ LangString UninstallDone ${LANG_ITALIAN} "LedgerAlps è stato disinstallato."
   ; s'executerait donc en Administrateur.
   nsExec::Exec '"$SYSDIR\taskkill.exe" /f /im "${exe}"'
   Pop $0
-  StrCmp $0 "0" +3 0
-  StrCmp $0 "128" +2 0
+  StrCmp $0 "0" ${AP_ID}_fin
+  StrCmp $0 "128" ${AP_ID}_fin
   DetailPrint "$(StopFailed)"
+  ${AP_ID}_fin:
+  Pop $0
+  !undef AP_ID
 !macroend
 
 ; --------------------------------------------------------------------------- ;
