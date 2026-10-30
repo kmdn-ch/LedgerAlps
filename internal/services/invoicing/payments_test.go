@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
 )
 
@@ -368,5 +369,47 @@ func TestUnEncaissementEstTrace(t *testing.T) {
 	if n := compte(t, database,
 		`SELECT COUNT(*) FROM audit_logs WHERE table_name = 'payments' AND record_id = ?`, res.Payment.ID); n != 1 {
 		t.Fatalf("%d maillon(s) d'audit pour le paiement, attendu 1", n)
+	}
+}
+
+// La migration 0029 aligne `amount_paid` des factures déjà payées (« Marquer
+// payée » le laissait à zéro) sans toucher à ce qui ne doit pas bouger.
+func TestLaMigrationAligneLEncaisseDesFacturesPayeesDAvant(t *testing.T) {
+	s, database, contactID := postingService(t, false)
+
+	// Quatre documents d'avant la mise à jour, dans quatre situations.
+	payee := makeInvoice(t, s, contactID, 500, 0)    // payée, encaissé resté à 0
+	archivee := makeInvoice(t, s, contactID, 300, 0) // archivée : on ne sait pas
+	deja := makeInvoice(t, s, contactID, 200, 0)     // payée, encaissé déjà renseigné
+	offre := makeInvoice(t, s, contactID, 100, 0)    // jamais de paiement sur une offre
+	for id, sets := range map[string]string{
+		payee:    `status = 'paid', amount_paid = 0`,
+		archivee: `status = 'archived', amount_paid = 0`,
+		deja:     `status = 'paid', amount_paid = 120`,
+		offre:    `status = 'sent', amount_paid = 0, document_type = 'quote'`,
+	} {
+		if _, err := database.Exec(`UPDATE invoices SET `+sets+` WHERE id = ?`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	migration, err := db.MigrationSQL("0029_amount_paid_des_factures_payees")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Deux passages : la migration est rejouable sans effet.
+	for i := 0; i < 2; i++ {
+		if _, err := database.Exec(migration); err != nil {
+			t.Fatalf("migration (passage %d): %v", i+1, err)
+		}
+	}
+
+	for id, want := range map[string]float64{payee: 500, archivee: 0, deja: 120, offre: 0} {
+		if _, paid := etat(t, database, id); paid != want {
+			t.Errorf("document %s : amount_paid = %.2f, attendu %.2f", id[:6], paid, want)
+		}
+	}
+	if n := compte(t, database, `SELECT COUNT(*) FROM journal_entries`); n != 0 {
+		t.Errorf("la migration a créé %d écriture(s) : le journal est immuable, elle n'y touche pas", n)
 	}
 }
