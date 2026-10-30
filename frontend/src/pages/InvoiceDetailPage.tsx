@@ -12,6 +12,7 @@ import {
   PageHeader, StatusBadge, LoadingSpinner, ErrorBanner,
   SectionTitle, PDFPreview, ConfirmDialog,
 } from '@/components/ui'
+import { InvoicePayments } from '@/components/invoice/InvoicePayments'
 import { useCanWrite } from '@/hooks/usePermissions'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
@@ -94,7 +95,9 @@ type ActionCopy = {
   tone?: 'danger' | 'normal'
 }
 
-function transitionCopy(t: T, status: DocumentStatus, isQuote: boolean, number: string): ActionCopy {
+function transitionCopy(
+  t: T, status: DocumentStatus, isQuote: boolean, number: string, balance: number,
+): ActionCopy {
   const n = { numero: number }
   switch (status) {
     case 'sent':
@@ -109,7 +112,11 @@ function transitionCopy(t: T, status: DocumentStatus, isQuote: boolean, number: 
     case 'paid':
       return {
         title: t('fd.titrePayee', n),
-        consequences: [t('fd.consPayee1'), t('fd.consPayee2')],
+        consequences: [
+          t('fd.consPayee1', { montant: formatCHF(balance) }),
+          t('fd.consPayee3'),
+          t('fd.consPayee2'),
+        ],
         reassurance: t('fd.rassurPayee'),
         confirmLabel: t('fd.marquerPayee'),
       }
@@ -206,6 +213,8 @@ export function InvoiceDetailPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoice', invoiceId] })
       qc.invalidateQueries({ queryKey: ['invoices'] })
+      // « Marquer payée » enregistre le solde comme un paiement : la liste change.
+      qc.invalidateQueries({ queryKey: ['payments', invoiceId] })
     },
   })
 
@@ -241,7 +250,10 @@ export function InvoiceDetailPage() {
       ? { paymentDate: new Date().toISOString().slice(0, 10) }
       : {}
     ask(
-      transitionCopy(t, status, invoice?.document_type === 'quote', invoice?.invoice_number ?? ''),
+      transitionCopy(
+        t, status, invoice?.document_type === 'quote', invoice?.invoice_number ?? '',
+        invoice ? invoice.total_amount - invoice.amount_paid : 0,
+      ),
       () => transition.mutate({ status, ...extra }),
     )
   }
@@ -276,7 +288,11 @@ export function InvoiceDetailPage() {
   )
 
   const isQuote = invoice.document_type === 'quote'
-  const actions = (isQuote ? QUOTE_TRANSITIONS[invoice.status] : TRANSITIONS[invoice.status]) ?? []
+  // Une facture déjà encaissée, en tout ou partie, ne s'annule pas : le serveur
+  // refuse (409), et offrir une action vouée à l'échec est pire que ne pas
+  // l'offrir. La correction est la note de crédit, dont le bouton est ci-dessus.
+  const actions = ((isQuote ? QUOTE_TRANSITIONS[invoice.status] : TRANSITIONS[invoice.status]) ?? [])
+    .filter(a => !(a.status === 'cancelled' && invoice.amount_paid > 0.005))
   // Une offre envoyée dont l'issue n'est pas encore connue reste actionnable.
   const quoteOpen = isQuote && invoice.status === 'sent' && !invoice.quote_outcome
   // Une facture émise — envoyée ou payée — peut être corrigée. Un brouillon n'a
@@ -514,6 +530,9 @@ export function InvoiceDetailPage() {
           </dl>
         </div>
       </div>
+
+      {/* Paiements : liste des encaissements, et saisie d'un versement partiel. */}
+      <InvoicePayments invoice={invoice} canRecord={peutEcrire} />
 
       {/* Lignes de facture */}
       <div className="card card-pad mb-6">

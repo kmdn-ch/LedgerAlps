@@ -178,6 +178,21 @@ export interface InvoiceLine {
   sequence: number
 }
 
+export type PaymentMethod = 'bank_transfer' | 'cash' | 'card' | 'check' | 'other'
+
+// Un encaissement enregistré sur une facture (GET /payments?invoice_id=…).
+export interface Payment {
+  id: string
+  invoice_id: string
+  amount: number
+  payment_date: string
+  method: PaymentMethod
+  reference?: string | null
+  journal_entry_id?: string | null
+  created_by_id: string
+  created_at: string
+}
+
 export interface Invoice {
   id: string
   invoice_number: string

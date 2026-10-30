@@ -414,6 +414,21 @@ export const contactsApi = {
   update: (id: string, data: unknown) => api.patch(`/contacts/${id}`, data),
 }
 
+// ─── Encaissements d'une facture ──────────────────────────────────────────────
+//
+// Distinct de `paymentsApi`, qui prépare les virements aux FOURNISSEURS
+// (pain.001) : ici c'est l'argent qui entre.
+export const invoicePaymentsApi = {
+  list: (invoiceId: string) => api.get('/payments', { params: { invoice_id: invoiceId } }),
+  record: (body: {
+    invoice_id: string
+    amount: number
+    payment_date: string
+    method: string
+    reference?: string
+  }) => api.post('/payments', body),
+}
+
 // ─── Factures ─────────────────────────────────────────────────────────────────
 export const invoicesApi = {
   list: (params?: {
