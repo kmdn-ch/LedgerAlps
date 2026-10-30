@@ -261,10 +261,10 @@ install_systemd() {
   # laissait en 0755 — lisible par tout compte local.
   #
   # Le durcissement de /etc/ledgeralps (la cle JWT) avait ete pose sans que
-  # celui-ci le soit. Le meme geste existe depuis toujours dans
-  # infrastructure/linux/preinstall.sh, mais les paquets .deb/.rpm ne sont plus
-  # publies depuis la v1.4.5 : ce script-ci est le seul chemin d'installation
-  # vivant, et c'est lui qui devait porter la correction.
+  # celui-ci le soit. Les anciens paquets .deb/.rpm portaient le meme geste, mais
+  # ils ne sont plus publies depuis la v1.4.5 (et leurs scripts ont ete retires du
+  # depot) : ce script-ci est le seul chemin d'installation vivant, et c'est lui
+  # qui devait porter la correction.
   #
   # ProtectSystem=strict et NoNewPrivileges plus bas protegent le PROCESSUS,
   # pas les lecteurs.
