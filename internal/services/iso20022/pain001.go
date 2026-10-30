@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -67,15 +68,15 @@ type CreditTransfer struct {
 func newMessageID(now time.Time) string {
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand n'échoue pas en pratique ; à défaut, les nanosecondes
-		// gardent l'identifiant distinct d'un appel à l'autre.
-		n := now.UnixNano()
-		for i := range b {
-			b[i] = byte(n >> (8 * i))
-		}
+		// crypto/rand n'échoue pas en pratique ; à défaut, un compteur du processus
+		// garde l'identifiant distinct d'un appel à l'autre.
+		return fmt.Sprintf("LA-%s-%08x", now.Format("20060102150405"), msgIDFallback.Add(1))
 	}
 	return "LA-" + now.Format("20060102150405") + "-" + hex.EncodeToString(b[:])
 }
+
+// msgIDFallback numérote les identifiants produits quand crypto/rand a échoué.
+var msgIDFallback atomic.Uint32
 
 // GeneratePain001 returns a pain.001.001.09 XML document as bytes.
 func GeneratePain001(req Pain001Request) ([]byte, error) {

@@ -251,7 +251,7 @@ func (s *Service) paymentBankAccount(ctx context.Context, req PaymentRequest) (s
 	if err != nil {
 		var missing ErrAccountMissing
 		if errors.As(err, &missing) {
-			return "", ErrPaymentAccountMissing{Number: missing.Number}
+			return "", ErrPaymentAccountMissing(missing)
 		}
 		return "", err
 	}
