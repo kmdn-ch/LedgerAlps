@@ -297,3 +297,80 @@ func TestUneEcritureEcarteeSortDeLaListe(t *testing.T) {
 		t.Fatalf("%d écriture(s) restante(s) après mise à l'écart", len(after))
 	}
 }
+
+// Le défaut : deux virements réels, le même jour, au même montant et sans
+// aucune référence, avaient la même empreinte. Le second était compté comme un
+// doublon et jeté — un encaissement perdu sans un mot.
+func TestDeuxVirementsSansReferenceRestentDeuxEcritures(t *testing.T) {
+	s, database := newDB(t)
+	a := entry(100, "")
+	a.BankRef = ""
+	b := a // strictement identique
+
+	res, err := s.Import(context.Background(), []iso20022.BankEntry{a, b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Imported != 2 || res.Duplicate != 0 {
+		t.Fatalf("import = %+v : un des deux virements a disparu comme « doublon »", res)
+	}
+
+	// Et le même relevé réimporté ne duplique rien.
+	again, err := s.Import(context.Background(), []iso20022.BankEntry{a, b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Imported != 0 || again.Duplicate != 2 {
+		t.Fatalf("réimport = %+v, attendu 0 importé / 2 doublons", again)
+	}
+	var n int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM bank_entries`).Scan(&n); err != nil || n != 2 {
+		t.Fatalf("%d écriture(s) en base (%v), attendu 2", n, err)
+	}
+}
+
+// Deux relevés qui se recouvrent : l'ordre des écritures ne doit pas faire
+// prendre une personne pour une autre.
+func TestUnReleveQuiSeRecouvreNeConfondPasLesContreparties(t *testing.T) {
+	s, _ := newDB(t)
+	x := entry(100, "")
+	x.BankRef, x.CounterpartName = "", "Payeur X"
+	y := entry(100, "")
+	y.BankRef, y.CounterpartName = "", "Payeur Y"
+
+	if res, err := s.Import(context.Background(), []iso20022.BankEntry{x}); err != nil || res.Imported != 1 {
+		t.Fatalf("premier relevé: %+v %v", res, err)
+	}
+	// Le second relevé contient Y AVANT X.
+	res, err := s.Import(context.Background(), []iso20022.BankEntry{y, x})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Imported != 1 || res.Duplicate != 1 {
+		t.Fatalf("second relevé = %+v, attendu Y importé et X reconnu : Y a été pris pour X", res)
+	}
+}
+
+// Les écritures conservées par une version antérieure portent l'ancienne
+// empreinte : réimporter leur relevé après la mise à jour ne doit pas les doubler.
+func TestUneEcritureDEnAvantLaMiseAJourNEstPasDupliquee(t *testing.T) {
+	s, database := newDB(t)
+	e := entry(250, "")
+	if _, err := database.Exec(`
+		INSERT INTO bank_entries
+		  (fingerprint, amount, currency, is_credit, booking_date, bank_ref, end_to_end_ref,
+		   qr_reference, counterparty, remittance)
+		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		fingerprint(e), e.Amount, e.Currency, 1, e.BookingDate, e.BankRef, "", "",
+		counterpartyOf(e), remittanceOf(e)); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := s.Import(context.Background(), []iso20022.BankEntry{e})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Imported != 0 || res.Duplicate != 1 {
+		t.Fatalf("import = %+v : une écriture déjà conservée a été dupliquée", res)
+	}
+}

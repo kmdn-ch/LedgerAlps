@@ -24,6 +24,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -49,12 +50,39 @@ func New(database *sql.DB, usePostgres bool) *Service {
 // les fondre en un seul ferait disparaître un encaissement. La combinaison de
 // tout ce qui identifie l'opération est le compromis qui ne perd rien et ne
 // duplique pas.
+//
+// Cette empreinte est celle des versions jusqu'à 1.6.4. Elle reste en place
+// pour reconnaître les écritures déjà conservées ; voir fingerprintV2 pour
+// celle que l'import écrit désormais.
 func fingerprint(e iso20022.BankEntry) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "%s|%.2f|%s|%t|%s|%s|%s",
 		e.BookingDate.Format("2006-01-02"), e.Amount, e.Currency, e.IsCredit,
 		strings.TrimSpace(e.BankRef), strings.TrimSpace(e.EndToEndRef),
 		strings.TrimSpace(e.QRReference))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// identityKey est tout ce qui, sur une écriture, la distingue d'une autre : la
+// base de l'ancienne empreinte, plus la contrepartie et le motif.
+func identityKey(e iso20022.BankEntry) string {
+	return fmt.Sprintf("%s|%s|%s", fingerprint(e), counterpartyOf(e), remittanceOf(e))
+}
+
+// fingerprintV2 ajoute à l'identité le RANG de l'écriture parmi les écritures
+// identiques d'un même relevé.
+//
+// Deux virements réels sans aucune référence, le même jour, au même montant et
+// de la même personne ont exactement les mêmes champs. L'ancienne empreinte les
+// confondait : le second tombait sur la contrainte d'unicité, était compté
+// comme doublon et disparaissait — un encaissement perdu sans un mot. Le rang
+// les sépare : le premier est #0, le second #1.
+//
+// Réimporter le même relevé redonne les mêmes rangs, donc les mêmes empreintes :
+// l'import reste idempotent.
+func fingerprintV2(e iso20022.BankEntry, rank int) string {
+	h := sha256.New()
+	fmt.Fprintf(h, "v2|%s|#%d", identityKey(e), rank)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -76,13 +104,37 @@ func (s *Service) Import(ctx context.Context, entries []iso20022.BankEntry) (Imp
 		   bank_ref, end_to_end_ref, qr_reference, counterparty, remittance)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?)`, s.usePostgres)
 
+	// Rang de chaque écriture parmi les identiques de CE relevé.
+	ranks := map[string]int{}
 	for _, e := range entries {
+		key := identityKey(e)
+		rank := ranks[key]
+		ranks[key]++
+
+		// Une écriture conservée par une version antérieure porte l'ancienne
+		// empreinte. La réimporter ne doit pas la dupliquer — mais seulement si
+		// c'est bien la même (même contrepartie, même motif) : l'ancienne
+		// empreinte confondait justement des écritures différentes.
+		if rank == 0 {
+			var cp, rm string
+			err := s.db.QueryRowContext(ctx,
+				db.Rebind(`SELECT counterparty, remittance FROM bank_entries WHERE fingerprint = ?`, s.usePostgres),
+				fingerprint(e)).Scan(&cp, &rm)
+			if err == nil && cp == counterpartyOf(e) && rm == remittanceOf(e) {
+				res.Duplicate++
+				continue
+			}
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return res, fmt.Errorf("recherche d'une écriture déjà conservée: %w", err)
+			}
+		}
+
 		var valueDate any
 		if !e.ValueDate.IsZero() {
 			valueDate = e.ValueDate
 		}
 		_, err := s.db.ExecContext(ctx, q,
-			fingerprint(e), e.Amount, currencyOr(e.Currency), boolInt(e.IsCredit),
+			fingerprintV2(e, rank), e.Amount, currencyOr(e.Currency), boolInt(e.IsCredit),
 			e.BookingDate, valueDate,
 			e.BankRef, e.EndToEndRef, e.QRReference, counterpartyOf(e), remittanceOf(e))
 		if err != nil {
