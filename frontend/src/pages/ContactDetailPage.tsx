@@ -54,7 +54,11 @@ const schema = z.object({
   }
 })
 
+// zod 4 distingue ce que le formulaire CONTIENT (z.input : un champ coercé est
+// « unknown », un défaut est facultatif) de ce que le schéma PRODUIT (z.infer).
+// react-hook-form porte les deux : valeurs en entrée, données validées en sortie.
 type FormData = z.infer<typeof schema>
+type FormInput = z.input<typeof schema>
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -75,7 +79,7 @@ export function ContactDetailPage() {
   const {
     register, handleSubmit, reset, watch,
     formState: { errors, isDirty },
-  } = useForm<FormData>({
+  } = useForm<FormInput, unknown, FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       contact_type:      'customer',

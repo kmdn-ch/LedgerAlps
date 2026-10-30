@@ -37,7 +37,11 @@ export const invoiceFormSchema = z.object({
   lines:         z.array(lineSchema).min(1, 'val.auMoinsUneLigne'),
 })
 
+// zod 4 distingue ce que le formulaire CONTIENT (z.input : un champ coercé est
+// « unknown », un défaut est facultatif) de ce que le schéma PRODUIT (z.infer).
+// react-hook-form porte les deux : valeurs en entrée, données validées en sortie.
 export type InvoiceFormData = z.infer<typeof invoiceFormSchema>
+export type InvoiceFormInput = z.input<typeof invoiceFormSchema>
 
 /**
  * computeLineTotals calcule base HT, TVA et total d'une ligne.
@@ -48,7 +52,7 @@ export type InvoiceFormData = z.infer<typeof invoiceFormSchema>
  * corresponde au document émis — mais elle n'a pas à être répétée deux fois
  * DANS le frontend.
  */
-export function computeLineTotals(line: Partial<InvoiceFormData['lines'][0]>) {
+export function computeLineTotals(line: Partial<InvoiceFormInput['lines'][0]>) {
   const qty      = Number(line.quantity     ?? 1)
   const price    = Number(line.unit_price   ?? 0)
   const discount = Number(line.discount_pct ?? 0) / 100

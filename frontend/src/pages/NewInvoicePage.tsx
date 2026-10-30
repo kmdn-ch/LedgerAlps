@@ -13,6 +13,7 @@ import { QuickContactModal } from '@/components/invoice/QuickContactModal'
 import {
   invoiceFormSchema, computeLineTotals,
   type InvoiceFormData as FormData,
+  type InvoiceFormInput as FormInput,
 } from '@/schemas/invoiceForm'
 import { formatCHF } from '@/utils'
 import type { Contact, CompanySettings } from '@/types'
@@ -52,7 +53,7 @@ export function NewInvoicePage() {
   const {
     register, control, handleSubmit, setValue,
     formState: { errors, isDirty },
-  } = useForm<FormData>({
+  } = useForm<FormInput, unknown, FormData>({
     resolver: zodResolver(invoiceFormSchema),
     defaultValues: {
       document_type: 'invoice',

@@ -40,7 +40,11 @@ const schema = z.object({
   currency:              z.string().length(3).default('CHF'),
 })
 
+// zod 4 distingue ce que le formulaire CONTIENT (z.input : un champ coercé est
+// « unknown », un défaut est facultatif) de ce que le schéma PRODUIT (z.infer).
+// react-hook-form porte les deux : valeurs en entrée, données validées en sortie.
 type FormData = z.infer<typeof schema>
+type FormInput = z.input<typeof schema>
 
 // Les onglets réservés à l'administration ne sont pas seulement masqués : ils
 // ne sont pas rendus, leur contenu n'est pas monté, et leurs routes répondent
@@ -99,7 +103,7 @@ export function SettingsPage() {
     queryFn:  () => settingsApi.getCompany().then(r => r.data),
   })
 
-  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormInput, unknown, FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       company_name: '',
@@ -611,7 +615,7 @@ function Statut({
   valeur: 'liable' | 'exempt'
   titre: string
   aide: string
-  register: UseFormRegister<FormData>
+  register: UseFormRegister<FormInput>
 }) {
   return (
     <label className="flex items-start gap-2.5 cursor-pointer rounded-md
