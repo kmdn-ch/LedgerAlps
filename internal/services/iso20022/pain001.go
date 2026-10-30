@@ -4,6 +4,8 @@
 package iso20022
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/xml"
 	"fmt"
 	"math"
@@ -51,6 +53,30 @@ type CreditTransfer struct {
 	Unstructured  string // motif en texte libre, quand il n'y a pas de référence
 }
 
+// newMessageID rend l'identifiant de message d'un fichier de virements.
+//
+// La banque rejette un MsgId déjà vu (code DUPL). L'ancien identifiant — date
+// d'exécution et nombre de lignes — était identique pour deux fichiers de même
+// taille le même jour : regénérer un lot après correction, ou en préparer deux
+// de trois virements, donnait le même MsgId et la banque refusait le second.
+//
+// Il porte maintenant l'instant de création à la seconde et 32 bits d'aléa,
+// donc deux appels n'entrent en collision que dans la même seconde ET avec le
+// même tirage. Le tout tient en 26 caractères : l'ISO 20022 plafonne MsgId et
+// PmtInfId à 35 (Max35Text), et PmtInfId y ajoute « -BATCH ».
+func newMessageID(now time.Time) string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// crypto/rand n'échoue pas en pratique ; à défaut, les nanosecondes
+		// gardent l'identifiant distinct d'un appel à l'autre.
+		n := now.UnixNano()
+		for i := range b {
+			b[i] = byte(n >> (8 * i))
+		}
+	}
+	return "LA-" + now.Format("20060102150405") + "-" + hex.EncodeToString(b[:])
+}
+
 // GeneratePain001 returns a pain.001.001.09 XML document as bytes.
 func GeneratePain001(req Pain001Request) ([]byte, error) {
 	if len(req.Transactions) == 0 {
@@ -60,9 +86,7 @@ func GeneratePain001(req Pain001Request) ([]byte, error) {
 		return nil, fmt.Errorf("pain.001: debtor IBAN required")
 	}
 
-	msgID := fmt.Sprintf("LEDGERALPS-%s-%04d",
-		req.ExecutionDate.Format("20060102"),
-		len(req.Transactions))
+	msgID := newMessageID(time.Now().UTC())
 
 	var ctrlSum float64
 	for _, t := range req.Transactions {

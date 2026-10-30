@@ -448,8 +448,7 @@ func TestGeneratePain001AgentDuDebiteurBICOuNotProvided(t *testing.T) {
 	})
 }
 
-// Le message est signé par sa date d'exécution ET le nombre de transactions —
-// deux lots différents un même jour ne doivent pas porter le même identifiant.
+// Deux lots différents un même jour ne doivent pas porter le même identifiant.
 func TestGeneratePain001IdentifiantDeMessageVarieAvecLeLot(t *testing.T) {
 	req := func(n int) Pain001Request {
 		txs := make([]CreditTransfer, n)
@@ -474,5 +473,53 @@ func TestGeneratePain001IdentifiantDeMessageVarieAvecLeLot(t *testing.T) {
 	}
 	if doc1.CstmrCdtTrfInitn.PmtInf.PmtInfID != id1+"-BATCH" {
 		t.Errorf("PmtInfId = %q, attendu %q", doc1.CstmrCdtTrfInitn.PmtInf.PmtInfID, id1+"-BATCH")
+	}
+}
+
+// Le défaut : deux fichiers de MÊME taille, générés le même jour avec la même
+// date d'exécution, portaient le même MsgId, et la banque rejetait le second
+// (DUPL). Les identifiants doivent différer à l'identique de tout le reste.
+func TestGeneratePain001DeuxLotsIdentiquesOntDesIdentifiantsDistincts(t *testing.T) {
+	req := Pain001Request{
+		DebtorIBAN:    ibanDebiteur,
+		ExecutionDate: dateExecution(t),
+		Transactions: []CreditTransfer{
+			{EndToEndID: "F1", CreditorIBAN: ibanCrediteur, Amount: 10},
+			{EndToEndID: "F2", CreditorIBAN: ibanCrediteur, Amount: 20},
+		},
+	}
+	seen := map[string]bool{}
+	for i := 0; i < 200; i++ {
+		raw, err := GeneratePain001(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := unmarshalPain001(t, raw).CstmrCdtTrfInitn.GrpHdr.MsgID
+		if seen[id] {
+			t.Fatalf("l'identifiant %q est sorti deux fois pour deux fichiers générés séparément", id)
+		}
+		seen[id] = true
+	}
+}
+
+// MsgId et PmtInfId sont des Max35Text : au-delà, un contrôle de schéma strict
+// rejette le fichier. « -BATCH » s'ajoute au MsgId, il faut donc de la marge.
+func TestGeneratePain001LesIdentifiantsTiennentDansTrenteCinqCaracteres(t *testing.T) {
+	raw, err := GeneratePain001(Pain001Request{
+		DebtorIBAN:    ibanDebiteur,
+		ExecutionDate: dateExecution(t),
+		Transactions:  []CreditTransfer{{EndToEndID: "F", CreditorIBAN: ibanCrediteur, Amount: 1}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := unmarshalPain001(t, raw)
+	for nom, id := range map[string]string{
+		"MsgId":    doc.CstmrCdtTrfInitn.GrpHdr.MsgID,
+		"PmtInfId": doc.CstmrCdtTrfInitn.PmtInf.PmtInfID,
+	} {
+		if n := len([]rune(id)); n == 0 || n > 35 {
+			t.Errorf("%s = %q : %d caractères, attendu de 1 à 35", nom, id, n)
+		}
 	}
 }
