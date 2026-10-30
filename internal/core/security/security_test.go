@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // ─── HashPassword + CheckPassword ────────────────────────────────────────────
@@ -258,5 +259,22 @@ func TestComputeEntryHash(t *testing.T) {
 				t.Errorf("ComputeEntryHash = %q; expected a different hash from baseline but got the same", got)
 			}
 		})
+	}
+}
+
+// Le coût de production ne doit pas bouger sans qu'un test le dise : abaissé,
+// il affaiblirait silencieusement tous les mots de passe. Ce test tourne dans le
+// paquet, où SetBcryptCostForTests n'est jamais appelé.
+func TestLeCoutDeProductionEstDouze(t *testing.T) {
+	h, err := security.HashPassword("mot de passe d'essai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cost, err := bcrypt.Cost([]byte(h))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cost != 12 {
+		t.Fatalf("coût bcrypt = %d, attendu 12", cost)
 	}
 }

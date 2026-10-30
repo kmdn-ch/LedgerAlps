@@ -19,8 +19,10 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/api/handlers"
 	"github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
+	"github.com/kmdn-ch/ledgeralps/internal/core/security"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
+	"golang.org/x/crypto/bcrypt"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
@@ -536,6 +538,9 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 // ─── Main (needed for test binary in standalone package) ─────────────────────
 
 func TestMain(m *testing.M) {
+	// Les connexions du parcours ne testent pas la lenteur du hachage : voir
+	// security.SetBcryptCostForTests.
+	security.SetBcryptCostForTests(bcrypt.MinCost)
 	os.Exit(m.Run())
 }
 

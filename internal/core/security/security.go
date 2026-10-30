@@ -5,13 +5,34 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
-const bcryptCost = 12
+// bcryptCost est le coût de production. Il n'est une variable que pour que les
+// tests des autres paquets puissent l'abaisser : voir SetBcryptCostForTests.
+var bcryptCost = 12
+
+// SetBcryptCostForTests abaisse le coût de bcrypt pour une suite de tests.
+//
+// Une connexion coûte près d'un quart de seconde au coût de production — voulu —
+// et la CI joue les tests sous le détecteur de concurrence, plusieurs fois plus
+// lent : la suite des gestionnaires approchait déjà la limite de dix minutes par
+// paquet, et un test de plus la faisait tomber (« test timed out »). Les tests
+// ne vérifient pas la lenteur du hachage mais ce qui l'entoure.
+//
+// Refuse de s'exécuter hors d'un binaire de test : un coût abaissé dans un
+// serveur de production serait un affaiblissement silencieux de tous les mots
+// de passe. Le coût de production est verrouillé par un test du paquet.
+func SetBcryptCostForTests(cost int) {
+	if !testing.Testing() {
+		panic("security.SetBcryptCostForTests : réservé aux binaires de test")
+	}
+	bcryptCost = cost
+}
 
 // prehash applies SHA-256 to the password before bcrypt.
 // bcrypt silently truncates input at 72 bytes; pre-hashing avoids this so that
