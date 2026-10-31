@@ -31,30 +31,10 @@ func RepairFiscalYearDates(database *sql.DB, usePostgres bool) error {
 	if usePostgres {
 		return nil
 	}
-	rows, err := database.Query(
-		`SELECT id, CAST(start_date AS TEXT), CAST(end_date AS TEXT) FROM fiscal_years`)
+	todo, err := exercicesARepaires(database)
 	if err != nil {
-		return fmt.Errorf("lecture des exercices: %w", err)
+		return err
 	}
-	type reparation struct{ id, start, end string }
-	var todo []reparation
-	for rows.Next() {
-		var id, start, end string
-		if err := rows.Scan(&id, &start, &end); err != nil {
-			_ = rows.Close()
-			return fmt.Errorf("lecture d'un exercice: %w", err)
-		}
-		s, e := padYear(start), padYear(end)
-		if s != start || e != end {
-			todo = append(todo, reparation{id, s, e})
-		}
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return fmt.Errorf("lecture des exercices: %w", err)
-	}
-	_ = rows.Close()
-
 	for _, r := range todo {
 		if _, err := database.Exec(
 			`UPDATE fiscal_years SET start_date = ?, end_date = ? WHERE id = ?`, r.start, r.end, r.id); err != nil {
@@ -65,6 +45,35 @@ func RepairFiscalYearDates(database *sql.DB, usePostgres bool) error {
 		log.Printf("[migration] %d exercice(s) aux bornes illisibles réparé(s) (années complétées sur quatre chiffres)", len(todo))
 	}
 	return nil
+}
+
+type reparation struct{ id, start, end string }
+
+// exercicesARepaires relit les exercices et rend ceux dont une borne est à réécrire.
+// Le curseur se ferme par defer : il doit être fermé AVANT les UPDATE, SQLite
+// n'aimant pas un curseur ouvert pendant une écriture.
+func exercicesARepaires(database *sql.DB) ([]reparation, error) {
+	rows, err := database.Query(
+		`SELECT id, CAST(start_date AS TEXT), CAST(end_date AS TEXT) FROM fiscal_years`)
+	if err != nil {
+		return nil, fmt.Errorf("lecture des exercices: %w", err)
+	}
+	defer rows.Close()
+	var todo []reparation
+	for rows.Next() {
+		var id, start, end string
+		if err := rows.Scan(&id, &start, &end); err != nil {
+			return nil, fmt.Errorf("lecture d'un exercice: %w", err)
+		}
+		s, e := padYear(start), padYear(end)
+		if s != start || e != end {
+			todo = append(todo, reparation{id, s, e})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("lecture des exercices: %w", err)
+	}
+	return todo, nil
 }
 
 var reAnneeCourte = regexp.MustCompile(`^(\d{1,3})(-\d{2}-\d{2}.*)$`)

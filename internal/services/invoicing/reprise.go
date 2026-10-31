@@ -132,16 +132,17 @@ func (s *Service) PostPending(ctx context.Context, actor Actor, invoiceID string
 	return res, nil
 }
 
-// postUnpostedPayments comptabilise les encaissements enregistrés sans écriture.
-func (s *Service) postUnpostedPayments(
-	ctx context.Context, userID, ip, invoiceID, number string, refund bool,
-) (int, error) {
-	type pending struct {
-		id, method string
-		reference  *string
-		amount     float64
-		date       time.Time
-	}
+// paiementEnAttente est un encaissement enregistré sans écriture.
+type paiementEnAttente struct {
+	id, method string
+	reference  *string
+	amount     float64
+	date       time.Time
+}
+
+// paiementsSansEcriture lit les encaissements du document dont l'écriture manque.
+// Le curseur se ferme par defer, avant que la moindre écriture ne soit passée.
+func (s *Service) paiementsSansEcriture(ctx context.Context, invoiceID string) ([]paiementEnAttente, error) {
 	q := db.Rebind(`
 		SELECT id, amount, payment_date, method, reference
 		FROM payments
@@ -149,31 +150,38 @@ func (s *Service) postUnpostedPayments(
 		ORDER BY payment_date, created_at`, s.usePostgres)
 	rows, err := s.db.QueryContext(ctx, q, invoiceID)
 	if err != nil {
-		return 0, fmt.Errorf("load payments: %w", err)
+		return nil, fmt.Errorf("load payments: %w", err)
 	}
-	var todo []pending
+	defer rows.Close()
+	var todo []paiementEnAttente
 	for rows.Next() {
-		var p pending
+		var p paiementEnAttente
 		var d string
 		if err := rows.Scan(&p.id, &p.amount, &d, &p.method, &p.reference); err != nil {
-			_ = rows.Close()
-			return 0, fmt.Errorf("scan payment: %w", err)
+			return nil, fmt.Errorf("scan payment: %w", err)
 		}
 		if len(d) >= 10 {
 			d = d[:10]
 		}
 		if p.date, err = time.Parse("2006-01-02", d); err != nil {
-			_ = rows.Close()
-			return 0, fmt.Errorf("payment date %q: %w", d, err)
+			return nil, fmt.Errorf("payment date %q: %w", d, err)
 		}
 		todo = append(todo, p)
 	}
 	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return 0, fmt.Errorf("iterate payments: %w", err)
+		return nil, fmt.Errorf("iterate payments: %w", err)
 	}
-	_ = rows.Close()
+	return todo, nil
+}
 
+// postUnpostedPayments comptabilise les encaissements enregistrés sans écriture.
+func (s *Service) postUnpostedPayments(
+	ctx context.Context, userID, ip, invoiceID, number string, refund bool,
+) (int, error) {
+	todo, err := s.paiementsSansEcriture(ctx, invoiceID)
+	if err != nil {
+		return 0, err
+	}
 	arID, err := s.accountIDByNumber(ctx, accountReceivables)
 	if err != nil {
 		return 0, ErrPaymentAccountMissing{Number: accountReceivables}
