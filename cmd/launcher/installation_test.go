@@ -100,7 +100,9 @@ func TestLaRotationTourneSurLeCheminDuLanceur(t *testing.T) {
 	appData := t.TempDir()
 	t.Setenv("APPDATA", appData)
 	t.Setenv("HOME", appData)
-	dir := filepath.Join(appData, "LedgerAlps")
+	// Le dossier de données dépend du système (APPDATA\LedgerAlps sous Windows, ~/.ledgeralps
+	// ailleurs) : on le demande à la configuration, comme le serveur.
+	dir := appconfig.AppDataDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
