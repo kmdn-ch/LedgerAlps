@@ -164,17 +164,24 @@ func (s *FiscalYearService) CloseYear(ctx context.Context, fiscalYearID, userID 
 			}
 		}
 
+		// Le condensé des lignes, scellé avec les totaux (audit croisé Gemini, CRIT-10).
+		linesDigest, err := LinesDigest(ctx, tx, s.usePostgres, entryID)
+		if err != nil {
+			return fmt.Errorf("digest closing lines: %w", err)
+		}
+
 		// Chaînage et comptabilisation, dans la même transaction que la clôture :
 		// une panne entre les deux laisserait un exercice clos sur une écriture
 		// de clôture restée en brouillon.
 		chainedHash, now, err := AppendAuditEntry(ctx, tx, s.usePostgres,
 			userID, "close", entryID, "",
 			map[string]any{
-				"entry_id":    entryID,
-				"status":      "posted",
-				"fiscal_year": fyName,
-				"debit":       float64(debitCents) / 100,
-				"credit":      float64(creditCents) / 100,
+				"entry_id":     entryID,
+				"status":       "posted",
+				"fiscal_year":  fyName,
+				"debit":        float64(debitCents) / 100,
+				"credit":       float64(creditCents) / 100,
+				"lines_digest": linesDigest,
 			})
 		if err != nil {
 			return fmt.Errorf("chain closing entry: %w", err)

@@ -31,9 +31,10 @@ func ecritureSpeciale(t *testing.T, d *sql.DB, date, ref string, extourne bool, 
 	}
 	if _, err := d.Exec(`
 		INSERT INTO journal_entries (id, date, reference, description, status, is_reversal, created_by_id)
-		VALUES (?, ?, ?, 'essai', 'posted', ?, 'u1')`, id, date, ref, flag); err != nil {
+		VALUES (?, ?, ?, 'essai', 'draft', ?, 'u1')`, id, date, ref, flag); err != nil {
 		t.Fatalf("écriture: %v", err)
 	}
+	defer comptabiliser(t, d, id)
 	for i, l := range []struct {
 		code          string
 		debit, credit any

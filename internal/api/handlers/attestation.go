@@ -205,7 +205,7 @@ func (h *AuditHandler) BuildAttestation(ctx context.Context, issuedBy string, la
 	}
 
 	att.HowToVerify = []string{
-		t("1. Le SCEAU, sans aucun logiciel : retirez la ligne « self_hash » de ce fichier, calculez l'empreinte SHA-256 de ce qui reste, et comparez-la à la valeur retirée. Sous Windows : certutil -hashfile fichier.json SHA256. Sous macOS ou Linux : shasum -a 256 fichier.json."),
+		t("1. Le SCEAU, sans aucun logiciel : dans ce fichier, videz la valeur de « self_hash » en gardant la ligne et ses guillemets (\"self_hash\": \"\"), sans rien ajouter ni retirer d'autre — pas même un saut de ligne final —, calculez l'empreinte SHA-256 du fichier obtenu et comparez-la à la valeur que vous avez effacée. Sous Windows : certutil -hashfile fichier.json SHA256. Sous macOS ou Linux : shasum -a 256 fichier.json."),
 		t("2. La CORRESPONDANCE, chez votre client : Paramètres → Maintenance → Conformité → « Vérifier une attestation », et déposez ce fichier. LedgerAlps compare l'empreinte de tête ci-dessus à celle que portent les livres au même numéro de séquence."),
 		t("3. Ce que la comparaison prouve : conservez ce fichier. S'il correspond encore dans six mois, aucune des écritures qu'il couvre n'a été réécrite entre-temps. C'est la copie que VOUS détenez qui donne sa valeur au contrôle — le sceau seul ne protège que du fichier retouché à la main."),
 	}

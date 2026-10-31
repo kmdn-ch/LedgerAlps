@@ -16,7 +16,7 @@ import { InvoicePayments } from '@/components/invoice/InvoicePayments'
 import { useCanWrite } from '@/hooks/usePermissions'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
-import { formatCHF, formatDate, isOverdue } from '@/utils'
+import { formatCHF, formatDate, isOverdue, dateLocale } from '@/utils'
 import { businessRefusal } from '@/utils/refusal'
 import type { DocumentStatus, Invoice, QuoteOutcome } from '@/types'
 
@@ -274,7 +274,7 @@ export function InvoiceDetailPage() {
 
   const handleTransition = (status: DocumentStatus) => {
     const extra = status === 'paid'
-      ? { paymentDate: new Date().toISOString().slice(0, 10) }
+      ? { paymentDate: dateLocale() }
       : {}
     ask(
       transitionCopy(

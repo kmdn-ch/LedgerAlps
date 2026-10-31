@@ -544,6 +544,10 @@ func main() {
 	api.GET("/fiscal-years", fyh.ListFiscalYears)
 	api.POST("/fiscal-years", authorizer.Require(authz.PermManage), fyh.CreateFiscalYear)
 	api.POST("/fiscal-years/:id/close", authorizer.Require(authz.PermManage), fyh.CloseFiscalYear)
+	// Le complément d'une clôture déséquilibrée par une version antérieure à la 1.6.6 : l'aperçu
+	// d'abord, puis l'application, confirmée.
+	api.GET("/fiscal-years/:id/closing-repair", authorizer.Require(authz.PermManage), fyh.PlanClosingRepair)
+	api.POST("/fiscal-years/:id/closing-repair", authorizer.Require(authz.PermManage), fyh.RepairClosing)
 	// Lecture, elle aussi : la déclaration se CALCULE, elle ne s'écrit nulle
 	// part. Le lecteur doit pouvoir la produire.
 	api.POST("/vat/declaration", authorizer.Require(authz.PermRead), fyh.GenerateVATDeclaration)

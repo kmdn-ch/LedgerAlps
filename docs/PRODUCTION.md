@@ -152,6 +152,13 @@ comportement de la rotation.
 | **Archive `.zip`** — décompression manuelle | Les binaires, rien d'autre | où vous lancez le serveur | Active si vous ne posez pas `JWT_SECRET` |
 | **`scripts/install.ps1`** — service Windows | Serveur + CLI, **sans lanceur ni assistant** | `C:\ProgramData\LedgerAlps` (machine entière) | **Désactivée** (voir §2) |
 
+> **Correction de la 1.6.6 (audit croisé Gemini, CRIT-16).** La colonne « Active, quotidienne » de
+> l'installeur `.exe` était une promesse que le code ne tenait pas : le lanceur passait
+> `JWT_SECRET` dans l'environnement du serveur, ce qui faisait de la clé « une clé venue de
+> l'environnement » — et la rotation ne tournait jamais. Il ne le fait plus : le serveur lit la
+> clé dans `config.json`, et la rotation s'applique. **À la première mise à jour vers la 1.6.6,
+> toute session ouverte se reconnecte une fois** (la clé tourne, son âge étant inconnu).
+
 `install.ps1` enregistre un véritable service Windows sous un compte de service
 virtuel dédié (`NT SERVICE\LedgerAlps`), avec des ACL restreintes, et vérifie
 l'empreinte SHA-256 de l'archive avant de l'installer.

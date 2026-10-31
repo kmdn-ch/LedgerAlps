@@ -10,6 +10,7 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/db/dbtest"
 )
 
 // Ce fichier existe à cause d'un défaut précis.
@@ -146,6 +147,9 @@ func TestVerifyEntryIntegrityAcceptsAFreshlyPostedEntry(t *testing.T) {
 // entrées anciennes ne doit pas avoir désarmé le contrôle.
 func TestVerifyEntryIntegrityRejectsATamperedEntry(t *testing.T) {
 	s, database, bank, sales := newAccountingDB(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	entryID := postOne(t, s, bank, sales, 6)
 
 	if _, err := database.Exec(
@@ -169,6 +173,9 @@ func TestVerifyEntryIntegrityRejectsATamperedEntry(t *testing.T) {
 // « je ne sais pas » au lieu de « vos livres ont été altérés ».
 func TestVerifyEntryIntegrityDistinguishesLegacyFromTampered(t *testing.T) {
 	s, database, bank, sales := newAccountingDB(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	entryID := postOne(t, s, bank, sales, 7)
 
 	if _, err := database.Exec(

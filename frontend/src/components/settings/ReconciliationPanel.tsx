@@ -160,6 +160,9 @@ export function ReconciliationPanel() {
                       <Link to={`/invoices/${e.invoice_id}`} className="text-accent-700 hover:text-accent-600 font-medium">
                         {e.invoice_number}
                       </Link>
+                    ) : e.is_reversal ? (
+                      // Un storno annule une opération antérieure : il ne solde aucune facture.
+                      <span className="text-warning-700 text-sm">{t('rc.storno')}</span>
                     ) : e.suggestion ? (
                       <div>
                         <Link

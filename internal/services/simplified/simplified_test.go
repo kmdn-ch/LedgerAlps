@@ -55,6 +55,14 @@ func idCompte(t *testing.T, d *sql.DB, code string) string {
 	return id
 }
 
+// comptabiliser passe l'écriture à « posted » une fois ses lignes insérées.
+func comptabiliser(t *testing.T, d *sql.DB, id string) {
+	t.Helper()
+	if _, err := d.Exec(`UPDATE journal_entries SET status = 'posted' WHERE id = ?`, id); err != nil {
+		t.Fatalf("comptabiliser %s: %v", id, err)
+	}
+}
+
 // ecriture passe une écriture comptabilisée à deux lignes.
 func ecriture(t *testing.T, d *sql.DB, date, libelle, codeDebit, codeCredit string, montant float64) {
 	t.Helper()
@@ -64,9 +72,12 @@ func ecriture(t *testing.T, d *sql.DB, date, libelle, codeDebit, codeCredit stri
 
 	if _, err := d.Exec(`
 		INSERT INTO journal_entries (id, date, reference, description, status, created_by_id)
-		VALUES (?, ?, ?, ?, 'posted', 'u1')`, id, date, "JN-TEST-"+id, libelle); err != nil {
+		VALUES (?, ?, ?, ?, 'draft', 'u1')`, id, date, "JN-TEST-"+id, libelle); err != nil {
 		t.Fatalf("écriture: %v", err)
 	}
+	// Les lignes s'insèrent AVANT la comptabilisation : celles d'une écriture comptabilisée sont
+	// immuables (migration 0032), et c'est justement ce qu'on ne contourne pas ici.
+	defer comptabiliser(t, d, id)
 	// Le schéma impose qu'un SEUL côté soit renseigné, l'autre NULL — et non
 	// zéro. C'est ce qui empêche une ligne d'être à la fois au débit et au
 	// crédit, donc de compter deux fois.
@@ -361,9 +372,10 @@ func ecritureComposee(t *testing.T, d *sql.DB, date, libelle string, lignes []li
 
 	if _, err := d.Exec(`
 		INSERT INTO journal_entries (id, date, reference, description, status, created_by_id)
-		VALUES (?, ?, ?, ?, 'posted', 'u1')`, id, date, "JN-TEST-"+id, libelle); err != nil {
+		VALUES (?, ?, ?, ?, 'draft', 'u1')`, id, date, "JN-TEST-"+id, libelle); err != nil {
 		t.Fatalf("écriture: %v", err)
 	}
+	defer comptabiliser(t, d, id)
 	for i, l := range lignes {
 		// Un seul côté renseigné, l'autre NULL — comme le schéma l'impose.
 		var debit, credit any

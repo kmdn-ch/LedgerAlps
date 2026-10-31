@@ -227,8 +227,13 @@ sur `test` — clôture déséquilibrée, compte de résultat et bilan faux, car
 notes de crédit à l'encaissement, cycle des factures fournisseurs, factures archivées dans
 la TVA. La deuxième série ferme le contournement du limiteur du second facteur (et du mot
 de passe), dégèle la navigation des écrans Journal et Achats et rend leurs accents aux
-lignes de facture du PDF. Les séries suivantes et les décisions du propriétaire (TDFN, service Windows,
-contenu de l'archive légale) restent ouvertes.
+lignes de facture du PDF. La troisième série rend l'immuabilité réelle (lignes et journal d'audit
+protégés, condensé des lignes scellé), propose le complément des clôtures déjà déséquilibrées,
+protège la clé d'une base chiffrée de l'assistant d'installation, rétablit la rotation de la clé de
+signature sur l'installeur, borne la décompression des PDF et corrige le rapprochement bancaire, les
+avoirs, la balance âgée et les créances du tableau de bord. Restent ouverts : les décisions du
+propriétaire (TDFN, service Windows, contenu de l'archive légale) et les constats de ce rapport que
+je n'ai pas instruits (vingt-huit, listés dans `review-Gemini1.md`).
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions

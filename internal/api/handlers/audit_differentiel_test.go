@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kmdn-ch/ledgeralps/internal/db/dbtest"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
@@ -193,6 +194,9 @@ func TestLesAnciensMaillonsSeVerifientEncore(t *testing.T) {
 // modifications sans que rien ne le signale — une piste d'audit décorative.
 func TestAltererLEtatAnterieurCasseLaChaine(t *testing.T) {
 	h, database := newAuditDB(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	ecrireMaillon(t, database, "document_transition", "f1",
 		accounting.Modification(
 			map[string]any{"status": "draft"},
@@ -220,6 +224,9 @@ func TestAltererLEtatAnterieurCasseLaChaine(t *testing.T) {
 // pour masquer qu'un IBAN a bougé doit casser la chaîne.
 func TestAltererLaListeDesChampsCasseLaChaine(t *testing.T) {
 	h, database := newAuditDB(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	ecrireMaillon(t, database, "company_settings_updated", "company",
 		accounting.Modification(
 			map[string]any{"iban": "CH11", "currency": "CHF"},

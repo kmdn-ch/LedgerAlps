@@ -17,6 +17,12 @@ type BankEntry struct {
 	Amount   float64
 	Currency string
 	IsCredit bool // true = CRDT (money in), false = DBIT (money out)
+	// IsReversal : l'écriture est un STORNO (RvslInd = true), l'annulation d'une opération
+	// antérieure — un versement rejeté, un prélèvement contesté. Le sens que porte alors
+	// CdtDbtInd varie d'une banque à l'autre ; plutôt que de le deviner et de proposer de
+	// solder une facture avec un remboursement, on marque l'écriture pour qu'elle soit
+	// traitée à la main (audit croisé Gemini, CRIT-09).
+	IsReversal bool
 
 	// Dates
 	BookingDate time.Time
@@ -61,6 +67,8 @@ func ParseCamt053(xmlData []byte) ([]BankEntry, error) {
 				Currency: ntry.Amt.Ccy,
 				IsCredit: ntry.CdtDbtInd == "CRDT",
 				BankRef:  ntry.AcctSvcrRef,
+				// « true » et « 1 » sont les deux écritures XML d'un booléen.
+				IsReversal: strings.EqualFold(strings.TrimSpace(ntry.RvslInd), "true") || strings.TrimSpace(ntry.RvslInd) == "1",
 			}
 
 			// Booking date
@@ -188,6 +196,7 @@ type c53AcctID struct {
 type c53Ntry struct {
 	Amt         c53Amt      `xml:"Amt"`
 	CdtDbtInd   string      `xml:"CdtDbtInd"` // CRDT or DBIT
+	RvslInd     string      `xml:"RvslInd"`   // true : storno d'une opération antérieure
 	Sts         c53Sts      `xml:"Sts"`
 	BookgDt     c53Date     `xml:"BookgDt"`
 	ValDt       c53Date     `xml:"ValDt"`

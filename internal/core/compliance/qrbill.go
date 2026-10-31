@@ -202,6 +202,24 @@ func GenerateQRRReference(invoiceID string) (string, error) {
 	return fmt.Sprintf("%s%d", padded, check), nil
 }
 
+// QRRReferenceOf rend la référence QRR que le bulletin d'une facture porte : les chiffres de
+// son numéro (« FA-2026-0007 » → 20260007), complétés à 26 et suivis de la clé de contrôle.
+//
+// La référence est DÉRIVÉE du numéro, jamais stockée : le PDF la calcule à chaque impression, et
+// le rapprochement bancaire la recalcule pour retrouver la facture d'un versement. Les deux
+// doivent appeler cette fonction — une seconde copie de la règle les ferait diverger sans bruit
+// (audit croisé Gemini, CRIT-09 : la colonne `qr_reference` n'était écrite nulle part, et le
+// rapprochement par référence ne trouvait donc jamais rien).
+func QRRReferenceOf(invoiceNumber string) (string, error) {
+	var digits strings.Builder
+	for _, ch := range invoiceNumber {
+		if ch >= '0' && ch <= '9' {
+			digits.WriteRune(ch)
+		}
+	}
+	return GenerateQRRReference(digits.String())
+}
+
 // FormatQRRReference formats a 27-digit QRR reference for display in the
 // printed payment slip: groups of 2+5+5+5+5+5 separated by spaces.
 // Example: "210000000031394714300090172" → "21 00000 00031 39471 43000 90172"

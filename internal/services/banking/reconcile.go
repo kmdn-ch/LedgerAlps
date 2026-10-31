@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/services/iso20022"
 )
@@ -66,7 +67,14 @@ func fingerprint(e iso20022.BankEntry) string {
 // identityKey est tout ce qui, sur une écriture, la distingue d'une autre : la
 // base de l'ancienne empreinte, plus la contrepartie et le motif.
 func identityKey(e iso20022.BankEntry) string {
-	return fmt.Sprintf("%s|%s|%s", fingerprint(e), counterpartyOf(e), remittanceOf(e))
+	k := fmt.Sprintf("%s|%s|%s", fingerprint(e), counterpartyOf(e), remittanceOf(e))
+	// Un storno porte souvent la date, le montant et les références de l'opération qu'il
+	// annule : sans cette marque il en serait pris pour un doublon et disparaîtrait. Ajoutée
+	// SEULEMENT aux stornos, pour que les empreintes déjà conservées ne changent pas.
+	if e.IsReversal {
+		k += "|storno"
+	}
+	return k
 }
 
 // fingerprintV2 ajoute à l'identité le RANG de l'écriture parmi les écritures
@@ -101,8 +109,8 @@ func (s *Service) Import(ctx context.Context, entries []iso20022.BankEntry) (Imp
 	q := db.Rebind(`
 		INSERT INTO bank_entries
 		  (fingerprint, amount, currency, is_credit, booking_date, value_date,
-		   bank_ref, end_to_end_ref, qr_reference, counterparty, remittance)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?)`, s.usePostgres)
+		   bank_ref, end_to_end_ref, qr_reference, counterparty, remittance, is_reversal)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, s.usePostgres)
 
 	// Rang de chaque écriture parmi les identiques de CE relevé.
 	ranks := map[string]int{}
@@ -136,7 +144,7 @@ func (s *Service) Import(ctx context.Context, entries []iso20022.BankEntry) (Imp
 		_, err := s.db.ExecContext(ctx, q,
 			fingerprintV2(e, rank), e.Amount, currencyOr(e.Currency), boolInt(e.IsCredit),
 			e.BookingDate, valueDate,
-			e.BankRef, e.EndToEndRef, e.QRReference, counterpartyOf(e), remittanceOf(e))
+			e.BankRef, e.EndToEndRef, e.QRReference, counterpartyOf(e), remittanceOf(e), boolInt(e.IsReversal))
 		if err != nil {
 			if isUnique(err) {
 				res.Duplicate++
@@ -160,6 +168,10 @@ type Entry struct {
 	Counterparty string    `json:"counterparty,omitempty"`
 	Remittance   string    `json:"remittance,omitempty"`
 	Ignored      bool      `json:"ignored"`
+	// Reversal : l'écriture est un STORNO (RvslInd du relevé) — l'annulation d'une opération
+	// antérieure, pas un mouvement ordinaire. Aucune suggestion ne lui est faite : la lire comme
+	// un versement ordinaire proposait de solder une facture avec un remboursement.
+	Reversal bool `json:"is_reversal"`
 
 	// Rapprochement confirmé.
 	InvoiceID     *string `json:"invoice_id,omitempty"`
@@ -193,7 +205,7 @@ func (s *Service) List(ctx context.Context, includeSettled bool) ([]Entry, error
 	q := db.Rebind(`
 		SELECT be.id, be.amount, be.currency, be.is_credit, be.booking_date,
 		       be.qr_reference, be.counterparty, be.remittance, be.ignored,
-		       be.invoice_id, COALESCE(i.invoice_number, '')
+		       be.invoice_id, COALESCE(i.invoice_number, ''), be.is_reversal
 		FROM bank_entries be
 		LEFT JOIN invoices i ON i.id = be.invoice_id
 		`+where+`
@@ -208,14 +220,15 @@ func (s *Service) List(ctx context.Context, includeSettled bool) ([]Entry, error
 	var out []Entry
 	for rows.Next() {
 		var e Entry
-		var isCredit, ignored int
+		var isCredit, ignored, reversal int
 		if err := rows.Scan(&e.ID, &e.Amount, &e.Currency, &isCredit, &e.BookingDate,
 			&e.QRReference, &e.Counterparty, &e.Remittance, &ignored,
-			&e.InvoiceID, &e.InvoiceNumber); err != nil {
+			&e.InvoiceID, &e.InvoiceNumber, &reversal); err != nil {
 			return nil, err
 		}
 		e.IsCredit = isCredit == 1
 		e.Ignored = ignored == 1
+		e.Reversal = reversal == 1
 		out = append(out, e)
 	}
 	if err := rows.Err(); err != nil {
@@ -226,8 +239,8 @@ func (s *Service) List(ctx context.Context, includeSettled bool) ([]Entry, error
 	// laisserait un curseur ouvert le temps de plusieurs requêtes, ce que
 	// SQLite supporte mal.
 	for i := range out {
-		if out[i].InvoiceID != nil || !out[i].IsCredit {
-			continue // déjà tranché, ou sortie d'argent : rien à encaisser
+		if out[i].InvoiceID != nil || !out[i].IsCredit || out[i].Reversal {
+			continue // déjà tranché, sortie d'argent, ou storno : rien à encaisser
 		}
 		sug, err := s.suggest(ctx, out[i])
 		if err != nil {
@@ -277,6 +290,17 @@ func (s *Service) suggest(ctx context.Context, e Entry) (*Suggestion, error) {
 	return nil, nil
 }
 
+// findByReference retrouve la facture que désigne une référence QRR.
+//
+// # La référence se DÉRIVE, elle ne se lit pas
+//
+// Le bulletin imprimé porte la référence calculée depuis le numéro de la facture
+// (compliance.QRRReferenceOf). Cette recherche lisait la colonne `qr_reference`, que rien
+// n'a jamais écrite : zéro facture sur sept en portait une, et la règle « certaine » du
+// rapprochement ne se déclenchait jamais — le test qui la couvrait la renseignait à la main
+// (audit croisé Gemini, CRIT-09). On recalcule donc la référence de chaque facture candidate.
+//
+// La colonne reste consultée en premier : si quelqu'un la renseigne, elle prime.
 func (s *Service) findByReference(ctx context.Context, ref string) (*Suggestion, error) {
 	q := db.Rebind(`
 		SELECT i.id, i.invoice_number, COALESCE(c.name,''), i.total_amount
@@ -287,13 +311,68 @@ func (s *Service) findByReference(ctx context.Context, ref string) (*Suggestion,
 	var sug Suggestion
 	err := s.db.QueryRowContext(ctx, q, ref).Scan(
 		&sug.InvoiceID, &sug.InvoiceNumber, &sug.ContactName, &sug.TotalAmount)
-	if err == sql.ErrNoRows {
-		return nil, nil
+	if err == nil {
+		return &sug, nil
 	}
-	if err != nil {
+	if err != sql.ErrNoRows {
 		return nil, fmt.Errorf("recherche par référence: %w", err)
 	}
-	return &sug, nil
+	return s.findByDerivedReference(ctx, ref)
+}
+
+func (s *Service) findByDerivedReference(ctx context.Context, ref string) (*Suggestion, error) {
+	// Une référence QRR a 27 chiffres : 26 pour le numéro, plus la clé.
+	if len(ref) != 27 {
+		return nil, nil
+	}
+	for _, ch := range ref {
+		if ch < '0' || ch > '9' {
+			return nil, nil
+		}
+	}
+	// Les chiffres du numéro sont à la FIN des 26 : on ne parcourt que les factures dont le
+	// numéro se termine comme eux, puis on recalcule la référence de chacune. Le filtre
+	// n'est qu'un raccourci — c'est la comparaison de la référence entière qui décide.
+	chiffres := strings.TrimLeft(ref[:26], "0")
+	if chiffres == "" {
+		return nil, nil
+	}
+	fin := chiffres
+	if len(fin) > 4 {
+		fin = fin[len(fin)-4:]
+	}
+	q := db.Rebind(`
+		SELECT i.id, i.invoice_number, COALESCE(c.name,''), i.total_amount
+		FROM invoices i
+		LEFT JOIN contacts c ON c.id = i.contact_id
+		WHERE COALESCE(i.document_type, 'invoice') = 'invoice'
+		  AND i.status IN ('sent', 'paid', 'archived')
+		  AND i.invoice_number LIKE ?
+		ORDER BY CASE i.status WHEN 'sent' THEN 0 ELSE 1 END, i.issue_date DESC`, s.usePostgres)
+	rows, err := s.db.QueryContext(ctx, q, "%"+fin)
+	if err != nil {
+		return nil, fmt.Errorf("recherche par référence dérivée: %w", err)
+	}
+	defer rows.Close()
+
+	var trouvees []Suggestion
+	for rows.Next() {
+		var sug Suggestion
+		if err := rows.Scan(&sug.InvoiceID, &sug.InvoiceNumber, &sug.ContactName, &sug.TotalAmount); err != nil {
+			return nil, fmt.Errorf("lecture d'une facture candidate: %w", err)
+		}
+		if r, err := compliance.QRRReferenceOf(sug.InvoiceNumber); err == nil && r == ref {
+			trouvees = append(trouvees, sug)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("lecture des factures candidates: %w", err)
+	}
+	// Deux factures qui se réclament de la même référence : on ne tire pas au sort.
+	if len(trouvees) != 1 {
+		return nil, nil
+	}
+	return &trouvees[0], nil
 }
 
 func (s *Service) findByAmount(ctx context.Context, amount float64) (*Suggestion, int, error) {

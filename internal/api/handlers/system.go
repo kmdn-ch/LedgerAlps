@@ -166,6 +166,19 @@ func (h *SystemHandler) PutServerSettings(c *gin.Context) {
 //
 // Accès : administrateur uniquement.
 func (h *SystemHandler) RotateJWTSecret(c *gin.Context) {
+	// Quand la clé vient de la variable d'environnement JWT_SECRET, la régénérer dans
+	// config.json ne ferait rien : la variable reprend la main à chaque démarrage. Répondre
+	// « secret régénéré » alors que la clé en service reste celle qu'on voulait remplacer —
+	// peut-être compromise — serait pire que de refuser (audit croisé Gemini, CRIT-16).
+	if h.cfg != nil && h.cfg.JWTSecretDepuisEnv {
+		c.JSON(http.StatusConflict, gin.H{
+			"reason": "secret_from_environment",
+			"error": "La clé de signature vient de la variable d'environnement JWT_SECRET : " +
+				"la régénérer ici ne changerait rien, la variable reprendrait la main au prochain démarrage. " +
+				"Changez la valeur de la variable, puis redémarrez LedgerAlps.",
+		})
+		return
+	}
 	length, err := config.RotateJWTSecret()
 	if err != nil {
 		erreurInterne(c, msgErreurInterne, err)

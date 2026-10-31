@@ -478,7 +478,10 @@ func (h *InvoicesHandler) ConvertQuote(c *gin.Context) {
 		DueDate   string `json:"due_date"`
 	}
 	// An empty body is valid: the dates then default to today and today + 30d.
-	_ = c.ShouldBindJSON(&body)
+	if err := bindOptionalJSON(c, &body); err != nil {
+		refus(c, http.StatusUnprocessableEntity, err)
+		return
+	}
 
 	var req invoicing.ConvertQuoteRequest
 	if body.IssueDate != "" {
@@ -564,7 +567,13 @@ func (h *InvoicesHandler) CreateCreditNote(c *gin.Context) {
 		Reason    *string   `json:"reason"`
 		Lines     []lineReq `json:"lines"`
 	}
-	_ = c.ShouldBindJSON(&body)
+	// Un corps VIDE crédite la facture en entier ; un corps mal formé ne le fait pas. Il était
+	// ignoré, donc lu comme vide : une faute de frappe dans le JSON émettait un avoir de 100 %
+	// (audit croisé Gemini, HIGH-03).
+	if err := bindOptionalJSON(c, &body); err != nil {
+		refus(c, http.StatusUnprocessableEntity, err)
+		return
+	}
 
 	req := invoicing.CreateCreditNoteRequest{Reason: body.Reason}
 	if body.IssueDate != "" {

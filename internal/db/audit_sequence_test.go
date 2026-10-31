@@ -10,6 +10,8 @@ import (
 	"database/sql"
 	"os"
 	"testing"
+
+	"github.com/kmdn-ch/ledgeralps/internal/db/dbtest"
 )
 
 func TestUneBaseFourchueMigreQuandMeme(t *testing.T) {
@@ -31,7 +33,10 @@ func TestUneBaseFourchueMigreQuandMeme(t *testing.T) {
 	}
 
 	// Reproduire l'état d'avant : index non unique, et deux maillons qui
-	// partagent le numéro 2 — exactement ce que produisait la course.
+	// partagent le numéro 2 — exactement ce que produisait la course. Les déclencheurs
+	// d'immuabilité du journal d'audit (0032) n'existaient pas : sur une vraie base, 0026 tourne
+	// AVANT eux, et réparer les doublons y modifie le journal d'audit.
+	dbtest.Desarmer(t, d)
 	if _, err := d.Exec(`DROP INDEX IF EXISTS idx_audit_logs_sequence`); err != nil {
 		t.Fatal(err)
 	}

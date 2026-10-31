@@ -84,13 +84,17 @@ type generalLedgerResponse struct {
 }
 
 type arAgingLine struct {
-	InvoiceID     string  `json:"invoice_id"`
-	InvoiceNumber string  `json:"invoice_number"`
-	ContactName   string  `json:"contact_name"`
-	TotalAmount   float64 `json:"total_amount"`
-	DueDate       string  `json:"due_date"`
-	DaysOverdue   int     `json:"days_overdue"`
-	Bucket        string  `json:"bucket"`
+	InvoiceID     string `json:"invoice_id"`
+	InvoiceNumber string `json:"invoice_number"`
+	ContactName   string `json:"contact_name"`
+	// TotalAmount est le total de la facture ; BalanceDue ce qui reste À ENCAISSER — il est
+	// net des acomptes versés et des notes de crédit émises, et c'est lui qui est classé
+	// et additionné (audit croisé Gemini, HIGH-10).
+	TotalAmount float64 `json:"total_amount"`
+	BalanceDue  float64 `json:"balance_due"`
+	DueDate     string  `json:"due_date"`
+	DaysOverdue int     `json:"days_overdue"`
+	Bucket      string  `json:"bucket"`
 }
 
 type arAgingResponse struct {
@@ -475,6 +479,9 @@ func (h *ReportsHandler) ARaging(c *gin.Context) {
 		    i.invoice_number,
 		    co.name AS contact_name,
 		    i.total_amount,
+		    ROUND(MAX(0, i.total_amount - i.amount_paid - COALESCE((SELECT SUM(cn.total_amount) FROM invoices cn
+		          WHERE cn.corrects_invoice_id = i.id AND cn.document_type = 'credit_note'
+		            AND cn.status IN ('sent', 'paid', 'archived')), 0)), 2) AS balance_due,
 		    i.due_date
 		FROM invoices i
 		JOIN contacts co ON co.id = i.contact_id
@@ -502,10 +509,15 @@ func (h *ReportsHandler) ARaging(c *gin.Context) {
 
 	for rows.Next() {
 		var invoiceID, invoiceNumber, contactName, dueDateStr string
-		var totalAmount float64
-		if err := rows.Scan(&invoiceID, &invoiceNumber, &contactName, &totalAmount, &dueDateStr); err != nil {
+		var totalAmount, balanceDue float64
+		if err := rows.Scan(&invoiceID, &invoiceNumber, &contactName, &totalAmount, &balanceDue, &dueDateStr); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error"})
 			return
+		}
+		// Une facture entièrement créditée, ou déjà couverte par ses versements, ne doit
+		// rien à personne : elle sortait pourtant de ce rapport pour son total entier.
+		if balanceDue < 0.005 {
+			continue
 		}
 		// Trim to date-only.
 		if len(dueDateStr) > 10 {
@@ -537,6 +549,7 @@ func (h *ReportsHandler) ARaging(c *gin.Context) {
 			InvoiceNumber: invoiceNumber,
 			ContactName:   contactName,
 			TotalAmount:   totalAmount,
+			BalanceDue:    balanceDue,
 			DueDate:       dueDateStr,
 			DaysOverdue:   daysOverdue,
 			Bucket:        bucket,
@@ -545,21 +558,21 @@ func (h *ReportsHandler) ARaging(c *gin.Context) {
 		switch bucket {
 		case "current":
 			resp.Current = append(resp.Current, line)
-			resp.TotalCurrent += totalAmount
+			resp.TotalCurrent += balanceDue
 		case "1-30":
 			resp.Days1To30 = append(resp.Days1To30, line)
-			resp.TotalDays1To30 += totalAmount
+			resp.TotalDays1To30 += balanceDue
 		case "31-60":
 			resp.Days31To60 = append(resp.Days31To60, line)
-			resp.TotalDays31To60 += totalAmount
+			resp.TotalDays31To60 += balanceDue
 		case "61-90":
 			resp.Days61To90 = append(resp.Days61To90, line)
-			resp.TotalDays61To90 += totalAmount
+			resp.TotalDays61To90 += balanceDue
 		default:
 			resp.Days91Plus = append(resp.Days91Plus, line)
-			resp.TotalDays91Plus += totalAmount
+			resp.TotalDays91Plus += balanceDue
 		}
-		resp.GrandTotal += totalAmount
+		resp.GrandTotal += balanceDue
 	}
 	if err := rows.Err(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "rows error"})

@@ -15,13 +15,18 @@ import (
 // ─── Response DTOs ────────────────────────────────────────────────────────────
 
 type statsInvoices struct {
-	Draft           int    `json:"draft"`
-	Sent            int    `json:"sent"`
-	Overdue         int    `json:"overdue"`
-	Paid            int    `json:"paid"`
-	Cancelled       int    `json:"cancelled"`
-	Archived        int    `json:"archived"`
+	Draft     int `json:"draft"`
+	Sent      int `json:"sent"`
+	Overdue   int `json:"overdue"`
+	Paid      int `json:"paid"`
+	Cancelled int `json:"cancelled"`
+	Archived  int `json:"archived"`
+	// TotalReceivable : ce qui reste À ENCAISSER sur les factures envoyées — net des versements et
+	// des notes de crédit émises. TotalOverdue : la part dont l'échéance est passée. Calculés ici,
+	// sur TOUTES les factures : l'écran les sommait sur la première page de vingt factures, offres et
+	// avoirs compris (audit croisé Gemini, HIGH-22).
 	TotalReceivable string `json:"total_receivable"`
+	TotalOverdue    string `json:"total_overdue"`
 }
 
 type statsJournal struct {
@@ -137,16 +142,25 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 
 	// ── Invoices: total receivable (sent, due or not) ─────────────────────────
 	{
-		q := db.Rebind(`
-			SELECT COALESCE(SUM(total_amount), 0)
-			FROM invoices
-			WHERE document_type = 'invoice'
-			  AND status IN ('sent')`, h.usesPG)
-		var receivable float64
+		// Le reste dû d'une facture : son total, moins ce qui a été versé, moins les notes de
+		// crédit ÉMISES (les brouillons ne comptent pas). Jamais négatif.
+		const resteDu = `MAX(0, i.total_amount - i.amount_paid - COALESCE((
+			SELECT SUM(cn.total_amount) FROM invoices cn
+			WHERE cn.corrects_invoice_id = i.id AND cn.document_type = 'credit_note'
+			  AND cn.status IN ('sent', 'paid', 'archived')), 0))`
+		var receivable, overdue float64
+		q := db.Rebind(`SELECT COALESCE(SUM(`+resteDu+`), 0) FROM invoices i
+			WHERE i.document_type = 'invoice' AND i.status = 'sent'`, h.usesPG)
 		if err := h.db.QueryRowContext(ctx, q).Scan(&receivable); err != nil {
 			log.Printf("stats: invoices receivable query failed: %v", err)
 		}
+		q = db.Rebind(`SELECT COALESCE(SUM(`+resteDu+`), 0) FROM invoices i
+			WHERE i.document_type = 'invoice' AND i.status = 'sent' AND i.due_date < ?`, h.usesPG)
+		if err := h.db.QueryRowContext(ctx, q, time.Now().Format("2006-01-02")).Scan(&overdue); err != nil {
+			log.Printf("stats: invoices overdue amount query failed: %v", err)
+		}
 		resp.Invoices.TotalReceivable = fmt.Sprintf("%.2f", receivable)
+		resp.Invoices.TotalOverdue = fmt.Sprintf("%.2f", overdue)
 	}
 
 	// ── Journal: total entries ────────────────────────────────────────────────

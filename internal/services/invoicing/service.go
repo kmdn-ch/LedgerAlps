@@ -844,10 +844,10 @@ func (s *Service) ConvertQuote(ctx context.Context, quoteID, userID string, req 
 	}
 
 	subtotal, vatAmount, total := computeTotals(lines)
-	primaryVATRate := 8.1
-	if lines[0].VATRate > 0 {
-		primaryVATRate = lines[0].VATRate
-	}
+	// Le taux de l'en-tête suit les lignes, comme à la création : il valait 8.1 dès que la
+	// première ligne était à 0 %, et la déclaration TVA, qui groupe par ce taux, comptait
+	// alors du chiffre d'affaires exonéré comme taxable (audit croisé Gemini, HIGH-02).
+	primaryVATRate := headerVATRate(lines)
 
 	invoiceID := db.NewID()
 	number, err := s.nextInvoiceNumber(ctx, tx, DocumentTypeInvoice, req.IssueDate)
@@ -855,16 +855,23 @@ func (s *Service) ConvertQuote(ctx context.Context, quoteID, userID string, req 
 		return nil, fmt.Errorf("next invoice number: %w", err)
 	}
 
+	// Rattachement à l'exercice, comme toute facture : une facture née d'une offre
+	// restait hors de l'archive légale filtrée par exercice (CRIT-11).
+	period, err := accsvc.EnsureFiscalPeriod(ctx, tx, s.usePostgres, req.IssueDate)
+	if err != nil {
+		return nil, err
+	}
+
 	insertInv := db.Rebind(`
 		INSERT INTO invoices (id, invoice_number, document_type, contact_id, status, issue_date, due_date,
 		                      currency, subtotal_amount, vat_amount, total_amount, vat_rate,
-		                      notes, terms, created_by_id, converted_from_id)
-		VALUES (?, ?, 'invoice', ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+		                      notes, terms, fiscal_year_id, created_by_id, converted_from_id)
+		VALUES (?, ?, 'invoice', ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
 	if _, err := tx.ExecContext(ctx, insertInv,
 		invoiceID, number, contactID,
 		req.IssueDate.Format("2006-01-02"), req.DueDate.Format("2006-01-02"),
 		currency, subtotal, vatAmount, total, primaryVATRate,
-		notes, terms, userID, quoteID); err != nil {
+		notes, terms, period.ID, userID, quoteID); err != nil {
 		return nil, fmt.Errorf("insert converted invoice: %w", err)
 	}
 
@@ -979,6 +986,11 @@ func (s *Service) loadLines(ctx context.Context, tx *sql.Tx, invoiceID string) (
 
 // ─── Credit notes ─────────────────────────────────────────────────────────────
 
+// creditTolerance : cinq centimes. Les factures d'avant la 1.6.6 portent un total arrondi
+// à 5 centimes, et les créditer ligne à ligne peut dépasser l'original de quelques
+// centimes sans que personne ait crédité trop. Une seule valeur pour tous les contrôles.
+const creditTolerance = 0.05
+
 // CreateCreditNoteRequest describes the correction. Leaving Lines empty credits
 // the invoice in full, which is the common case; supplying lines credits part
 // of it (a returned item, a disputed position).
@@ -1034,8 +1046,11 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 		return nil, ErrNotAnInvoice
 	}
 	// A draft was never issued and a cancelled invoice is already void; in
-	// neither case is there a VAT debt to correct.
-	if status != string(models.InvoiceStatusSent) && status != string(models.InvoiceStatusPaid) {
+	// neither case is there a VAT debt to correct. Une facture ARCHIVÉE est une facture
+	// payée rangée : elle reste une pièce émise, et c'est souvent après coup qu'on la
+	// rembourse — la refuser obligeait à la désarchiver (audit croisé Gemini, HIGH-13).
+	if status != string(models.InvoiceStatusSent) && status != string(models.InvoiceStatusPaid) &&
+		status != string(models.InvoiceStatusArchived) {
 		return nil, ErrInvoiceNotCreditable
 	}
 
@@ -1071,18 +1086,14 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 	if err := tx.QueryRowContext(ctx, sumQ, invoiceID).Scan(&alreadyCredited); err != nil {
 		return nil, fmt.Errorf("sum existing credit notes: %w", err)
 	}
-	// Cinq centimes de tolérance : les factures d'avant la 1.6.6 portent un total
-	// arrondi à 5 centimes, et les créditer ligne à ligne peut dépasser l'original
-	// de quelques centimes sans que personne ait crédité trop.
-	if alreadyCredited+total > invoiceTotal+0.05 {
+	if alreadyCredited+total > invoiceTotal+creditTolerance {
 		return nil, fmt.Errorf("%w: %.2f déjà crédités + %.2f demandés > %.2f facturés (%s)",
 			ErrCreditExceedsInvoice, alreadyCredited, total, invoiceTotal, invoiceNumber)
 	}
 
-	primaryVATRate := 8.1
-	if lines[0].VATRate > 0 {
-		primaryVATRate = lines[0].VATRate
-	}
+	// Le taux de l'en-tête suit les lignes (HIGH-02) : 8.1 forcé dès que la première
+	// ligne était à 0 % faisait déclarer un avoir exonéré comme taxable.
+	primaryVATRate := headerVATRate(lines)
 
 	creditNoteID := db.NewID()
 	number, err := s.nextInvoiceNumber(ctx, tx, DocumentTypeCreditNote, req.IssueDate)
@@ -1090,16 +1101,23 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 		return nil, fmt.Errorf("next credit note number: %w", err)
 	}
 
+	// Rattachement à l'exercice : les avoirs avaient `fiscal_year_id` NULL, et l'archive
+	// légale filtrée par exercice (CO art. 958f) les omettait (CRIT-11).
+	period, err := accsvc.EnsureFiscalPeriod(ctx, tx, s.usePostgres, req.IssueDate)
+	if err != nil {
+		return nil, err
+	}
+
 	insertQ := db.Rebind(`
 		INSERT INTO invoices (id, invoice_number, document_type, contact_id, status, issue_date, due_date,
 		                      currency, subtotal_amount, vat_amount, total_amount, vat_rate,
-		                      notes, created_by_id, corrects_invoice_id)
-		VALUES (?, ?, 'credit_note', ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
+		                      notes, fiscal_year_id, created_by_id, corrects_invoice_id)
+		VALUES (?, ?, 'credit_note', ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
 	issued := req.IssueDate.Format("2006-01-02")
 	if _, err := tx.ExecContext(ctx, insertQ,
 		creditNoteID, number, contactID, issued, issued,
 		currency, subtotal, vatAmount, total, primaryVATRate,
-		req.Reason, userID, invoiceID); err != nil {
+		req.Reason, period.ID, userID, invoiceID); err != nil {
 		return nil, fmt.Errorf("insert credit note: %w", err)
 	}
 
@@ -1409,9 +1427,9 @@ func (s *Service) checkVATAllowed(ctx context.Context, q querier, vatAmount, vat
 // somme pour que modifier son montant se compare à ce que les AUTRES ont déjà
 // crédité — sans quoi une note se compterait deux fois.
 //
-// Une tolérance d'un centime : les totaux sont arrondis à 5 centimes, donc
-// créditer ligne à ligne peut atterrir un ou deux centimes au-dessus sans que
-// personne n'ait sur-crédité quoi que ce soit.
+// La tolérance est `creditTolerance`, la MÊME qu'à la création : elle valait un centime
+// ici et cinq centimes là, si bien qu'un avoir créé ne pouvait plus être modifié sans
+// être refusé (audit croisé Gemini, HIGH-13).
 func (s *Service) checkCreditCap(ctx context.Context, q querier, documentID string, newTotal float64) error {
 	var correctsID sql.NullString
 	var docType string
@@ -1440,7 +1458,7 @@ func (s *Service) checkCreditCap(ctx context.Context, q querier, documentID stri
 		return fmt.Errorf("sum sibling credit notes: %w", err)
 	}
 
-	if others+newTotal > invoiceTotal+0.01 {
+	if others+newTotal > invoiceTotal+creditTolerance {
 		return fmt.Errorf("%w: %.2f déjà crédités + %.2f demandés > %.2f facturés (%s)",
 			ErrCreditExceedsInvoice, others, newTotal, invoiceTotal, invoiceNumber)
 	}

@@ -29,7 +29,7 @@ import { ConfirmDialog } from '@/components/ui'
 import { useCanWrite } from '@/hooks/usePermissions'
 import { useT, useFormats } from '@/i18n/useT'
 import { LoadingSpinner, EmptyState, ErrorBanner, SectionTitle } from '@/components/ui'
-import { formatCHF, formatDate } from '@/utils'
+import { formatCHF, formatDate, dateLocale } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
 
 interface Payable {
@@ -62,7 +62,7 @@ export function PaymentRunPanel() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [aRetirer, setARetirer] = useState(false)
   const [retrait, setRetrait] = useState<string | null>(null)
-  const [execDate, setExecDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [execDate, setExecDate] = useState(() => dateLocale())
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{ count: number; total: number } | null>(null)
 

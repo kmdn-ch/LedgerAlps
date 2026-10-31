@@ -63,10 +63,10 @@ var catalogue = map[string]map[Lang]string{
 		IT: "%d fattura/e su %d non sono più pagabili: possono essere state saldate o annullate nel frattempo. Ricaricate l’elenco",
 		EN: "%d of %d invoice(s) are no longer payable: they may have been settled or cancelled meanwhile. Reload the list",
 	},
-	"1. Le SCEAU, sans aucun logiciel : retirez la ligne « self_hash » de ce fichier, calculez l'empreinte SHA-256 de ce qui reste, et comparez-la à la valeur retirée. Sous Windows : certutil -hashfile fichier.json SHA256. Sous macOS ou Linux : shasum -a 256 fichier.json.": {
-		DE: "1. Das SIEGEL, ohne jede Software: entfernen Sie die Zeile «self_hash» aus dieser Datei, berechnen Sie den SHA-256-Hashwert des Rests und vergleichen Sie ihn mit dem entfernten Wert. Unter Windows: certutil -hashfile datei.json SHA256. Unter macOS oder Linux: shasum -a 256 datei.json.",
-		IT: "1. Il SIGILLO, senza alcun software: togliete la riga «self_hash» da questo file, calcolate l’impronta SHA-256 di ciò che resta e confrontatela con il valore tolto. Su Windows: certutil -hashfile file.json SHA256. Su macOS o Linux: shasum -a 256 file.json.",
-		EN: "1. The SEAL, with no software at all: remove the “self_hash” line from this file, compute the SHA-256 hash of what remains, and compare it with the value you removed. On Windows: certutil -hashfile file.json SHA256. On macOS or Linux: shasum -a 256 file.json.",
+	"1. Le SCEAU, sans aucun logiciel : dans ce fichier, videz la valeur de « self_hash » en gardant la ligne et ses guillemets (\"self_hash\": \"\"), sans rien ajouter ni retirer d'autre — pas même un saut de ligne final —, calculez l'empreinte SHA-256 du fichier obtenu et comparez-la à la valeur que vous avez effacée. Sous Windows : certutil -hashfile fichier.json SHA256. Sous macOS ou Linux : shasum -a 256 fichier.json.": {
+		DE: "1. Das SIEGEL, ohne jede Software: Leeren Sie in dieser Datei den Wert von «self_hash», ohne die Zeile und ihre Anführungszeichen zu entfernen (\"self_hash\": \"\"), und fügen Sie nichts hinzu oder weg — auch keinen abschliessenden Zeilenumbruch. Berechnen Sie den SHA-256-Hashwert der so erhaltenen Datei und vergleichen Sie ihn mit dem gelöschten Wert. Unter Windows: certutil -hashfile datei.json SHA256. Unter macOS oder Linux: shasum -a 256 datei.json.",
+		IT: "1. Il SIGILLO, senza alcun software: in questo file svuotate il valore di «self_hash», mantenendo la riga e le sue virgolette (\"self_hash\": \"\"), senza aggiungere né togliere altro — nemmeno un a capo finale —, calcolate l’impronta SHA-256 del file ottenuto e confrontatela con il valore cancellato. Su Windows: certutil -hashfile file.json SHA256. Su macOS o Linux: shasum -a 256 file.json.",
+		EN: "1. The SEAL, with no software at all: in this file, empty the value of “self_hash” while keeping the line and its quotation marks (\"self_hash\": \"\"), adding or removing nothing else — not even a final line break — then compute the SHA-256 hash of the resulting file and compare it with the value you erased. On Windows: certutil -hashfile file.json SHA256. On macOS or Linux: shasum -a 256 file.json.",
 	},
 	"2. La CORRESPONDANCE, chez votre client : Paramètres → Maintenance → Conformité → « Vérifier une attestation », et déposez ce fichier. LedgerAlps compare l'empreinte de tête ci-dessus à celle que portent les livres au même numéro de séquence.": {
 		DE: "2. Die ÜBEREINSTIMMUNG, bei Ihrem Kunden: Einstellungen → Wartung → Konformität → «Eine Bescheinigung prüfen», und legen Sie diese Datei ab. LedgerAlps vergleicht den obigen Kopf-Hashwert mit dem, den die Bücher an derselben Sequenznummer tragen.",
@@ -1540,10 +1540,10 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Riga %d: lo sconto deve essere compreso tra 0 e 100",
 		EN: "Line %d: the discount must be between 0 and 100",
 	},
-	"ligne %d : le taux de TVA doit être compris entre 0 et 100": {
-		DE: "Zeile %d: Der MWST-Satz muss zwischen 0 und 100 liegen",
-		IT: "Riga %d: l’aliquota IVA deve essere compresa tra 0 e 100",
-		EN: "Line %d: the VAT rate must be between 0 and 100",
+	"ligne %d : le taux de TVA doit être compris entre 0 et 8,1 (le taux normal suisse)": {
+		DE: "Zeile %d: Der MWST-Satz muss zwischen 0 und 8,1 liegen (dem Schweizer Normalsatz)",
+		IT: "Riga %d: l’aliquota IVA deve essere compresa tra 0 e 8,1 (l’aliquota normale svizzera)",
+		EN: "Line %d: the VAT rate must be between 0 and 8.1 (the Swiss standard rate)",
 	},
 	"ligne %d : le montant de la ligne dépasse la borne admise de %.2f": {
 		DE: "Zeile %d: Der Zeilenbetrag überschreitet die zulässige Grenze von %.2f",
@@ -1664,6 +1664,61 @@ var catalogue = map[string]map[Lang]string{
 		DE: "Die Integritätsprüfung konnte nicht ausgeführt werden: ",
 		IT: "Il controllo d’integrità non ha potuto essere eseguito: ",
 		EN: "The integrity check could not run: ",
+	},
+	"une clé de base de données existe déjà sur cette machine : elle ne se remplace pas, car la base qu'elle chiffre deviendrait illisible": {
+		DE: "Auf diesem Rechner existiert bereits ein Datenbankschlüssel: Er wird nicht ersetzt, denn die damit verschlüsselte Datenbank würde unlesbar",
+		IT: "Su questo computer esiste già una chiave del database: non si sostituisce, perché il database che cifra diventerebbe illeggibile",
+		EN: "A database key already exists on this machine: it is not replaced, because the database it encrypts would become unreadable",
+	},
+	"ce document se décompresse démesurément : il est refusé": {
+		DE: "Dieses Dokument dehnt sich beim Entpacken unverhältnismässig aus: Es wird abgelehnt",
+		IT: "Questo documento si espande in modo smisurato alla decompressione: viene rifiutato",
+		EN: "This document expands out of all proportion when decompressed: it is refused",
+	},
+	"cet exercice n'est pas clos : il n'y a rien à réparer": {
+		DE: "Dieses Geschäftsjahr ist nicht abgeschlossen: Es gibt nichts zu reparieren",
+		IT: "Questo esercizio non è chiuso: non c’è nulla da riparare",
+		EN: "This financial year is not closed: there is nothing to repair",
+	},
+	"aucune écriture de clôture n'a été trouvée pour cet exercice": {
+		DE: "Für dieses Geschäftsjahr wurde keine Abschlussbuchung gefunden",
+		IT: "Per questo esercizio non è stata trovata alcuna scrittura di chiusura",
+		EN: "No closing entry was found for this financial year",
+	},
+	"la clôture de cet exercice s'équilibre : il n'y a rien à réparer": {
+		DE: "Der Abschluss dieses Geschäftsjahres geht auf: Es gibt nichts zu reparieren",
+		IT: "La chiusura di questo esercizio quadra: non c’è nulla da riparare",
+		EN: "The closing of this financial year balances: there is nothing to repair",
+	},
+	"cette clôture a déjà été complétée": {
+		DE: "Dieser Abschluss wurde bereits ergänzt",
+		IT: "Questa chiusura è già stata completata",
+		EN: "This closing has already been completed",
+	},
+	"l'écart de cette clôture ne s'explique pas par des comptes de produits ou de charges restés ouverts : la réparation automatique est refusée, faites examiner l'écriture par votre fiduciaire": {
+		DE: "Die Abweichung dieses Abschlusses lässt sich nicht durch offen gebliebene Ertrags- oder Aufwandskonten erklären: Die automatische Reparatur wird abgelehnt, lassen Sie die Buchung von Ihrer Treuhandstelle prüfen",
+		IT: "Lo scarto di questa chiusura non si spiega con conti di ricavi o di costi rimasti aperti: la riparazione automatica è rifiutata, fate esaminare la scrittura dal vostro fiduciario",
+		EN: "The discrepancy in this closing is not explained by revenue or expense accounts left open: automatic repair is refused, have the entry reviewed by your accountant",
+	},
+	"la réparation doit être confirmée : consultez d'abord ce qu'elle passera, puis envoyez confirm: true": {
+		DE: "Die Reparatur muss bestätigt werden: Prüfen Sie zuerst, was sie buchen wird, und senden Sie dann confirm: true",
+		IT: "La riparazione deve essere confermata: consultate prima ciò che registrerà, poi inviate confirm: true",
+		EN: "The repair must be confirmed: first review what it will post, then send confirm: true",
+	},
+	"exercice introuvable": {
+		DE: "Geschäftsjahr nicht gefunden",
+		IT: "Esercizio non trovato",
+		EN: "Financial year not found",
+	},
+	"La clé de signature vient de la variable d'environnement JWT_SECRET : la régénérer ici ne changerait rien, la variable reprendrait la main au prochain démarrage. Changez la valeur de la variable, puis redémarrez LedgerAlps.": {
+		DE: "Der Signaturschlüssel stammt aus der Umgebungsvariablen JWT_SECRET: ihn hier neu zu erzeugen würde nichts ändern, die Variable würde beim nächsten Start wieder gelten. Ändern Sie den Wert der Variablen und starten Sie LedgerAlps neu.",
+		IT: "La chiave di firma proviene dalla variabile d’ambiente JWT_SECRET: rigenerarla qui non cambierebbe nulla, la variabile riprenderebbe il sopravvento al prossimo avvio. Cambiate il valore della variabile, poi riavviate LedgerAlps.",
+		EN: "The signing key comes from the JWT_SECRET environment variable: regenerating it here would change nothing, the variable would take over again at the next start. Change the variable’s value, then restart LedgerAlps.",
+	},
+	"le corps de la requête n'est pas un JSON valide": {
+		DE: "Der Anfragekörper ist kein gültiges JSON",
+		IT: "Il corpo della richiesta non è un JSON valido",
+		EN: "The request body is not valid JSON",
 	},
 	"le corps de la requête n'a pas pu être lu": {
 		DE: "Der Anfragekörper konnte nicht gelesen werden",

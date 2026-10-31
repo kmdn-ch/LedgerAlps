@@ -15,7 +15,7 @@ import {
   type InvoiceFormData as FormData,
   type InvoiceFormInput as FormInput,
 } from '@/schemas/invoiceForm'
-import { formatCHF } from '@/utils'
+import { formatCHF, dateLocale, dansJours } from '@/utils'
 import type { Contact, CompanySettings } from '@/types'
 import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 import { useT, useTv } from '@/i18n/useT'
@@ -47,8 +47,8 @@ export function NewInvoicePage() {
   // plus fréquent, et proposer 0 % à un assujetti lui ferait sous-facturer.
   const tauxParDefaut = company?.vat_status === 'exempt' ? 0 : 8.1
 
-  const today = new Date().toISOString().slice(0, 10)
-  const defaultDueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const today = dateLocale()
+  const defaultDueDate = dansJours(30)
 
   const {
     register, control, handleSubmit, setValue,

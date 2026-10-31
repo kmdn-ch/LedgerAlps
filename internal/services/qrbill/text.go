@@ -43,6 +43,10 @@ type textItem struct {
 
 // extractText rend les fragments de texte du PDF, avec leurs coordonnées.
 func extractText(data []byte) ([]textItem, error) {
+	// AVANT pdfcpu : il décode chaque flux en mémoire (HIGH-12, voir expansion.go).
+	if err := verifierExpansion(data); err != nil {
+		return nil, err
+	}
 	dir, err := os.MkdirTemp("", "ledgeralps-txt-*")
 	if err != nil {
 		return nil, err

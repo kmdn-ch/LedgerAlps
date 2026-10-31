@@ -22,14 +22,16 @@ import { PageHeader, SectionTitle, ErrorBanner } from '@/components/ui'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 import { useT } from '@/i18n/useT'
 import { refusalMessage } from '@/utils/refusal'
+import { dateLocale } from '@/utils'
 
 export function ReportsPage() {
   const t = useT()
   const peutEcrire = useCanWrite()
-  const [startDate, setStartDate] = useState(() =>
-    new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)
-  )
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10))
+  // Le 1er janvier de l'année en cours, en date LOCALE : `new Date(an, 0, 1).toISOString()` rend
+  // le 31 décembre de l'année précédente — la période commençait la veille et avalait l'écriture
+  // de clôture d'avant (MED-01).
+  const [startDate, setStartDate] = useState(() => `${new Date().getFullYear()}-01-01`)
+  const [endDate, setEndDate] = useState(() => dateLocale())
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState('')
 
@@ -203,7 +205,7 @@ export function ReportsPage() {
               <button
                 onClick={() => download('archive',
                   () => exportApi.legalArchive(),
-                  `archive-legale_${new Date().toISOString().slice(0, 10)}.zip`)}
+                  `archive-legale_${dateLocale()}.zip`)}
                 disabled={loading === 'archive'}
                 className="btn-primary btn-sm flex items-center gap-1.5"
               >

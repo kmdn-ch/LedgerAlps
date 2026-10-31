@@ -18,6 +18,7 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/core/authz"
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/db/dbtest"
 )
 
 // ─── Harnais ─────────────────────────────────────────────────────────────────
@@ -147,6 +148,9 @@ func TestVerifyChainAcceptsAnEmptyChain(t *testing.T) {
 // entrée par entrée détecte déjà.
 func TestVerifyChainDetectsAnAlteredEntry(t *testing.T) {
 	h, database := newAuditDB(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	seedChain(t, database, 5)
 
 	if _, err := database.Exec(
@@ -170,6 +174,9 @@ func TestVerifyChainDetectsAnAlteredEntry(t *testing.T) {
 // vérifier les entrées une à une ne verrait rien.
 func TestVerifyChainDetectsADeletedEntry(t *testing.T) {
 	h, database := newAuditDB(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	seedChain(t, database, 5)
 
 	if _, err := database.Exec(`DELETE FROM audit_logs WHERE sequence_number = 3`); err != nil {
@@ -228,6 +235,9 @@ func TestVerifyChainDetectsADeletedEntry(t *testing.T) {
 // première entrée et son numéro de séquence trahissent la troncature.
 func TestVerifyChainDetectsATruncatedHead(t *testing.T) {
 	h, database := newAuditDB(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	seedChain(t, database, 5)
 
 	if _, err := database.Exec(`DELETE FROM audit_logs WHERE sequence_number <= 2`); err != nil {
@@ -250,6 +260,9 @@ func TestVerifyChainDetectsATruncatedHead(t *testing.T) {
 // garder d'affirmer que la comptabilité est complète.
 func TestVerifyChainCannotDetectATruncatedTail(t *testing.T) {
 	h, database := newAuditDB(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	seedChain(t, database, 5)
 
 	if _, err := database.Exec(`DELETE FROM audit_logs WHERE sequence_number > 2`); err != nil {
@@ -274,6 +287,9 @@ func TestVerifyChainCannotDetectATruncatedTail(t *testing.T) {
 // qui soit, puisqu'il détruit la crédibilité de tous les suivants.
 func TestVerifyChainDoesNotAccuseLegacyEntries(t *testing.T) {
 	h, database := newAuditDB(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	seedChain(t, database, 4)
 	if _, err := database.Exec(`UPDATE audit_logs SET hash_version = 1`); err != nil {
 		t.Fatal(err)
@@ -293,6 +309,9 @@ func TestVerifyChainDoesNotAccuseLegacyEntries(t *testing.T) {
 // quoi la tolérance ci-dessus reviendrait à ne plus rien vérifier du tout.
 func TestVerifyChainStillDetectsDeletionAmongLegacyEntries(t *testing.T) {
 	h, database := newAuditDB(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	seedChain(t, database, 5)
 	if _, err := database.Exec(`UPDATE audit_logs SET hash_version = 1`); err != nil {
 		t.Fatal(err)
@@ -315,6 +334,9 @@ func TestVerifyChainStillDetectsDeletionAmongLegacyEntries(t *testing.T) {
 // « intégrité en échec ». Un 409 ici serait une accusation.
 func TestVerifySingleLegacyEntryReportsNotVerifiable(t *testing.T) {
 	h, database := newAuditDB(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	seedChain(t, database, 1)
 	if _, err := database.Exec(`UPDATE audit_logs SET hash_version = 1`); err != nil {
 		t.Fatal(err)

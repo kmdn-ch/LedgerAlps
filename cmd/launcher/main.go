@@ -188,17 +188,23 @@ func waitForServer(ctx context.Context, baseURL string, client *http.Client) err
 	}
 }
 
-// startServer launches ledgeralps-server.exe with the given config as env vars.
-// Returns the process; the caller should not wait on it.
-func startServer(cfg *config) (*os.Process, error) {
-	cmd := exec.Command(serverExe())
-	// Seuls les réglages dont le lanceur a lui-même besoin sont transmis. Les
-	// options réseau restent dans config.json, que le serveur lit directement :
-	// les passer ici en ferait une seconde source de vérité qui, valant sa
-	// valeur par défaut, écraserait le fichier — c'est ce qui rendait le
-	// réglage TLS impossible à activer.
-	cmd.Env = append(os.Environ(),
-		"JWT_SECRET="+cfg.JWTSecret,
+// serverEnv compose l'environnement du serveur lancé par le lanceur.
+//
+// Seuls les réglages dont le lanceur a lui-même besoin sont transmis. Les options réseau
+// restent dans config.json, que le serveur lit directement : les passer ici en ferait une
+// seconde source de vérité qui, valant sa valeur par défaut, écraserait le fichier — c'est ce
+// qui rendait le réglage TLS impossible à activer.
+//
+// # Le secret de signature n'en fait PAS partie (audit croisé Gemini, CRIT-16)
+//
+// `JWT_SECRET` y figurait. Le serveur le lit dans config.json : le passer aussi par
+// l'environnement faisait de la variable la source qui gagne, donc « la clé vient de
+// l'environnement » — et la rotation quotidienne ne tournait jamais sur le chemin d'installation
+// NSIS, contrairement à ce que disait `jwt_rotation.go`. La rotation d'urgence, elle, était
+// annulée quand le serveur se relançait lui-même en reprenant son environnement.
+func serverEnv(base []string, cfg *config) []string {
+	env := append([]string{}, base...)
+	env = append(env,
 		"SQLITE_PATH="+cfg.SQLitePath,
 		"PORT="+cfg.Port,
 		"ALLOWED_ORIGINS="+cfg.AllowedOrigins,
@@ -206,8 +212,16 @@ func startServer(cfg *config) (*os.Process, error) {
 		"LEDGERALPS_INSTALL_DIR="+exeDir(),
 	)
 	if cfg.Debug {
-		cmd.Env = append(cmd.Env, "DEBUG=true")
+		env = append(env, "DEBUG=true")
 	}
+	return env
+}
+
+// startServer launches ledgeralps-server.exe with the given config as env vars.
+// Returns the process; the caller should not wait on it.
+func startServer(cfg *config) (*os.Process, error) {
+	cmd := exec.Command(serverExe())
+	cmd.Env = serverEnv(os.Environ(), cfg)
 	// Write server logs to AppData\LedgerAlps\server.log
 	logPath := filepath.Join(appDataDir(), "server.log")
 	_ = os.MkdirAll(appDataDir(), 0700)
@@ -1179,6 +1193,13 @@ func runSetupWizard() {
 			return
 		}
 
+		// Une installation a pu apparaître depuis l'ouverture de l'assistant (un second lanceur,
+		// une restauration) : on revérifie AVANT d'écrire quoi que ce soit.
+		if ok, raison := peutLancerAssistant(appDataDir(), errors.New("assistant")); !ok {
+			jsonError(w, raison, http.StatusConflict)
+			return
+		}
+
 		// Generate a strong JWT secret.
 		secret, err := generateSecret()
 		if err != nil {
@@ -1215,6 +1236,10 @@ func runSetupWizard() {
 		// Un échec ici annule l'installation plutôt que de la poursuivre à
 		// moitié : quelqu'un qui a demandé le chiffrement et obtient une base
 		// en clair ne le saurait pas.
+		// `cleCreee` : on ne défait que ce que CE passage a fait. Forget() efface la clé de la
+		// machine ; appelé sur une clé qu'on n'a pas créée, il détruirait celle d'une autre
+		// installation (CRIT-17).
+		cleCreee := false
 		if req.EncryptDatabase {
 			if _, err := db.NewDatabaseKeys(dataDir).Create(req.DBRecovery); err != nil {
 				_ = os.Remove(configFilePath())
@@ -1222,11 +1247,14 @@ func runSetupWizard() {
 					http.StatusBadRequest)
 				return
 			}
+			cleCreee = true
 		}
 		if req.BackupPassphrase != "" {
 			if err := db.NewBackupPolicy(dataDir).Set(req.BackupPassphrase); err != nil {
 				_ = os.Remove(configFilePath())
-				_ = db.NewDatabaseKeys(dataDir).Forget()
+				if cleCreee {
+					_ = db.NewDatabaseKeys(dataDir).Forget()
+				}
 				jsonError(w, "Impossible d'enregistrer la phrase de passe des sauvegardes: "+err.Error(),
 					http.StatusBadRequest)
 				return
@@ -1240,7 +1268,9 @@ func runSetupWizard() {
 			// partent avec : une clé sans base et sans configuration ferait
 			// échouer la tentative suivante pour une raison incompréhensible.
 			_ = os.Remove(configFilePath())
-			_ = db.NewDatabaseKeys(dataDir).Forget()
+			if cleCreee {
+				_ = db.NewDatabaseKeys(dataDir).Forget()
+			}
 			jsonError(w, "Impossible de démarrer le serveur: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -1373,7 +1403,14 @@ func main() {
 
 	cfg, err := loadConfig()
 	if err != nil {
-		// No config — first run.
+		// L'assistant ne tourne que sur une machine VIERGE. Il se lançait sur n'importe quelle
+		// erreur de lecture — un JSON abîmé suffisait — et écrasait alors la configuration et,
+		// si l'on cochait « chiffrer la base », la clé d'une base déjà chiffrée (audit croisé
+		// Gemini, CRIT-17). Voir peutLancerAssistant.
+		if ok, raison := peutLancerAssistant(appDataDir(), err); !ok {
+			refuserLAssistant(raison)
+			return
+		}
 		logInfo("No config found at %s — starting setup wizard.", configFilePath())
 		runSetupWizard()
 		return

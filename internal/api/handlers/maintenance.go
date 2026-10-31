@@ -10,6 +10,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/core/diskcrypt"
 	"github.com/kmdn-ch/ledgeralps/internal/core/tlsutil"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 	"github.com/kmdn-ch/ledgeralps/version"
 )
 
@@ -42,6 +44,24 @@ type FindingDocument struct {
 	Detail string `json:"detail,omitempty"`
 }
 
+// FindingRepair propose une réparation que l'écran sait appliquer : aujourd'hui, le complément
+// d'une clôture déséquilibrée (voir accounting.FiscalYearService.RepairClosing).
+type FindingRepair struct {
+	Kind             string  `json:"kind"`
+	FiscalYearID     string  `json:"fiscal_year_id"`
+	FiscalYear       string  `json:"fiscal_year"`
+	ClosingReference string  `json:"closing_reference"`
+	Gap              float64 `json:"gap"`
+}
+
+// groupeEquilibre est l'unité dont l'équilibre se mesure. Une écriture ordinaire est son propre
+// groupe. La clôture d'un exercice et son COMPLÉMENT (« CLOTURE-2024-C ») forment UN groupe :
+// le complément est déséquilibré à dessein, du même écart et en sens inverse, et seul
+// l'ensemble s'équilibre.
+const groupeEquilibre = `CASE WHEN je.reference LIKE 'CLOTURE-%'
+	THEN (CASE WHEN je.reference LIKE 'CLOTURE-%-C' THEN SUBSTR(je.reference, 1, LENGTH(je.reference) - 2) ELSE je.reference END)
+	ELSE je.id END`
+
 // Finding is one thing worth a human's attention.
 type Finding struct {
 	// Severity is "error" when the books are wrong, "warning" when something
@@ -59,7 +79,9 @@ type Finding struct {
 	// sans le numéro de la facture : il reste à la chercher à la main dans
 	// toute la liste, et c'est ce qui fait qu'on ne corrige pas.
 	Documents []FindingDocument `json:"documents,omitempty"`
-	Count     int               `json:"count"`
+	// Repairs : les réparations que l'écran propose pour ce constat, à valider une à une.
+	Repairs []FindingRepair `json:"repairs,omitempty"`
+	Count   int             `json:"count"`
 }
 
 // IntegrityCheck GET /api/v1/maintenance/integrity
@@ -79,9 +101,9 @@ func (h *MaintenanceHandler) IntegrityCheck(c *gin.Context) {
 	// fausse le bilan : c'est la seule chose ici qui soit franchement une erreur.
 	if n, err := h.count(ctx, `
 		SELECT COUNT(*) FROM (
-			SELECT jl.entry_id
-			FROM journal_lines jl
-			GROUP BY jl.entry_id
+			SELECT `+groupeEquilibre+` AS grp
+			FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id
+			GROUP BY grp
 			HAVING ABS(COALESCE(SUM(jl.debit_amount), 0) - COALESCE(SUM(jl.credit_amount), 0)) > 0.005
 		)`); err != nil {
 		h.fail(c, err)
@@ -93,14 +115,43 @@ func (h *MaintenanceHandler) IntegrityCheck(c *gin.Context) {
 				detail += " Concernées : " + refs + "."
 			}
 		}
+		repairs := h.closingRepairs(ctx)
+		action := "Une écriture comptabilisée ne se modifie pas, et une écriture rectificative ordinaire, équilibrée, ne rétablit pas l'équilibre d'une écriture qui ne l'est pas. " +
+			"Cas des écritures de clôture (CLOTURE-…) d'une version antérieure à la 1.6.6 : elles ignoraient les produits débiteurs et les charges créditrices, " +
+			"dont les comptes sont restés ouverts."
+		if len(repairs) > 0 {
+			action += " Un complément de clôture peut être passé : il ajoute les lignes qui manquaient, sans toucher à l'écriture d'origine. " +
+				"Consultez-le ci-dessous avant de l'appliquer, et faites-le valider par votre fiduciaire si une déclaration en dépend."
+		} else {
+			action += " Deux issues : restaurer la sauvegarde d'avant la clôture puis clôturer à nouveau avec cette version, " +
+				"ou faire examiner l'écriture par votre fiduciaire avant toute déclaration."
+		}
 		add(Finding{
 			Severity: "error", Check: "journal_balance", Count: n,
-			Title:  "Écritures déséquilibrées",
+			Title:   "Écritures déséquilibrées",
+			Detail:  detail,
+			Action:  action,
+			Repairs: repairs,
+		})
+	}
+
+	// ── Lignes modifiées après comptabilisation ──────────────────────────────
+	// Le maillon d'audit d'une écriture scelle le condensé de ses lignes. Une ligne réécrite
+	// directement dans la base — un compte changé sans toucher au montant, que l'équilibre ne
+	// voit pas — ne correspond plus à ce condensé (audit croisé Gemini, CRIT-10).
+	{
+		n, refs := h.alteredLineEntries(ctx)
+		detail := fmt.Sprintf("%d écriture(s) comptabilisée(s) dont les lignes ne correspondent plus à ce que le journal d'audit a scellé.", n)
+		if refs != "" {
+			detail += " Concernées : " + refs + "."
+		}
+		add(Finding{
+			Severity: "error", Check: "journal_lines_altered", Count: n,
+			Title:  "Lignes d'écritures modifiées après leur comptabilisation",
 			Detail: detail,
-			Action: "Une écriture comptabilisée ne se modifie pas, et une écriture rectificative ordinaire, équilibrée, ne rétablit pas l'équilibre d'une écriture qui ne l'est pas. " +
-				"Cas des écritures de clôture (CLOTURE-…) d'une version antérieure à la 1.6.6 : elles ignoraient les produits débiteurs et les charges créditrices, " +
-				"dont les comptes sont restés ouverts. Deux issues : restaurer la sauvegarde d'avant la clôture puis clôturer à nouveau avec cette version, " +
-				"ou faire examiner l'écriture par votre fiduciaire avant toute déclaration.",
+			Action: "Une écriture comptabilisée ne se modifie pas : ses lignes ont été réécrites en dehors de LedgerAlps. " +
+				"Restaurez une sauvegarde antérieure à la modification, ou faites examiner ces écritures par votre fiduciaire avant toute déclaration. " +
+				"Les écritures comptabilisées avant la 1.6.6 ne portent pas ce condensé : leurs lignes ne sont pas vérifiables par ce contrôle.",
 		})
 	}
 
@@ -392,15 +443,117 @@ func (h *MaintenanceHandler) IntegrityCheck(c *gin.Context) {
 	})
 }
 
+// closingRepairs liste les clôtures déséquilibrées que l'on sait réparer : exercice clos, clôture
+// d'origine déséquilibrée, comptes restés ouverts qui expliquent l'écart au centime. Les autres —
+// écart inexpliqué, complément déjà passé — n'ont pas de bouton : c'est à la fiduciaire de dire.
+func (h *MaintenanceHandler) closingRepairs(ctx context.Context) []FindingRepair {
+	ids, err := h.closedFiscalYearsWithClosing(ctx)
+	if err != nil {
+		return nil
+	}
+	svc := accounting.NewFiscalYearService(h.db, h.usePostgres)
+	var out []FindingRepair
+	for _, id := range ids {
+		plan, err := svc.PlanClosingRepair(ctx, id)
+		if err != nil {
+			continue // équilibrée, déjà complétée, ou inexpliquée : rien à proposer
+		}
+		out = append(out, FindingRepair{
+			Kind: "closing_complement", FiscalYearID: plan.FiscalYearID, FiscalYear: plan.FiscalYear,
+			ClosingReference: plan.ClosingReference, Gap: plan.Gap,
+		})
+	}
+	return out
+}
+
+// closedFiscalYearsWithClosing rend les exercices clos qui portent une écriture de clôture. Le
+// curseur est fermé AVANT que l'appelant ne lise autre chose : SQLite supporte mal les curseurs
+// imbriqués.
+func (h *MaintenanceHandler) closedFiscalYearsWithClosing(ctx context.Context) ([]string, error) {
+	rows, err := h.db.QueryContext(ctx, db.Rebind(`
+		SELECT DISTINCT fy.id, fy.start_date FROM journal_entries je
+		JOIN fiscal_years fy ON fy.id = je.fiscal_year_id
+		WHERE je.reference LIKE 'CLOTURE-%' AND je.reference NOT LIKE 'CLOTURE-%-C'
+		  AND fy.is_closed = 1 AND je.status = 'posted'
+		ORDER BY fy.start_date`, h.usePostgres))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		var start any
+		if err := rows.Scan(&id, &start); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// alteredLineEntries relit, pour chaque écriture dont le maillon scelle un condensé de lignes,
+// les lignes actuelles, et compte celles qui ont changé. Rend aussi les premières références.
+func (h *MaintenanceHandler) alteredLineEntries(ctx context.Context) (int, string) {
+	scelles, err := h.sealedLineDigests(ctx)
+	if err != nil {
+		return 0, ""
+	}
+	n := 0
+	var parts []string
+	for _, s := range scelles {
+		actuel, err := accounting.LinesDigest(ctx, h.db, h.usePostgres, s.id)
+		if err != nil || actuel == s.digest {
+			continue
+		}
+		n++
+		if len(parts) < 5 {
+			parts = append(parts, s.ref)
+		}
+	}
+	return n, strings.Join(parts, ", ")
+}
+
+type sealedDigest struct{ id, ref, digest string }
+
+// sealedLineDigests lit les condensés de lignes scellés par le journal d'audit. Le curseur est
+// fermé à la sortie, avant les relectures de l'appelant.
+func (h *MaintenanceHandler) sealedLineDigests(ctx context.Context) ([]sealedDigest, error) {
+	rows, err := h.db.QueryContext(ctx, db.Rebind(`
+		SELECT al.record_id, je.reference, al.after_state
+		FROM audit_logs al JOIN journal_entries je ON je.id = al.record_id
+		WHERE al.table_name = 'journal_entries' AND al.action IN ('post', 'close', 'close_repair')
+		  AND al.after_state LIKE '%"lines_digest"%'
+		ORDER BY je.date, je.reference`, h.usePostgres))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []sealedDigest
+	for rows.Next() {
+		var id, ref, state string
+		if err := rows.Scan(&id, &ref, &state); err != nil {
+			return nil, err
+		}
+		var parsed struct {
+			LinesDigest string `json:"lines_digest"`
+		}
+		if json.Unmarshal([]byte(state), &parsed) == nil && parsed.LinesDigest != "" {
+			out = append(out, sealedDigest{id, ref, parsed.LinesDigest})
+		}
+	}
+	return out, rows.Err()
+}
+
 // unbalancedReferences nomme, avec leur écart, les premières écritures déséquilibrées :
 // « CLOTURE-2024 (écart 3000.00) ». Le constat disait « 1 écriture » sans dire laquelle.
 func (h *MaintenanceHandler) unbalancedReferences(ctx context.Context) string {
 	rows, err := h.db.QueryContext(ctx, db.Rebind(`
-		SELECT je.reference, ROUND(ABS(COALESCE(SUM(jl.debit_amount), 0) - COALESCE(SUM(jl.credit_amount), 0)), 2)
+		SELECT MIN(je.reference), ROUND(ABS(COALESCE(SUM(jl.debit_amount), 0) - COALESCE(SUM(jl.credit_amount), 0)), 2)
 		FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id
-		GROUP BY je.id, je.reference, je.date
+		GROUP BY `+groupeEquilibre+`
 		HAVING ABS(COALESCE(SUM(jl.debit_amount), 0) - COALESCE(SUM(jl.credit_amount), 0)) > 0.005
-		ORDER BY je.date, je.reference
+		ORDER BY MIN(je.date), MIN(je.reference)
 		LIMIT 5`, h.usePostgres))
 	if err != nil {
 		return ""

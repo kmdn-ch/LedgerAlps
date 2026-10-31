@@ -15,7 +15,7 @@ import { PageHeader, StatCard, StatusBadge, LoadingSpinner } from '@/components/
 import { RevenuePanel } from '@/components/dashboard/RevenuePanel'
 import { OnboardingPanel } from '@/components/dashboard/OnboardingPanel'
 import { useCanWrite } from '@/hooks/usePermissions'
-import { formatCHF, formatDate, isOverdue } from '@/utils'
+import { formatCHF, formatDate, isOverdue, dateLocale } from '@/utils'
 import { useT } from '@/i18n/useT'
 import type { Invoice } from '@/types'
 
@@ -41,15 +41,12 @@ export function DashboardPage() {
     queryFn:  () => statsApi.get().then(r => r.data),
   })
 
-  const totalDue = invoices
-    .filter(i => i.status === 'sent')
-    .reduce((s, i) => s + i.total_amount - i.amount_paid, 0)
-
-  // Déduit de l'échéance : ce total lisait auparavant un statut 'overdue' que
-  // la base ne peut pas contenir, et affichait donc toujours 0.
-  const totalOverdue = invoices
-    .filter(isOverdue)
-    .reduce((s, i) => s + i.total_amount - i.amount_paid, 0)
+  // Les créances viennent du SERVEUR, qui les calcule sur toutes les factures, nettes des versements
+  // et des notes de crédit émises. Elles étaient sommées ici sur la première page de vingt
+  // factures — offres et avoirs envoyés compris : un avoir de 300 s'ajoutait aux créances au lieu
+  // de les réduire (audit croisé Gemini, HIGH-22).
+  const totalDue = parseFloat(stats?.invoices?.total_receivable ?? '')
+  const totalOverdue = parseFloat(stats?.invoices?.total_overdue ?? '')
 
   const recentInvoices = [...invoices]
     .sort((a, b) => b.issue_date.localeCompare(a.issue_date))
@@ -69,7 +66,7 @@ export function DashboardPage() {
       <PageHeader
         title={t('nav.tableauDeBord')}
         aide={t('aide.tableauDeBord')}
-        subtitle={t('tb.aujourdhui', { date: formatDate(new Date().toISOString()) })}
+        subtitle={t('tb.aujourdhui', { date: formatDate(dateLocale()) })}
         actions={peutEcrire ? (
           <Link to="/invoices/new" className="btn-primary">
             <Plus size={15} />
@@ -87,19 +84,19 @@ export function DashboardPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           label={t('tb.creancesOuvertes')}
-          value={formatCHF(totalDue)}
+          value={isFinite(totalDue) ? formatCHF(totalDue) : '—'}
           icon={<TrendingUp size={18} />}
           accent={totalDue > 0}
         />
         <StatCard
           label={t('tb.enRetard')}
-          value={formatCHF(totalOverdue)}
+          value={isFinite(totalOverdue) ? formatCHF(totalOverdue) : '—'}
           icon={<AlertCircle size={18} />}
         />
         <StatCard
           label={t('tb.facturesCeMois')}
           value={String(invoices.filter(i =>
-            i.issue_date.startsWith(new Date().toISOString().slice(0, 7))
+            i.issue_date.startsWith(dateLocale().slice(0, 7))
           ).length)}
           icon={<FileText size={18} />}
         />

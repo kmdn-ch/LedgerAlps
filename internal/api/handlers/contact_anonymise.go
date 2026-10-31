@@ -133,6 +133,32 @@ func (h *ContactsHandler) AnonymiseContact(c *gin.Context) {
 		return
 	}
 
+	// Refus si le contact est le FOURNISSEUR d'une pièce comptabilisée encore soumise à la
+	// conservation. Une facture fournisseur est la pièce de l'impôt préalable (LTVA art. 28) :
+	// elle doit nommer le fournisseur, et elle n'en porte aucune copie — son nom, son IDE et
+	// son IBAN ne vivent que sur la fiche. L'anonymiser les effaçait de la pièce, sans retour
+	// possible (audit croisé Gemini, CRIT-12). La conservation court jusqu'à la fin de la
+	// dixième année suivant l'exercice (CO art. 958f al. 1).
+	var supplierDocs int
+	if err := h.db.QueryRowContext(ctx, db.Rebind(`
+		SELECT COUNT(*) FROM supplier_invoices
+		WHERE supplier_id = ? AND COALESCE(journal_entry_id, '') <> '' AND issue_date >= ?`,
+		h.usePostgres), id, fmt.Sprintf("%04d-01-01", time.Now().Year()-10)).Scan(&supplierDocs); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+		return
+	}
+	if supplierDocs > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"reason": "supplier_documents_retained",
+			"error": fmt.Sprintf(
+				"%d facture(s) fournisseur comptabilisée(s) citent ce contact, et la loi impose de les conserver "+
+					"dix ans avec le nom de leur fournisseur (CO art. 958f, LTVA art. 28). "+
+					"L'anonymiser les rendrait inutilisables comme justificatif de l'impôt préalable.",
+				supplierDocs),
+		})
+		return
+	}
+
 	now := time.Now().UTC()
 	label := anonymisedLabel(id)
 

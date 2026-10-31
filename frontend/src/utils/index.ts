@@ -107,6 +107,25 @@ export function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+/**
+ * dateLocale rend la date de `d` (aujourd'hui par défaut) en `AAAA-MM-JJ`, en heure LOCALE.
+ *
+ * Lire la date dans `toISOString()` donne la date UTC. En Suisse, entre minuit et 1 h
+ * (2 h l'été), c'est la veille — et celle du 1er janvier à minuit local est TOUJOURS le
+ * 31 décembre de l'année précédente : la période par défaut des rapports commençait la veille
+ * et avalait l'écriture de clôture de l'année d'avant (audit croisé Gemini, MED-01).
+ */
+export function dateLocale(d: Date = new Date()): string {
+  const deux = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}`
+}
+
+/** dansJours rend la date locale du jour d'aujourd'hui décalé de `n` jours (calendrier, pas millisecondes). */
+export function dansJours(n: number, depuis: Date = new Date()): string {
+  const d = new Date(depuis.getFullYear(), depuis.getMonth(), depuis.getDate() + n)
+  return dateLocale(d)
+}
+
 // Une facture est en retard parce que la date d'échéance est passée, pas parce
 // qu'on l'a décidé. Seule une facture envoyée peut l'être : un brouillon n'a
 // jamais été réclamé, une facture payée ou annulée ne doit plus rien.
@@ -114,7 +133,7 @@ export function isOverdue(inv: { status: string; due_date: string | null; docume
   if (inv.status !== 'sent') return false
   if (inv.document_type && inv.document_type !== 'invoice') return false
   if (!inv.due_date) return false
-  return inv.due_date < new Date().toISOString().slice(0, 10)
+  return inv.due_date < dateLocale()
 }
 
 // estQRIBAN dit si un compte suisse est un QR-IBAN.

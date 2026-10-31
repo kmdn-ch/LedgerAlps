@@ -66,6 +66,11 @@ var ErrDatabaseKeyUnavailable = errors.New(
 // ErrNoRecovery : aucune enveloppe de récupération n'a été enregistrée.
 var ErrNoRecovery = errors.New("aucune phrase de récupération n'a été enregistrée pour cette base")
 
+// ErrDatabaseKeyExists : une clé de base existe déjà sur cette machine. Elle ne se remplace pas par une
+// création — la perdre rendrait illisible la base qu'elle chiffre.
+var ErrDatabaseKeyExists = errors.New(
+	"une clé de base de données existe déjà sur cette machine : elle ne se remplace pas, car la base qu'elle chiffre deviendrait illisible")
+
 // recoveryWrap enveloppe la clé de la base avec une phrase de récupération.
 // Argon2id + XChaCha20-Poly1305, les mêmes primitives que les sauvegardes, avec
 // les mêmes paramètres — un seul jeu à auditer.
@@ -150,6 +155,16 @@ func (k *DatabaseKeys) Key() ([]byte, error) {
 // turns ten years of legally required records into an unreadable file — a
 // confidentiality measure must not create a retention failure.
 func (k *DatabaseKeys) Create(recoveryPassphrase string) ([]byte, error) {
+	// Jamais par-dessus une clé existante. Elle était écrasée sans un mot, et la base qu'elle
+	// chiffrait devenait illisible pour toujours : l'assistant d'installation l'a fait sur une
+	// simple configuration illisible (audit croisé Gemini, CRIT-17). Remplacer une clé est une
+	// opération à part, qui passe par la phrase de récupération — jamais par une création.
+	if k.Configured() {
+		return nil, ErrDatabaseKeyExists
+	}
+	if _, err := os.Stat(k.filePath()); err == nil {
+		return nil, ErrDatabaseKeyExists
+	}
 	if err := ValidatePassphrase(recoveryPassphrase); err != nil {
 		return nil, err
 	}

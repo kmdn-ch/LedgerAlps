@@ -29,7 +29,7 @@ import { supplierInvoicesApi, contactsApi, accountsApi } from '@/api/client'
 import {
   PageHeader, LoadingSpinner, EmptyState, ErrorBanner, SectionTitle, ConfirmDialog,
 } from '@/components/ui'
-import { formatCHF, formatDate, estQRIBAN } from '@/utils'
+import { formatCHF, formatDate, estQRIBAN, dateLocale } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
 import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
@@ -75,7 +75,7 @@ const VAT_RATES: { value: string; cle: Cle }[] = [
 ]
 
 // La date LOCALE : toISOString() donne la date UTC, donc la veille entre minuit et 1 h ou 2 h en Suisse.
-const today = () => new Date().toLocaleDateString('sv-SE')
+const today = () => dateLocale()
 
 // Le formulaire de saisie. Un type nommé : `formDeFacture` doit rendre exactement ce
 // que l'état contient, sans quoi la comparaison de `dirty` ne veut rien dire.
@@ -192,13 +192,27 @@ export function PurchasesPage() {
   const rate    = parseFloat(form.vat_rate.replace(',', '.'))
   const saisi   = parseFloat(form.amount.replace(',', '.'))
   const taux    = isFinite(rate) ? rate / 100 : 0
+  //
+  // Tout se compte AU CENTIME, comme le serveur (total = HT + TVA, chacun arrondi au centime).
+  // Le TTC affiché était arrondi à 5 centimes : l'écran annonçait 100.05 pour une facture que le
+  // serveur enregistrait à 100.04 (audit croisé Gemini, HIGH-18 — reste de l'audit 9, A-04, qui
+  // avait ôté l'arrondi du serveur sans toucher à la saisie).
+  const centimes = (v: number) => Math.round(v * 100) / 100
+  const tvaDe = (h: number) => centimes(h * taux)
   const ht = !isFinite(saisi)
     ? NaN
     : form.amount_mode === 'ttc'
-      ? Math.round((saisi / (1 + taux)) * 100) / 100
+      ? (() => {
+          // Le HT qu'on déduit d'un TTC n'est pas unique au centime près : parmi le plus
+          // proche et ses voisins, on garde celui dont HT + TVA retombe EXACTEMENT sur le TTC
+          // saisi — la somme à payer est ce que le QR annonce, elle ne doit pas bouger d'un centime.
+          const h0 = centimes(saisi / (1 + taux))
+          return [h0, centimes(h0 - 0.01), centimes(h0 + 0.01)]
+            .find(h => centimes(h + tvaDe(h)) === centimes(saisi)) ?? h0
+        })()
       : saisi
-  const tva = isFinite(ht) ? Math.round(ht * taux * 100) / 100 : 0
-  const ttc = isFinite(ht) ? Math.round((ht + tva) * 20) / 20 : 0
+  const tva = isFinite(ht) ? tvaDe(ht) : 0
+  const ttc = isFinite(ht) ? centimes(ht + tva) : 0
 
   const create = useMutation({
     mutationFn: () => {
@@ -620,7 +634,7 @@ export function PurchasesPage() {
                 {t('ach.montantObl')}
               </label>
               <div className="flex gap-2">
-                <input id="amt" type="number" step="0.05" min="0" inputMode="decimal"
+                <input id="amt" type="number" step="0.01" min="0" inputMode="decimal"
                        className="input text-right font-mono tabular-nums"
                        value={form.amount}
                        onChange={e => setForm({ ...form, amount: e.target.value })} />

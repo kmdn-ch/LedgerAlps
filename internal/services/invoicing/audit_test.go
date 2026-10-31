@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
+	"github.com/kmdn-ch/ledgeralps/internal/db/dbtest"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
@@ -172,6 +173,9 @@ func TestLaTraceDUnDocumentEstDansLaChaineEtSeVerifie(t *testing.T) {
 // Altérer une trace doit casser son empreinte — sinon la chaîne ne prouve rien.
 func TestAltererUneTraceCasseSonEmpreinte(t *testing.T) {
 	s, database, contactID := auditService(t)
+	// Ce test PROUVE que la chaîne détecte une réécriture : il commence par faire ce que ferait
+	// quelqu'un qui écrit dans le fichier de la base — retirer les déclencheurs d'immuabilité.
+	dbtest.Desarmer(t, database)
 	invID := makeInvoice(t, s, contactID, 500, 0)
 	if err := s.TransitionBy(context.Background(), invID, models.InvoiceStatusSent,
 		Actor{UserID: "u1"}); err != nil {

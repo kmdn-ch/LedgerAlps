@@ -310,11 +310,13 @@ func TestLeControleSignaleLesDonneesAbsurdesDejaEnBase(t *testing.T) {
 	// Écriture équilibrée, mais à trois décimales et datée de l'an 26.
 	entryID := db.NewID()
 	exec(`INSERT INTO journal_entries (id, reference, date, description, status, created_by_id)
-	      VALUES (?, 'JN-0026-001', '0026-10-30', 'faute de frappe', 'posted', ?)`, entryID, userID)
+	      VALUES (?, 'JN-0026-001', '0026-10-30', 'faute de frappe', 'draft', ?)`, entryID, userID)
 	exec(`INSERT INTO journal_lines (id, entry_id, account_id, debit_amount, sequence) VALUES (?, ?, ?, 100.123, 1)`,
 		db.NewID(), entryID, accountID)
 	exec(`INSERT INTO journal_lines (id, entry_id, account_id, credit_amount, sequence) VALUES (?, ?, ?, 100.123, 2)`,
 		db.NewID(), entryID, accountID)
+	// Comptabilisée APRÈS ses lignes : celles d'une écriture comptabilisée sont immuables (0032).
+	exec(`UPDATE journal_entries SET status = 'posted' WHERE id = ?`, entryID)
 
 	// Facture à total négatif.
 	invID := db.NewID()

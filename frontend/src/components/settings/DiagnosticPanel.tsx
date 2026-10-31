@@ -1,9 +1,13 @@
 // LedgerAlps — Diagnostic (Paramètres → Maintenance)
 //
-// Cet écran MONTRE, il ne répare pas. Une comptabilité incohérente se corrige
-// par une écriture, pas par un bouton : réparer en silence effacerait la trace
-// de ce qui s'est passé, ce que le CO art. 957a al. 2 ch. 5 interdit. Chaque
-// constat dit donc ce qui ne va pas et ce qu'il faut faire.
+// Cet écran MONTRE, il ne répare pas : une comptabilité incohérente se corrige par une
+// écriture, pas par un bouton — réparer en silence effacerait la trace de ce qui s'est passé,
+// ce que le CO art. 957a al. 2 ch. 5 interdit. Chaque constat dit donc ce qui ne va pas et ce
+// qu'il faut faire.
+//
+// Un seul geste est proposé, et il n'a rien de silencieux : le COMPLÉMENT d'une clôture
+// scellée déséquilibrée (CRIT-04). Il passe une écriture visible au journal, tracée, après un
+// aperçu des lignes et une confirmation ; la clôture d'origine reste telle quelle.
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -14,8 +18,10 @@ import {
 } from 'lucide-react'
 import { maintenanceApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
-import { formatDate } from '@/utils'
-import type { IntegrityReport, IntegrityFinding, SystemHealth } from '@/types'
+import { ClosingRepairDialog } from '@/components/settings/ClosingRepairDialog'
+import { useCanWrite } from '@/hooks/usePermissions'
+import { formatCHF, formatDate } from '@/utils'
+import type { IntegrityReport, IntegrityFinding, FindingRepair, SystemHealth } from '@/types'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
 
@@ -41,6 +47,9 @@ const CAPABILITY_LABEL: Record<string, Cle> = {
 
 export function DiagnosticPanel() {
   const t = useT()
+  const peutEcrire = useCanWrite()
+  const [reparation, setReparation] = useState<FindingRepair | null>(null)
+  const [fait, setFait] = useState<string | null>(null)
   const integrity = useQuery<IntegrityReport>({
     queryKey: ['maintenance', 'integrity'],
     queryFn:  () => maintenanceApi.integrity().then(r => r.data),
@@ -73,6 +82,12 @@ export function DiagnosticPanel() {
 
         {integrity.isLoading && <LoadingSpinner />}
         {integrity.isError && <ErrorBanner message={t('dg.erreurControle')} />}
+
+        {fait && (
+          <div className="mb-3 rounded-md border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">
+            {t('dg.complementFait', { ref: fait })}
+          </div>
+        )}
 
         {integrity.data?.clean && (
           <div className="flex items-start gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
@@ -127,6 +142,26 @@ export function DiagnosticPanel() {
                       )}
 
                       {f.action && <p className="mt-1.5">{f.action}</p>}
+
+                      {/* Le complément d'une clôture déséquilibrée : un aperçu, puis une
+                          confirmation. Réservé à qui peut écrire — c'est une écriture. */}
+                      {peutEcrire && f.repairs && f.repairs.length > 0 && (
+                        <ul className="mt-2 space-y-1.5">
+                          {f.repairs.map(r => (
+                            <li key={r.fiscal_year_id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                              <span>
+                                {t('dg.complementLigne', {
+                                  exercice: r.fiscal_year, ref: r.closing_reference, ecart: formatCHF(r.gap),
+                                })}
+                              </span>
+                              <button type="button" className="btn-secondary btn-sm"
+                                      onClick={() => { setFait(null); setReparation(r) }}>
+                                {t('dg.complementVoir')}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -135,6 +170,14 @@ export function DiagnosticPanel() {
           </div>
         )}
       </div>
+
+      {reparation && (
+        <ClosingRepairDialog
+          repair={reparation}
+          onClose={() => setReparation(null)}
+          onDone={(ref) => { setReparation(null); setFait(ref) }}
+        />
+      )}
 
       {/* ── Diagnostic & état du système ─────────────────────────────────── */}
       <div>

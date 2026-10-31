@@ -143,6 +143,10 @@ const (
 // sortie. Une facture fournisseur contient le nom et l'IBAN d'un tiers : elle
 // n'a rien à faire ailleurs que dans un dossier qui disparaît.
 func extractImages(data []byte) ([]pageImage, error) {
+	// AVANT pdfcpu : il décode chaque flux en mémoire (HIGH-12, voir expansion.go).
+	if err := verifierExpansion(data); err != nil {
+		return nil, err
+	}
 	dir, err := os.MkdirTemp("", "ledgeralps-qr-*")
 	if err != nil {
 		return nil, fmt.Errorf("dossier temporaire: %w", err)

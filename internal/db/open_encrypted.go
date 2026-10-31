@@ -39,7 +39,11 @@ func OpenEncryptedWithKey(path string, key []byte) (*sql.DB, error) {
 		return nil, fmt.Errorf("clé de %d octets, attendu %d", len(key), DatabaseKeySize)
 	}
 	pragma := "PRAGMA hexkey='" + hexKey(key) + "';"
-	return driver.Open(sqliteDSN(path, "vfs=adiantum"), func(c *sqlite3.Conn) error {
+	// `_txlock=immediate` comme la base en clair (voir livePragmas) : sans lui, la chaîne d'audit
+	// — lire le maillon précédent, puis insérer le suivant — perdait des maillons sous
+	// écritures concurrentes, en silence (audit croisé Gemini, HIGH-14). Le correctif n'avait
+	// été posé que sur le chemin de la base en clair.
+	return driver.Open(sqliteDSN(path, "vfs=adiantum", "_txlock=immediate"), func(c *sqlite3.Conn) error {
 		if err := c.Exec(pragma); err != nil {
 			return err
 		}

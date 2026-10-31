@@ -529,6 +529,10 @@ export const fiscalYearsApi = {
   create: (data: { name: string; start_date: string; end_date: string }) =>
     api.post('/fiscal-years', data),
   close: (id: string)          => api.post(`/fiscal-years/${id}/close`),
+  // Le complément d'une clôture déséquilibrée par une version antérieure à la 1.6.6 :
+  // l'aperçu d'abord, puis l'application — qui exige la confirmation.
+  closingRepairPlan: (id: string) => api.get(`/fiscal-years/${id}/closing-repair`),
+  repairClosing:     (id: string) => api.post(`/fiscal-years/${id}/closing-repair`, { confirm: true }),
   vatDeclaration: (params: { period_start: string; period_end: string; method: string }) =>
     api.post('/vat/declaration', params),
 }

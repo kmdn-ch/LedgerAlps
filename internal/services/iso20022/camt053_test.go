@@ -381,3 +381,32 @@ func TestParseCamt053UnLotSansMontantsRestePorteParSonTotal(t *testing.T) {
 		t.Errorf("montant = %v, attendu le total du lot, 600", e[0].Amount)
 	}
 }
+
+// RvslInd : un storno n'est pas un encaissement ordinaire (audit croisé Gemini, CRIT-09).
+// Le relevé le marque ; l'import l'ignorait, et le storno d'un versement rejeté se lisait
+// comme un versement de plus.
+func TestParseCamt053MarqueLesStornos(t *testing.T) {
+	storno := strings.Replace(entreeCreditQR, "<CdtDbtInd>CRDT</CdtDbtInd>", "<CdtDbtInd>CRDT</CdtDbtInd>\n        <RvslInd>true</RvslInd>", 1)
+	entries, err := ParseCamt053(releveSquelette(storno))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || !entries[0].IsReversal {
+		t.Fatalf("storno non reconnu : %+v", entries)
+	}
+
+	// « 1 » vaut « true » en XML ; « false » et l'absence de l'élément ne marquent rien.
+	for valeur, attendu := range map[string]bool{"1": true, "TRUE": true, "false": false, "0": false} {
+		x := strings.Replace(entreeCreditQR, "<CdtDbtInd>CRDT</CdtDbtInd>", "<CdtDbtInd>CRDT</CdtDbtInd><RvslInd>"+valeur+"</RvslInd>", 1)
+		e, err := ParseCamt053(releveSquelette(x))
+		if err != nil || len(e) != 1 {
+			t.Fatalf("RvslInd=%s : %v %+v", valeur, err, e)
+		}
+		if e[0].IsReversal != attendu {
+			t.Errorf("RvslInd=%s : IsReversal = %v, attendu %v", valeur, e[0].IsReversal, attendu)
+		}
+	}
+	if ordinaire, _ := ParseCamt053(releveSquelette(entreeCreditQR)); len(ordinaire) != 1 || ordinaire[0].IsReversal {
+		t.Errorf("une écriture ordinaire est marquée storno : %+v", ordinaire)
+	}
+}

@@ -17,7 +17,7 @@ import { invoicePaymentsApi } from '@/api/client'
 import { SectionTitle } from '@/components/ui'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
-import { formatCHF, formatDate } from '@/utils'
+import { formatCHF, formatDate, dateLocale } from '@/utils'
 import { businessRefusal, refusalMessage } from '@/utils/refusal'
 import type { Invoice, Payment, PaymentMethod } from '@/types'
 
@@ -40,7 +40,7 @@ const METHOD_LABEL: Record<PaymentMethod, Cle> = {
 // Un centime de tolérance : l'écart d'arrondi d'une saisie à deux décimales.
 const TOLERANCE = 0.005
 
-const aujourdhui = () => new Date().toISOString().slice(0, 10)
+const aujourdhui = () => dateLocale()
 
 interface Props {
   invoice: Invoice

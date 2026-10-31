@@ -119,8 +119,10 @@ func MaybeRotateJWTSecret(cfg *Config, now time.Time) (bool, error) {
 	// le DIRE (voir RotationStatus) vaut mieux qu'une promesse intenable.
 	//
 	// Deux des trois chemins d'installation livrés sont dans ce cas :
-	// Linux/systemd et Windows Service. Le chemin NSIS/lanceur, lui, n'utilise
-	// aucune variable d'environnement et continue de tourner normalement.
+	// Linux/systemd et Windows Service. Le chemin NSIS/lanceur, lui, ne passe plus le secret
+	// par l'environnement (cmd/launcher, `serverEnv`) et tourne normalement. Il le faisait
+	// jusqu'à la 1.6.5, et la rotation n'y tournait donc jamais — d'où la revue de ce
+	// commentaire, qui promettait le contraire (audit croisé Gemini, CRIT-16).
 	if cfg.JWTSecretDepuisEnv {
 		return false, nil
 	}

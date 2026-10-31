@@ -41,6 +41,12 @@ const (
 	MaxDocumentLines = 500
 	// MaxDescriptionRunes borne le libellé d'une ligne.
 	MaxDescriptionRunes = 2000
+
+	// MaxVATPercent : le taux normal suisse en vigueur, 8,1 %. Aucun taux suisse, présent
+	// ou passé (7,7 %, 8 %…), ne le dépasse. Le plafond valait 100 % : « 81 » tapé pour
+	// « 8,1 » devenait 81 % de TVA déductible, comptabilisés sans un mot (audit croisé
+	// Gemini, CRIT-08). Un taux étranger n'a pas sa place ici : le produit est suisse.
+	MaxVATPercent = 8.1
 )
 
 // ErrDateHorsBornes : la date n'est pas une date comptable plausible.
@@ -115,8 +121,9 @@ func CheckDocumentLine(n int, description string, qty, unitPrice, discountPct, v
 	if !isFinite(discountPct) || discountPct < 0 || discountPct > 100 {
 		return fmt.Errorf("ligne %d : le rabais doit être compris entre 0 et 100", n)
 	}
-	if !isFinite(vatPercent) || vatPercent < 0 || vatPercent > 100 {
-		return fmt.Errorf("ligne %d : le taux de TVA doit être compris entre 0 et 100", n)
+	if !isFinite(vatPercent) || vatPercent < 0 || vatPercent > MaxVATPercent+1e-9 {
+		// Phrase FIXE (hormis le numéro de ligne) : le catalogue la rend par correspondance exacte.
+		return fmt.Errorf("ligne %d : le taux de TVA doit être compris entre 0 et 8,1 (le taux normal suisse)", n)
 	}
 	if base := qty * unitPrice * (1 - discountPct/100); !isFinite(base) || base > MaxAmount {
 		return fmt.Errorf("ligne %d : le montant de la ligne dépasse la borne admise de %.2f", n, MaxAmount)

@@ -596,7 +596,7 @@ func qrReferenceFor(inv InvoiceData) (iban, refType, ref string, err error) {
 				return "", "", "", fmt.Errorf("QR-IBAN cannot be used for %s invoices (QRR is CHF-only) and no regular IBAN is configured", inv.Currency)
 			}
 		} else {
-			qrRef, err := compliance.GenerateQRRReference(extractDigits(inv.InvoiceNumber))
+			qrRef, err := compliance.QRRReferenceOf(inv.InvoiceNumber)
 			if err != nil {
 				// A QR-IBAN with a non-QRR reference is rejected by banks, so
 				// surface the failure instead of silently emitting an invalid slip.
@@ -938,17 +938,6 @@ func formatIBAN(iban string) string {
 		result += p
 	}
 	return result
-}
-
-// extractDigits strips non-digit characters (for QRR reference generation from invoice numbers).
-func extractDigits(s string) string {
-	var b []byte
-	for i := 0; i < len(s); i++ {
-		if s[i] >= '0' && s[i] <= '9' {
-			b = append(b, s[i])
-		}
-	}
-	return string(b)
 }
 
 // latin1 converts a UTF-8 string to ISO-8859-1 (Latin-1) bytes so that fpdf's

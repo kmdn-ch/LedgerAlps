@@ -278,6 +278,31 @@ sans aucune charge), une pièce payée ne s'annule pas — c'est un remboursemen
 Redemander l'état où l'on est répond `200` sans effet. Une facture payée avant la 1.6.6 n'a pas d'écriture de
 règlement ; la migration n'en invente pas.
 
+### Réparer une clôture déséquilibrée (exercices clos avant la 1.6.6)
+
+Une clôture passée par une version antérieure à la 1.6.6 ignorait les produits à solde
+débiteur et les charges à solde créditeur : écriture scellée déséquilibrée, comptes restés
+ouverts, balance de vérification fausse. Le journal est immuable, et une écriture rectificative
+ordinaire — équilibrée — ne rétablit pas l'équilibre d'une écriture qui ne l'est pas.
+
+| Méthode | Route | Accès | Description |
+|---|---|---|---|
+| GET | `/fiscal-years/:id/closing-repair` | écriture comptable | **Aperçu** : l'écriture de complément que la réparation passerait (`CLOTURE-AAAA-C`, datée de la fin de l'exercice), ses lignes, l'écart de la clôture d'origine. N'écrit rien |
+| POST | `/fiscal-years/:id/closing-repair` | écriture comptable | Passe le complément. Le corps doit porter `{"confirm": true}` (sinon `422`, `reason: "confirmation_required"`). `201` avec le complément passé |
+
+Le complément ne porte que les lignes qui manquaient — celles qui soldent les comptes restés
+ouverts ; le compte de résultat n'y figure pas, sa ligne comptait déjà tout. Il est donc
+déséquilibré **à dessein**, du même écart et en sens inverse : la clôture et son complément
+s'équilibrent ensemble (le contrôle d'intégrité les lit comme un seul groupe). La clôture d'origine
+n'est ni modifiée ni supprimée ; le complément entre au journal comme toute écriture, chaîné au
+journal d'audit (action `close_repair`) avec le condensé de ses lignes.
+
+La réparation est **refusée** (`409`) quand l'exercice n'est pas clos, quand la clôture
+s'équilibre, quand le complément existe déjà, ou quand l'écart ne s'explique pas **exactement** par
+les comptes restés ouverts — la fiduciaire examine alors l'écriture. Le constat « écritures
+déséquilibrées » de `GET /maintenance/integrity` porte `repairs` : les clôtures réparables, avec
+l'exercice et l'écart.
+
 ### Montants et reprise
 
 **Le total d'un document est HT + TVA, exactement, au centime.** Le HT est la
@@ -414,6 +439,11 @@ aucune facture derrière.
 
 `lines` vide crédite la facture **en totalité**, en reprenant ses lignes.
 Fournir des lignes crédite une partie (retour d'un article, poste contesté).
+Un corps **absent** crédite en totalité ; un corps **mal formé** (une virgule en trop, un
+champ de mauvais type) répond `422` et n'émet rien — il était lu comme un corps absent, et
+une faute de frappe émettait un avoir de 100 %. Il en va de même de `POST /invoices/:id/convert`.
+Une facture `sent`, `paid` **ou `archived`** se crédite (on la rembourse souvent après l'avoir
+rangée) ; brouillons et factures annulées non.
 
 La note de crédit référence la facture par `corrects_invoice_id`, et son PDF
 porte la mention « Annule la facture : FA-… ». LTVA art. 27 al. 4 définit
@@ -424,8 +454,11 @@ document, elle ne réécrit pas celui qu'elle corrige.
 
 **Le montant est borné.** La somme des notes de crédit rattachées à une facture
 ne peut pas dépasser son total ; les notes annulées ne comptent pas, puisqu'elles
-ne créditent rien. Une tolérance d'un centime absorbe l'arrondi à 5 centimes
-lorsqu'on crédite ligne à ligne.
+ne créditent rien. Une tolérance de **cinq centimes**, la même à la création et à la
+modification, absorbe l'arrondi à 5 centimes des factures d'avant la 1.6.6 lorsqu'on
+crédite ligne à ligne. L'avoir et la facture née d'une offre portent leur **exercice** dès la
+création, et le taux de TVA de leur en-tête suit leurs lignes (il valait 8.1 dès qu'une
+première ligne était à 0 %).
 
 | Code | Cas |
 |---|---|
@@ -456,7 +489,7 @@ comptent dans la déclaration TVA.
 | GET | `/supplier-invoices/:id` | lecture | Détail avec lignes |
 | POST | `/supplier-invoices` | écriture documents | Créer (refus si doublon fournisseur + référence) |
 | PUT | `/supplier-invoices/:id` | écriture documents | Modifier — **brouillons uniquement** (409 sinon) |
-| POST | `/supplier-invoices/read-qr` | écriture documents | Lire le QR d'un PDF ou d'une image déposée. **Ne crée rien** |
+| POST | `/supplier-invoices/read-qr` | écriture documents | Lire le QR d'un PDF ou d'une image déposée. **Ne crée rien**. Un PDF dont un flux compressé se dilate au-delà de 64 Mo (256 Mo au total) est refusé en `422` **avant** toute décompression : quelques centaines de Ko de zéros compressés faisaient monter la mémoire du serveur à plus de 2 Go |
 | POST | `/supplier-invoices/:id/transition` | écriture comptable | Changer de statut — **machine à états stricte** (voir « Factures fournisseurs : états et règlement ») |
 
 ### Lire le QR d'une facture
@@ -647,6 +680,12 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 
 | POST | `/contacts/:id/anonymise` | **admin** | Anonymise un contact (nLPD art. 6 al. 4 et 32). Efface nom, adresse, courriel, téléphone, IBAN, n° TVA et notes ; conserve la ligne et sa date d'anonymisation. Refuse si une facture du contact ne porte pas son destinataire figé, et refuse un second passage |
 
+> **Un fournisseur dont une pièce est conservée ne s'anonymise pas** (`409`, `reason:
+> "supplier_documents_retained"`) : une facture fournisseur comptabilisée est la pièce de
+> l'impôt préalable (LTVA art. 28) et n'a aucune copie de l'identité du fournisseur — nom, IDE
+> et IBAN ne vivent que sur la fiche. Le refus tient jusqu'à la fin de la dixième année suivant
+> l'exercice de la pièce (CO art. 958f) ; les brouillons ne comptent pas.
+>
 > **Anonymiser sans amputer une pièce comptable.** La nLPD art. 6 al. 4 impose
 > de détruire ou d'anonymiser une donnée personnelle dès qu'elle n'est plus
 > nécessaire, et l'art. 32 ouvre un droit à l'effacement. Le CO art. 958f impose
@@ -712,12 +751,12 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/reports/balance-sheet` | auth | Bilan à la date `date`. Les fonds propres portent, en dernière ligne, le **résultat non clôturé** (produits − charges pas encore virés ; champ `unclosed_result`) : l'actif égale toujours le passif plus les fonds propres |
 | GET | `/reports/income-statement` | auth | Compte de résultat. L'écriture de clôture (`CLOTURE-…`) en est **exclue** : elle remet les comptes à zéro, et un exercice clôturé affichait 0.00 |
 | GET | `/reports/general-ledger` | auth | Grand livre |
-| GET | `/reports/ar-aging` | auth | Balance âgée des créances |
+| GET | `/reports/ar-aging` | auth | Balance âgée des créances. Chaque ligne porte `total_amount` (le total de la facture) et `balance_due` (ce qui reste **à encaisser**, net des versements et des notes de crédit émises) ; ce sont les restes dus qui sont classés et additionnés, et une facture entièrement créditée n'y figure plus |
 | GET | `/reports/revenue` | auth | Chiffre d'affaires groupé par `year`, `month` ou `contact`, avec `from`/`to`. La réponse porte `basis` : la convention de calcul, pour qu'un total ne soit pas comparé à un autre calculé autrement |
 | GET | `/reports/simplified-accounting` | lecture | Comptabilité simplifiée (CO art. 957 al. 2). `from`, `to`. Recettes et dépenses hors écriture de clôture ; extournes en déduction ; **financement** (`financement`, `total_financement` : capital, réserves, compte du propriétaire, emprunts) à part, de sorte que `resultat` + `total_financement` égale le mouvement net des liquidités |
 | GET | `/reports/simplified-accounting.pdf` | lecture | Le même, en PDF — le document remis à l'administration |
 | GET | `/exports/simplified-accounting.csv` | lecture | Le même, en CSV |
-| GET | `/stats` | auth | Indicateurs du tableau de bord |
+| GET | `/stats` | auth | Indicateurs du tableau de bord. `invoices.total_receivable` et `invoices.total_overdue` sont le reste dû des factures envoyées (net des versements et des avoirs émis, offres et avoirs exclus), calculés sur **toutes** les factures — l'écran les sommait sur la première page de vingt |
 
 ## Paiements et ISO 20022
 
@@ -804,7 +843,7 @@ en francs vers un IBAN suisse décrit un service que l'opération n'utilise pas 
 expose au rejet. La référence QR s'écrit dans `<Prtry>` — « QRR » ne figure pas
 dans la liste de codes externes ISO 20022 — tandis que `SCOR`, qui y figure,
 s'écrit dans `<Cd>`.
-| POST | `/bank-statements/import` | auth | Import relevés `camt.053.001.08` |
+| POST | `/bank-statements/import` | auth | Import relevés `camt.053.001.08`. Une écriture marquée `RvslInd` (**storno** : l'annulation d'une opération antérieure) est conservée avec `is_reversal: true`, jamais proposée à une facture, et n'est pas prise pour un doublon de l'opération qu'elle annule. Les références QR se retrouvent depuis le **numéro de la facture** (la colonne `qr_reference`, écrite nulle part, n'a jamais servi) |
 
 La réponse porte `entries` (ce qui a été lu), `count`, puis `imported` et
 `duplicate` — ce que l'appel a réellement ajouté et ce qu'il a reconnu comme
@@ -865,4 +904,4 @@ la chaîne.
 | PUT | `/settings/company` | **admin** | Modifier le profil |
 | POST | `/settings/logo` | auth | Téléverser le logo |
 | DELETE | `/settings/logo` | auth | Supprimer le logo |
-| POST | `/settings/server/rotate-secret` | **admin** | Régénère le secret de signature des jetons. Déconnecte toutes les sessions et **rien d'autre** : mots de passe intacts (bcrypt), aucune donnée touchée, sauvegardes toujours utilisables — elles ne contiennent pas `config.json`. Prend effet au redémarrage ; les jetons de rafraîchissement en base sont révoqués au passage |
+| POST | `/settings/server/rotate-secret` | **admin** | Régénère le secret de signature des jetons. **Refusé (`409`, `reason: "secret_from_environment"`)** quand la clé vient de la variable `JWT_SECRET` : la variable reprendrait la main au démarrage suivant, et répondre « régénéré » serait faux. Déconnecte toutes les sessions et **rien d'autre** : mots de passe intacts (bcrypt), aucune donnée touchée, sauvegardes toujours utilisables — elles ne contiennent pas `config.json`. Prend effet au redémarrage ; les jetons de rafraîchissement en base sont révoqués au passage |

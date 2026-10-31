@@ -3,6 +3,7 @@ package accounting
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -204,15 +205,23 @@ func (s *Service) PostEntry(ctx context.Context, userID, entryID, ipAddress stri
 	}
 	defer tx.Rollback()
 
+	// 3 bis. Le condensé des LIGNES, lu dans la même transaction : il est scellé avec les
+	//    totaux, si bien qu'une ligne réécrite plus tard rompt la chaîne (CRIT-10).
+	linesDigest, err := LinesDigest(ctx, tx, s.usePostgres, entryID)
+	if err != nil {
+		return err
+	}
+
 	// 4. Ajouter le maillon d'audit (CO art. 957a) et récupérer l'empreinte
 	//    chaînée à porter sur l'écriture.
 	chainedHash, now, err := AppendAuditEntry(ctx, tx, s.usePostgres,
 		userID, "post", entryID, ipAddress,
 		map[string]any{
-			"entry_id": entryID,
-			"status":   "posted",
-			"debit":    totalDebit,
-			"credit":   totalCredit,
+			"entry_id":     entryID,
+			"status":       "posted",
+			"debit":        totalDebit,
+			"credit":       totalCredit,
+			"lines_digest": linesDigest,
 		})
 	if err != nil {
 		return err
@@ -260,24 +269,25 @@ func (s *Service) VerifyEntryIntegrity(ctx context.Context, entryID string) erro
 			COALESCE(ip_address, ''),
 			entry_hash,
 			created_at,
-			hash_version
+			hash_version,
+			COALESCE(prev_hash, '')
 		FROM audit_logs
 		WHERE table_name = 'journal_entries'
 		  AND record_id = ?
-		  AND action = 'post'
+		  AND action IN ('post', 'close', 'close_repair')
 		LIMIT 1`, s.usePostgres)
 
 	var (
 		userID, action, tableName, recordID string
 		beforeState, afterState, ipAddress  string
-		auditEntryHash                      string
+		auditEntryHash, prevHash            string
 		createdAt                           time.Time
 		hashVersion                         int
 	)
 	if err := s.db.QueryRowContext(ctx, auditQ, entryID).Scan(
 		&userID, &action, &tableName, &recordID,
 		&beforeState, &afterState, &ipAddress,
-		&auditEntryHash, &createdAt, &hashVersion,
+		&auditEntryHash, &createdAt, &hashVersion, &prevHash,
 	); err == sql.ErrNoRows {
 		return fmt.Errorf("aucun maillon d'audit pour l'écriture comptabilisée %s", entryID)
 	} else if err != nil {
@@ -301,6 +311,31 @@ func (s *Service) VerifyEntryIntegrity(ctx context.Context, entryID string) erro
 			EntryID:  entryID,
 			Expected: auditEntryHash,
 			Got:      recomputed,
+		}
+	}
+
+	// 5 bis. L'empreinte portée par l'ÉCRITURE elle-même doit être le maillon chaîné de ce
+	// journal d'audit. Elle était lue et jamais comparée : la modifier ne se voyait pas
+	// (audit croisé Gemini, CRIT-10 c). Une écriture sans empreinte stockée est celle d'avant
+	// la chaîne : rien à comparer.
+	if storedHash != "" {
+		if attendu := security.ChainHash(prevHash, auditEntryHash); storedHash != attendu {
+			return ErrIntegrityViolation{EntryID: entryID, Expected: attendu, Got: storedHash}
+		}
+	}
+
+	// 6. Les LIGNES. Le maillon scelle leur condensé depuis cette version ; une écriture plus
+	// ancienne n'en porte pas, et ses lignes ne sont alors pas vérifiables.
+	var scelle struct {
+		LinesDigest string `json:"lines_digest"`
+	}
+	if err := json.Unmarshal([]byte(afterState), &scelle); err == nil && scelle.LinesDigest != "" {
+		actuel, err := LinesDigest(ctx, s.db, s.usePostgres, entryID)
+		if err != nil {
+			return err
+		}
+		if actuel != scelle.LinesDigest {
+			return ErrLinesAltered{EntryID: entryID, Expected: scelle.LinesDigest, Got: actuel}
 		}
 	}
 

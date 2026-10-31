@@ -305,6 +305,36 @@ export interface FindingDocument {
   detail?: string
 }
 
+// Une réparation que l'écran sait appliquer : le complément d'une clôture déséquilibrée.
+export interface FindingRepair {
+  kind: string
+  fiscal_year_id: string
+  fiscal_year: string
+  closing_reference: string
+  gap: number
+}
+
+export interface ClosingRepairLine {
+  account_code: string
+  account_name: string
+  debit: number
+  credit: number
+}
+
+// Ce que le complément passerait (aperçu), ou a passé (`entry_id` renseigné).
+export interface ClosingRepairPlan {
+  fiscal_year_id: string
+  fiscal_year: string
+  closing_reference: string
+  closing_debit: number
+  closing_credit: number
+  gap: number
+  reference: string
+  date: string
+  lines: ClosingRepairLine[]
+  entry_id?: string
+}
+
 export interface IntegrityFinding {
   severity: 'error' | 'warning' | 'info'
   check: string
@@ -315,6 +345,8 @@ export interface IntegrityFinding {
   // Les pièces visées. Un constat sans elles oblige à chercher à la main dans
   // toute la liste, et c'est ce qui fait qu'on ne corrige pas.
   documents?: FindingDocument[]
+  // Les réparations proposées, à valider une à une.
+  repairs?: FindingRepair[]
 }
 
 export interface IntegrityReport {
@@ -528,6 +560,8 @@ export interface BankEntry {
   counterparty?: string
   remittance?: string
   ignored: boolean
+  // Storno (RvslInd du relevé) : l'annulation d'une opération antérieure, jamais proposée à une facture.
+  is_reversal?: boolean
   invoice_id?: string
   invoice_number?: string
   suggestion?: {

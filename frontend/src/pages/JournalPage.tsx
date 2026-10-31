@@ -32,7 +32,7 @@ import { journalApi, accountsApi, settingsApi } from '@/api/client'
 import {
   PageHeader, LoadingSpinner, EmptyState, ErrorBanner, ConfirmDialog,
 } from '@/components/ui'
-import { formatDate, formatCHF } from '@/utils'
+import { formatDate, formatCHF, dateLocale } from '@/utils'
 import { refusalMessage } from '@/utils/refusal'
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 import { useT } from '@/i18n/useT'
@@ -102,7 +102,7 @@ export function JournalPage() {
   const [toPost, setToPost] = useState<JournalEntry | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(() => dateLocale())
   const [description, setDescription] = useState('')
   const [rows, setRows] = useState<Row[]>([emptyRow()])
 
@@ -151,7 +151,7 @@ export function JournalPage() {
 
   const resetForm = () => {
     setDescription(''); setRows([emptyRow()]); setError(null)
-    setDate(new Date().toISOString().slice(0, 10))
+    setDate(dateLocale())
   }
 
   const create = useMutation({
@@ -300,7 +300,7 @@ export function JournalPage() {
                         <AccountHint code={r.credit} byCode={byCode} />
                       </td>
                       <td className="px-2 py-2 w-32">
-                        <input type="number" step="0.05" min="0" inputMode="decimal"
+                        <input type="number" step="0.01" min="0" inputMode="decimal"
                                className="input text-right font-mono tabular-nums"
                                value={r.amount} onChange={e => setRow(i, { amount: e.target.value })} />
                       </td>

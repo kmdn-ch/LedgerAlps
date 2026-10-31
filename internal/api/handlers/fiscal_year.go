@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -193,6 +195,65 @@ func (h *FiscalYearHandler) CloseFiscalYear(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "closed", "fiscal_year_id": fiscalYearID})
+}
+
+// ─── /api/v1/fiscal-years/:id/closing-repair ─────────────────────────────────
+
+// PlanClosingRepair GET /api/v1/fiscal-years/:id/closing-repair
+//
+// Ce que le complément de la clôture passerait, sans rien écrire. À lire — et à faire lire à la
+// fiduciaire — avant d'appliquer (voir accounting.FiscalYearService.RepairClosing).
+func (h *FiscalYearHandler) PlanClosingRepair(c *gin.Context) {
+	plan, err := h.fySvc.PlanClosingRepair(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		h.refuserReparation(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, plan)
+}
+
+// RepairClosing POST /api/v1/fiscal-years/:id/closing-repair
+//
+// Passe le complément. Le corps doit porter `{"confirm": true}` : une réparation du journal ne
+// part pas d'un clic sans aperçu, ni d'un appel qui oublie un paramètre.
+func (h *FiscalYearHandler) RepairClosing(c *gin.Context) {
+	var body struct {
+		Confirm bool `json:"confirm"`
+	}
+	if err := bindOptionalJSON(c, &body); err != nil {
+		refus(c, http.StatusUnprocessableEntity, err)
+		return
+	}
+	if !body.Confirm {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error":  "la réparation doit être confirmée : consultez d'abord ce qu'elle passera, puis envoyez confirm: true",
+			"reason": "confirmation_required",
+		})
+		return
+	}
+	plan, err := h.fySvc.RepairClosing(c.Request.Context(), c.Param("id"), currentUserID(c))
+	if err != nil {
+		h.refuserReparation(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, plan)
+}
+
+// refuserReparation traduit un refus de la réparation en 409 (l'état de l'exercice ne s'y prête
+// pas) ou 404 ; tout le reste est une erreur de lecture ordinaire.
+func (h *FiscalYearHandler) refuserReparation(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, accounting.ErrReparationExerciceOuvert),
+		errors.Is(err, accounting.ErrReparationSansCloture),
+		errors.Is(err, accounting.ErrReparationClotureEquilibree),
+		errors.Is(err, accounting.ErrReparationDejaFaite),
+		errors.Is(err, accounting.ErrReparationInexpliquee):
+		refus(c, http.StatusConflict, err)
+	case strings.Contains(err.Error(), "not found"):
+		c.JSON(http.StatusNotFound, gin.H{"error": "exercice introuvable"})
+	default:
+		refus(c, http.StatusUnprocessableEntity, err)
+	}
 }
 
 // ─── POST /api/v1/vat/declaration ────────────────────────────────────────────

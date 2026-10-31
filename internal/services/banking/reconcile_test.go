@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kmdn-ch/ledgeralps/internal/config"
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/services/iso20022"
 )
@@ -372,5 +373,108 @@ func TestUneEcritureDEnAvantLaMiseAJourNEstPasDupliquee(t *testing.T) {
 	}
 	if res.Imported != 0 || res.Duplicate != 1 {
 		t.Fatalf("import = %+v : une écriture déjà conservée a été dupliquée", res)
+	}
+}
+
+// ─── Audit croisé Gemini, CRIT-09 ────────────────────────────────────────────
+
+// La règle « certaine » ne se déclenchait JAMAIS : elle lisait la colonne `qr_reference`, que
+// rien n'a écrite (zéro facture sur sept en portait une) — et le test d'au-dessus la
+// renseignait à la main, ce qui cachait le défaut. Ici la colonne reste VIDE : la référence
+// doit se retrouver depuis le numéro de la facture, comme le bulletin la calcule.
+func TestLaReferenceSeRetrouveDepuisLeNumeroDeLaFacture(t *testing.T) {
+	s, database := newDB(t)
+	addInvoice(t, database, "i1", "FA-2026-0007", 1081, "sent", "")
+	addInvoice(t, database, "i2", "FA-2026-0008", 1081, "sent", "") // même montant : seul le numéro départage
+	ref, err := compliance.QRRReferenceOf("FA-2026-0007")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Import(context.Background(), []iso20022.BankEntry{entry(1081, ref)}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.List(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Suggestion == nil {
+		t.Fatalf("aucune suggestion : %+v", list)
+	}
+	if got := list[0].Suggestion; got.InvoiceNumber != "FA-2026-0007" || got.Confidence != "certaine" {
+		t.Fatalf("suggestion %q (%s), attendu FA-2026-0007 / certaine", got.InvoiceNumber, got.Confidence)
+	}
+}
+
+// La référence écrite avec des espaces (« 21 00000 … », comme sur le papier) se retrouve aussi.
+func TestLaReferenceAvecEspacesSeRetrouve(t *testing.T) {
+	s, database := newDB(t)
+	addInvoice(t, database, "i1", "FA-2026-0007", 500, "sent", "")
+	ref, _ := compliance.QRRReferenceOf("FA-2026-0007")
+	imprime := compliance.FormatQRRReference(ref)
+
+	if _, err := s.Import(context.Background(), []iso20022.BankEntry{entry(999, imprime)}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.List(context.Background(), false)
+	if len(list) != 1 || list[0].Suggestion == nil || list[0].Suggestion.InvoiceNumber != "FA-2026-0007" {
+		t.Fatalf("référence imprimée non reconnue : %+v", list)
+	}
+}
+
+// Une référence qui ne correspond à aucune facture ne propose rien — et ne tombe pas sur un
+// numéro qui se termine pareil.
+func TestUneReferenceInconnueNeDesignePersonne(t *testing.T) {
+	s, database := newDB(t)
+	addInvoice(t, database, "i1", "FA-2026-0007", 1081, "sent", "")
+	autre, _ := compliance.QRRReferenceOf("FA-2025-0007") // se termine par les mêmes chiffres, pas la même facture
+	if _, err := s.Import(context.Background(), []iso20022.BankEntry{entry(777, autre)}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.List(context.Background(), false)
+	if len(list) != 1 || list[0].Suggestion != nil {
+		t.Fatalf("une référence étrangère a désigné une facture : %+v", list)
+	}
+}
+
+// Un storno n'est pas un versement : aucune suggestion, même avec la bonne référence et le bon
+// montant — il s'y proposerait de solder la facture avec le remboursement de son paiement.
+func TestUnStornoNEstPasPropose(t *testing.T) {
+	s, database := newDB(t)
+	addInvoice(t, database, "i1", "FA-2026-0007", 1081, "sent", "")
+	ref, _ := compliance.QRRReferenceOf("FA-2026-0007")
+
+	e := entry(1081, ref)
+	e.IsReversal = true
+	if _, err := s.Import(context.Background(), []iso20022.BankEntry{e}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.List(context.Background(), false)
+	if len(list) != 1 || !list[0].Reversal {
+		t.Fatalf("storno non conservé comme tel : %+v", list)
+	}
+	if list[0].Suggestion != nil {
+		t.Fatalf("un storno a reçu une suggestion : %+v", list[0].Suggestion)
+	}
+}
+
+// Un storno porte souvent la même date, le même montant et les mêmes références que le
+// versement qu'il annule : il ne doit pas être pris pour un doublon de celui-ci.
+func TestUnStornoNEstPasUnDoublonDuVersement(t *testing.T) {
+	s, _ := newDB(t)
+	versement := entry(1081, "210000000003139471430009017")
+	storno := versement
+	storno.IsReversal = true
+
+	res, err := s.Import(context.Background(), []iso20022.BankEntry{versement, storno})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Imported != 2 || res.Duplicate != 0 {
+		t.Fatalf("import : %+v, attendu 2 importées / 0 doublon — le storno a disparu", res)
+	}
+	// Réimporter le même relevé reste idempotent.
+	if res, _ = s.Import(context.Background(), []iso20022.BankEntry{versement, storno}); res.Imported != 0 || res.Duplicate != 2 {
+		t.Fatalf("réimport : %+v, attendu 0 / 2", res)
 	}
 }
