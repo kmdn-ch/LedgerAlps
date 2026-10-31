@@ -56,6 +56,7 @@ efface ses données personnelles d'un même geste.
 | Télécharger un PDF, un lot de PDF | ✅ | ✅ | ✅ |
 | Créer, modifier une facture ou une offre | ⛔ | ✅ | ✅ |
 | Envoyer, annuler, convertir une offre | ⛔ | ✅ | ✅ |
+| Comptabiliser un document envoyé dont l'écriture manque (« Comptabiliser maintenant ») | ⛔ | ✅ | ✅ |
 | Émettre une note de crédit | ⛔ | ✅ | ✅ |
 | Enregistrer un paiement | ⛔ | ✅ | ✅ |
 
@@ -189,7 +190,12 @@ logiciel.
    `admin`.
 2. **Le filtre global.** Toute méthode d'écriture est refusée à un rôle en
    lecture seule, *quelle que soit la route* — y compris celles qui n'existent
-   pas encore. C'est ce qui couvre la route qu'on oubliera d'annoter.
+   pas encore. C'est ce qui couvre la route qu'on oubliera d'annoter. Deux `POST`
+   **ne modifient rien** et sont exemptés par une liste explicite
+   (`postEnLecture`, `middleware/authz.go`) : le lot de PDF (`/invoices/bulk-pdf`)
+   et le calcul de la déclaration TVA (`/vat/declaration`). Une route n'entre
+   dans cette liste que lorsqu'on a lu qu'elle n'écrit rien — pas parce qu'elle
+   déclare la permission de lecture.
 
 Un troisième filtre existe pour l'état des comptes : mot de passe temporaire à
 remplacer, second facteur à activer. Tant que c'est dû, le compte ne peut

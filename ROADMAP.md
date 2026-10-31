@@ -80,6 +80,7 @@ flowchart TB
 | 16 | Montée react-router v6 → v7 (et zod 4) | 🔎 à valider |
 | 17 | Correctifs d'audit reportés (1.6.3) | ✅ |
 | 18 | Audit brutal : correctifs (1.6.5) | 🔎 à valider |
+| 19 | Audit 9 : correctifs (à paraître en 1.6.6) | 🔎 sur `test`, à valider |
 | 14 | **Modules métier** | 💡 à trancher |
 
 ---
@@ -208,6 +209,18 @@ doublons d'import bancaire, numérotation, arrondi des négatifs. Sécurité : `
 `pain.001` unique, formules CSV neutralisées, causes d'erreur gardées au journal,
 déconnexion sur inactivité tenue par le serveur, plafond des codes de secours.
 Outillage : `react-router` 7, `zod` 4, macro NSIS.
+
+**19 — Audit 9 : correctifs (à paraître en 1.6.6).** Revue complète du code après la
+1.6.5, dix-neuf constats corrigés sur la branche `test`. Critique : une facture dont
+le HT n'est pas un multiple de 0,05 partait sans jamais être comptabilisée — le total
+est désormais HT + TVA au centime, avec une reprise explicite des documents déjà dans
+cet état. Élevés : un jeton de rafraîchissement n'ouvre plus l'API, les dates et les
+montants sont bornés dans les services, une facture reçue garde ses centimes.
+Moyens et faibles : devise unique, journal exact au centime, contrôle d'intégrité
+élargi, limiteur de connexion non réinitialisable, assistant d'installation protégé
+par un jeton, garde de l'en-tête `Host`, politique de mot de passe dès le premier.
+Reste ouverte : la signature Authenticode (pas de certificat). Rapport :
+`review-Claude9.md` (local, ignoré par git).
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions

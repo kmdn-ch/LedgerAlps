@@ -56,7 +56,7 @@ Voir [ROADMAP.md](../ROADMAP.md#14--modules-métier).
 | `cmd/launcher` | Lanceur Windows (`-H=windowsgui`) : démarrage, assistant, navigateur |
 | `internal/api/handlers` | Handlers HTTP — une famille de routes par fichier |
 | `internal/api/middleware` | Authentification, autorisation par rôle, CORS, en-têtes de sécurité, limitation de débit |
-| `internal/core/compliance` | Règles suisses : QR-facture, IBAN, arrondi 5 centimes, avis de conformité |
+| `internal/core/compliance` | Règles suisses : QR-facture, IBAN, arrondi (centime facturé, 5 centimes TVA), bornes des dates et des montants, avis de conformité |
 | `internal/core/security` | Hachage de mots de passe, JWT, chaîne de hachage d'audit |
 | `internal/core/authz` | Rôles et permissions — table de droits, refus par défaut |
 | `internal/core/mfa` | Second facteur TOTP (RFC 6238), vérifié contre les vecteurs officiels |
@@ -325,7 +325,7 @@ déséquilibrée est refusée, pas corrigée silencieusement.
 | Domaine | Emplacement |
 |---|---|
 | QR-facture (SIX, SPC 0200) | `internal/core/compliance/qrbill.go` |
-| TVA suisse, arrondi 0.05 | `internal/services/vat`, `internal/core/compliance/swiss.go` |
+| TVA suisse, arrondi 0.05 de la déclaration ; arrondi au centime facturé ; bornes | `internal/services/vat`, `internal/core/compliance/swiss.go`, `bornes.go` |
 | ISO 20022 pain.001 / camt.053 | `internal/services/iso20022` |
 | CO art. 957a — audit immuable | `internal/services/accounting` |
 | CO art. 958f — archivage 10 ans | `internal/api/handlers/export.go`, `internal/db/backup.go` |

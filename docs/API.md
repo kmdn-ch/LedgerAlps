@@ -6,6 +6,15 @@ Toutes les routes applicatives sont préfixées par `/api/v1`.
 `access_token` (60 min) et un `refresh_token` (30 jours). Le refresh porte un
 `jti` permettant de le révoquer individuellement.
 
+**Chaque jeton n'ouvre que sa porte.** Les jetons portent un type (`typ` :
+`access`, `refresh` ou `mfa`) que chaque point d'entrée exige. Un jeton de
+rafraîchissement présenté en `Authorization: Bearer` n'ouvre **aucune** route de
+l'API (`401`), un jeton d'accès présenté à `/auth/refresh` ne redonne pas de
+session, et un jeton d'avant la 1.6.6 (sans type) n'est plus reconnu : les
+sessions ouvertes à la mise à jour se reconnectent une fois. Un jeton **d'accès**
+reste valable jusqu'à son expiration, 60 minutes au plus, même après une
+déconnexion : l'authentification des routes est sans état.
+
 | Accès | Signification |
 |---|---|
 | public | aucun jeton requis |
@@ -157,8 +166,8 @@ de passe utilisable à quelqu'un qui n'a plus le droit d'entrer.
 
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
-| GET | `/health` | public | État du serveur et version (hors `/api/v1`) |
-| GET | `/api/v1/uid-lookup` | public | Recherche d'entreprise au registre IDE/ZEFIX |
+| GET | `/health` | public | État du serveur et version (hors `/api/v1`). La version s'affiche sur l'écran de connexion, par conception |
+| GET | `/api/v1/uid-lookup` | auth | Recherche d'entreprise au registre IDE/ZEFIX (`che`). Seul point qui déclenche un appel **sortant** (zefix.admin.ch) : authentifié, et chaque appel est compté — 30 par adresse et par 10 minutes, `429` au-delà. L'assistant d'installation a son propre relais |
 
 ## Comptabilité
 
@@ -227,11 +236,52 @@ est le rôle, pas un filtre par créateur.
 | POST | `/invoices` | auth | Créer |
 | PATCH | `/invoices/:id` | auth | Modifier — **brouillons uniquement** : `409` de motif `document_not_draft` dès que le document est envoyé, annulé ou payé |
 | POST | `/invoices/:id/transition` | auth | Changer de statut. `paid` **encaisse le solde restant** à la date du jour, par virement, et le passe au journal comme tout paiement (voir « Paiements »). `cancelled` est refusé (`409`, `reason: "invoice_has_payments"`) sur une facture déjà encaissée en tout ou partie : la correction est la note de crédit |
+| POST | `/invoices/:id/post-journal` | écriture comptable | **Reprise** de la comptabilisation d'un document `sent`/`paid` dont l'écriture d'émission manque (voir « Montants et reprise »). `200` `{journal_entry_id, payment_entries}` ; `409` `reason: "already_posted"` quand tout est déjà au journal, `409` si le document n'est pas envoyé ou encaissé, si la comptabilisation automatique est éteinte, ou si la note de crédit précède sa facture |
 | POST | `/invoices/:id/convert` | auth | Convertir une offre en facture |
 | POST | `/invoices/:id/outcome` | auth | Enregistrer l'issue d'une offre (`refused`, `expired`) |
 | POST | `/invoices/:id/credit-note` | auth | Émettre une note de crédit contre une facture |
 | GET | `/invoices/:id/pdf` | auth | PDF — bulletin QR-facture sur les factures uniquement |
-| POST | `/invoices/bulk-pdf` | auth | Téléchargement groupé. Corps `{"ids": [...]}`. **Un** identifiant renvoie un PDF, **plusieurs** un ZIP — emballer un unique PDF obligerait à le dézipper pour le lire. Doublons ignorés, 200 documents au maximum. Un document disparu entre l'affichage et le clic est omis et compté dans l'en-tête `X-LedgerAlps-Missing` plutôt que passé sous silence |
+| POST | `/invoices/bulk-pdf` | auth | Téléchargement groupé (`POST` mais **lecture** : le rôle lecture seule le reçoit). Corps `{"ids": [...]}`. **Un** identifiant renvoie un PDF, **plusieurs** un ZIP — emballer un unique PDF obligerait à le dézipper pour le lire. Doublons ignorés, 200 documents au maximum. Un document disparu entre l'affichage et le clic est omis et compté dans l'en-tête `X-LedgerAlps-Missing` plutôt que passé sous silence |
+
+### Montants et reprise
+
+**Le total d'un document est HT + TVA, exactement, au centime.** Le HT est la
+somme des lignes, chacune arrondie au centime ; la TVA se calcule **par taux**
+sur la somme des bases de ce taux, puis s'arrondit au centime ; le total en est
+la somme. Jusqu'à la 1.6.5 le total était arrondi à 5 centimes alors que le HT
+restait au centime : l'écriture d'émission (débit = total, crédits = HT + TVA)
+était refusée pour 80 % des montants — la facture partait, jamais comptabilisée.
+Les 5 centimes sont une règle d'**encaissement en espèces**, que le logiciel
+n'applique plus au montant facturé ; ils restent sur la déclaration TVA. La
+facture reçue (fournisseur) n'est **jamais** arrondie : elle reprend la pièce.
+
+**Les documents d'avant la 1.6.6** portent encore leur total arrondi à 5 centimes.
+Leur écriture porte ce total — ce que le client a reçu — et l'écart rejoint le
+produit (3200) ; un crédit intégral reprend les montants de la facture au lieu de
+les recalculer.
+
+**Reprise.** `POST /invoices/:id/post-journal` passe l'écriture d'émission d'un
+document envoyé qui n'en a pas, puis celle de chaque encaissement saisi sans
+écriture. C'est une action explicite, document par document, et non une réparation
+au démarrage : le journal est immuable et l'écriture a pu être saisie à la main.
+Le contrôle d'intégrité (`invoice_unposted`) liste ces documents quand la
+comptabilisation automatique est active ; la page du document propose
+« Comptabiliser maintenant ».
+
+**Bornes.** Refusées en `422`, dans les services (donc aussi par les imports, la
+reprise et les appels internes) :
+
+| Valeur | Règle |
+|---|---|
+| date (émission, échéance, paiement, écriture, exercice) | années 2000 à l'année courante + 5 |
+| montant, prix unitaire | de 0 à 999 999 999,99 ; au centime pour une écriture au journal |
+| quantité | strictement positive, au plus 999 999 999 |
+| rabais, taux de TVA | de 0 à 100 |
+| lignes par document | 500 au plus ; libellé de 2 000 caractères au plus |
+| devise | celle de la comptabilité (fiche société, CHF par défaut) ; facture reçue : CHF ou EUR, **sans conversion** — la tenue en plusieurs devises n'est pas prise en charge |
+| écriture au journal | débit = crédit **exactement**, en centimes ; une ligne est débitée ou créditée, jamais les deux ni aucune |
+
+Une correction se fait par une note de crédit, jamais par un montant négatif.
 
 ### Types de documents
 
@@ -506,7 +556,15 @@ interdit précisément.
 `warning`, `info`), un compte, et surtout **une action** : un constat sur lequel
 on ne peut rien faire est du bruit qui apprend à ignorer la page. Rien n'est
 signalé comme `error` sans qu'un chiffre soit réellement faux — l'arrondi au
-5 rappen, par exemple, n'en est pas un.
+5 rappen d'un document d'avant la 1.6.6, par exemple, n'en est pas un.
+
+Constats : `journal_balance`, `journal_empty`, `hash_chain`, `invoice_empty`,
+`invoice_totals`, `orphan_contacts`, `over_credited`, `stale_quotes`, ainsi que,
+depuis la 1.6.6 : `invoice_unposted` (envoyé sans écriture, comptabilisation
+automatique active — `warning`), `journal_amounts` (ligne négative ou à plus de
+deux décimales), `journal_dates` et `invoice_dates` (année improbable),
+`fiscal_year_dates` (bornes d'exercice illisibles, réparées au démarrage) et
+`invoice_amounts` (total négatif ou démesuré).
 
 `PUT /settings/server` écrit `host`, `tls_cert`, `tls_key` et
 `allow_insecure_http` dans `config.json`, puis répond `restart_required: true`.
@@ -585,7 +643,7 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
 | GET | `/vat/rates` | auth | Taux suisses en vigueur |
-| POST | `/vat/declaration` | auth | Déclaration TVA (effective ou TDFN) |
+| POST | `/vat/declaration` | auth | Déclaration TVA (effective ou TDFN). `POST` mais **lecture** : elle ne modifie rien, et le rôle lecture seule la reçoit |
 | GET | `/fiscal-years` | auth | Exercices déclarés, du plus récent au plus ancien |
 | POST | `/fiscal-years` | **admin** | Déclarer un exercice (`name`, `start_date`, `end_date`). Refuse tout chevauchement |
 | POST | `/fiscal-years/:id/close` | **admin** | Clôture (CO art. 958) : vire produits et charges au résultat, verrouille la période, ouvre la suivante |
