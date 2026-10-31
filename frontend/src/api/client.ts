@@ -177,8 +177,11 @@ export const supplierInvoicesApi = {
   get:    (id: string)   => api.get(`/supplier-invoices/${id}`),
   create: (data: unknown) => api.post('/supplier-invoices', data),
   update: (id: string, data: unknown) => api.put(`/supplier-invoices/${id}`, data),
-  transition: (id: string, status: string) =>
-    api.post(`/supplier-invoices/${id}/transition`, { status }),
+  // `extra` : pour « paid », la date et le mode du règlement ; pour « cancelled »,
+  // le motif. Le règlement passe son écriture (Débit 2000 / Crédit banque ou caisse).
+  transition: (id: string, status: string,
+               extra?: { payment_date?: string; method?: 'bank_transfer' | 'cash'; reason?: string }) =>
+    api.post(`/supplier-invoices/${id}/transition`, { status, ...extra }),
   // Vide la liste des paiements sans mentir aux livres : un brouillon est
   // supprime, une facture comptabilisee est EXTOURNEE puis marquee annulee.
   // Le serveur rend un verdict PAR facture — un lot partiel est le cas normal.

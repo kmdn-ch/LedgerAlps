@@ -130,7 +130,17 @@ func (h *SimplifiedAccountingHandler) CarnetCSV(c *gin.Context) {
 		[]string{"", L.TotalDep, money(k.TotalDepenses)},
 		[]string{},
 		[]string{"", L.Resultat, money(k.Resultat)},
-		[]string{},
+		[]string{})
+	if len(k.Financement) > 0 {
+		rows = append(rows,
+			[]string{L.Financement},
+			[]string{L.Compte, L.Libelle, L.Montant})
+		for _, l := range k.Financement {
+			rows = append(rows, []string{l.Code, l.Libelle, money(l.Montant)})
+		}
+		rows = append(rows, []string{"", L.TotalFin, money(k.TotalFinancement)}, []string{})
+	}
+	rows = append(rows,
 		[]string{L.Patrimoine + k.Au},
 		[]string{L.Compte, L.Libelle, L.Montant},
 		[]string{L.Avoirs})
@@ -209,6 +219,7 @@ func (h *SimplifiedAccountingHandler) CarnetPDF(c *gin.Context) {
 		TotalRecettes:    k.TotalRecettes,
 		TotalDepenses:    k.TotalDepenses,
 		Resultat:         k.Resultat,
+		TotalFinancement: k.TotalFinancement,
 		TotalAvoirs:      k.TotalAvoirs,
 		TotalEngagements: k.TotalEngagements,
 		Fortune:          k.Fortune,
@@ -227,6 +238,9 @@ func (h *SimplifiedAccountingHandler) CarnetPDF(c *gin.Context) {
 	}
 	for _, l := range k.Depenses {
 		d.Depenses = append(d.Depenses, pdf.CarnetLigne{Code: l.Code, Libelle: l.Libelle, Montant: l.Montant})
+	}
+	for _, l := range k.Financement {
+		d.Financement = append(d.Financement, pdf.CarnetLigne{Code: l.Code, Libelle: l.Libelle, Montant: l.Montant})
 	}
 	for _, p := range k.Avoirs {
 		d.Avoirs = append(d.Avoirs, pdf.CarnetLigne{Code: p.Code, Libelle: p.Libelle, Montant: p.Montant})

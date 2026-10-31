@@ -59,7 +59,7 @@ func (s *Service) GenerateDeclaration(ctx context.Context, periodStart, periodEn
 
 	// ── Aggregate invoice data for the period ─────────────────────────────────
 	// We collect subtotal_amount (HT) and vat_amount with the associated vat_rate.
-	// Only sent/paid invoices count for TVA (accrual basis).
+	// Only sent/paid/archived invoices count for TVA (accrual basis).
 	//
 	// document_type must be filtered here. The invoices table also holds price
 	// offers and credit notes, and both used to land in the declaration:
@@ -82,7 +82,11 @@ func (s *Service) GenerateDeclaration(ctx context.Context, periodStart, periodEn
 			vat_rate
 		FROM invoices
 		WHERE document_type IN ('invoice', 'credit_note')
-		  AND status IN ('sent', 'paid')
+		  -- 'archived' compte : on n'archive qu'une facture PAYÉE, et l'archivage ne
+		  -- défait pas la dette de TVA née à la facturation (LTVA art. 40). Sans lui,
+		  -- archiver ses factures réglées du premier trimestre effaçait leur chiffre
+		  -- d'affaires et leur TVA du décompte (audit croisé Gemini, CRIT-07).
+		  AND status IN ('sent', 'paid', 'archived')
 		  AND issue_date BETWEEN ? AND ?
 		GROUP BY vat_rate
 	`, s.usePostgres)

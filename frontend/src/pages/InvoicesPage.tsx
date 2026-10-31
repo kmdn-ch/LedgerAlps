@@ -96,7 +96,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
           // Le SOLDE restant, pas le total : après un versement partiel, le
           // raccourci n'encaisse que ce qui reste dû.
           pendingPaid
-            ? t('fd.consPayee1', { montant: formatCHF(pendingPaid.total_amount - pendingPaid.amount_paid) })
+            ? t('fd.consPayee1', { montant: formatCHF(pendingPaid.balance_due ?? pendingPaid.total_amount - pendingPaid.amount_paid) })
             : '',
           t('fact.paiementAuJournal'),
           t('fact.plusModifiable'),

@@ -221,6 +221,12 @@ Moyens et faibles : devise unique, journal exact au centime, contrôle d'intégr
 par un jeton, garde de l'en-tête `Host`, politique de mot de passe dès le premier.
 Reste ouverte : la signature Authenticode (pas de certificat). Rapport :
 `review-Claude9.md` (local, ignoré par git).
+Un audit externe (Gemini, soixante-huit constats) a ensuite été recoupé avec le code
+(`review-Gemini1.md`, local) : la première série, celle des chiffres faux, est corrigée
+sur `test` — clôture déséquilibrée, compte de résultat et bilan faux, carnet du lait,
+notes de crédit à l'encaissement, cycle des factures fournisseurs, factures archivées dans
+la TVA. Les séries suivantes et les décisions du propriétaire (TDFN, service Windows,
+contenu de l'archive légale) restent ouvertes.
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions

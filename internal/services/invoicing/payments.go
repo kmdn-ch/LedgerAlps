@@ -108,6 +108,28 @@ func cents(v float64) float64 { return math.Round(v*100) / 100 }
 // centime : 0.005 est la moitié de la plus petite unité.
 const soldeTolerance = 0.005
 
+// creditedAmount est le total des notes de crédit ÉMISES contre la facture : envoyées,
+// encaissées ou archivées — pas les brouillons, qui n'engagent personne, ni les
+// annulées, qui ne créditent rien.
+//
+// Le solde dû d'une facture est son total moins ce qui a été crédité moins ce qui a
+// été versé. Les encaissements l'ignoraient (audit croisé Gemini, CRIT-05) : après un
+// avoir de 300 sur 1 000, le client réglait ses 700 et la facture restait « envoyée »
+// à vie ; et « Marquer payée » après un avoir intégral encaissait 2 000 sur la banque
+// pour une créance déjà soldée par l'avoir — de la trésorerie fictive, et un compte
+// de débiteurs négatif.
+func (s *Service) creditedAmount(ctx context.Context, invoiceID string) (float64, error) {
+	var credited float64
+	q := db.Rebind(`
+		SELECT COALESCE(SUM(total_amount), 0) FROM invoices
+		WHERE corrects_invoice_id = ? AND document_type = 'credit_note'
+		  AND status IN ('sent', 'paid', 'archived')`, s.usePostgres)
+	if err := s.db.QueryRowContext(ctx, q, invoiceID).Scan(&credited); err != nil {
+		return 0, fmt.Errorf("sum credit notes: %w", err)
+	}
+	return cents(credited), nil
+}
+
 // RecordPayment enregistre un encaissement : voir l'en-tête du fichier.
 func (s *Service) RecordPayment(ctx context.Context, actor Actor, req PaymentRequest) (*PaymentResult, error) {
 	// Un seul encaissement à la fois dans le processus : la lecture du solde, le
@@ -140,7 +162,20 @@ func (s *Service) RecordPayment(ctx context.Context, actor Actor, req PaymentReq
 		return nil, ErrInvoiceNotPayable
 	}
 
-	balance := cents(inv.total - inv.paid)
+	// Le dû est net des avoirs émis : une facture n'a pas à être payée pour la part que
+	// la note de crédit a déjà soldée.
+	var credited float64
+	if inv.docType == DocumentTypeInvoice {
+		var err error
+		if credited, err = s.creditedAmount(ctx, req.InvoiceID); err != nil {
+			return nil, err
+		}
+	}
+	due := cents(inv.total - credited) // ce que le client doit au total, avoirs déduits
+	balance := cents(due - inv.paid)
+	if balance < 0 {
+		balance = 0
+	}
 	if amount > balance+soldeTolerance {
 		return nil, ErrPaymentExceedsBalance
 	}
@@ -182,11 +217,11 @@ func (s *Service) RecordPayment(ctx context.Context, actor Actor, req PaymentReq
 	}
 
 	newPaid := cents(inv.paid + amount)
-	settled := newPaid >= cents(inv.total)-soldeTolerance
+	settled := newPaid >= due-soldeTolerance
 	status := models.InvoiceStatusSent
 	if settled {
 		status = models.InvoiceStatusPaid
-		newPaid = cents(inv.total) // pas de dérive : un solde exact est le total
+		newPaid = due // pas de dérive : un solde exact est le dû net des avoirs
 	}
 
 	now := time.Now().UTC()
@@ -229,7 +264,7 @@ func (s *Service) RecordPayment(ctx context.Context, actor Actor, req PaymentReq
 		JournalEntryID: entryID,
 		Status:         status,
 		AmountPaid:     newPaid,
-		Balance:        cents(inv.total - newPaid),
+		Balance:        cents(due - newPaid),
 	}
 	if entryID != "" {
 		res.Payment.JournalEntryID = &entryID
@@ -343,11 +378,22 @@ func (s *Service) storePayment(
 // couverte) — l'appelant se contente alors de changer le statut.
 func (s *Service) settleBalance(ctx context.Context, actor Actor, invoiceID string) (bool, error) {
 	var total, paid float64
-	q := db.Rebind(`SELECT total_amount, amount_paid FROM invoices WHERE id = ?`, s.usePostgres)
-	if err := s.db.QueryRowContext(ctx, q, invoiceID).Scan(&total, &paid); err != nil {
+	var docType string
+	q := db.Rebind(`SELECT total_amount, amount_paid, COALESCE(document_type, 'invoice') FROM invoices WHERE id = ?`, s.usePostgres)
+	if err := s.db.QueryRowContext(ctx, q, invoiceID).Scan(&total, &paid, &docType); err != nil {
 		return false, fmt.Errorf("load invoice: %w", err)
 	}
-	balance := cents(total - paid)
+	// Net des avoirs émis : « Marquer payée » ne doit encaisser que ce qui reste dû.
+	// Après un avoir intégral il ne reste rien, et le statut change sans écriture
+	// d'encaissement (voir TransitionBy).
+	var credited float64
+	if docType == DocumentTypeInvoice {
+		var err error
+		if credited, err = s.creditedAmount(ctx, invoiceID); err != nil {
+			return false, err
+		}
+	}
+	balance := cents(total - credited - paid)
 	if balance <= soldeTolerance {
 		return false, nil
 	}

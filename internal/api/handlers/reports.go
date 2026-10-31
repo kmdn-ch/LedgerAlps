@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
 // ─── ReportsHandler ───────────────────────────────────────────────────────────
@@ -37,6 +39,11 @@ type balanceSheetResponse struct {
 	Equity                 []reportAccountLine `json:"equity"`
 	TotalAssets            float64             `json:"total_assets"`
 	TotalLiabilitiesEquity float64             `json:"total_liabilities_equity"`
+	// UnclosedResult est le résultat des comptes de produits et de charges qui n'a
+	// pas encore été viré au compte de résultat par une clôture. Il figure aussi,
+	// en dernière ligne, dans `equity` : sans lui le bilan d'un exercice ouvert ne
+	// s'équilibre jamais.
+	UnclosedResult float64 `json:"unclosed_result"`
 }
 
 type incomeStatementLine struct {
@@ -121,6 +128,13 @@ func (h *ReportsHandler) BalanceSheet(c *gin.Context) {
 	// Aggregate posted journal lines up to (and including) asOf per account.
 	// For assets: balance = sum(debit) - sum(credit)
 	// For liabilities/equity: balance = sum(credit) - sum(debit)
+	// Les comptes de produits et de charges sont lus AUSSI : leur solde non viré
+	// est le résultat de l'exercice en cours, qui fait partie des fonds propres.
+	// Sans lui, une facture de 1 000 + 81 de TVA donnait 1 081 à l'actif contre 81 au
+	// passif : le bilan d'un exercice ouvert ne s'équilibrait jamais, et celui d'un
+	// exercice clôturé daté AVANT la clôture non plus (audit croisé Gemini, CRIT-03).
+	// Une fois l'exercice clôturé, ces comptes sont soldés et le résultat est dans le
+	// compte 5900 — l'écriture de clôture, elle, reste comptée.
 	q := db.Rebind(`
 		SELECT
 		    a.id,
@@ -139,7 +153,7 @@ func (h *ReportsHandler) BalanceSheet(c *gin.Context) {
 		       ON je.id = jl.entry_id
 		      AND je.status = 'posted'
 		      AND je.date <= ?
-		WHERE a.account_type IN ('asset','liability','equity')
+		WHERE a.account_type IN ('asset','liability','equity','revenue','expense')
 		GROUP BY a.id, a.code, a.name, a.account_type
 		ORDER BY a.code`, h.usePostgres)
 
@@ -168,29 +182,44 @@ func (h *ReportsHandler) BalanceSheet(c *gin.Context) {
 		line := reportAccountLine{AccountID: id, Code: code, Name: name}
 		switch accountType {
 		case "asset":
-			line.Balance = totalDebit - totalCredit
+			line.Balance = compliance.RoundCents(totalDebit - totalCredit)
 			if line.Balance != 0 {
 				resp.Assets = append(resp.Assets, line)
 				resp.TotalAssets += line.Balance
 			}
 		case "liability":
-			line.Balance = totalCredit - totalDebit
+			line.Balance = compliance.RoundCents(totalCredit - totalDebit)
 			if line.Balance != 0 {
 				resp.Liabilities = append(resp.Liabilities, line)
 				resp.TotalLiabilitiesEquity += line.Balance
 			}
 		case "equity":
-			line.Balance = totalCredit - totalDebit
+			line.Balance = compliance.RoundCents(totalCredit - totalDebit)
 			if line.Balance != 0 {
 				resp.Equity = append(resp.Equity, line)
 				resp.TotalLiabilitiesEquity += line.Balance
 			}
+		case "revenue", "expense":
+			// Produits au crédit, charges au débit : le résultat est la somme des
+			// (crédit − débit) des deux types.
+			resp.UnclosedResult += totalCredit - totalDebit
 		}
 	}
 	if err := rows.Err(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "rows error"})
 		return
 	}
+
+	resp.UnclosedResult = compliance.RoundCents(resp.UnclosedResult)
+	if resp.UnclosedResult != 0 {
+		resp.Equity = append(resp.Equity, reportAccountLine{
+			Name:    "Résultat de l'exercice en cours (non clôturé)",
+			Balance: resp.UnclosedResult,
+		})
+		resp.TotalLiabilitiesEquity += resp.UnclosedResult
+	}
+	resp.TotalAssets = compliance.RoundCents(resp.TotalAssets)
+	resp.TotalLiabilitiesEquity = compliance.RoundCents(resp.TotalLiabilitiesEquity)
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -235,6 +264,10 @@ func (h *ReportsHandler) IncomeStatement(c *gin.Context) {
 		      AND je.status = 'posted'
 		      AND je.date >= ?
 		      AND je.date <= ?
+		      -- L'écriture de clôture REMET À ZÉRO ces comptes : comptée, elle
+		      -- effaçait tout l'exercice (produits, charges et résultat à 0.00 sur
+		      -- tout exercice clôturé — audit croisé Gemini, CRIT-01).
+		      AND `+accounting.SQLNotClosingEntry+`
 		WHERE a.account_type IN ('revenue','expense')
 		GROUP BY a.id, a.code, a.name, a.account_type
 		ORDER BY a.code`, h.usePostgres)

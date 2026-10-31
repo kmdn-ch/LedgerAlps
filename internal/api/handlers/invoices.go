@@ -125,7 +125,12 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 		       i.created_at, i.updated_at,
 		       COALESCE(co.name, ''),
 		       COALESCE((SELECT SUM(cn.total_amount) FROM invoices cn
-		                 WHERE cn.corrects_invoice_id = i.id AND cn.status <> 'cancelled'), 0)
+		                 WHERE cn.corrects_invoice_id = i.id AND cn.status <> 'cancelled'), 0),
+		       ROUND(CASE WHEN COALESCE(i.document_type, 'invoice') = 'invoice'
+		                  THEN MAX(0, i.total_amount - i.amount_paid - COALESCE((SELECT SUM(cn2.total_amount) FROM invoices cn2
+		                        WHERE cn2.corrects_invoice_id = i.id AND cn2.document_type = 'credit_note'
+		                          AND cn2.status IN ('sent', 'paid', 'archived')), 0))
+		                  ELSE i.total_amount - i.amount_paid END, 2) AS balance_due
 		FROM invoices i
 		LEFT JOIN contacts co ON co.id = i.contact_id`+where+`
 		ORDER BY i.issue_date DESC, i.created_at DESC LIMIT ? OFFSET ?`, h.usePostgres)
@@ -144,7 +149,7 @@ func (h *InvoicesHandler) ListInvoices(c *gin.Context) {
 			&inv.IssueDate, &inv.DueDate, &inv.Currency,
 			&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate, &inv.AmountPaid,
 			&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome, &inv.CorrectsInvoiceID,
-			&inv.CreatedAt, &inv.UpdatedAt, &inv.ContactName, &inv.CreditedAmount); err != nil {
+			&inv.CreatedAt, &inv.UpdatedAt, &inv.ContactName, &inv.CreditedAmount, &inv.BalanceDue); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error"})
 			return
 		}
@@ -174,7 +179,12 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 		       COALESCE(co.name, ''),
 		       COALESCE((SELECT SUM(cn.total_amount) FROM invoices cn
 		                 WHERE cn.corrects_invoice_id = i.id AND cn.status <> 'cancelled'), 0),
-		       NULLIF(i.journal_entry_id, '')
+		       NULLIF(i.journal_entry_id, ''),
+		       ROUND(CASE WHEN COALESCE(i.document_type, 'invoice') = 'invoice'
+		                  THEN MAX(0, i.total_amount - i.amount_paid - COALESCE((SELECT SUM(cn2.total_amount) FROM invoices cn2
+		                        WHERE cn2.corrects_invoice_id = i.id AND cn2.document_type = 'credit_note'
+		                          AND cn2.status IN ('sent', 'paid', 'archived')), 0))
+		                  ELSE i.total_amount - i.amount_paid END, 2) AS balance_due
 		FROM invoices i
 		LEFT JOIN contacts co ON co.id = i.contact_id
 		WHERE i.id = ?`, h.usePostgres)
@@ -185,7 +195,7 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 		&inv.IssueDate, &inv.DueDate, &inv.Currency,
 		&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate, &inv.AmountPaid,
 		&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome, &inv.CorrectsInvoiceID,
-		&inv.CreatedAt, &inv.UpdatedAt, &inv.ContactName, &inv.CreditedAmount, &inv.JournalEntryID)
+		&inv.CreatedAt, &inv.UpdatedAt, &inv.ContactName, &inv.CreditedAmount, &inv.JournalEntryID, &inv.BalanceDue)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "facture introuvable"})
 		return

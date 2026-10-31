@@ -63,6 +63,7 @@ const (
 	ActionSupplierInvoiceCreated   = "supplier_invoice_created"
 	ActionSupplierInvoiceUpdated   = "supplier_invoice_updated"
 	ActionSupplierInvoiceBooked    = "supplier_invoice_booked"
+	ActionSupplierInvoicePaid      = "supplier_invoice_paid"
 	ActionSupplierInvoiceCancelled = "supplier_invoice_cancelled"
 	ActionSupplierInvoiceDeleted   = "supplier_invoice_deleted"
 

@@ -171,6 +171,11 @@ type Invoice struct {
 	// cancelled ones excluded. It is what tells the UI an invoice is already
 	// fully credited and must not be credited again.
 	CreditedAmount float64 `db:"-" json:"credited_amount"`
+	// BalanceDue est ce que le client doit encore : total moins versements moins notes
+	// de crédit ÉMISES (les brouillons et les annulées ne comptent pas), jamais
+	// négatif. CreditedAmount, lui, compte aussi les brouillons : il sert à plafonner
+	// un nouvel avoir, pas à dire ce qui reste à encaisser.
+	BalanceDue float64 `db:"-" json:"balance_due"`
 
 	Lines   []InvoiceLine `db:"-" json:"lines,omitempty"`
 	Contact *Contact      `db:"-" json:"contact,omitempty"`

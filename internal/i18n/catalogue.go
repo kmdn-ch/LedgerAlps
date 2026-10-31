@@ -27,10 +27,10 @@ var catalogue = map[string]map[Lang]string{
 	// avec le mouvement net de trésorerie. C'est un message d'exploitation,
 	// mais il atteint la personne qui a cliqué : elle doit le lire dans sa
 	// langue pour savoir que le document N'A PAS été produit.
-	"incohérence du carnet : le résultat (%.2f) ne correspond pas au mouvement net de liquidités (%.2f), écart de %.2f — le document n'est pas établi": {
-		DE: "Inkonsistenz im Kassabuch: Das Ergebnis (%.2f) stimmt nicht mit der Nettoveränderung der flüssigen Mittel (%.2f) überein, Abweichung von %.2f — das Dokument wird nicht erstellt",
-		IT: "Incoerenza del libro cassa: il risultato (%.2f) non corrisponde al movimento netto di liquidità (%.2f), scarto di %.2f — il documento non viene emesso",
-		EN: "Cash book inconsistency: the result (%.2f) does not match the net cash movement (%.2f), a discrepancy of %.2f — the document is not produced",
+	"incohérence du carnet : le résultat (%.2f) et le financement (%.2f) ne correspondent pas au mouvement net de liquidités (%.2f), écart de %.2f — le document n'est pas établi": {
+		DE: "Inkonsistenz im Kassabuch: Ergebnis (%.2f) und Finanzierung (%.2f) stimmen nicht mit der Nettoveränderung der flüssigen Mittel (%.2f) überein, Abweichung von %.2f — das Dokument wird nicht erstellt",
+		IT: "Incoerenza del libro cassa: risultato (%.2f) e finanziamento (%.2f) non corrispondono al movimento netto di liquidità (%.2f), scarto di %.2f — il documento non viene emesso",
+		EN: "Cash book inconsistency: the result (%.2f) and the financing (%.2f) do not match the net cash movement (%.2f), a discrepancy of %.2f — the document is not produced",
 	},
 
 	"\nNote sur les données personnelles (nLPD) : les IBAN des contacts sont\n": {
@@ -1579,6 +1579,36 @@ var catalogue = map[string]map[Lang]string{
 		DE: "Host nicht zugelassen: öffnen Sie LedgerAlps über seine lokale Adresse",
 		IT: "Host non autorizzato: aprite LedgerAlps dal suo indirizzo locale",
 		EN: "Host not allowed: open LedgerAlps through its local address",
+	},
+	"la clôture de l'exercice %s ne s'équilibre pas (débit %.2f, crédit %.2f) : elle n'est pas passée": {
+		DE: "Der Abschluss des Geschäftsjahres %s geht nicht auf (Soll %.2f, Haben %.2f): er wird nicht gebucht",
+		IT: "La chiusura dell’esercizio %s non quadra (dare %.2f, avere %.2f): non viene registrata",
+		EN: "Closing financial year %s does not balance (debit %.2f, credit %.2f): it is not posted",
+	},
+	"cette transition n'est pas permise pour une facture fournisseur : une pièce comptabilisée ne redevient pas un brouillon, elle s'annule (extourne) ou se corrige par une écriture": {
+		DE: "Dieser Statuswechsel ist für eine Lieferantenrechnung nicht zulässig: Ein verbuchter Beleg wird nicht wieder zum Entwurf, er wird storniert (Gegenbuchung) oder durch eine Buchung korrigiert",
+		IT: "Questo passaggio di stato non è ammesso per una fattura fornitore: un documento contabilizzato non torna bozza, si annulla (storno) o si corregge con una scrittura",
+		EN: "This status change is not allowed for a supplier invoice: a posted document does not go back to draft, it is cancelled (reversal) or corrected by an entry",
+	},
+	"une facture fournisseur doit être comptabilisée avant d'être payée": {
+		DE: "Eine Lieferantenrechnung muss verbucht sein, bevor sie bezahlt wird",
+		IT: "Una fattura fornitore deve essere contabilizzata prima di essere pagata",
+		EN: "A supplier invoice must be posted before it is paid",
+	},
+	"seule une facture fournisseur comptabilisée se règle": {
+		DE: "Nur eine verbuchte Lieferantenrechnung wird beglichen",
+		IT: "Solo una fattura fornitore contabilizzata si salda",
+		EN: "Only a posted supplier invoice can be settled",
+	},
+	"mode de paiement inconnu : virement ou espèces": {
+		DE: "Unbekannte Zahlungsart: Überweisung oder Bargeld",
+		IT: "Modalità di pagamento sconosciuta: bonifico o contanti",
+		EN: "Unknown payment method: bank transfer or cash",
+	},
+	"l'écriture de règlement %s est passée mais la facture n'est plus comptabilisée": {
+		DE: "Die Zahlungsbuchung %s wurde verbucht, aber die Rechnung ist nicht mehr verbucht",
+		IT: "La scrittura di pagamento %s è stata registrata ma la fattura non è più contabilizzata",
+		EN: "Payment entry %s was posted but the invoice is no longer posted",
 	},
 	"seule une facture envoyée accepte un paiement": {
 		DE: "Nur eine versendete Rechnung nimmt eine Zahlung entgegen",

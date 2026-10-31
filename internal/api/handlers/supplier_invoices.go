@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -445,12 +446,22 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 
 type transitionSupplierInvoiceRequest struct {
 	Status string `json:"status" binding:"required"`
+	// PaymentDate et Method ne servent qu'au passage à « paid » : date du règlement
+	// (AAAA-MM-JJ, aujourd'hui par défaut) et mode — « bank_transfer » (défaut) ou « cash ».
+	PaymentDate string `json:"payment_date"`
+	Method      string `json:"method"`
+	// Reason accompagne une annulation (trace d'audit).
+	Reason string `json:"reason"`
 }
 
 // TransitionSupplierInvoice POST /api/v1/supplier-invoices/:id/transition
 //
 // Only 'booked' and 'paid' invoices contribute input VAT to the declaration,
 // so the transition is what makes an expense count fiscally.
+//
+// La machine à états est stricte (voir supplier_settle.go) : brouillon → comptabilisée |
+// annulée ; comptabilisée → payée | annulée. Comptabiliser écrit la charge, payer écrit le
+// règlement, annuler une pièce comptabilisée passe l'extourne.
 func (h *SupplierInvoicesHandler) TransitionSupplierInvoice(c *gin.Context) {
 	id := c.Param("id")
 	var req transitionSupplierInvoiceRequest
@@ -463,7 +474,7 @@ func (h *SupplierInvoicesHandler) TransitionSupplierInvoice(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 	defer cancel()
 
 	var current string
@@ -480,29 +491,98 @@ func (h *SupplierInvoicesHandler) TransitionSupplierInvoice(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "une facture fournisseur annulée ne change plus de statut"})
 		return
 	}
-
-	// Comptabiliser ECRIT au journal. Le statut l'annoncait depuis l'origine
-	// sans que rien ne l'ecrive : la charge n'entrait dans les livres que si
-	// quelqu'un la saisissait a la main, pendant que la TVA deductible
-	// alimentait deja la declaration. L'echec bloque la transition — rien n'est
-	// engage vis-a-vis d'un tiers, et laisser passer le statut sans l'ecriture
-	// recreerait exactement ce defaut.
-	var entryID string
-	if req.Status == "booked" && current != "booked" && current != "paid" {
-		userID := ""
-		if claims := mw.GetClaims(c); claims != nil {
-			userID = claims.UserID
+	// Redemander l'état où l'on est n'est pas une erreur : un double clic ne doit pas
+	// afficher un échec alors que le premier appel a réussi.
+	if current == req.Status {
+		c.JSON(http.StatusOK, gin.H{"id": id, "status": current, "journal_entry_id": ""})
+		return
+	}
+	if !supplierTransitionAllowed(current, req.Status) {
+		err := errSupplierTransition
+		if current == "draft" && req.Status == "paid" {
+			err = errSupplierPayBeforeBook
 		}
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "transition_not_allowed"})
+		return
+	}
+
+	userID := ""
+	if claims := mw.GetClaims(c); claims != nil {
+		userID = claims.UserID
+	}
+
+	var entryID string
+	switch {
+	case req.Status == "booked":
+		// Comptabiliser ECRIT au journal. Le statut l'annoncait depuis l'origine
+		// sans que rien ne l'ecrive : la charge n'entrait dans les livres que si
+		// quelqu'un la saisissait a la main, pendant que la TVA deductible
+		// alimentait deja la declaration. L'echec bloque la transition — rien n'est
+		// engage vis-a-vis d'un tiers, et laisser passer le statut sans l'ecriture
+		// recreerait exactement ce defaut.
 		var err error
 		entryID, err = h.postSupplierInvoice(ctx, id, userID, c.ClientIP())
 		if err != nil {
 			refus(c, http.StatusUnprocessableEntity, err)
 			return
 		}
+
+	case req.Status == "paid":
+		date := time.Now()
+		if req.PaymentDate != "" {
+			d, err := time.Parse("2006-01-02", req.PaymentDate)
+			if err != nil {
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la date de paiement doit être au format AAAA-MM-JJ"})
+				return
+			}
+			date = d
+		}
+		method := req.Method
+		if method == "" {
+			method = "bank_transfer"
+		}
+		if method != "bank_transfer" && method != "cash" {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "mode de paiement inconnu : virement ou espèces"})
+			return
+		}
+		var err error
+		entryID, err = h.settleSupplierInvoice(ctx, id, userID, c.ClientIP(), date, method)
+		if err != nil {
+			if errors.Is(err, errSupplierNotBooked) {
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "transition_not_allowed"})
+				return
+			}
+			refus(c, http.StatusUnprocessableEntity, err)
+			return
+		}
+		// Le statut est déjà changé par le règlement, dans le même geste.
+		trace(c, h.db, h.usePostgres, TableSupplierInvoices, ActionSupplierInvoicePaid, id,
+			accounting.Modification(
+				map[string]any{"status": current},
+				map[string]any{"status": "paid", "payment_entry_id": entryID, "payment_date": date.Format("2006-01-02"), "method": method},
+			))
+		c.JSON(http.StatusOK, gin.H{"id": id, "status": "paid", "journal_entry_id": entryID})
+		return
+
+	case req.Status == "cancelled" && current == "booked":
+		// Annuler une pièce comptabilisée passe l'EXTOURNE de son écriture : changer le
+		// statut seul laissait la charge, la TVA déductible et la dette au journal.
+		res := h.cancelOne(ctx, id, userID, c.ClientIP(), req.Reason)
+		if res.Outcome != "cancelled" {
+			c.JSON(http.StatusConflict, gin.H{"error": res.Detail, "reason": "cancel_refused"})
+			return
+		}
+		trace(c, h.db, h.usePostgres, TableSupplierInvoices, ActionSupplierInvoiceCancelled, id,
+			accounting.Modification(
+				map[string]any{"status": current},
+				map[string]any{"status": "cancelled", "reversal_entry_id": res.EntryID},
+			))
+		c.JSON(http.StatusOK, gin.H{"id": id, "status": "cancelled", "journal_entry_id": res.EntryID})
+		return
 	}
 
-	updQ := db.Rebind("UPDATE supplier_invoices SET status = ?, updated_at = ? WHERE id = ?", h.usePostgres)
-	if _, err := h.db.ExecContext(ctx, updQ, req.Status, time.Now().UTC(), id); err != nil {
+	updQ := db.Rebind("UPDATE supplier_invoices SET status = ?, updated_at = ? WHERE id = ? AND status = ?", h.usePostgres)
+	if _, err := h.db.ExecContext(ctx, updQ, req.Status, time.Now().UTC(), id, current); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}

@@ -224,6 +224,9 @@ export interface Invoice {
   // Somme des notes de crédit rattachées, hors annulées. Une facture
   // entièrement créditée ne doit plus proposer de note de crédit.
   credited_amount: number
+  // Ce que le client doit encore : total − versements − notes de crédit ÉMISES. À
+  // utiliser pour tout « solde » ; `credited_amount` compte aussi les brouillons.
+  balance_due?: number
   lines: InvoiceLine[]
   created_at: string
   updated_at: string

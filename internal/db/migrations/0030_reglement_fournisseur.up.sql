@@ -1,0 +1,11 @@
+-- L'écriture de règlement d'une facture fournisseur.
+--
+-- « Marquer payée » ne passait aucune écriture et laissait `amount_paid` à zéro : la
+-- dette au compte 2000 enflait indéfiniment au bilan, et le paiement n'avait aucune
+-- trace au journal (audit croisé Gemini, CRIT-06). Le règlement passe désormais
+-- Débit 2000 Créanciers / Crédit banque (ou caisse) et retient son écriture ici,
+-- comme `journal_entry_id` retient celle de la comptabilisation.
+--
+-- NULL pour les factures déjà payées avant cette version : leur règlement n'a pas
+-- d'écriture, et ce n'est pas à une migration d'en inventer au journal.
+ALTER TABLE supplier_invoices ADD COLUMN payment_entry_id TEXT REFERENCES journal_entries(id);

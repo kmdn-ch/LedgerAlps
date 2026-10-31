@@ -87,11 +87,20 @@ func (h *MaintenanceHandler) IntegrityCheck(c *gin.Context) {
 		h.fail(c, err)
 		return
 	} else {
+		detail := fmt.Sprintf("%d écriture(s) dont le total des débits diffère du total des crédits.", n)
+		if n > 0 {
+			if refs := h.unbalancedReferences(ctx); refs != "" {
+				detail += " Concernées : " + refs + "."
+			}
+		}
 		add(Finding{
 			Severity: "error", Check: "journal_balance", Count: n,
 			Title:  "Écritures déséquilibrées",
-			Detail: fmt.Sprintf("%d écriture(s) dont le total des débits diffère du total des crédits.", n),
-			Action: "Ouvrez ces écritures dans le journal et corrigez-les par une écriture rectificative.",
+			Detail: detail,
+			Action: "Une écriture comptabilisée ne se modifie pas, et une écriture rectificative ordinaire, équilibrée, ne rétablit pas l'équilibre d'une écriture qui ne l'est pas. " +
+				"Cas des écritures de clôture (CLOTURE-…) d'une version antérieure à la 1.6.6 : elles ignoraient les produits débiteurs et les charges créditrices, " +
+				"dont les comptes sont restés ouverts. Deux issues : restaurer la sauvegarde d'avant la clôture puis clôturer à nouveau avec cette version, " +
+				"ou faire examiner l'écriture par votre fiduciaire avant toute déclaration.",
 		})
 	}
 
@@ -381,6 +390,32 @@ func (h *MaintenanceHandler) IntegrityCheck(c *gin.Context) {
 		"findings":   findings,
 		"clean":      len(findings) == 0,
 	})
+}
+
+// unbalancedReferences nomme, avec leur écart, les premières écritures déséquilibrées :
+// « CLOTURE-2024 (écart 3000.00) ». Le constat disait « 1 écriture » sans dire laquelle.
+func (h *MaintenanceHandler) unbalancedReferences(ctx context.Context) string {
+	rows, err := h.db.QueryContext(ctx, db.Rebind(`
+		SELECT je.reference, ROUND(ABS(COALESCE(SUM(jl.debit_amount), 0) - COALESCE(SUM(jl.credit_amount), 0)), 2)
+		FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id
+		GROUP BY je.id, je.reference, je.date
+		HAVING ABS(COALESCE(SUM(jl.debit_amount), 0) - COALESCE(SUM(jl.credit_amount), 0)) > 0.005
+		ORDER BY je.date, je.reference
+		LIMIT 5`, h.usePostgres))
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	var parts []string
+	for rows.Next() {
+		var ref string
+		var gap float64
+		if err := rows.Scan(&ref, &gap); err != nil {
+			return ""
+		}
+		parts = append(parts, fmt.Sprintf("%s (écart %.2f)", ref, gap))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // addQRBillFindings vérifie ce qui rend une QR-facture émettable, avec la même

@@ -243,6 +243,32 @@ est le rôle, pas un filtre par créateur.
 | GET | `/invoices/:id/pdf` | auth | PDF — bulletin QR-facture sur les factures uniquement |
 | POST | `/invoices/bulk-pdf` | auth | Téléchargement groupé (`POST` mais **lecture** : le rôle lecture seule le reçoit). Corps `{"ids": [...]}`. **Un** identifiant renvoie un PDF, **plusieurs** un ZIP — emballer un unique PDF obligerait à le dézipper pour le lire. Doublons ignorés, 200 documents au maximum. Un document disparu entre l'affichage et le clic est omis et compté dans l'en-tête `X-LedgerAlps-Missing` plutôt que passé sous silence |
 
+### Encaissements nets des notes de crédit
+
+Le solde dû d'une facture est son total **moins les notes de crédit émises** (envoyées, encaissées ou
+archivées — pas les brouillons) **moins les versements**. `POST /payments` et « Marquer payée » le
+retiennent : après un avoir de 300 sur 1 000, il reste 700 à encaisser ; la facture passe « payée » quand ces
+700 sont versés. Un avoir intégral ne laisse rien à encaisser : « Marquer payée » change alors le statut
+**sans écriture** d'encaissement. La facture et la liste portent `balance_due` (ce qui reste dû, jamais négatif) ;
+`credited_amount` compte aussi les brouillons — il plafonne un nouvel avoir, il ne dit pas ce qu'il reste à encaisser.
+
+### Factures fournisseurs : états et règlement
+
+`POST /supplier-invoices/:id/transition`, corps `{"status": …}` :
+
+| De | Vers | Effet |
+|---|---|---|
+| brouillon | `booked` | écrit la charge, la TVA déductible et la dette (2000) |
+| brouillon | `cancelled` | statut seul (rien n'est entré dans les livres) |
+| comptabilisée | `paid` | **écriture de règlement** Débit 2000 / Crédit 1020 banque (ou 1000 caisse), `amount_paid` = total, `payment_entry_id` ; corps facultatif `payment_date` (AAAA-MM-JJ, aujourd'hui par défaut) et `method` (`bank_transfer` par défaut, `cash`) |
+| comptabilisée | `cancelled` | **extourne** de l'écriture de comptabilisation ; refusée (`409`, `cancel_refused`) si un règlement est enregistré |
+
+Tout autre passage répond `409` de motif `transition_not_allowed` : une pièce comptabilisée ne redevient pas
+un brouillon, un brouillon ne passe pas directement « payée » (sa TVA préalable entrerait dans la déclaration
+sans aucune charge), une pièce payée ne s'annule pas — c'est un remboursement du fournisseur qui se saisit.
+Redemander l'état où l'on est répond `200` sans effet. Une facture payée avant la 1.6.6 n'a pas d'écriture de
+règlement ; la migration n'en invente pas.
+
 ### Montants et reprise
 
 **Le total d'un document est HT + TVA, exactement, au centime.** Le HT est la
@@ -422,7 +448,7 @@ comptent dans la déclaration TVA.
 | POST | `/supplier-invoices` | écriture documents | Créer (refus si doublon fournisseur + référence) |
 | PUT | `/supplier-invoices/:id` | écriture documents | Modifier — **brouillons uniquement** (409 sinon) |
 | POST | `/supplier-invoices/read-qr` | écriture documents | Lire le QR d'un PDF ou d'une image déposée. **Ne crée rien** |
-| POST | `/supplier-invoices/:id/transition` | écriture comptable | Changer de statut |
+| POST | `/supplier-invoices/:id/transition` | écriture comptable | Changer de statut — **machine à états stricte** (voir « Factures fournisseurs : états et règlement ») |
 
 ### Lire le QR d'une facture
 
@@ -643,10 +669,10 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
 | GET | `/vat/rates` | auth | Taux suisses en vigueur |
-| POST | `/vat/declaration` | auth | Déclaration TVA (effective ou TDFN). `POST` mais **lecture** : elle ne modifie rien, et le rôle lecture seule la reçoit |
+| POST | `/vat/declaration` | auth | Déclaration TVA (effective ou TDFN) ; les factures `sent`, `paid` **et `archived`** comptent (on n'archive qu'une facture payée). `POST` mais **lecture** : elle ne modifie rien, et le rôle lecture seule la reçoit |
 | GET | `/fiscal-years` | auth | Exercices déclarés, du plus récent au plus ancien |
 | POST | `/fiscal-years` | **admin** | Déclarer un exercice (`name`, `start_date`, `end_date`). Refuse tout chevauchement |
-| POST | `/fiscal-years/:id/close` | **admin** | Clôture (CO art. 958) : vire produits et charges au résultat, verrouille la période, ouvre la suivante |
+| POST | `/fiscal-years/:id/close` | **admin** | Clôture (CO art. 958) : vire produits et charges au résultat, verrouille la période, ouvre la suivante. Une seule transaction ; **chaque** compte de produits ou de charges reçoit sa ligne de clôture quel que soit le sens de son solde, et l'écriture (`CLOTURE-AAAA`) est refusée si elle ne s'équilibre pas au centime |
 
 > **Rattachement à l'exercice.** Chaque écriture et chaque document est rattaché
 > à l'exercice couvrant sa date. Si aucun ne la couvre, LedgerAlps crée l'**année
@@ -674,12 +700,12 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
-| GET | `/reports/balance-sheet` | auth | Bilan |
-| GET | `/reports/income-statement` | auth | Compte de résultat |
+| GET | `/reports/balance-sheet` | auth | Bilan à la date `date`. Les fonds propres portent, en dernière ligne, le **résultat non clôturé** (produits − charges pas encore virés ; champ `unclosed_result`) : l'actif égale toujours le passif plus les fonds propres |
+| GET | `/reports/income-statement` | auth | Compte de résultat. L'écriture de clôture (`CLOTURE-…`) en est **exclue** : elle remet les comptes à zéro, et un exercice clôturé affichait 0.00 |
 | GET | `/reports/general-ledger` | auth | Grand livre |
 | GET | `/reports/ar-aging` | auth | Balance âgée des créances |
 | GET | `/reports/revenue` | auth | Chiffre d'affaires groupé par `year`, `month` ou `contact`, avec `from`/`to`. La réponse porte `basis` : la convention de calcul, pour qu'un total ne soit pas comparé à un autre calculé autrement |
-| GET | `/reports/simplified-accounting` | lecture | Comptabilité simplifiée (CO art. 957 al. 2). `from`, `to` |
+| GET | `/reports/simplified-accounting` | lecture | Comptabilité simplifiée (CO art. 957 al. 2). `from`, `to`. Recettes et dépenses hors écriture de clôture ; extournes en déduction ; **financement** (`financement`, `total_financement` : capital, réserves, compte du propriétaire, emprunts) à part, de sorte que `resultat` + `total_financement` égale le mouvement net des liquidités |
 | GET | `/reports/simplified-accounting.pdf` | lecture | Le même, en PDF — le document remis à l'administration |
 | GET | `/exports/simplified-accounting.csv` | lecture | Le même, en CSV |
 | GET | `/stats` | auth | Indicateurs du tableau de bord |

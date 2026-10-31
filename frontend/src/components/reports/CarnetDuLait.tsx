@@ -39,6 +39,9 @@ interface Carnet {
   total_recettes: number
   total_depenses: number
   resultat: number
+  // Apports, prélèvements, emprunts : ni recettes ni dépenses.
+  financement: Ligne[] | null
+  total_financement: number
   avoirs: Ligne[] | null
   engagements: Ligne[] | null
   total_avoirs: number
@@ -280,6 +283,12 @@ export function CarnetDuLait({ du, au }: { du: string; au: string }) {
               <span>{t('carnet.resultat')}</span>
               <span className="tabular-nums">{montant(carnet.resultat)}</span>
             </div>
+
+            {(carnet.financement ?? []).length > 0 && (
+              <Bloc titre={t('carnet.financement')} lignes={carnet.financement}
+                    total={carnet.total_financement} libelleTotal={t('carnet.totalFinancement')}
+                    siVide={t('carnet.aucun')} />
+            )}
 
             <h4 className="font-semibold text-sm mb-2">
               {t('carnet.patrimoine')} {carnet.au}

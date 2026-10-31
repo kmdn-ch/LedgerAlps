@@ -59,7 +59,7 @@ export function InvoicePayments({ invoice, canRecord }: Props) {
     queryFn: () => invoicePaymentsApi.list(invoice.id).then(r => (r.data.items ?? []) as Payment[]),
   })
 
-  const balance = Math.round((invoice.total_amount - invoice.amount_paid) * 100) / 100
+  const balance = Math.round((invoice.balance_due ?? invoice.total_amount - invoice.amount_paid) * 100) / 100
   const peutEncaisser = canRecord && invoice.document_type !== 'quote'
     && invoice.status === 'sent' && balance > TOLERANCE
   const liste = payments.data ?? []

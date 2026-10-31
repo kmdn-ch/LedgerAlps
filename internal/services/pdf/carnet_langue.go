@@ -34,6 +34,8 @@ type libellésCarnet struct {
 	BaseCaisse  string
 	Recettes    string
 	Depenses    string
+	Financement string
+	TotalFin    string
 	TotalRec    string
 	TotalDep    string
 	Resultat    string
@@ -97,6 +99,8 @@ var jeuxCarnet = map[i18n.Lang]libellésCarnet{
 		Depenses:    "DÉPENSES",
 		TotalRec:    "Total des recettes",
 		TotalDep:    "Total des dépenses",
+		Financement: "FINANCEMENT (hors recettes et dépenses)",
+		TotalFin:    "Solde du financement",
 		Resultat:    "RÉSULTAT DE L'EXERCICE",
 		Patrimoine:  "ÉTAT DU PATRIMOINE AU ",
 		Avoirs:      "Avoirs",
@@ -145,6 +149,8 @@ var jeuxCarnet = map[i18n.Lang]libellésCarnet{
 		Depenses:    "AUSGABEN",
 		TotalRec:    "Total Einnahmen",
 		TotalDep:    "Total Ausgaben",
+		Financement: "FINANZIERUNG (ohne Einnahmen und Ausgaben)",
+		TotalFin:    "Saldo der Finanzierung",
 		Resultat:    "ERGEBNIS DES GESCHÄFTSJAHRES",
 		Patrimoine:  "VERMÖGENSLAGE PER ",
 		Avoirs:      "Vermögen",
@@ -193,6 +199,8 @@ var jeuxCarnet = map[i18n.Lang]libellésCarnet{
 		Depenses:    "USCITE",
 		TotalRec:    "Totale entrate",
 		TotalDep:    "Totale uscite",
+		Financement: "FINANZIAMENTO (escluse entrate e uscite)",
+		TotalFin:    "Saldo del finanziamento",
 		Resultat:    "RISULTATO D'ESERCIZIO",
 		Patrimoine:  "SITUAZIONE PATRIMONIALE AL ",
 		Avoirs:      "Averi",
@@ -241,6 +249,8 @@ var jeuxCarnet = map[i18n.Lang]libellésCarnet{
 		Depenses:    "EXPENDITURE",
 		TotalRec:    "Total receipts",
 		TotalDep:    "Total expenditure",
+		Financement: "FINANCING (excluded from receipts and expenditure)",
+		TotalFin:    "Net financing",
 		Resultat:    "RESULT FOR THE YEAR",
 		Patrimoine:  "NET WORTH AS AT ",
 		Avoirs:      "Assets",

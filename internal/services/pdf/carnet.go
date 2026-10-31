@@ -51,6 +51,10 @@ type CarnetData struct {
 	TotalDepenses float64
 	Resultat      float64
 
+	// Financement : apports, prélèvements, emprunts — ni recettes ni dépenses.
+	Financement      []CarnetLigne
+	TotalFinancement float64
+
 	Avoirs           []CarnetLigne
 	Engagements      []CarnetLigne
 	TotalAvoirs      float64
@@ -135,6 +139,11 @@ func GenerateCarnet(d CarnetData) ([]byte, error) {
 	carnetSection(pdf, L.Recettes, d.Recettes, L.TotalRec, d.TotalRecettes, d.Devise, L, L.AucunMouv)
 	carnetSection(pdf, L.Depenses, d.Depenses, L.TotalDep, d.TotalDepenses, d.Devise, L, L.AucunMouv)
 	carnetResultat(pdf, d, L)
+	// Le financement n'a pas sa place dans le résultat, mais le lecteur doit le
+	// voir : sans lui, le résultat ne se rapproche plus du relevé bancaire.
+	if len(d.Financement) > 0 {
+		carnetSection(pdf, L.Financement, d.Financement, L.TotalFin, d.TotalFinancement, d.Devise, L, L.AucunMouv)
+	}
 	carnetPatrimoine(pdf, d, L)
 	carnetMentions(pdf, d, L)
 

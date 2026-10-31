@@ -54,6 +54,7 @@ import (
 	"time"
 
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
 // Seuils légaux, en francs.
@@ -191,6 +192,19 @@ type Carnet struct {
 	TotalDepenses float64 `json:"total_depenses"`
 	Resultat      float64 `json:"resultat"`
 
+	// Financement porte ce qui fait bouger la trésorerie SANS être une recette ni
+	// une dépense : apports et prélèvements du propriétaire, capital, emprunts reçus
+	// et remboursés. Un solde positif est de l'argent entré, négatif de l'argent sorti.
+	//
+	// Ces flux se comptaient en recettes (l'emprunt, l'apport) et en dépenses (le
+	// prélèvement privé) : le résultat imprimé sur le document remis à
+	// l'administration était faux, et le chiffre d'affaires n'y était pour rien
+	// (audit croisé Gemini, CRIT-02). Ils sont montrés à part pour que le document
+	// concorde toujours avec le relevé bancaire :
+	// résultat + financement = mouvement net des liquidités.
+	Financement      []Ligne `json:"financement"`
+	TotalFinancement float64 `json:"total_financement"`
+
 	// L'état du patrimoine à la date de clôture — la troisième exigence de
 	// l'art. 957 al. 2, celle qu'on oublie.
 	Avoirs           []PostePatrimoine `json:"avoirs"`
@@ -237,14 +251,18 @@ func (s *Service) Etablir(ctx context.Context, du, au string) (Carnet, error) {
 // ENTIÈRE — ses deux côtés à la fois —, ce qu'une agrégation ligne à ligne ne
 // permet pas.
 func (s *Service) mouvements(ctx context.Context, c *Carnet) error {
+	// L'écriture de clôture est écartée : elle remet à zéro les comptes de produits et
+	// de charges et ne touche aucune liquidité. Les extournes sont lues avec leur
+	// drapeau : voir le classement plus bas.
 	q := db.Rebind(`
-		SELECT je.id, a.code, a.name,
+		SELECT je.id, a.code, a.name, a.account_type, COALESCE(je.is_reversal, 0),
 		       COALESCE(jl.debit_amount, 0), COALESCE(jl.credit_amount, 0)
 		  FROM journal_entries je
 		  JOIN journal_lines  jl ON jl.entry_id = je.id
 		  JOIN accounts       a  ON a.id = jl.account_id
 		 WHERE je.status = 'posted'
 		   AND je.date >= ? AND je.date <= ?
+		   AND `+accounting.SQLNotClosingEntry+`
 		 ORDER BY je.id, a.code`, s.usePostgres)
 
 	rows, err := s.db.QueryContext(ctx, q, c.Du, c.Au)
@@ -254,8 +272,9 @@ func (s *Service) mouvements(ctx context.Context, c *Carnet) error {
 	defer rows.Close()
 
 	type ligneJournal struct {
-		code, nom     string
-		debit, credit float64
+		code, nom, typ string
+		extourne       bool
+		debit, credit  float64
 	}
 	parEcriture := map[string][]ligneJournal{}
 	ordre := []string{}
@@ -263,9 +282,11 @@ func (s *Service) mouvements(ctx context.Context, c *Carnet) error {
 	for rows.Next() {
 		var id string
 		var l ligneJournal
-		if err := rows.Scan(&id, &l.code, &l.nom, &l.debit, &l.credit); err != nil {
+		var ext int
+		if err := rows.Scan(&id, &l.code, &l.nom, &l.typ, &ext, &l.debit, &l.credit); err != nil {
 			return fmt.Errorf("lecture d'une ligne: %w", err)
 		}
+		l.extourne = ext == 1
 		if _, vu := parEcriture[id]; !vu {
 			ordre = append(ordre, id)
 		}
@@ -277,6 +298,7 @@ func (s *Service) mouvements(ctx context.Context, c *Carnet) error {
 
 	recettes := map[string]*Ligne{}
 	depenses := map[string]*Ligne{}
+	financement := map[string]*Ligne{}
 
 	// mouvementNet est la somme algébrique des mouvements de liquidités de la
 	// période — ce que le relevé bancaire montrerait. Il sert de contrôle
@@ -334,32 +356,62 @@ func (s *Service) mouvements(ctx context.Context, c *Carnet) error {
 		// ajoutés indépendamment : en pratique une ligne n'en porte qu'un,
 		// mais les traiter séparément rend l'identité vérifiée plus bas vraie
 		// sans hypothèse sur la forme des écritures.
+		//
+		// Deux exceptions à ce classement, toutes deux de l'audit croisé Gemini
+		// (CRIT-02) :
+		//
+		//   - une contrepartie de FINANCEMENT (capital, réserves, prélèvements du
+		//     propriétaire, emprunts) n'est ni une recette ni une dépense : elle va
+		//     dans son bloc, en solde net — entrée positive, sortie négative ;
+		//   - une EXTOURNE défait une écriture : ce qu'elle porte au crédit vient en
+		//     DÉDUCTION des dépenses, ce qu'elle porte au débit en déduction des
+		//     recettes. Comptée comme une écriture ordinaire, elle gonflait les deux
+		//     côtés à la fois : une erreur de 1 000 annulée donnait 1 000 de recettes
+		//     ET 1 000 de dépenses.
 		for _, l := range lignes {
 			if estLiquidite(l.code) {
 				continue
 			}
-			if l.credit != 0 {
-				cumuler(recettes, l.code, l.nom, l.credit)
-			}
-			if l.debit != 0 {
-				cumuler(depenses, l.code, l.nom, l.debit)
+			switch {
+			case estFinancement(l.code, l.typ):
+				cumuler(financement, l.code, l.nom, l.credit-l.debit)
+			case l.extourne:
+				if l.credit != 0 {
+					cumuler(depenses, l.code, l.nom, -l.credit)
+				}
+				if l.debit != 0 {
+					cumuler(recettes, l.code, l.nom, -l.debit)
+				}
+			default:
+				if l.credit != 0 {
+					cumuler(recettes, l.code, l.nom, l.credit)
+				}
+				if l.debit != 0 {
+					cumuler(depenses, l.code, l.nom, l.debit)
+				}
 			}
 		}
 	}
 
 	c.Recettes = trier(recettes)
 	c.Depenses = trier(depenses)
+	c.Financement = trier(financement)
 	for _, l := range c.Recettes {
 		c.TotalRecettes += l.Montant
 	}
 	for _, l := range c.Depenses {
 		c.TotalDepenses += l.Montant
 	}
+	for _, l := range c.Financement {
+		c.TotalFinancement += l.Montant
+	}
 	c.Resultat = arrondi(c.TotalRecettes - c.TotalDepenses)
 	c.TotalRecettes = arrondi(c.TotalRecettes)
 	c.TotalDepenses = arrondi(c.TotalDepenses)
+	c.TotalFinancement = arrondi(c.TotalFinancement)
 
-	// Concordance : le résultat DOIT égaler le mouvement net de liquidités.
+	// Concordance : le résultat, plus le financement, DOIT égaler le mouvement net de
+	// liquidités.
 	//
 	// Ce n'est pas une précaution décorative, c'est l'identité qui définit le
 	// document. Dans une écriture équilibrée, débits et crédits s'égalent ;
@@ -374,12 +426,33 @@ func (s *Service) mouvements(ctx context.Context, c *Carnet) error {
 	// est un problème d'exploitation, un document faux est un problème
 	// fiscal. C'est ce contrôle qui aurait arrêté le classement en bloc des
 	// écritures composées.
-	if ecart := math.Abs(arrondi(mouvementNet) - c.Resultat); ecart > 0.005 {
+	if ecart := math.Abs(arrondi(mouvementNet) - arrondi(c.Resultat+c.TotalFinancement)); ecart > 0.005 {
 		return fmt.Errorf(
-			"incohérence du carnet : le résultat (%.2f) ne correspond pas au mouvement net de liquidités (%.2f), écart de %.2f — le document n'est pas établi",
-			c.Resultat, arrondi(mouvementNet), ecart)
+			"incohérence du carnet : le résultat (%.2f) et le financement (%.2f) ne correspondent pas au mouvement net de liquidités (%.2f), écart de %.2f — le document n'est pas établi",
+			c.Resultat, c.TotalFinancement, arrondi(mouvementNet), ecart)
 	}
 	return nil
+}
+
+// estFinancement dit si une contrepartie de liquidités relève du financement plutôt
+// que de l'exploitation : un compte de FONDS PROPRES (capital, réserves, compte
+// privé du propriétaire), ou une dette FINANCIÈRE — dettes bancaires (21xx), emprunts
+// à long terme (24xx) et autres dettes à long terme (26xx) du plan comptable.
+//
+// Les autres dettes restent dans l'exploitation : régler un fournisseur (2000) ou
+// l'impôt (22xx) est bien une dépense de la période, en base de caisse.
+func estFinancement(code, accountType string) bool {
+	if accountType == "equity" {
+		return true
+	}
+	if accountType != "liability" || len(code) < 2 {
+		return false
+	}
+	switch code[:2] {
+	case "21", "24", "26":
+		return true
+	}
+	return false
 }
 
 // cumuler ajoute un montant au poste d'un compte, en créant le poste au besoin.
@@ -474,7 +547,11 @@ func (s *Service) eligibilite(ctx context.Context, c *Carnet) error {
 		  JOIN accounts       a  ON a.id = jl.account_id
 		 WHERE je.status = 'posted'
 		   AND je.date >= ? AND je.date <= ?
-		   AND a.account_type = 'revenue'`, s.usePostgres)
+		   AND a.account_type = 'revenue'
+		   -- Sans l'écriture de clôture, qui débite les produits : un exercice clôturé
+		   -- affichait un chiffre d'affaires de zéro, donc « éligible » et « non
+		   -- assujetti » pour quelqu'un qui dépasse les deux seuils (CRIT-02).
+		   AND `+accounting.SQLNotClosingEntry+``, s.usePostgres)
 
 	var ca float64
 	if err := s.db.QueryRowContext(ctx, q, c.Du, c.Au).Scan(&ca); err != nil {
@@ -540,6 +617,9 @@ func trier(m map[string]*Ligne) []Ligne {
 	out := make([]Ligne, 0, len(m))
 	for _, l := range m {
 		l.Montant = arrondi(l.Montant)
+		if l.Montant == 0 {
+			continue // une extourne qui annule exactement le poste : rien à montrer
+		}
 		out = append(out, *l)
 	}
 	for i := 1; i < len(out); i++ {

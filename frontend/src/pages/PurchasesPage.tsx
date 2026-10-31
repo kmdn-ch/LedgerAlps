@@ -13,15 +13,17 @@
 // **Brouillon** — saisi, hors des livres. Ne compte ni à la TVA, ni au bilan.
 // **Comptabilisé** — l'écriture est passée (charge + TVA déductible / créanciers)
 // et scellée ; la facture devient payable.
-// **Payé** — le débit est apparu au relevé bancaire.
+// **Payé** — le règlement est enregistré : écriture Débit 2000 Créanciers / Crédit
+// banque (ou caisse) à la date du paiement, et `amount_paid` au total. Une facture
+// payée ne s'annule plus : le décaissement est parti.
 //
-// Générer un fichier de paiement ne fait PAS passer à « payé » : c'est le
-// rapprochement camt.053 qui l'établit.
+// Générer un fichier de paiement ne fait PAS passer à « payé » : le règlement se
+// saisit ici, une fois l'argent parti.
 
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Loader2, FileText, CheckCircle, UserPlus, X, Upload, Pencil, ScanLine,
+  Plus, Loader2, FileText, CheckCircle, UserPlus, X, Upload, Pencil, ScanLine, Wallet,
 } from 'lucide-react'
 import { supplierInvoicesApi, contactsApi, accountsApi } from '@/api/client'
 import {
@@ -72,7 +74,8 @@ const VAT_RATES: { value: string; cle: Cle }[] = [
   { value: '0',   cle: 'tva.tauxZero' },
 ]
 
-const today = () => new Date().toISOString().slice(0, 10)
+// La date LOCALE : toISOString() donne la date UTC, donc la veille entre minuit et 1 h ou 2 h en Suisse.
+const today = () => new Date().toLocaleDateString('sv-SE')
 
 export function PurchasesPage() {
   const t = useT()
@@ -81,6 +84,10 @@ export function PurchasesPage() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toBook, setToBook] = useState<SupplierInvoice | null>(null)
+  // Règlement d'une facture comptabilisée : la pièce visée, la date et le mode.
+  const [toPay, setToPay] = useState<SupplierInvoice | null>(null)
+  const [payDate, setPayDate] = useState(today())
+  const [payMethod, setPayMethod] = useState<'bank_transfer' | 'cash'>('bank_transfer')
 
   const [form, setForm] = useState({
     supplier_id: '', supplier_reference: '',
@@ -354,6 +361,21 @@ export function PurchasesPage() {
     onError: (e) => {
       setToBook(null)
       setError(refusalMessage(e, "La facture n'a pas pu être comptabilisée."))
+    },
+  })
+
+  const pay = useMutation({
+    mutationFn: (i: SupplierInvoice) =>
+      supplierInvoicesApi.transition(i.id, 'paid', { payment_date: payDate, method: payMethod }),
+    onSuccess: () => {
+      setError(null); setToPay(null)
+      qc.invalidateQueries({ queryKey: ['supplier-invoices'] })
+      qc.invalidateQueries({ queryKey: ['payments-payable'] })
+      qc.invalidateQueries({ queryKey: ['journal'] })
+      qc.invalidateQueries({ queryKey: ['trial-balance'] })
+    },
+    onError: (e) => {
+      setError(refusalMessage(e, t('ach.payerErreur')))
     },
   })
 
@@ -736,6 +758,15 @@ export function PurchasesPage() {
                       </button>
                     </div>
                   )}
+                  {i.status === 'booked' && peutEcrire && (
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => { setPayDate(today()); setPayMethod('bank_transfer'); setToPay(i) }}
+                              disabled={pay.isPending}
+                              className="btn-ghost btn-sm text-success-700 flex items-center gap-1">
+                        <Wallet size={13} /> {t('ach.payer')}
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
@@ -744,6 +775,51 @@ export function PurchasesPage() {
       </div>
 
       <PaymentRunPanel />
+
+      {toPay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4"
+               role="dialog" aria-modal="true" aria-labelledby="supplier-pay-title">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-alpine-200">
+              <h3 id="supplier-pay-title" className="text-sm font-semibold text-alpine-900">
+                {t('ach.payerTitre', { ref: toPay.supplier_reference })}
+              </h3>
+              <button type="button" onClick={() => setToPay(null)}
+                      className="btn-ghost btn-sm p-1 text-alpine-400" aria-label={t('action.annuler')}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-sm text-alpine-600">
+                {t('ach.payerMontant', { montant: formatCHF(toPay.total_amount - toPay.amount_paid) })}
+              </p>
+              <div>
+                <label className="label" htmlFor="supplier-pay-date">{t('ach.payerDate')}</label>
+                <input id="supplier-pay-date" type="date" className="input" value={payDate}
+                       onChange={e => setPayDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="label" htmlFor="supplier-pay-mode">{t('ach.payerMode')}</label>
+                <select id="supplier-pay-mode" className="select" value={payMethod}
+                        onChange={e => setPayMethod(e.target.value as 'bank_transfer' | 'cash')}>
+                  <option value="bank_transfer">{t('ach.modeVirement')}</option>
+                  <option value="cash">{t('ach.modeEspeces')}</option>
+                </select>
+              </div>
+              <p className="text-xs text-alpine-500">{t('ach.payerAide')}</p>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3 border-t border-alpine-200">
+              <button type="button" className="btn-ghost btn-sm" onClick={() => setToPay(null)}>
+                {t('action.annuler')}
+              </button>
+              <button type="button" className="btn-primary btn-sm" disabled={pay.isPending || !payDate}
+                      onClick={() => pay.mutate(toPay)}>
+                {pay.isPending ? t('ach.payerEnCours') : t('ach.payerConfirmer')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         open={toBook !== null}

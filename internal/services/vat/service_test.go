@@ -446,3 +446,37 @@ func TestLeMontantTDFNResteCalculeSurLaFraction(t *testing.T) {
 			"les constantes compliance.VATRate* doivent rester en fraction", got, want)
 	}
 }
+
+// Audit croisé Gemini, CRIT-07 : le décompte lisait `status IN ('sent', 'paid')`. Une
+// facture réglée puis ARCHIVÉE en sortait : archiver ses factures du premier
+// trimestre effaçait rétroactivement leur chiffre d'affaires et leur TVA du décompte.
+func TestUneFactureArchiveeResteDansLeDecompte(t *testing.T) {
+	database := newTestDB(t)
+	start, end := period()
+
+	for _, statut := range []string{"sent", "paid", "archived"} {
+		seedQuote(t, database, statut, 1000, 81, 8.1, "2026-03-01")
+	}
+	// seedQuote écrit des offres : on les requalifie en factures.
+	if _, err := database.Exec(`UPDATE invoices SET document_type = 'invoice'`); err != nil {
+		t.Fatal(err)
+	}
+	// Une annulée et un brouillon ne comptent pas.
+	seedQuote(t, database, "cancelled", 1000, 81, 8.1, "2026-03-01")
+	seedQuote(t, database, "draft", 1000, 81, 8.1, "2026-03-01")
+	if _, err := database.Exec(
+		`UPDATE invoices SET document_type = 'invoice' WHERE status IN ('cancelled', 'draft')`); err != nil {
+		t.Fatal(err)
+	}
+
+	decl, err := vat.New(database, false).GenerateDeclaration(context.Background(), start, end, "effective")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decl.TotalRevenue != 3000 {
+		t.Errorf("chiffre d'affaires = %.2f, attendu 3000.00 (envoyée + payée + archivée)", decl.TotalRevenue)
+	}
+	if decl.VATCollected.Standard != 243 {
+		t.Errorf("TVA collectée = %.2f, attendu 243.00 : la facture archivée a disparu du décompte", decl.VATCollected.Standard)
+	}
+}

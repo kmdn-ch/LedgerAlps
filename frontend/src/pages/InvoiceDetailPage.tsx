@@ -279,7 +279,7 @@ export function InvoiceDetailPage() {
     ask(
       transitionCopy(
         t, status, invoice?.document_type === 'quote', invoice?.invoice_number ?? '',
-        invoice ? invoice.total_amount - invoice.amount_paid : 0,
+        invoice ? (invoice.balance_due ?? invoice.total_amount - invoice.amount_paid) : 0,
       ),
       () => transition.mutate({ status, ...extra }),
     )
@@ -330,7 +330,10 @@ export function InvoiceDetailPage() {
   const fullyCredited = invoice.credited_amount >= invoice.total_amount - 0.01
   const creditable = invoice.document_type === 'invoice'
     && (invoice.status === 'sent' || invoice.status === 'paid')
-  const totalRemaining = invoice.total_amount - invoice.amount_paid
+  // Le solde est net des avoirs ÉMIS : le serveur le calcule (balance_due). Les avoirs
+  // appliqués se déduisent du total et des versements.
+  const totalRemaining = invoice.balance_due ?? invoice.total_amount - invoice.amount_paid
+  const avoirsAppliques = Math.round((invoice.total_amount - invoice.amount_paid - totalRemaining) * 100) / 100
   // Envoyé ou encaissé, comptabilisation automatique active, et pourtant aucun
   // lien vers une écriture : voir invoicing/reprise.go.
   const unposted = invoice.document_type !== 'quote'
@@ -536,12 +539,20 @@ export function InvoiceDetailPage() {
               <span>{t('fd.totalTTC')}</span>
               <span className="font-mono tabular-nums">{formatCHF(invoice.total_amount)}</span>
             </div>
-            {invoice.amount_paid > 0 && (
+            {(invoice.amount_paid > 0 || avoirsAppliques > 0.005) && (
               <>
-                <div className="flex justify-between text-success-700">
-                  <span>{t('fd.dejaPaye')}</span>
-                  <span className="font-mono tabular-nums">−{formatCHF(invoice.amount_paid)}</span>
-                </div>
+                {invoice.amount_paid > 0 && (
+                  <div className="flex justify-between text-success-700">
+                    <span>{t('fd.dejaPaye')}</span>
+                    <span className="font-mono tabular-nums">−{formatCHF(invoice.amount_paid)}</span>
+                  </div>
+                )}
+                {avoirsAppliques > 0.005 && (
+                  <div className="flex justify-between text-success-700">
+                    <span>{t('fd.avoirsEmis')}</span>
+                    <span className="font-mono tabular-nums">−{formatCHF(avoirsAppliques)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-alpine-900 font-semibold border-t border-alpine-100 pt-2">
                   <span>{t('fd.soldeRestant')}</span>
                   <span className="font-mono tabular-nums">{formatCHF(totalRemaining)}</span>
