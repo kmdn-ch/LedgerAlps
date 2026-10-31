@@ -26,7 +26,16 @@ déconnexion : l'authentification des routes est sans état.
 > (`429` + en-tête `Retry-After`), dont la durée **s'allonge à chaque série** :
 > 30 s, 1 min, 5 min, 15 min, 1 h — le dernier palier se répétant ensuite.
 > Une heure de silence après la fin d'un verrou ramène l'échelle à son premier
-> palier ; une connexion réussie l'efface entièrement.
+> palier.
+>
+> Quatre compteurs **séparés**, qu'aucun succès d'un autre ne remet à zéro :
+> le mot de passe par **adresse**, le mot de passe par **couple adresse + compte
+> visé** (un utilisateur qui se connecte sur son compte n'efface rien des essais portés
+> contre un autre), le **second facteur par compte** — **5 codes faux** ferment la voie
+> de ce compte quelle que soit l'adresse, et redemander un jeton d'attente (il suffit du
+> mot de passe) ne donne aucun nouvel essai —, et le rafraîchissement. Une réussite
+> n'efface que le compteur de son propre compte. Chaque verrouillage est écrit dans le
+> journal de sécurité (`login_lockout`, `mfa_lockout`).
 >
 > L'adresse retenue est celle de la connexion elle-même. Les en-têtes
 > `X-Forwarded-For` / `X-Real-IP` ne sont pris en compte que si le mandataire
@@ -110,7 +119,7 @@ comptabilité. La **lecture seule** en est dispensée — elle ne peut rien modi
 | 401 | Code faux, ou jeton d'attente expiré (cinq minutes) |
 | 403 + `mfa_enrolment_required` | Compte administrateur sans second facteur inscrit |
 | 409 | Inscription déjà active — retirez-la d'abord pour changer de téléphone |
-| 429 | Trop de codes faux depuis cette adresse |
+| 429 | Cinq codes faux sur ce compte, d'où qu'ils viennent : la voie est fermée pour lui, **le bon code aussi est refusé** tant qu'elle l'est. `retry_after` et `Retry-After` disent combien attendre |
 
 ### Déconnexion sur inactivité
 
@@ -824,7 +833,7 @@ la chaîne.
 | GET | `/audit-logs/:id/verify` | **admin** | Vérifier une entrée isolée. Détecte une modification de contenu, **pas une suppression** — voir la note ci-dessous |
 | POST | `/audit-logs/attestation/verify` | **admin** | Vérifier une attestation qu'on nous présente — la sienne, ou celle qu'un client a remise. Le fichier va dans un formulaire (`file`) ou dans le corps. Rend trois contrôles : le sceau du document, la correspondance de l'empreinte de tête avec les livres au même numéro de séquence, et l'état actuel de la chaîne |
 | GET | `/compliance/advisories` | auth | Avis de conformité — voir [compliance](../compliance/README.md) |
-| GET | `/security-events` | **admin** | Verrouillages de connexion (contient des adresses IP — nLPD) |
+| GET | `/security-events` | **admin** | Verrouillages de connexion (`login_lockout`) et de second facteur (`mfa_lockout`, qui nomme le compte et n'a pas d'adresse). Contient des adresses IP — nLPD |
 | GET | `/exports/legal-archive` | auth | Archive ZIP 10 ans avec manifeste (CO art. 958f). Contient le JSON **et** un dossier `csv/` — export de réversibilité ouvrable dans un tableur, avec les lignes imbriquées extraites dans leurs propres fichiers |
 
 > **Pourquoi une vérification de chaîne, et pas seulement par entrée.** Vérifier

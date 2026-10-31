@@ -410,7 +410,9 @@ func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
 
 		y := pdf.GetY()
 		pdf.SetXY(15, y)
-		pdf.MultiCell(wDesc, rowH/float64(len(wrapped)), latin1(desc), "1", "L", fill)
+		// `desc` est DÉJÀ encodé en Latin-1 (voir plus haut, pour mesurer
+		// l'enroulement) : l'encoder encore faisait de chaque accent un « ? ».
+		pdf.MultiCell(wDesc, rowH/float64(len(wrapped)), desc, "1", "L", fill)
 
 		pdf.SetXY(15+wDesc, y)
 		pdf.CellFormat(wQty, rowH, fmtFloat(line.Quantity), "1", 0, "C", fill, 0, "")

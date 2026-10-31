@@ -76,15 +76,19 @@ type LoginRateLimiter struct {
 	// appel sortant), pas la réussite d'un secret : voir NewRequestRateLimiter.
 	countAll bool
 
+	// keyFn dit SUR QUOI le limiteur compte. Vide : l'adresse du client. Voir KeyFunc.
+	keyFn KeyFunc
+
 	// onLockout, when set, is invoked once each time a client crosses the
 	// threshold. It lets the caller persist the event without giving this
 	// package a database dependency. Never called while holding the mutex.
-	onLockout func(ip string, until time.Time)
+	onLockout func(key string, until time.Time)
 }
 
-// OnLockout registers a callback fired when a client is locked out. Intended for
+// OnLockout registers a callback fired when a client is locked out. `key` is what
+// the limiter counts on: an address by default, see KeyFunc. Intended for
 // security telemetry; it must not block, as it runs on the request path.
-func (l *LoginRateLimiter) OnLockout(fn func(ip string, until time.Time)) {
+func (l *LoginRateLimiter) OnLockout(fn func(key string, until time.Time)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.onLockout = fn
@@ -146,7 +150,16 @@ func NewRequestRateLimiter(maxRequests int, window time.Duration, paliers ...tim
 // ignored so a malformed body or an outage cannot lock a user out.
 func (l *LoginRateLimiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		key := c.ClientIP()
+		key, ok := c.ClientIP(), true
+		if l.keyFn != nil {
+			key, ok = l.keyFn(c)
+		}
+		if !ok {
+			// Rien à compter (corps illisible, jeton absent) : le gestionnaire
+			// répondra lui-même, par un refus qui ne tente aucun secret.
+			c.Next()
+			return
+		}
 
 		if retryAfter, locked := l.locked(key); locked {
 			secs := int(retryAfter.Seconds())

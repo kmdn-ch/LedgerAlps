@@ -311,31 +311,22 @@ func main() {
 	// restait utilisable toute sa durée de vie.
 	idleGuard := middleware.IdleLimit(authHandler.Activity(), cfg.IdleMinutes)
 	//
-	// Dix échecs verrouillent l'adresse, puis l'attente s'allonge à chaque
-	// nouvelle série : 30 s, 1 min, 5 min, 15 min, 1 h. Une heure de calme
+	// Les limiteurs d'authentification (middleware.AuthLimiters) : dix échecs de mot
+	// de passe verrouillent l'adresse — et, séparément, le couple adresse + compte
+	// visé —, cinq échecs de code verrouillent le COMPTE, puis l'attente s'allonge à
+	// chaque nouvelle série : 30 s, 1 min, 5 min, 15 min, 1 h. Une heure de calme
 	// ramène l'échelle à son premier barreau.
-	loginLimiter := middleware.NewLoginRateLimiter(
-		middleware.DefaultLoginMaxAttempts,
-		middleware.DefaultLoginWindow,
-		middleware.DefaultLoginPaliers...,
-	)
-	// Persist lockouts so brute-force attempts are visible to an administrator.
-	loginLimiter.OnLockout(func(ip string, until time.Time) {
-		handlers.RecordLoginLockout(database, cfg.UsePostgres(), ip, until)
+	//
+	// Le second facteur et le rafraîchissement ont CHACUN leur compteur : un succès
+	// de connexion, ou de rafraîchissement, ne doit jamais effacer les échecs d'un
+	// autre (audit 9, M-01 ; audit croisé Gemini, CRIT-13).
+	//
+	// Les verrouillages sont tracés pour qu'un administrateur voie les tentatives.
+	limiters := middleware.NewAuthLimiters(func(kind, key string, until time.Time) {
+		handlers.RecordAuthLockout(database, cfg.UsePostgres(), kind, key, until)
 	})
-	// Le rafraîchissement a SON compteur : le frontend l'appelle en routine, et un
-	// succès ne doit pas effacer les échecs de mot de passe de la même adresse
-	// (audit 9, M-01).
-	refreshLimiter := middleware.NewLoginRateLimiter(
-		middleware.DefaultLoginMaxAttempts,
-		middleware.DefaultLoginWindow,
-		middleware.DefaultLoginPaliers...,
-	)
-	refreshLimiter.OnLockout(func(ip string, until time.Time) {
-		handlers.RecordLoginLockout(database, cfg.UsePostgres(), ip, until)
-	})
-	v1.POST("/auth/login", loginLimiter.Middleware(), authHandler.Login)
-	v1.POST("/auth/refresh", refreshLimiter.Middleware(), authHandler.Refresh)
+	v1.POST("/auth/login", append(limiters.ForLogin(), authHandler.Login)...)
+	v1.POST("/auth/refresh", limiters.Refresh.Middleware(), authHandler.Refresh)
 	v1.POST("/auth/logout", authHandler.Logout)
 	// Hors du groupe filtré : c'est la seule action qu'un compte au mot de passe
 	// temporaire puisse faire, et la placer dans le groupe la bloquerait
@@ -355,8 +346,7 @@ func main() {
 	// pour quelqu'un à qui l'on ferme la porte au bout de quelques erreurs. Elle
 	// n'accepte QUE le jeton d'attente, et le filtre d'authentification refuse ce
 	// jeton partout ailleurs.
-	v1.POST("/auth/mfa/verify", loginLimiter.Middleware(),
-		middleware.RequireMFAChallenge(cfg.JWTSecret), authHandler.MFAVerify)
+	v1.POST("/auth/mfa/verify", append(limiters.ForMFAVerify(cfg.JWTSecret), authHandler.MFAVerify)...)
 
 	// Inscription et retrait, hors du groupe filtré pour la même raison que le
 	// changement de mot de passe : un administrateur non inscrit ne peut rien
@@ -377,7 +367,7 @@ func main() {
 	// actif — donc PermManage, donc l'IBAN de l'entreprise — sans qu'aucun
 	// administrateur l'ait voulu, et contournait entièrement POST /users.
 	// Voir internal/api/handlers/auth.go pour le détail.
-	v1.POST("/auth/bootstrap", loginLimiter.Middleware(), authHandler.Bootstrap) // one-shot: creates first admin user
+	v1.POST("/auth/bootstrap", limiters.Login.Middleware(), authHandler.Bootstrap) // one-shot: creates first admin user
 
 	// La recherche au registre IDE (/uid-lookup) est dans le groupe PROTÉGÉ, plus
 	// bas. Elle était publique et partageait le limiteur des mots de passe : ses

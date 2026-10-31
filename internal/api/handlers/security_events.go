@@ -6,9 +6,11 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
 
@@ -31,20 +33,44 @@ type securityEvent struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// RecordLoginLockout persists a lockout. It is called from the rate limiter on
-// the request path, so it takes its own short timeout and never surfaces an
-// error to the client: failing to write telemetry must not affect the response.
-func RecordLoginLockout(database *sql.DB, usePostgres bool, ip string, until time.Time) {
+// RecordAuthLockout trace un verrouillage d'une des routes d'authentification.
+//
+// Appelée depuis le limiteur, sur le chemin de la requête : elle prend son propre
+// délai court et ne remonte jamais d'erreur au client — échouer à écrire la
+// télémétrie ne doit pas changer la réponse.
+//
+// `kind` et `key` viennent de middleware.AuthLimiters : l'adresse seule (mot de
+// passe, rafraîchissement), « adresse|compte » (mot de passe sur un compte précis)
+// ou un identifiant de compte (second facteur, qui n'a pas d'adresse à noter).
+func RecordAuthLockout(database *sql.DB, usePostgres bool, kind, key string, until time.Time) {
+	fin := "locked until " + until.UTC().Format(time.RFC3339)
+	switch kind {
+	case mw.LockoutLoginAccount:
+		ip, compte, _ := strings.Cut(key, "|")
+		recordLockout(database, usePostgres, "login_lockout", ip, "compte="+compte+" ; "+fin)
+	case mw.LockoutMFA:
+		recordLockout(database, usePostgres, "mfa_lockout", "", "compte="+key+" ; "+fin)
+	default:
+		recordLockout(database, usePostgres, "login_lockout", key, fin)
+	}
+}
+
+func recordLockout(database *sql.DB, usePostgres bool, eventType, ip, detail string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	q := db.Rebind(`
 		INSERT INTO security_events (id, event_type, ip_address, detail, created_at)
-		VALUES (?, 'login_lockout', ?, ?, ?)`, usePostgres)
+		VALUES (?, ?, ?, ?, ?)`, usePostgres)
 
-	detail := "locked until " + until.UTC().Format(time.RFC3339)
-	if _, err := database.ExecContext(ctx, q, db.NewID(), ip, detail, time.Now().UTC()); err != nil {
-		log.Printf("WARNING: could not record login lockout for %s: %v", ip, err)
+	// Pas d'adresse à noter (second facteur, compté par compte) : NULL, pas une chaîne
+	// vide que la purge de rétention prendrait pour une adresse à anonymiser.
+	var adresse any
+	if ip != "" {
+		adresse = ip
+	}
+	if _, err := database.ExecContext(ctx, q, db.NewID(), eventType, adresse, detail, time.Now().UTC()); err != nil {
+		log.Printf("WARNING: could not record %s for %s: %v", eventType, ip, err)
 	}
 }
 

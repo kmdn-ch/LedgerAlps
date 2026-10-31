@@ -77,6 +77,35 @@ const VAT_RATES: { value: string; cle: Cle }[] = [
 // La date LOCALE : toISOString() donne la date UTC, donc la veille entre minuit et 1 h ou 2 h en Suisse.
 const today = () => new Date().toLocaleDateString('sv-SE')
 
+// Le formulaire de saisie. Un type nommé : `formDeFacture` doit rendre exactement ce
+// que l'état contient, sans quoi la comparaison de `dirty` ne veut rien dire.
+type FormFacture = {
+  supplier_id: string; supplier_reference: string
+  issue_date: string; due_date: string
+  description: string; amount: string; amount_mode: 'ht' | 'ttc'; vat_rate: string
+  expense_account_code: string; payment_reference: string
+}
+
+// Ce que le formulaire contient à l'ouverture d'une facture existante.
+//
+// Sert aussi de point de comparaison : le formulaire de modification est pré-rempli,
+// donc « il contient quelque chose » ne dit rien d'une saisie — seule une DIFFÉRENCE
+// avec la facture enregistrée en est une.
+const formDeFacture = (i: SupplierInvoice): FormFacture => ({
+  supplier_id: i.supplier_id,
+  supplier_reference: i.supplier_reference,
+  issue_date: i.issue_date.slice(0, 10),
+  due_date: i.due_date ? i.due_date.slice(0, 10) : '',
+  description: '',
+  amount: String(i.subtotal_amount),
+  amount_mode: 'ht',
+  vat_rate: i.subtotal_amount > 0
+    ? String(Math.round((i.vat_amount / i.subtotal_amount) * 1000) / 10)
+    : '8.1',
+  expense_account_code: i.expense_account_code ?? '',
+  payment_reference: i.payment_reference ?? '',
+})
+
 export function PurchasesPage() {
   const t = useT()
   const qc = useQueryClient()
@@ -89,10 +118,10 @@ export function PurchasesPage() {
   const [payDate, setPayDate] = useState(today())
   const [payMethod, setPayMethod] = useState<'bank_transfer' | 'cash'>('bank_transfer')
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<FormFacture>({
     supplier_id: '', supplier_reference: '',
     issue_date: today(), due_date: '',
-    description: '', amount: '', amount_mode: 'ttc' as 'ht' | 'ttc', vat_rate: '8.1',
+    description: '', amount: '', amount_mode: 'ttc', vat_rate: '8.1',
     expense_account_code: '', payment_reference: '',
   })
 
@@ -133,9 +162,14 @@ export function PurchasesPage() {
     [accounts.data],
   )
 
-  const dirty = creating && (form.supplier_reference !== '' || form.amount !== '' ||
-    form.description !== '')
-  useUnsavedGuard(dirty)
+  const dirty = creating && (editing
+    ? JSON.stringify(form) !== JSON.stringify(formDeFacture(editing))
+    : (form.supplier_reference !== '' || form.amount !== '' || form.description !== ''))
+  // Le garde BLOQUE la navigation tant qu'une saisie est en cours ; il ne peut rien
+  // dire lui-même. Ignorer ce qu'il rend gèle l'interface : chaque lien du menu
+  // restait sans effet, sans une seule boîte pour expliquer pourquoi (audit croisé
+  // Gemini, CRIT-18). La boîte est rendue en bas de page.
+  const guard = useUnsavedGuard(dirty)
 
   // Le mode de saisie survit à l'enregistrement : celui qu'on vient d'utiliser
   // est presque toujours celui de la facture suivante.
@@ -201,20 +235,7 @@ export function PurchasesPage() {
     setEditing(i)
     setScan(null)
     setError(null)
-    setForm({
-      supplier_id: i.supplier_id,
-      supplier_reference: i.supplier_reference,
-      issue_date: i.issue_date.slice(0, 10),
-      due_date: i.due_date ? i.due_date.slice(0, 10) : '',
-      description: '',
-      amount: String(i.subtotal_amount),
-      amount_mode: 'ht' as const,
-      vat_rate: i.subtotal_amount > 0
-        ? String(Math.round((i.vat_amount / i.subtotal_amount) * 1000) / 10)
-        : '8.1',
-      expense_account_code: i.expense_account_code ?? '',
-      payment_reference: i.payment_reference ?? '',
-    })
+    setForm(formDeFacture(i))
     setCreating(true)
   }
 
@@ -820,6 +841,17 @@ export function PurchasesPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={guard.blocked}
+        tone="danger"
+        title={t('nf.quitterTitre')}
+        consequences={[t(editing ? 'ach.quitterConsModif' : 'ach.quitterCons')]}
+        reassurance={t(editing ? 'ach.quitterRassurModif' : 'ach.quitterRassur')}
+        confirmLabel={t('nf.quitterConfirmer')}
+        onConfirm={guard.confirmLeave}
+        onCancel={guard.cancelLeave}
+      />
 
       <ConfirmDialog
         open={toBook !== null}

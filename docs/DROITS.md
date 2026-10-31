@@ -18,10 +18,13 @@ le serveur, et l'adresse tapée à la main répond **403**.
 Légende : ✅ autorisé · 👁 lecture seule · ⛔ refusé (403)
 
 **Se connecter.** Dix échecs consécutifs depuis une même adresse la
-verrouillent, et chaque nouvelle série coûte plus cher : 30 s, 1 min, 5 min,
-15 min, 1 h, puis 1 h indéfiniment. Une heure de silence après la fin d'un
-verrou ramène l'échelle à son premier barreau ; une connexion réussie l'efface.
-Le verrouillage est écrit dans le journal de sécurité, visible dans
+verrouillent — ou dix contre un même compte depuis cette adresse —, et chaque
+nouvelle série coûte plus cher : 30 s, 1 min, 5 min, 15 min, 1 h, puis 1 h
+indéfiniment. Une heure de silence après la fin d'un verrou ramène l'échelle à
+son premier barreau. Une connexion réussie n'efface que les échecs de son propre
+compte : se connecter sur le sien ne remet rien à zéro contre celui d'un autre.
+**Le second facteur se ferme par compte, après cinq codes faux**, d'où qu'ils
+viennent. Les verrouillages sont écrits dans le journal de sécurité, visible dans
 Paramètres → Maintenance → Diagnostic.
 
 ---

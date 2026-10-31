@@ -41,6 +41,8 @@ func TestAucunAppelNEncodeDeuxFois(t *testing.T) {
 	}
 	for _, fautif := range []string{
 		"metaRow(latin1(", "totalRow(latin1(", "line(latin1(", "cell(latin1(",
+		// La description d'une ligne est encodée une fois, avant l'enroulement.
+		"latin1(desc)",
 	} {
 		if strings.Contains(string(src), fautif) {
 			t.Errorf("%s… : le texte est encodé une seconde fois par la fonction appelée, "+
@@ -129,4 +131,49 @@ func fluxDécompressés(pdf []byte) []byte {
 		reste = reste[i+j:]
 	}
 	return out.Bytes()
+}
+
+// La description d'une ligne sort avec ses accents, pas avec des « ? ».
+//
+// Audit croisé Gemini, HIGH-04. La description était encodée une première fois
+// pour mesurer son enroulement (`SplitLines` compte des octets Latin-1), puis une
+// SECONDE fois à l'impression : « Prestation à Genève, déjà facturé — élève »
+// sortait « Prestation ? Gen?ve, d?j? factur? - ?l?ve » sur chaque ligne de chaque
+// facture. Le test d'au-dessus ne le voyait pas : il cherche des paires UTF-8
+// échappées à latin1(), et un « ? » n'en est pas une.
+//
+// Le test cherche donc le contraire — les octets Latin-1 attendus — et l'absence
+// du caractère de remplacement dans le mot.
+func TestLesAccentsDUneDescriptionLongueSurvivent(t *testing.T) {
+	long := "Prestation à Genève, déjà facturé — élève " + strings.Repeat("très long ", 20) + "fin"
+	for nom, description := range map[string]string{
+		"courte":        "Prestation à Genève, déjà facturé — élève",
+		"qui s'enroule": long,
+	} {
+		t.Run(nom, func(t *testing.T) {
+			sortie, err := Generate(InvoiceData{
+				InvoiceNumber: "FA-2026-0001", DocumentType: "invoice",
+				IssueDate: time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC),
+				DueDate:   time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC),
+				Currency:  "CHF", TotalAmount: 100,
+				Lines:    []InvoiceLine{{Description: description, Quantity: 1, UnitPrice: 100, LineTotal: 100}},
+				Company:  CompanyInfo{Name: "Alpes SA"},
+				Customer: CustomerInfo{Name: "Müller AG"},
+			})
+			if err != nil {
+				t.Fatalf("génération: %v", err)
+			}
+			contenu := fluxDécompressés(sortie)
+			for _, attendu := range []string{"Gen\xe8ve", "d\xe9j\xe0", "factur\xe9", "\xe9l\xe8ve"} {
+				if !bytes.Contains(contenu, []byte(attendu)) {
+					t.Errorf("le PDF ne porte pas %q en Latin-1 : la description a été encodée deux fois", attendu)
+				}
+			}
+			for _, abime := range []string{"Gen?ve", "d?j?", "factur?", "?l?ve"} {
+				if bytes.Contains(contenu, []byte(abime)) {
+					t.Errorf("le PDF porte %q : chaque accent est devenu « ? »", abime)
+				}
+			}
+		})
+	}
 }

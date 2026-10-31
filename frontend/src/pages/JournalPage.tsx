@@ -143,7 +143,11 @@ export function JournalPage() {
 
   const dirty = showForm && (description.trim() !== '' ||
     rows.some(r => r.debit || r.credit || r.amount || r.label))
-  useUnsavedGuard(dirty)
+  // Le garde BLOQUE la navigation tant qu'une saisie est en cours ; il ne peut rien
+  // dire lui-même. Ignorer ce qu'il rend gèle l'interface : chaque lien du menu
+  // restait sans effet, sans une seule boîte pour expliquer pourquoi (audit croisé
+  // Gemini, CRIT-18). La boîte est rendue en bas de page.
+  const guard = useUnsavedGuard(dirty)
 
   const resetForm = () => {
     setDescription(''); setRows([emptyRow()]); setError(null)
@@ -361,7 +365,7 @@ export function JournalPage() {
             <button type="button" className="btn-primary flex items-center gap-1.5"
                     disabled={!peutEnregistrer} onClick={() => { setError(null); create.mutate() }}>
               {create.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={15} />}
-              Enregistrer le brouillon
+              {t('ach.enregistrerBrouillon')}
             </button>
           </div>
         </div>
@@ -425,6 +429,17 @@ export function JournalPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={guard.blocked}
+        tone="danger"
+        title={t('nf.quitterTitre')}
+        consequences={[t('jr.quitterCons')]}
+        reassurance={t('jr.quitterRassur')}
+        confirmLabel={t('nf.quitterConfirmer')}
+        onConfirm={guard.confirmLeave}
+        onCancel={guard.cancelLeave}
+      />
 
       <ConfirmDialog
         open={toPost !== null}

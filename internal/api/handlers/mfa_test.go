@@ -31,6 +31,14 @@ const mfaSecret = "secret-de-test-second-facteur-0123456789"
 
 func mfaEnv(t *testing.T) (*sql.DB, *gin.Engine, *config.Config) {
 	t.Helper()
+	return mfaEnvOpt(t, false)
+}
+
+// mfaEnvOpt monte les routes comme le serveur ; `limite` y ajoute les limiteurs
+// d'authentification, montés par la MÊME fonction (middleware.AuthLimiters) : un
+// test qui passe ici prouve la configuration livrée, pas une copie.
+func mfaEnvOpt(t *testing.T, limite bool) (*sql.DB, *gin.Engine, *config.Config) {
+	t.Helper()
 	tmp, err := os.CreateTemp("", "ledgeralps-mfa-*.db")
 	if err != nil {
 		t.Fatal(err)
@@ -57,8 +65,16 @@ func mfaEnv(t *testing.T) (*sql.DB, *gin.Engine, *config.Config) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h := NewAuthHandler(database, cfg)
-	r.POST("/auth/login", h.Login)
-	r.POST("/auth/mfa/verify", mw.RequireMFAChallenge(cfg.JWTSecret), h.MFAVerify)
+	if limite {
+		lim := mw.NewAuthLimiters(func(kind, key string, until time.Time) {
+			RecordAuthLockout(database, false, kind, key, until)
+		})
+		r.POST("/auth/login", append(lim.ForLogin(), h.Login)...)
+		r.POST("/auth/mfa/verify", append(lim.ForMFAVerify(cfg.JWTSecret), h.MFAVerify)...)
+	} else {
+		r.POST("/auth/login", h.Login)
+		r.POST("/auth/mfa/verify", mw.RequireMFAChallenge(cfg.JWTSecret), h.MFAVerify)
+	}
 	authed := r.Group("", mw.RequireAuth(cfg.JWTSecret))
 	authed.GET("/auth/mfa", h.MFAStatus)
 	authed.POST("/auth/mfa/setup", h.MFASetup)

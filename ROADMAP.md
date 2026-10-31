@@ -225,7 +225,9 @@ Un audit externe (Gemini, soixante-huit constats) a ensuite été recoupé avec 
 (`review-Gemini1.md`, local) : la première série, celle des chiffres faux, est corrigée
 sur `test` — clôture déséquilibrée, compte de résultat et bilan faux, carnet du lait,
 notes de crédit à l'encaissement, cycle des factures fournisseurs, factures archivées dans
-la TVA. Les séries suivantes et les décisions du propriétaire (TDFN, service Windows,
+la TVA. La deuxième série ferme le contournement du limiteur du second facteur (et du mot
+de passe), dégèle la navigation des écrans Journal et Achats et rend leurs accents aux
+lignes de facture du PDF. Les séries suivantes et les décisions du propriétaire (TDFN, service Windows,
 contenu de l'archive légale) restent ouvertes.
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
