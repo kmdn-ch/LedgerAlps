@@ -41,11 +41,18 @@ func authenticate(c *gin.Context, jwtSecret string) bool {
 	// ajoutée demain le rejette sans que personne ait à y penser. L'inverse —
 	// autoriser par défaut et bloquer route par route — s'oublie une fois, et
 	// cette fois-là une moitié de connexion vaut une session complète.
-	if claims.MFAPending {
+	if claims.MFAPending || claims.Typ == security.TokenTypeMFA {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"error":        "connexion incomplète : le second facteur n'a pas été validé",
 			"mfa_required": true,
 		})
+		return false
+	}
+	// Seul un jeton d'ACCÈS ouvre l'API. Un jeton de rafraîchissement ne sert qu'à
+	// en obtenir un (A-02) ; un jeton sans type — émis avant cette version — n'est
+	// plus reconnu, l'utilisateur se reconnecte.
+	if claims.Typ != security.TokenTypeAccess {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 		return false
 	}
 	c.Set(claimsKey, claims)
@@ -72,7 +79,7 @@ func RequireMFAChallenge(jwtSecret string) gin.HandlerFunc {
 				"error": "cette étape a expiré : recommencez la connexion"})
 			return
 		}
-		if !claims.MFAPending {
+		if !claims.MFAPending || claims.Typ != security.TokenTypeMFA {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": "cette étape suit une saisie de mot de passe"})
 			return

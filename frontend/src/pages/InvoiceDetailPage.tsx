@@ -5,9 +5,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Download, Eye, EyeOff, Send, CheckCircle,
-  XCircle, Archive, Pencil, RotateCcw, FileText, Clock, Undo2,
+  XCircle, Archive, Pencil, RotateCcw, FileText, Clock, Undo2, BookCheck,
 } from 'lucide-react'
-import { invoicesApi, downloadBlob } from '@/api/client'
+import { invoicesApi, settingsApi, downloadBlob } from '@/api/client'
 import {
   PageHeader, StatusBadge, LoadingSpinner, ErrorBanner,
   SectionTitle, PDFPreview, ConfirmDialog,
@@ -169,6 +169,13 @@ const CREDIT_NOTE_COPY = (t: T, number: string): ActionCopy => ({
   confirmLabel: t('fd.confirmerNoteCredit'),
 })
 
+const POST_COPY = (t: T, number: string): ActionCopy => ({
+  title: t('fd.titreComptabiliser', { numero: number }),
+  consequences: [t('fd.consComptabiliser1'), t('fd.consComptabiliser2')],
+  reassurance: t('fd.rassurComptabiliser'),
+  confirmLabel: t('fd.confirmerComptabiliser'),
+})
+
 const OUTCOME_COPY: Record<'refused' | 'expired', (t: T, n: string) => ActionCopy> = {
   refused: (t, n) => ({
     title: t('fd.titreRefusee', { numero: n }),
@@ -215,6 +222,26 @@ export function InvoiceDetailPage() {
       qc.invalidateQueries({ queryKey: ['invoices'] })
       // « Marquer payée » enregistre le solde comme un paiement : la liste change.
       qc.invalidateQueries({ queryKey: ['payments', invoiceId] })
+    },
+  })
+
+  // Le réglage de comptabilisation automatique se lit ici parce que c'est lui qui
+  // dit si un document sans écriture est un oubli ou un choix : avec le réglage
+  // éteint, la comptabilité est tenue à la main et rien ne manque.
+  const company = useQuery<{ auto_post_invoices?: boolean }>({
+    queryKey: ['company-settings'],
+    queryFn:  () => settingsApi.getCompany().then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+
+  const postJournal = useMutation({
+    mutationFn: () => invoicesApi.postJournal(invoiceId!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoice', invoiceId] })
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['payments', invoiceId] })
+      qc.invalidateQueries({ queryKey: ['journal'] })
+      qc.invalidateQueries({ queryKey: ['integrity'] })
     },
   })
 
@@ -304,9 +331,16 @@ export function InvoiceDetailPage() {
   const creditable = invoice.document_type === 'invoice'
     && (invoice.status === 'sent' || invoice.status === 'paid')
   const totalRemaining = invoice.total_amount - invoice.amount_paid
+  // Envoyé ou encaissé, comptabilisation automatique active, et pourtant aucun
+  // lien vers une écriture : voir invoicing/reprise.go.
+  const unposted = invoice.document_type !== 'quote'
+    && (invoice.status === 'sent' || invoice.status === 'paid')
+    && !invoice.journal_entry_id
+    && invoice.total_amount !== 0
+    && company.data?.auto_post_invoices === true
 
   const busy = transition.isPending || convert.isPending
-    || setOutcome.isPending || creditNote.isPending
+    || setOutcome.isPending || creditNote.isPending || postJournal.isPending
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -378,6 +412,17 @@ export function InvoiceDetailPage() {
                   </button>
                 </>
               )}
+              {peutEcrire && unposted && (
+                <button
+                  onClick={() => ask(POST_COPY(t, invoice.invoice_number), () => postJournal.mutate())}
+                  disabled={postJournal.isPending}
+                  className="btn-primary btn-sm flex items-center gap-1.5"
+                  title={t('fd.infoBulleComptabiliser')}
+                >
+                  <BookCheck size={14} />
+                  {postJournal.isPending ? t('fd.comptabilisationEnCours') : t('fd.comptabiliserMaintenant')}
+                </button>
+              )}
               {peutEcrire && creditable && (
                 <button
                   onClick={() => ask(CREDIT_NOTE_COPY(t, invoice.invoice_number), () => creditNote.mutate())}
@@ -438,6 +483,9 @@ export function InvoiceDetailPage() {
       )}
       {creditNote.isError && (
         <ErrorBanner message={t('fd.erreurNoteCredit')} />
+      )}
+      {postJournal.isError && (
+        <ErrorBanner message={businessRefusal(postJournal.error) ?? t('fd.erreurComptabiliser')} />
       )}
 
       {/* Lien entre l'offre et la facture qui en découle. Les deux documents

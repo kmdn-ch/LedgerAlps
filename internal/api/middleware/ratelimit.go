@@ -71,6 +71,11 @@ type LoginRateLimiter struct {
 	paliers []time.Duration
 	now     func() time.Time // injectable for tests
 
+	// countAll : chaque requête est comptée, quel que soit son résultat, et rien ne
+	// remet le compteur à zéro. Pour les routes dont le COÛT est le problème (un
+	// appel sortant), pas la réussite d'un secret : voir NewRequestRateLimiter.
+	countAll bool
+
 	// onLockout, when set, is invoked once each time a client crosses the
 	// threshold. It lets the caller persist the event without giving this
 	// package a database dependency. Never called while holding the mutex.
@@ -117,6 +122,22 @@ func NewLoginRateLimiter(maxAttempts int, window time.Duration, paliers ...time.
 	}
 }
 
+// NewRequestRateLimiter limite le DÉBIT d'une route, succès compris.
+//
+// Le limiteur de connexion ne compte que les refus (401/403) et se remet à zéro
+// sur tout succès : c'est ce qu'il faut pour un mot de passe, qu'on ne veut pas
+// punir d'avoir fini par le trouver. Pour une route publique qui déclenche un
+// appel sortant, c'est exactement l'inverse de ce qu'il faut : ses succès (200)
+// effaçaient les échecs de la route de connexion quand les deux partageaient une
+// instance, et la limite des mots de passe tombait (audit 9, M-01 : 200 essais
+// acceptés sur 200). Ici chaque appel compte, aucun ne remet à zéro, et l'instance
+// est séparée de celle des identifiants.
+func NewRequestRateLimiter(maxRequests int, window time.Duration, paliers ...time.Duration) *LoginRateLimiter {
+	l := NewLoginRateLimiter(maxRequests, window, paliers...)
+	l.countAll = true
+	return l
+}
+
 // Middleware rejects requests from locked-out clients with 503-style backpressure
 // (429 + Retry-After), then inspects the response status to score the attempt.
 //
@@ -142,6 +163,10 @@ func (l *LoginRateLimiter) Middleware() gin.HandlerFunc {
 
 		c.Next()
 
+		if l.countAll {
+			l.recordFailure(key)
+			return
+		}
 		switch status := c.Writer.Status(); {
 		case status == http.StatusUnauthorized, status == http.StatusForbidden:
 			l.recordFailure(key)

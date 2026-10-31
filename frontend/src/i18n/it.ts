@@ -212,6 +212,7 @@ export const it: Catalogue = {
   'pay.intro': 'Selezioni le fatture da saldare: LedgerAlps produce un file XML da caricare nel suo e-banking. Compatibile con UBS, PostFinance, Raiffeisen e Banche cantonali.',
   'pay.compteADebiter': 'Conto da addebitare',
   'pay.aucuneAPayer': 'Nessuna fattura da pagare',
+  'pay.erreurLecture': 'L’elenco delle fatture da pagare non ha potuto essere letto.',
   'pay.aucuneAPayerAide': 'Qui compaiono solo le fatture fornitori contabilizzate. Una fattura ancora in bozza va prima contabilizzata: il costo deve esistere nei libri prima che la liquidità si muova.',
   'pay.toutSelectionner': 'Selezionare tutto',
   'pay.colFacture': 'Fattura',
@@ -530,6 +531,15 @@ export const it: Catalogue = {
   'fd.erreurStatut': 'Errore durante il cambio di stato.',
   'fd.erreurConversion': 'La conversione non è riuscita. Da questa offerta potrebbe essere già stata emessa una fattura.',
   'fd.erreurNoteCredit': 'La nota di credito è stata rifiutata: il totale accreditato supererebbe l’importo della fattura.',
+  'fd.comptabiliserMaintenant': 'Contabilizza ora',
+  'fd.comptabilisationEnCours': 'Contabilizzazione…',
+  'fd.infoBulleComptabiliser': 'Questo documento è inviato ma non figura nel giornale: mancano il ricavo e l’IVA dovuta nella contabilità.',
+  'fd.titreComptabiliser': 'Contabilizzare {numero} ora?',
+  'fd.consComptabiliser1': 'La scrittura di emissione (debitori / ricavi / IVA dovuta) viene registrata nel giornale alla data di emissione del documento.',
+  'fd.consComptabiliser2': 'Vengono contabilizzati anche gli incassi già registrati per questo documento senza scrittura.',
+  'fd.rassurComptabiliser': 'Se avete già registrato questa scrittura a mano, non proseguite: sarebbe raddoppiata. Una scrittura contabilizzata non si cancella più (CO art. 957a).',
+  'fd.confirmerComptabiliser': 'Contabilizza',
+  'fd.erreurComptabiliser': 'La contabilizzazione non è riuscita.',
   'fd.crediteeEnTotalite': 'Fattura accreditata per intero ({montant}). La fattura resta com’è stata emessa; la correzione vive nella nota di credito.',
   'fd.noteCreditAnnulantAvant': 'Nota di credito che annulla la',
   'fd.factureOrigine': 'fattura originaria',
@@ -715,7 +725,7 @@ export const it: Catalogue = {
   'us.retirerSecondFacteur': 'Rimuovere il secondo fattore',
   'us.pasDeSuppression': 'Un account si disattiva, non si elimina: le registrazioni e i documenti portano il nome del loro autore, e cancellarlo romperebbe la tracciabilità che il CO art. 957a esige. Un account disattivato non può più fare nulla, nemmeno con una sessione già aperta.',
   'us.ajouterCompte': 'Aggiungere un account',
-  'us.motDePasseAide': 'Almeno 8 caratteri. Trasmettetela alla persona per un canale diverso dall’e-mail con cui le annunciate l’accesso.',
+  'us.motDePasseAide': 'Almeno 12 caratteri, con minuscola, maiuscola e cifra. Trasmettetela alla persona per un canale diverso dall’e-mail con cui le annunciate l’accesso.',
   'us.creerCompte': 'Creare l’account',
 
   // ─── Diagnostic ───
@@ -1276,7 +1286,7 @@ export const it: Catalogue = {
 
   // ─── Écran de connexion — gabarit à deux panneaux ───
   'cx.garantieLocalTitre': 'Dati locali',
-  'cx.garantieLocalAide': 'Nessun cloud, nessun terzo, nessuna connessione in uscita',
+  'cx.garantieLocalAide': 'Nessun cloud, nessun terzo: i vostri dati restano su questo computer. Uniche connessioni in uscita: la verifica degli aggiornamenti (disattivabile) e la ricerca dell’azienda, su vostra richiesta',
   'cx.garantieLegaleTitre': 'Conformità CO e LPD',
   'cx.garantieLegaleAide': 'Tracciabilità delle registrazioni, conservazione dieci anni',
   'cx.afficherMotDePasse': 'Mostrare la password',

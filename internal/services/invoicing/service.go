@@ -142,20 +142,23 @@ type CreateInvoiceRequest struct {
 	Lines        []LineInput
 }
 
-// CreateInvoice creates an invoice or quote with totals rounded to 0.05 CHF (5-Rappen rule).
+// CreateInvoice creates an invoice or quote; its totals are exact to the centime (see computeTotals).
 // VAT rates are expressed as percentages (e.g. 8.1 for 8.1%).
 func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateInvoiceRequest) (*models.Invoice, error) {
 	if len(req.Lines) == 0 {
 		return nil, fmt.Errorf("invoice must have at least one line")
 	}
-	if req.Currency == "" {
-		req.Currency = "CHF"
-	}
 	if req.DocumentType == "" {
 		req.DocumentType = "invoice"
 	}
+	if err := s.validateDocument(ctx, &req); err != nil {
+		return nil, err
+	}
 
 	subtotal, vatAmount, total := computeTotals(req.Lines)
+	if err := checkTotals(subtotal, vatAmount, total); err != nil {
+		return nil, err
+	}
 
 	// Taux représentatif porté par l'en-tête de la facture.
 	//
@@ -236,7 +239,7 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
 	for _, l := range req.Lines {
 		// line_total is the HT amount after discount (before VAT).
-		lineTotal := l.Quantity * l.UnitPrice * (1 - l.DiscountPct/100)
+		lineTotal := lineBase(l)
 		if _, err := tx.ExecContext(ctx, insertLine,
 			db.NewID(), invoiceID, l.Description, l.Quantity, l.Unit, l.UnitPrice,
 			l.DiscountPct, l.VATRate, lineTotal, l.Sequence); err != nil {
@@ -334,10 +337,6 @@ func (s *Service) UpdateInvoiceBy(ctx context.Context, invoiceID string, req Cre
 		return nil, ErrDocumentNotDraft
 	}
 
-	if req.Currency == "" {
-		req.Currency = "CHF"
-	}
-
 	// Le type de document ne se DÉDUIT pas d'un champ omis. Il retombait sur
 	// « invoice », si bien qu'une modification sans ce champ transformait une
 	// note de crédit en facture : le lien vers la pièce corrigée survivait dans
@@ -356,8 +355,14 @@ func (s *Service) UpdateInvoiceBy(ctx context.Context, invoiceID string, req Cre
 	if req.DocumentType != currentType {
 		return nil, ErrDocumentTypeImmutable
 	}
+	if err := s.validateDocument(ctx, &req); err != nil {
+		return nil, err
+	}
 
 	subtotal, vatAmount, total := computeTotals(req.Lines)
+	if err := checkTotals(subtotal, vatAmount, total); err != nil {
+		return nil, err
+	}
 	primaryVATRate := headerVATRate(req.Lines)
 
 	// ── Garde-fou TVA ───────────────────────────────────────────────────────
@@ -405,7 +410,7 @@ func (s *Service) UpdateInvoiceBy(ctx context.Context, invoiceID string, req Cre
 		INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit, unit_price, discount_pct, vat_rate, line_total, sequence)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
 	for i, l := range req.Lines {
-		lineTotal := l.Quantity * l.UnitPrice * (1 - l.DiscountPct/100)
+		lineTotal := lineBase(l)
 		seq := l.Sequence
 		if seq == 0 {
 			seq = i + 1
@@ -696,16 +701,39 @@ func (s *Service) createReversalEntry(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// computeTotals calculates subtotal, VAT, and total (rounded to 0.05 CHF).
+// lineBase est le montant hors taxe d'une ligne après rabais, au centime.
+func lineBase(l LineInput) float64 {
+	return compliance.RoundCents(l.Quantity * l.UnitPrice * (1 - l.DiscountPct/100))
+}
+
+// computeTotals calcule HT, TVA et total d'un document, tous au centime.
 // VAT rates must be expressed as percentages (e.g. 8.1 for 8.1%).
+//
+//   - le HT est la somme des lignes, chacune arrondie au centime : c'est le
+//     chiffre que le PDF imprime ligne par ligne, il doit s'additionner ;
+//   - la TVA est calculée PAR TAUX sur la somme des bases de ce taux, puis arrondie
+//     au centime (LTVA : l'impôt se calcule sur la base, pas ligne par ligne) ;
+//   - le total est HT + TVA, exactement.
+//
+// Jusqu'à la 1.6.5 le total était arrondi à 5 centimes alors que le HT restait au
+// centime : débit (total) et crédits (HT + TVA) de l'écriture d'émission
+// différaient dès que HT + TVA n'était pas un multiple de 0,05, soit pour 80 %
+// des montants. L'écriture était refusée après l'envoi du document (audit 9,
+// A-01). Les 5 centimes sont une règle d'ENCAISSEMENT en espèces, pas de
+// facturation : voir compliance.RoundTo5Rappen.
 func computeTotals(lines []LineInput) (subtotal, vatAmount, total float64) {
+	vatByRate := map[float64]float64{}
 	for _, l := range lines {
-		base := l.Quantity * l.UnitPrice * (1 - l.DiscountPct/100)
+		base := lineBase(l)
 		subtotal += base
-		vatAmount += base * l.VATRate / 100
+		vatByRate[l.VATRate] += base * l.VATRate / 100
 	}
-	total = compliance.RoundTo5Rappen(subtotal + vatAmount)
-	vatAmount = compliance.RoundTo5Rappen(vatAmount)
+	for _, v := range vatByRate {
+		vatAmount += compliance.RoundCents(v)
+	}
+	subtotal = compliance.RoundCents(subtotal)
+	vatAmount = compliance.RoundCents(vatAmount)
+	total = compliance.RoundCents(subtotal + vatAmount)
 	return
 }
 
@@ -757,6 +785,12 @@ func (s *Service) ConvertQuote(ctx context.Context, quoteID, userID string, req 
 	}
 	if req.DueDate.IsZero() {
 		req.DueDate = req.IssueDate.AddDate(0, 0, 30)
+	}
+	if err := compliance.CheckBookingDate(req.IssueDate); err != nil {
+		return nil, err
+	}
+	if err := compliance.CheckBookingDate(req.DueDate); err != nil {
+		return nil, err
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -838,7 +872,7 @@ func (s *Service) ConvertQuote(ctx context.Context, quoteID, userID string, req 
 		INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit, unit_price, discount_pct, vat_rate, line_total, sequence)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
 	for _, l := range lines {
-		lineTotal := l.Quantity * l.UnitPrice * (1 - l.DiscountPct/100)
+		lineTotal := lineBase(l)
 		if _, err := tx.ExecContext(ctx, insertLine,
 			db.NewID(), invoiceID, l.Description, l.Quantity, l.Unit, l.UnitPrice,
 			l.DiscountPct, l.VATRate, lineTotal, l.Sequence); err != nil {
@@ -968,6 +1002,12 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 	if req.IssueDate.IsZero() {
 		req.IssueDate = time.Now()
 	}
+	if err := compliance.CheckBookingDate(req.IssueDate); err != nil {
+		return nil, err
+	}
+	if err := validateLines(req.Lines); err != nil {
+		return nil, err
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -976,12 +1016,14 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 	defer tx.Rollback()
 
 	loadQ := db.Rebind(`
-		SELECT COALESCE(document_type, 'invoice'), status, contact_id, currency, total_amount, invoice_number
+		SELECT COALESCE(document_type, 'invoice'), status, contact_id, currency, total_amount, invoice_number,
+		       subtotal_amount, vat_amount
 		FROM invoices WHERE id = ?`, s.usePostgres)
 	var docType, status, contactID, currency, invoiceNumber string
-	var invoiceTotal float64
+	var invoiceTotal, invoiceSubtotal, invoiceVAT float64
 	if err := tx.QueryRowContext(ctx, loadQ, invoiceID).Scan(
 		&docType, &status, &contactID, &currency, &invoiceTotal, &invoiceNumber,
+		&invoiceSubtotal, &invoiceVAT,
 	); err == sql.ErrNoRows {
 		return nil, ErrInvoiceNotFound
 	} else if err != nil {
@@ -998,7 +1040,8 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 	}
 
 	lines := req.Lines
-	if len(lines) == 0 {
+	fullCredit := len(lines) == 0
+	if fullCredit {
 		// Full credit: re-read the invoice's own lines so the correction
 		// matches what was billed, rather than trusting a caller's copy.
 		lines, err = s.loadLines(ctx, tx, invoiceID)
@@ -1011,6 +1054,13 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 	}
 
 	subtotal, vatAmount, total := computeTotals(lines)
+	if fullCredit {
+		// Un crédit intégral REPREND les montants de la facture, il ne les recalcule
+		// pas : avant la 1.6.6 les totaux étaient arrondis à 5 centimes, et une
+		// ancienne facture recalculée au centime aurait donné une note de crédit
+		// d'un ou deux centimes d'écart, qui ne la compense plus au journal.
+		subtotal, vatAmount, total = invoiceSubtotal, invoiceVAT, invoiceTotal
+	}
 
 	// Guard the total against the invoice, counting credit notes already
 	// issued. Cancelled ones do not count — they credit nothing.
@@ -1021,10 +1071,10 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 	if err := tx.QueryRowContext(ctx, sumQ, invoiceID).Scan(&alreadyCredited); err != nil {
 		return nil, fmt.Errorf("sum existing credit notes: %w", err)
 	}
-	// One rappen of tolerance: totals are rounded to 0.05 CHF, so crediting an
-	// invoice line by line can land a couple of centimes above the original
-	// without anyone over-crediting anything.
-	if alreadyCredited+total > invoiceTotal+0.01 {
+	// Cinq centimes de tolérance : les factures d'avant la 1.6.6 portent un total
+	// arrondi à 5 centimes, et les créditer ligne à ligne peut dépasser l'original
+	// de quelques centimes sans que personne ait crédité trop.
+	if alreadyCredited+total > invoiceTotal+0.05 {
 		return nil, fmt.Errorf("%w: %.2f déjà crédités + %.2f demandés > %.2f facturés (%s)",
 			ErrCreditExceedsInvoice, alreadyCredited, total, invoiceTotal, invoiceNumber)
 	}
@@ -1057,7 +1107,7 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 		INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit, unit_price, discount_pct, vat_rate, line_total, sequence)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
 	for _, l := range lines {
-		lineTotal := l.Quantity * l.UnitPrice * (1 - l.DiscountPct/100)
+		lineTotal := lineBase(l)
 		if _, err := tx.ExecContext(ctx, insertLine,
 			db.NewID(), creditNoteID, l.Description, l.Quantity, l.Unit, l.UnitPrice,
 			l.DiscountPct, l.VATRate, lineTotal, l.Sequence); err != nil {

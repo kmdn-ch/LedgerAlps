@@ -213,6 +213,7 @@ export const de: Catalogue = {
   'pay.intro': 'Wählen Sie die zu begleichenden Rechnungen: LedgerAlps erzeugt eine XML-Datei, die Sie in Ihrem E-Banking hochladen. Kompatibel mit UBS, PostFinance, Raiffeisen und Kantonalbanken.',
   'pay.compteADebiter': 'Belastungskonto',
   'pay.aucuneAPayer': 'Keine Rechnung zu bezahlen',
+  'pay.erreurLecture': 'Die Liste der zu bezahlenden Rechnungen konnte nicht gelesen werden.',
   'pay.aucuneAPayerAide': 'Hier erscheinen nur verbuchte Kreditorenrechnungen. Eine Rechnung im Entwurf muss zuerst verbucht werden: der Aufwand muss in den Büchern stehen, bevor Geld fliesst.',
   'pay.toutSelectionner': 'Alle auswählen',
   'pay.colFacture': 'Rechnung',
@@ -531,6 +532,15 @@ export const de: Catalogue = {
   'fd.erreurStatut': 'Fehler beim Statuswechsel.',
   'fd.erreurConversion': 'Die Umwandlung ist fehlgeschlagen. Aus dieser Offerte ist vielleicht bereits eine Rechnung entstanden.',
   'fd.erreurNoteCredit': 'Die Gutschrift wurde abgelehnt: der gutgeschriebene Gesamtbetrag würde den Rechnungsbetrag übersteigen.',
+  'fd.comptabiliserMaintenant': 'Jetzt verbuchen',
+  'fd.comptabilisationEnCours': 'Verbuchung…',
+  'fd.infoBulleComptabiliser': 'Dieses Dokument ist versendet, steht aber nicht im Journal: Ertrag und geschuldete MWST fehlen in der Buchhaltung.',
+  'fd.titreComptabiliser': '{numero} jetzt verbuchen?',
+  'fd.consComptabiliser1': 'Die Ausgangsbuchung (Debitoren / Ertrag / geschuldete MWST) wird zum Ausstellungsdatum des Dokuments ins Journal gebucht.',
+  'fd.consComptabiliser2': 'Bereits erfasste Zahlungen dieses Dokuments ohne Buchung werden ebenfalls verbucht.',
+  'fd.rassurComptabiliser': 'Wenn Sie diese Buchung bereits von Hand erfasst haben, fahren Sie nicht fort: sie würde doppelt. Eine verbuchte Buchung lässt sich nicht mehr löschen (OR Art. 957a).',
+  'fd.confirmerComptabiliser': 'Verbuchen',
+  'fd.erreurComptabiliser': 'Die Verbuchung ist fehlgeschlagen.',
   'fd.crediteeEnTotalite': 'Rechnung vollständig gutgeschrieben ({montant}). Die Rechnung bleibt so, wie sie ausgestellt wurde; die Korrektur lebt in der Gutschrift.',
   'fd.noteCreditAnnulantAvant': 'Gutschrift, welche die',
   'fd.factureOrigine': 'ursprüngliche Rechnung',
@@ -716,7 +726,7 @@ export const de: Catalogue = {
   'us.retirerSecondFacteur': 'Zweiten Faktor entfernen',
   'us.pasDeSuppression': 'Ein Konto wird deaktiviert, nicht gelöscht: Buchungen und Belege tragen den Namen ihres Urhebers, und ihn zu löschen würde die von OR Art. 957a verlangte Nachvollziehbarkeit brechen. Ein deaktiviertes Konto kann nichts mehr tun, auch nicht mit einer bereits offenen Sitzung.',
   'us.ajouterCompte': 'Konto hinzufügen',
-  'us.motDePasseAide': 'Mindestens 8 Zeichen. Übermitteln Sie es der Person über einen anderen Kanal als die E-Mail, mit der Sie den Zugang ankündigen.',
+  'us.motDePasseAide': 'Mindestens 12 Zeichen, mit Klein- und Grossbuchstaben und einer Ziffer. Übermitteln Sie es der Person über einen anderen Kanal als die E-Mail, mit der Sie den Zugang ankündigen.',
   'us.creerCompte': 'Konto erstellen',
 
   // ─── Diagnostic ───
@@ -1277,7 +1287,7 @@ export const de: Catalogue = {
 
   // ─── Écran de connexion — gabarit à deux panneaux ───
   'cx.garantieLocalTitre': 'Lokale Daten',
-  'cx.garantieLocalAide': 'Keine Cloud, keine Dritten, keine ausgehende Verbindung',
+  'cx.garantieLocalAide': 'Keine Cloud, keine Dritten: Ihre Daten bleiben auf diesem Computer. Einzige ausgehende Verbindungen: die Update-Prüfung (abschaltbar) und die Firmensuche, auf Ihre Anfrage',
   'cx.garantieLegaleTitre': 'Konformität OR und DSG',
   'cx.garantieLegaleAide': 'Nachvollziehbarkeit der Buchungen, zehn Jahre Aufbewahrung',
   'cx.afficherMotDePasse': 'Kennwort anzeigen',

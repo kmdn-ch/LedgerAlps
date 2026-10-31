@@ -144,3 +144,36 @@ func decouper(route string) (methode, chemin string) {
 	}
 	return route, ""
 }
+
+// Audit 9, M-03 : le filtre global refusait TOUT POST à la lecture seule, y compris
+// le lot de PDF et la déclaration TVA, qui ne modifient rien et que docs/DROITS.md
+// lui accorde. La liste des POST de lecture est explicite ; tout autre POST reste
+// refusé.
+func TestUnLecteurAtteintLesPOSTQuiNeModifientRien(t *testing.T) {
+	database, a := authzDB(t)
+	addUser(t, database, "lecteur", authz.RoleViewer, true)
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	api := r.Group("/api/v1")
+	api.Use(RequireAuth(secret))
+	api.Use(a.DenyWritesWithoutPermission())
+	for _, chemin := range []string{
+		"/invoices/bulk-pdf", "/vat/declaration", // lecture
+		"/invoices/:id/transition", "/payments", "/invoices", // écriture
+	} {
+		api.POST(chemin, func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
+	}
+
+	for chemin, want := range map[string]int{
+		"/api/v1/invoices/bulk-pdf":     http.StatusOK,
+		"/api/v1/vat/declaration":       http.StatusOK,
+		"/api/v1/invoices/x/transition": http.StatusForbidden,
+		"/api/v1/payments":              http.StatusForbidden,
+		"/api/v1/invoices":              http.StatusForbidden,
+	} {
+		if w := call(r, http.MethodPost, chemin, tokenFor(t, "lecteur")); w.Code != want {
+			t.Errorf("POST %s : code %d, attendu %d", chemin, w.Code, want)
+		}
+	}
+}

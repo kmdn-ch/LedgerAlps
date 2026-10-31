@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
 
@@ -91,6 +92,13 @@ func LookupFiscalPeriod(ctx context.Context, q execQuerier, usePostgres bool, da
 // La fonction renvoie ErrPeriodClosed si l'exercice trouvé est clos : c'est le
 // verrouillage de période, et il vaut aussi pour une écriture antidatée.
 func EnsureFiscalPeriod(ctx context.Context, q execQuerier, usePostgres bool, date time.Time) (FiscalPeriod, error) {
+	// Avant tout : une date absurde ne crée pas d'exercice. « 26 » tapé pour
+	// l'année donnait `26-01-01`, que la base ne relisait plus — l'écran des
+	// exercices et l'archive légale répondaient 500, sans réparation possible
+	// puisque l'écriture comptabilisée à cette date ne se supprime pas (A-03).
+	if err := compliance.CheckBookingDate(date); err != nil {
+		return FiscalPeriod{}, err
+	}
 	p, found, err := LookupFiscalPeriod(ctx, q, usePostgres, date)
 	if err != nil {
 		return FiscalPeriod{}, err
@@ -110,7 +118,7 @@ func EnsureFiscalPeriod(ctx context.Context, q execQuerier, usePostgres bool, da
 		VALUES (?, ?, ?, ?, 0)`, usePostgres)
 
 	if _, err := q.ExecContext(ctx, insert, id, name,
-		fmt.Sprintf("%d-01-01", year), fmt.Sprintf("%d-12-31", year)); err != nil {
+		fmt.Sprintf("%04d-01-01", year), fmt.Sprintf("%04d-12-31", year)); err != nil {
 		// `name` est UNIQUE : une création concurrente, ou un exercice portant
 		// déjà ce nom sur d'autres dates, nous ramène ici. On relit plutôt que
 		// d'échouer — l'objectif est d'attacher l'écriture, pas de gagner la course.

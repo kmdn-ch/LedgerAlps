@@ -142,8 +142,8 @@ func collectYears(database *sql.DB, usePostgres bool) ([]int, error) {
 // exercice juillet–juin ne doit pas se voir ajouter une année civile qui le
 // chevaucherait.
 func ensureCalendarYear(database *sql.DB, usePostgres bool, year int) (bool, error) {
-	jan := fmt.Sprintf("%d-01-01", year)
-	dec := fmt.Sprintf("%d-12-31", year)
+	jan := fmt.Sprintf("%04d-01-01", year)
+	dec := fmt.Sprintf("%04d-12-31", year)
 
 	var n int
 	checkQ := Rebind(

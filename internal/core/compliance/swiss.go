@@ -28,6 +28,40 @@ func RoundTo5Rappen(amount float64) float64 {
 	return r
 }
 
+// RoundCents arrondit un montant au centime, les demis à l'écart de zéro.
+//
+// C'est l'arrondi des MONTANTS FACTURÉS : le total d'une facture est HT + TVA au
+// centime, sans les 5 centimes de RoundTo5Rappen. Cette règle-ci est celle des
+// paiements en espèces, que le logiciel n'encaisse pas. Arrondir une facture
+// à 5 centimes cassait l'équilibre de son écriture (débit = total arrondi,
+// crédits = HT + TVA) pour 80 % des montants au centime près.
+//
+// Le centime se décide sur des millionièmes ENTIERS : 1.005 * 100 vaut
+// 100.49999999999999 en virgule flottante, et math.Round(v*100) rendrait 1.00 pour
+// un demi-centime qui doit monter. Passer d'abord par le millionième efface ce
+// bruit-là sans déplacer un vrai montant.
+func RoundCents(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return v
+	}
+	// Hors de ce que les millionièmes entiers savent porter (±9·10¹²), un montant
+	// est déjà au-delà de toute valeur comptable : repli sur l'arrondi simple.
+	if math.Abs(v) >= 9e12 {
+		return math.Round(v*100) / 100
+	}
+	micro := int64(math.Round(v * 1e6))
+	var c int64
+	if micro >= 0 {
+		c = (micro + 5000) / 10000
+	} else {
+		c = -((-micro + 5000) / 10000)
+	}
+	if c == 0 {
+		return 0 // pas de « -0.00 » pour un petit négatif
+	}
+	return float64(c) / 100
+}
+
 // ─── TVA rates (Swiss 2024) ───────────────────────────────────────────────────
 
 const (

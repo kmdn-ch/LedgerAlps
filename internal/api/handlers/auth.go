@@ -261,7 +261,9 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	}
 
 	claims, err := security.ParseToken(h.cfg.JWTSecret, rawToken)
-	if err != nil {
+	// Un jeton d'accès ou d'attente de second facteur n'est pas un jeton de
+	// rafraîchissement : le présenter ici ne doit pas redonner de session.
+	if err != nil || claims.Typ != security.TokenTypeRefresh {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "jeton de rafraîchissement invalide ou expiré"})
 		return
 	}
@@ -336,7 +338,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	claims, err := security.ParseToken(h.cfg.JWTSecret, rawToken)
-	if err != nil {
+	if err != nil || claims.Typ != security.TokenTypeRefresh {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "jeton de rafraîchissement invalide ou expiré"})
 		return
 	}
@@ -382,6 +384,14 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 	var req bootstrapRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		refus(c, http.StatusUnprocessableEntity, err)
+		return
+	}
+	// Le premier administrateur est le compte le plus puissant de l'installation :
+	// sa politique est celle des autres (audit 9, F-02). Huit caractères sans
+	// complexité suffisaient ici, douze avec complexité partout ailleurs.
+	if err := ValidateUserPassword(req.Password); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "mot de passe trop faible — " + err.Error()})
 		return
 	}
 

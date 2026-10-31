@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
@@ -124,6 +125,14 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 	if !end.After(start) {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "la date de fin doit suivre la date de début"})
 		return
+	}
+	// Un exercice « 0026 » ou « 9999 » rendrait les écrans d'exercices et l'archive
+	// légale illisibles (audit 9, A-03).
+	for _, d := range []time.Time{start, end} {
+		if err := compliance.CheckBookingDate(d); err != nil {
+			refus(c, http.StatusUnprocessableEntity, err)
+			return
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)

@@ -44,24 +44,57 @@ export type InvoiceFormData = z.infer<typeof invoiceFormSchema>
 export type InvoiceFormInput = z.input<typeof invoiceFormSchema>
 
 /**
- * computeLineTotals calcule base HT, TVA et total d'une ligne.
+ * roundCents arrondit au centime, les demis à l'écart de zéro : c'est
+ * `compliance.RoundCents` du paquet Go `internal/core/compliance`.
  *
- * L'arrondi au 5 rappen (`* 20) / 20`) reproduit `RoundTo5Rappen` du paquet Go
- * `internal/core/compliance`. Cette duplication-là est structurelle — le même
- * calcul doit exister des deux côtés du réseau pour que l'aperçu à la saisie
- * corresponde au document émis — mais elle n'a pas à être répétée deux fois
- * DANS le frontend.
+ * Le centime se décide sur des millionièmes entiers : 1.005 * 100 vaut
+ * 100.49999999999999 en virgule flottante, et Math.round(v * 100) rendrait 1.00
+ * pour un demi-centime qui doit monter. Cette duplication-là est structurelle —
+ * le même calcul doit exister des deux côtés du réseau pour que l'aperçu à la
+ * saisie corresponde au document émis — mais elle n'a pas à être répétée deux
+ * fois DANS le frontend.
+ */
+export function roundCents(v: number): number {
+  if (!Number.isFinite(v)) return v
+  const centimes = Math.floor((Math.round(Math.abs(v) * 1e6) + 5000) / 10000)
+  if (centimes === 0) return 0
+  return (v < 0 ? -centimes : centimes) / 100
+}
+
+/**
+ * computeLineTotals calcule base HT, TVA et total d'une ligne, au centime.
+ * Les totaux du DOCUMENT ne sont pas la somme de ces TVA-là : voir
+ * `computeDocumentTotals`.
  */
 export function computeLineTotals(line: Partial<InvoiceFormInput['lines'][0]>) {
   const qty      = Number(line.quantity     ?? 1)
   const price    = Number(line.unit_price   ?? 0)
   const discount = Number(line.discount_pct ?? 0) / 100
   const vatRate  = Number(line.vat_rate     ?? 8.1) / 100
-  const base     = qty * price * (1 - discount)
-  const vat      = Math.round(base * vatRate * 20) / 20  // arrondi 5 rappen
-  return {
-    base:  Math.round(base * 100) / 100,
-    vat:   Math.round(vat  * 100) / 100,
-    total: Math.round((base + vat) * 100) / 100,
-  }
+  const base     = roundCents(qty * price * (1 - discount))
+  const vat      = roundCents(base * vatRate)
+  return { base, vat, total: roundCents(base + vat) }
+}
+
+/**
+ * computeDocumentTotals reproduit `computeTotals` du service Go : HT = somme des
+ * lignes arrondies, TVA calculée PAR TAUX sur la somme des bases de ce taux puis
+ * arrondie, total = HT + TVA exactement. Depuis la 1.6.6 le total n'est plus arrondi
+ * à 5 centimes : la facture, son QR et son écriture au journal portent le même
+ * montant au centime près.
+ */
+export function computeDocumentTotals(lines: Partial<InvoiceFormInput['lines'][0]>[]) {
+  const parLigne = lines.map(computeLineTotals)
+  const tvaParTaux = new Map<number, number>()
+  let subtotal = 0
+  lines.forEach((l, i) => {
+    const taux = Number(l.vat_rate ?? 8.1)
+    subtotal += parLigne[i].base
+    tvaParTaux.set(taux, (tvaParTaux.get(taux) ?? 0) + (parLigne[i].base * taux) / 100)
+  })
+  let vat = 0
+  tvaParTaux.forEach(v => { vat += roundCents(v) })
+  subtotal = roundCents(subtotal)
+  vat = roundCents(vat)
+  return { lines: parLigne, subtotal, vat, total: roundCents(subtotal + vat) }
 }

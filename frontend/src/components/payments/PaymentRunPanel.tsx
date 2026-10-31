@@ -172,7 +172,7 @@ export function PaymentRunPanel() {
       )}
 
       {payable.isLoading && <LoadingSpinner />}
-      {payable.isError && <ErrorBanner message="La liste des factures à payer n'a pas pu être lue." />}
+      {payable.isError && <ErrorBanner message={t('pay.erreurLecture')} />}
 
       {!payable.isLoading && items.length === 0 && (
         <EmptyState

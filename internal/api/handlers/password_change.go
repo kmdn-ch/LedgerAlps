@@ -32,11 +32,8 @@ package handlers
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"net/http"
-	"strings"
 	"time"
-	"unicode"
 
 	"github.com/gin-gonic/gin"
 	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
@@ -45,43 +42,12 @@ import (
 )
 
 // MinUserPasswordLength est le plancher d'un mot de passe de connexion choisi
-// par son titulaire.
-const MinUserPasswordLength = 12
+// par son titulaire. La règle vit dans security, partagée avec l'assistant
+// d'installation (audit 9, F-02) ; ce nom reste pour les appelants existants.
+const MinUserPasswordLength = security.MinPasswordLength
 
 // ValidateUserPassword dit pourquoi un mot de passe est trop faible, ou rien.
-//
-// Le message nomme ce qui manque. « Mot de passe trop faible » oblige à
-// deviner, et la plupart des gens devinent en ajoutant un chiffre à la fin.
-func ValidateUserPassword(p string) error {
-	var lower, upper, digit bool
-	for _, r := range p {
-		switch {
-		case unicode.IsLower(r):
-			lower = true
-		case unicode.IsUpper(r):
-			upper = true
-		case unicode.IsDigit(r):
-			digit = true
-		}
-	}
-	var missing []string
-	if len([]rune(p)) < MinUserPasswordLength {
-		missing = append(missing, fmt.Sprintf("%d caractères au minimum", MinUserPasswordLength))
-	}
-	if !lower {
-		missing = append(missing, "une minuscule")
-	}
-	if !upper {
-		missing = append(missing, "une majuscule")
-	}
-	if !digit {
-		missing = append(missing, "un chiffre")
-	}
-	if len(missing) == 0 {
-		return nil
-	}
-	return fmt.Errorf("il manque : %s", strings.Join(missing, ", "))
-}
+func ValidateUserPassword(p string) error { return security.ValidatePasswordPolicy(p) }
 
 // ChangePassword POST /api/v1/auth/change-password
 //

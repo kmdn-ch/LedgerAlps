@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -35,6 +36,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kmdn-ch/ledgeralps/internal/core/security"
 	"github.com/kmdn-ch/ledgeralps/internal/core/zefix"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
@@ -706,8 +708,8 @@ const setupHTML = `<!DOCTYPE html>
     <input type="email" id="email" placeholder="admin@entreprise.ch" autocomplete="email" required>
 
     <label for="password">Mot de passe <span class="req">*</span></label>
-    <input type="password" id="password" placeholder="Min. 8 caractères" minlength="8" autocomplete="new-password" required>
-    <p class="hint">Minimum 8 caractères. Vous l'utiliserez pour vous connecter à LedgerAlps.</p>
+    <input type="password" id="password" placeholder="12 caractères min., avec majuscule, minuscule et chiffre" minlength="12" autocomplete="new-password" required>
+    <p class="hint">Au moins 12 caractères, dont une minuscule, une majuscule et un chiffre. Vous l'utiliserez pour vous connecter à LedgerAlps.</p>
 
     <!-- ── Paramètres avancés (optionnel) ─────────────────────────────── -->
     <button type="button" class="advanced-toggle" onclick="toggleAdvanced()">&#9660; Paramètres avancés</button>
@@ -818,6 +820,9 @@ const setupHTML = `<!DOCTYPE html>
 </div>
 
 <script>
+// Jeton de cette session d'installation, posé par le serveur dans la page : il
+// accompagne chaque appel et ne vit que dans cet onglet (voir gardeAssistant).
+const SETUP_TOKEN = {{.}};
 // ── Navigation par étapes ───────────────────────────────────────
 //
 // L'étape 1 garde ses champs "required" : passer à la suite sans les remplir
@@ -954,7 +959,9 @@ function toggleAdvanced() {
       try {
         // The wizard runs on a different port than the API server, so we
         // call the wizard's own /uid-lookup proxy which forwards to the server.
-        const resp = await fetch('/uid-lookup?che=' + encodeURIComponent(val));
+        const resp = await fetch('/uid-lookup?che=' + encodeURIComponent(val), {
+          headers: { 'X-Setup-Token': SETUP_TOKEN },
+        });
         const data = await resp.json();
         if (!resp.ok) {
           setHint(data.error || 'Non trouvé dans le registre.', false);
@@ -1019,7 +1026,7 @@ document.getElementById('setupForm').addEventListener('submit', async function(e
   try {
     const resp = await fetch('/setup', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Setup-Token': SETUP_TOKEN },
       body: JSON.stringify({
         firstName, lastName, email, password, port,
         companyName, legalForm, cheNumber,
@@ -1092,26 +1099,39 @@ func runSetupWizard() {
 	if err != nil {
 		logFatal("cannot start setup wizard: %v", err)
 	}
-	wizardURL := fmt.Sprintf("http://127.0.0.1:%d", ln.Addr().(*net.TCPAddr).Port)
+	hostPort := fmt.Sprintf("127.0.0.1:%d", ln.Addr().(*net.TCPAddr).Port)
+
+	// Jeton de cette session d'installation : voir gardeAssistant. Sans lui, une
+	// page web ouverte pendant l'installation pouvait balayer les ports de
+	// 127.0.0.1 et poster une configuration (audit 9, M-04).
+	jeton, err := generateSecret()
+	if err != nil {
+		logFatal("cannot generate setup token: %v", err)
+	}
+	// Le jeton voyage dans l'adresse ouverte par le lanceur, et dans elle seule.
+	wizardURL := "http://" + hostPort + "/?t=" + jeton
 
 	done := make(chan struct{})
 
 	mux := http.NewServeMux()
 
 	// Serve the setup HTML page.
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", gardeAssistant(hostPort, jeton, true, func(w http.ResponseWriter, r *http.Request) {
 		t, _ := template.New("setup").Parse(setupHTML)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = t.Execute(w, nil)
-	})
+		// Rien ne doit garder l'adresse (jeton compris) ni la page en cache partagé.
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		_ = t.Execute(w, jeton)
+	}))
 
 	// Proxy UID/IDE lookup to the ZEFIX registry — avoids CORS from the browser.
-	mux.HandleFunc("/uid-lookup", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/uid-lookup", gardeAssistant(hostPort, jeton, false, func(w http.ResponseWriter, r *http.Request) {
 		proxyUIDLookup(w, r)
-	})
+	}))
 
 	// Handle setup form submission.
-	mux.HandleFunc("/setup", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/setup", gardeAssistant(hostPort, jeton, false, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -1140,8 +1160,11 @@ func runSetupWizard() {
 			jsonError(w, "Adresse e-mail invalide.", http.StatusBadRequest)
 			return
 		}
-		if len(req.Password) < 8 {
-			jsonError(w, "Le mot de passe doit contenir au moins 8 caractères.", http.StatusBadRequest)
+		// La politique de l'application, pas une règle à part : un mot de passe
+		// accepté ici puis refusé par le serveur à l'amorçage laisserait une
+		// installation à moitié faite (audit 9, F-02).
+		if err := security.ValidatePasswordPolicy(req.Password); err != nil {
+			jsonError(w, "Mot de passe trop faible — "+err.Error()+".", http.StatusBadRequest)
 			return
 		}
 		// Le port vient du formulaire, donc du réseau. Il finira dans une URL
@@ -1271,7 +1294,7 @@ func runSetupWizard() {
 			time.Sleep(3 * time.Second)
 			close(done)
 		}()
-	})
+	}))
 
 	srv := &http.Server{Handler: mux}
 
@@ -1288,9 +1311,58 @@ func runSetupWizard() {
 		openBrowser(wizardURL)
 	}()
 
-	logInfo("Setup wizard listening on %s", wizardURL)
+	logInfo("Setup wizard listening on %s", hostPort)
 	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 		logFatal("wizard server error: %v", err)
+	}
+}
+
+// gardeAssistant protège les routes de l'assistant d'installation.
+//
+// L'assistant écoute sur 127.0.0.1, port aléatoire, le temps de l'installation.
+// « Local » ne veut pas dire « fermé » : n'importe quelle page web ouverte dans le
+// navigateur au même moment peut balayer les ports de la machine et envoyer un
+// POST sans réponse lisible — le navigateur ne bloque pas une requête simple,
+// seulement la lecture de sa réponse — et `/setup` fabriquait alors l'administrateur
+// de son choix (audit 9, M-04). Trois contrôles, tous nécessaires :
+//
+//   - Host : exactement l'adresse d'écoute. Une page qui fait pointer son propre
+//     nom de domaine vers 127.0.0.1 (« DNS rebinding ») envoie un autre Host.
+//   - Origin, quand le navigateur en joint un : celle de l'assistant, pas une
+//     autre. Un fetch d'une autre origine en porte une.
+//   - un jeton aléatoire, créé au lancement et connu de la seule page que le
+//     lanceur ouvre. Un en-tête personnalisé déclenche en outre une pré-requête
+//     CORS que l'assistant ne satisfait jamais.
+//
+// La page elle-même (`page` vrai) reçoit le jeton dans la query-string ; les
+// autres routes dans l'en-tête X-Setup-Token.
+func gardeAssistant(hostPort, jeton string, page bool, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		refuser := func(msg string) {
+			w.Header().Set("Cache-Control", "no-store")
+			http.Error(w, msg, http.StatusForbidden)
+		}
+		if r.Host != hostPort {
+			refuser("adresse non autorisée : utilisez le lien ouvert par LedgerAlps")
+			return
+		}
+		if o := r.Header.Get("Origin"); o != "" && o != "http://"+hostPort {
+			refuser("origine non autorisée")
+			return
+		}
+		fourni := r.Header.Get("X-Setup-Token")
+		if page {
+			if r.URL.Path != "/" {
+				http.NotFound(w, r)
+				return
+			}
+			fourni = r.URL.Query().Get("t")
+		}
+		if subtle.ConstantTimeCompare([]byte(fourni), []byte(jeton)) != 1 {
+			refuser("lien d'installation invalide : relancez LedgerAlps pour en obtenir un nouveau")
+			return
+		}
+		next(w, r)
 	}
 }
 

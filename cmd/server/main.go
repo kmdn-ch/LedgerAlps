@@ -111,6 +111,12 @@ func main() {
 	}
 	fmt.Println("LedgerAlps: migrations up-to-date.")
 
+	// Bornes d'exercice illisibles (année saisie sur deux chiffres) : voir
+	// db.RepairFiscalYearDates. Avant le rattachement, qui relit les exercices.
+	if err := db.RepairFiscalYearDates(database, cfg.UsePostgres()); err != nil {
+		log.Fatalf("FATAL: fiscal year repair failed: %v", err)
+	}
+
 	// Rattachement des écritures et documents à leur exercice comptable. Le
 	// champ n'était renseigné nulle part avant la v1.4.6, si bien qu'une base
 	// existante contient des lignes orphelines — invisibles à la clôture, qui
@@ -279,6 +285,8 @@ func main() {
 	// doit ressortir dans la langue demandée. Voir middleware/langue.go pour
 	// la raison de traduire ici plutôt qu'aux deux cents endroits qui refusent.
 	r.Use(middleware.Langue())
+	// Refuse un Host étranger : le « rebinding » d'un site hostile (audit 9, F-06).
+	r.Use(middleware.HostGuard(cfg.Host, strings.Split(cfg.AllowedOrigins, ",")...))
 	if cfg.Debug {
 		r.Use(gin.Logger())
 	}
@@ -315,8 +323,19 @@ func main() {
 	loginLimiter.OnLockout(func(ip string, until time.Time) {
 		handlers.RecordLoginLockout(database, cfg.UsePostgres(), ip, until)
 	})
+	// Le rafraîchissement a SON compteur : le frontend l'appelle en routine, et un
+	// succès ne doit pas effacer les échecs de mot de passe de la même adresse
+	// (audit 9, M-01).
+	refreshLimiter := middleware.NewLoginRateLimiter(
+		middleware.DefaultLoginMaxAttempts,
+		middleware.DefaultLoginWindow,
+		middleware.DefaultLoginPaliers...,
+	)
+	refreshLimiter.OnLockout(func(ip string, until time.Time) {
+		handlers.RecordLoginLockout(database, cfg.UsePostgres(), ip, until)
+	})
 	v1.POST("/auth/login", loginLimiter.Middleware(), authHandler.Login)
-	v1.POST("/auth/refresh", loginLimiter.Middleware(), authHandler.Refresh)
+	v1.POST("/auth/refresh", refreshLimiter.Middleware(), authHandler.Refresh)
 	v1.POST("/auth/logout", authHandler.Logout)
 	// Hors du groupe filtré : c'est la seule action qu'un compte au mot de passe
 	// temporaire puisse faire, et la placer dans le groupe la bloquerait
@@ -360,17 +379,12 @@ func main() {
 	// Voir internal/api/handlers/auth.go pour le détail.
 	v1.POST("/auth/bootstrap", loginLimiter.Middleware(), authHandler.Bootstrap) // one-shot: creates first admin user
 
-	// Swiss registry proxy — public (called from setup wizard, no auth yet)
-	// Limité comme les routes d'authentification. C'est le seul point public
-	// qui déclenche un appel SORTANT — jusqu'à trois requêtes vers
-	// zefix.admin.ch, avec vingt secondes de budget chacune. Rien n'empêchait
-	// un tiers de le faire émettre en boucle depuis une installation censée
-	// rester hors ligne, ni d'y immobiliser des goroutines.
-	//
-	// Il n'y a PAS de SSRF ici : l'entrée est validée contre « ^CHE… » avant
-	// toute construction d'URL, et l'appelant ne choisit ni l'hôte ni le
-	// chemin. Ce qu'on borne est le débit, pas la destination.
-	v1.GET("/uid-lookup", loginLimiter.Middleware(), handlers.UIDLookup)
+	// La recherche au registre IDE (/uid-lookup) est dans le groupe PROTÉGÉ, plus
+	// bas. Elle était publique et partageait le limiteur des mots de passe : ses
+	// succès remettaient les échecs de connexion à zéro (M-01), et n'importe qui
+	// atteignant le port pouvait lui faire émettre des appels vers zefix.admin.ch
+	// depuis une installation censée rester hors ligne (F-03). L'assistant
+	// d'installation a son propre relais et n'en dépend pas.
 
 	// Protected routes — JWT required
 	authorizer := middleware.NewAuthorizer(database, cfg.UsePostgres(), cfg.JWTSecret)
@@ -455,6 +469,15 @@ func main() {
 	api.POST("/supplier-invoices/cancel",
 		authorizer.Require(authz.PermWriteAccounting), sih.CancelSupplierInvoices)
 
+	// Recherche d'entreprise au registre IDE : authentifiée, et chaque appel est
+	// compté — c'est le seul point qui déclenche un appel SORTANT (jusqu'à trois
+	// requêtes vers zefix.admin.ch, vingt secondes de budget chacune). Il n'y a PAS
+	// de SSRF : l'entrée est validée contre « ^CHE… » avant toute construction
+	// d'URL et l'appelant ne choisit ni l'hôte ni le chemin. Ce qu'on borne est le
+	// débit, pas la destination.
+	lookupLimiter := middleware.NewRequestRateLimiter(30, 10*time.Minute)
+	api.GET("/uid-lookup", authorizer.Require(authz.PermRead), lookupLimiter.Middleware(), handlers.UIDLookup)
+
 	api.GET("/invoices", ih.ListInvoices)
 	api.GET("/invoices/:id", ih.GetInvoice)
 	api.GET("/invoices/:id/pdf", ih.GetInvoicePDF)
@@ -469,6 +492,8 @@ func main() {
 	api.POST("/invoices", authorizer.Require(authz.PermWriteDocuments), ih.CreateInvoice)
 	api.PATCH("/invoices/:id", authorizer.Require(authz.PermWriteDocuments), ih.UpdateInvoice)
 	api.POST("/invoices/:id/transition", authorizer.Require(authz.PermWriteAccounting), ih.TransitionInvoice)
+	// Reprise de la comptabilisation d'un document envoyé dont l'écriture manque.
+	api.POST("/invoices/:id/post-journal", authorizer.Require(authz.PermWriteAccounting), ih.PostInvoiceJournal)
 	// Quote lifecycle: an offer becomes an invoice by producing one, not by
 	// mutating into one — both documents are kept and linked.
 	api.POST("/invoices/:id/convert", authorizer.Require(authz.PermWriteDocuments), ih.ConvertQuote)

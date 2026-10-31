@@ -239,3 +239,99 @@ func TestHealthWorksOnAFreshInstall(t *testing.T) {
 		t.Error("127.0.0.1 n'est pas reconnu comme loopback")
 	}
 }
+
+// Audit 9, M-07 : le contrôle d'intégrité restait muet sur une facture envoyée
+// sans écriture (A-01). Il la signale quand la comptabilisation automatique est
+// active, et seulement alors : une installation qui tient ses écritures à la
+// main n'a rien à se faire reprocher.
+func TestUnSentInvoiceWithoutEntryIsReportedOnlyWhenAutoPostIsOn(t *testing.T) {
+	h, exec := newMaintenanceDB(t)
+
+	userID := db.NewID()
+	exec(`INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, 'x')`,
+		userID, "u@example.ch", "U")
+	contactID := db.NewID()
+	exec(`INSERT INTO contacts (id, name, contact_type) VALUES (?, 'Client', 'customer')`, contactID)
+	exec(`INSERT INTO company_settings (id, company_name, auto_post_invoices) VALUES (?, 'Test SA', 0)`, db.NewID())
+
+	invID := db.NewID()
+	exec(`INSERT INTO invoices (id, invoice_number, contact_id, status, issue_date, due_date,
+	                            subtotal_amount, total_amount, created_by_id)
+	      VALUES (?, 'FA-2026-9100', ?, 'sent', '2026-01-01', '2026-01-31', 12.34, 12.35, ?)`,
+		invID, contactID, userID)
+	exec(`INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit_price, line_total, sequence)
+	      VALUES (?, ?, 'Prestation', 1, 12.34, 12.34, 1)`, db.NewID(), invID)
+
+	if checksIn(runIntegrity(t, h))["invoice_unposted"] {
+		t.Error("signalé alors que la comptabilisation automatique est éteinte")
+	}
+
+	exec(`UPDATE company_settings SET auto_post_invoices = 1`)
+	body := runIntegrity(t, h)
+	if !checksIn(body)["invoice_unposted"] {
+		t.Fatal("une facture envoyée sans écriture n'a pas été signalée")
+	}
+	items, _ := body["findings"].([]any)
+	for _, it := range items {
+		f := it.(map[string]any)
+		if f["check"] == "invoice_unposted" {
+			docs, _ := f["documents"].([]any)
+			if len(docs) != 1 || docs[0].(map[string]any)["number"] != "FA-2026-9100" {
+				t.Errorf("le constat doit nommer la facture : %v", f["documents"])
+			}
+		}
+	}
+
+	// Liée à une écriture : plus rien à signaler.
+	entryID := db.NewID()
+	exec(`INSERT INTO journal_entries (id, reference, date, description, status, created_by_id)
+	      VALUES (?, 'JE-9', '2026-01-01', 'émission', 'draft', ?)`, entryID, userID)
+	exec(`UPDATE invoices SET journal_entry_id = ? WHERE id = ?`, entryID, invID)
+	if checksIn(runIntegrity(t, h))["invoice_unposted"] {
+		t.Error("signalé alors que la facture est liée à son écriture")
+	}
+}
+
+// Audit 9, M-07 : après les essais de l'audit, le contrôle d'intégrité ne rendait
+// que l'avertissement IBAN. Il doit montrer ce que le service ne refuse plus
+// d'accepter mais qui est déjà entré : montants négatifs ou à trois décimales,
+// dates improbables, exercice illisible, document à total négatif.
+func TestLeControleSignaleLesDonneesAbsurdesDejaEnBase(t *testing.T) {
+	h, exec := newMaintenanceDB(t)
+	userID := db.NewID()
+	exec(`INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, 'x')`, userID, "a@example.ch", "A")
+	contactID := db.NewID()
+	exec(`INSERT INTO contacts (id, name, contact_type) VALUES (?, 'Client', 'customer')`, contactID)
+	var accountID string
+	if err := h.db.QueryRow(`SELECT id FROM accounts LIMIT 1`).Scan(&accountID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Écriture équilibrée, mais à trois décimales et datée de l'an 26.
+	entryID := db.NewID()
+	exec(`INSERT INTO journal_entries (id, reference, date, description, status, created_by_id)
+	      VALUES (?, 'JN-0026-001', '0026-10-30', 'faute de frappe', 'posted', ?)`, entryID, userID)
+	exec(`INSERT INTO journal_lines (id, entry_id, account_id, debit_amount, sequence) VALUES (?, ?, ?, 100.123, 1)`,
+		db.NewID(), entryID, accountID)
+	exec(`INSERT INTO journal_lines (id, entry_id, account_id, credit_amount, sequence) VALUES (?, ?, ?, 100.123, 2)`,
+		db.NewID(), entryID, accountID)
+
+	// Facture à total négatif.
+	invID := db.NewID()
+	exec(`INSERT INTO invoices (id, invoice_number, contact_id, status, issue_date, due_date,
+	                            subtotal_amount, total_amount, created_by_id)
+	      VALUES (?, 'FA-2026-9200', ?, 'sent', '2026-01-01', '2026-01-31', -250, -250, ?)`, invID, contactID, userID)
+	exec(`INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit_price, line_total, sequence)
+	      VALUES (?, ?, 'x', 1, -250, -250, 1)`, db.NewID(), invID)
+
+	// Exercice aux bornes illisibles.
+	exec(`INSERT INTO fiscal_years (id, name, start_date, end_date, is_closed)
+	      VALUES ('fy-26', '26', '26-01-01', '26-12-31', 0)`)
+
+	found := checksIn(runIntegrity(t, h))
+	for _, check := range []string{"journal_amounts", "journal_dates", "fiscal_year_dates", "invoice_amounts"} {
+		if !found[check] {
+			t.Errorf("le contrôle %q n'a rien signalé", check)
+		}
+	}
+}

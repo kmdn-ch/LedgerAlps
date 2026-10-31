@@ -144,8 +144,9 @@ func (h *MaintenanceHandler) IntegrityCheck(c *gin.Context) {
 	}
 
 	// ── Totaux incohérents ───────────────────────────────────────────────────
-	// Tolérance de 5 centimes : les totaux sont arrondis au 5 rappen, donc un
-	// écart inférieur est le fonctionnement normal, pas un défaut.
+	// Tolérance de 5 centimes : elle absorbe les documents d'avant la 1.6.6, dont
+	// les lignes n'étaient pas arrondies au centime, donc un écart inférieur est le
+	// fonctionnement normal, pas un défaut.
 	if n, err := h.count(ctx, `
 		SELECT COUNT(*) FROM (
 			SELECT i.id
@@ -210,6 +211,140 @@ func (h *MaintenanceHandler) IntegrityCheck(c *gin.Context) {
 				      GROUP BY corrects_invoice_id) cn ON cn.iid = i.id
 				WHERE cn.credited > i.total_amount + 0.01
 				ORDER BY i.invoice_number`, 20),
+		})
+	}
+
+	// ── Documents envoyés dont l'écriture manque ─────────────────────────────
+	// Jusqu'à la 1.6.5, une facture dont le HT n'était pas un multiple de 0,05
+	// partait au client puis voyait son écriture d'émission refusée : envoyée,
+	// jamais comptabilisée, sans moyen d'y revenir (audit 9, A-01). Ce contrôle les
+	// montre, et la page du document offre « Comptabiliser maintenant ».
+	//
+	// Seulement quand la comptabilisation automatique est active : une
+	// installation qui tient ses écritures à la main n'a rien à se faire reprocher.
+	// Avertissement et non erreur — on ne peut pas savoir si l'écriture a été
+	// saisie à la main depuis, et la reprise est une décision de l'utilisateur.
+	const unpostedWhere = `
+		FROM invoices i
+		WHERE i.document_type IN ('invoice', 'credit_note')
+		  AND i.status IN ('sent', 'paid')
+		  AND COALESCE(i.journal_entry_id, '') = ''
+		  AND i.total_amount <> 0
+		  AND (SELECT COALESCE(auto_post_invoices, 0) FROM company_settings LIMIT 1) = 1`
+	if n, err := h.count(ctx, `SELECT COUNT(*) `+unpostedWhere); err != nil {
+		h.fail(c, err)
+		return
+	} else {
+		add(Finding{
+			Severity: "warning", Check: "invoice_unposted", Count: n,
+			Title:  "Documents envoyés sans écriture au journal",
+			Detail: fmt.Sprintf("%d facture(s) ou note(s) de crédit sont envoyées ou encaissées mais ne figurent pas au journal : produit et TVA due manquent à la comptabilité.", n),
+			Action: "Ouvrez le document et utilisez « Comptabiliser maintenant ». Si vous avez déjà saisi l'écriture à la main, ne faites rien : la reprise la doublerait.",
+			Documents: h.listDocuments(ctx, `
+				SELECT i.id, i.invoice_number,
+				       'envoyé le ' || substr(CAST(i.issue_date AS TEXT), 1, 10) || ' pour ' || printf('%.2f', i.total_amount)
+				`+unpostedWhere+`
+				ORDER BY i.invoice_number`, 20),
+		})
+	}
+
+	// ── Montants que le journal n'aurait jamais dû accepter ──────────────────
+	// Négatif, ou à plus de deux décimales. Le service les refuse désormais
+	// (compliance.CheckCents) ; ce contrôle montre ceux qui sont entrés avant et
+	// qui, le journal étant immuable, y restent (audit 9, A-05, M-06, M-07).
+	if n, err := h.count(ctx, `
+		SELECT COUNT(DISTINCT entry_id) FROM journal_lines
+		WHERE COALESCE(debit_amount, 0) < 0 OR COALESCE(credit_amount, 0) < 0
+		   OR ABS(COALESCE(debit_amount, 0) * 100 - ROUND(COALESCE(debit_amount, 0) * 100)) > 0.000001
+		   OR ABS(COALESCE(credit_amount, 0) * 100 - ROUND(COALESCE(credit_amount, 0) * 100)) > 0.000001`); err != nil {
+		if !h.usePostgres {
+			h.fail(c, err)
+			return
+		}
+	} else {
+		add(Finding{
+			Severity: "error", Check: "journal_amounts", Count: n,
+			Title:  "Écritures à montant négatif ou à plus de deux décimales",
+			Detail: fmt.Sprintf("%d écriture(s) portent une ligne de montant négatif, ou qui ne tombe pas sur un centime : les totaux de compte en sont faussés.", n),
+			Action: "Une écriture comptabilisée ne se supprime pas (CO art. 957a) : passez une écriture rectificative qui la contrepasse, puis la bonne écriture.",
+		})
+	}
+
+	// ── Dates improbables ────────────────────────────────────────────────────
+	// Une faute de frappe sur l'année (« 0026 »). Le service les refuse désormais
+	// (audit 9, A-03) ; celles d'avant restent au journal.
+	maxYear := time.Now().Year() + compliance.MaxBookingYearsAhead
+	badYear := func(col string) string {
+		return fmt.Sprintf(`(CAST(substr(CAST(%s AS TEXT), 1, 4) AS INTEGER) < %d OR CAST(substr(CAST(%s AS TEXT), 1, 4) AS INTEGER) > %d)`,
+			col, compliance.MinBookingYear, col, maxYear)
+	}
+	if n, err := h.count(ctx, `SELECT COUNT(*) FROM journal_entries WHERE `+badYear("date")); err != nil {
+		if !h.usePostgres {
+			h.fail(c, err)
+			return
+		}
+	} else {
+		add(Finding{
+			Severity: "warning", Check: "journal_dates", Count: n,
+			Title:  "Écritures à la date improbable",
+			Detail: fmt.Sprintf("%d écriture(s) sont datées hors des années %d à %d, probablement une faute de frappe sur l'année.", n, compliance.MinBookingYear, maxYear),
+			Action: "Filtrez le journal par date pour les retrouver. Une écriture comptabilisée ne se modifie pas : contrepassez-la et passez-la à la bonne date.",
+		})
+	}
+	if n, err := h.count(ctx, `SELECT COUNT(*) FROM invoices WHERE `+badYear("issue_date")); err != nil {
+		if !h.usePostgres {
+			h.fail(c, err)
+			return
+		}
+	} else {
+		add(Finding{
+			Severity: "warning", Check: "invoice_dates", Count: n,
+			Title:  "Documents à la date d'émission improbable",
+			Detail: fmt.Sprintf("%d document(s) sont datés hors des années %d à %d, probablement une faute de frappe sur l'année.", n, compliance.MinBookingYear, maxYear),
+			Action: "Un brouillon se corrige ; un document envoyé s'annule puis se réactive en brouillon, ou se corrige par une note de crédit.",
+			Documents: h.listDocuments(ctx, `
+				SELECT id, invoice_number, 'émis le ' || substr(CAST(issue_date AS TEXT), 1, 10)
+				FROM invoices WHERE `+badYear("issue_date")+` ORDER BY invoice_number`, 20),
+		})
+	}
+
+	// ── Exercices aux bornes illisibles ──────────────────────────────────────
+	// Un exercice dont les dates ne se relisent pas bloque l'écran des exercices et
+	// l'archive légale (A-03). La réparation passe au démarrage du serveur.
+	if n, err := h.count(ctx, `
+		SELECT COUNT(*) FROM fiscal_years
+		WHERE CAST(start_date AS TEXT) NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+		   OR CAST(end_date AS TEXT)   NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'`); err != nil {
+		if !h.usePostgres {
+			h.fail(c, err)
+			return
+		}
+	} else {
+		add(Finding{
+			Severity: "error", Check: "fiscal_year_dates", Count: n,
+			Title:  "Exercices aux dates illisibles",
+			Detail: fmt.Sprintf("%d exercice(s) portent des bornes qui ne se relisent pas : l'écran des exercices et l'archive légale en sont bloqués.", n),
+			Action: "Redémarrez LedgerAlps : les bornes sont complétées sur quatre chiffres au démarrage. Si le constat persiste, signalez-le avant votre prochaine clôture.",
+		})
+	}
+
+	// ── Documents à montant négatif ou hors bornes ───────────────────────────
+	// Une facture à total négatif contourne la note de crédit (LTVA art. 27 al. 4).
+	const badAmountWhere = `
+		FROM invoices
+		WHERE total_amount < 0 OR subtotal_amount < 0 OR vat_amount < 0 OR total_amount > 999999999.99`
+	if n, err := h.count(ctx, `SELECT COUNT(*) `+badAmountWhere); err != nil {
+		h.fail(c, err)
+		return
+	} else {
+		add(Finding{
+			Severity: "error", Check: "invoice_amounts", Count: n,
+			Title:  "Documents à montant négatif ou démesuré",
+			Detail: fmt.Sprintf("%d document(s) portent un total négatif ou supérieur à un milliard : la TVA et le produit déclarés en sont faussés.", n),
+			Action: "Une correction se fait par une note de crédit, pas par un montant négatif. Annulez le document et réémettez-le correctement.",
+			Documents: h.listDocuments(ctx, `
+				SELECT id, invoice_number, 'total ' || printf('%.2f', total_amount)
+				`+badAmountWhere+` ORDER BY invoice_number`, 20),
 		})
 	}
 

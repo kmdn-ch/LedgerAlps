@@ -196,6 +196,8 @@ export interface Payment {
 export interface Invoice {
   id: string
   invoice_number: string
+  // Lien vers l'écriture d'émission ; absent tant que le document n'est pas comptabilisé.
+  journal_entry_id?: string | null
   document_type: DocumentType
   contact_id: string
   status: DocumentStatus

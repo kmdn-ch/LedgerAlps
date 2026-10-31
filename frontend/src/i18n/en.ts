@@ -212,6 +212,7 @@ export const en: Catalogue = {
   'pay.intro': 'Select the invoices to settle: LedgerAlps produces an XML file you upload to your e-banking. Compatible with UBS, PostFinance, Raiffeisen and Cantonal Banks.',
   'pay.compteADebiter': 'Account to debit',
   'pay.aucuneAPayer': 'No invoices to pay',
+  'pay.erreurLecture': 'The list of invoices to pay could not be read.',
   'pay.aucuneAPayerAide': 'Only posted supplier invoices appear here. An invoice still in draft must be posted first: the expense must exist in the books before any money moves.',
   'pay.toutSelectionner': 'Select all',
   'pay.colFacture': 'Invoice',
@@ -530,6 +531,15 @@ export const en: Catalogue = {
   'fd.erreurStatut': 'Error while changing the status.',
   'fd.erreurConversion': 'The conversion failed. This quote may already have produced an invoice.',
   'fd.erreurNoteCredit': 'The credit note was refused: the total credited would exceed the invoice amount.',
+  'fd.comptabiliserMaintenant': 'Post now',
+  'fd.comptabilisationEnCours': 'Posting…',
+  'fd.infoBulleComptabiliser': 'This document has been sent but is not in the journal: revenue and VAT due are missing from the books.',
+  'fd.titreComptabiliser': 'Post {numero} now?',
+  'fd.consComptabiliser1': 'The issue entry (receivables / revenue / VAT due) is posted to the journal, dated on the document’s issue date.',
+  'fd.consComptabiliser2': 'Payments already recorded for this document without an entry are posted too.',
+  'fd.rassurComptabiliser': 'If you already entered this entry by hand, do not continue: it would be doubled. A posted entry can no longer be deleted (CO art. 957a).',
+  'fd.confirmerComptabiliser': 'Post',
+  'fd.erreurComptabiliser': 'Posting failed.',
   'fd.crediteeEnTotalite': 'Invoice credited in full ({montant}). The invoice stays as it was issued; the correction lives in the credit note.',
   'fd.noteCreditAnnulantAvant': 'Credit note cancelling the',
   'fd.factureOrigine': 'original invoice',
@@ -715,7 +725,7 @@ export const en: Catalogue = {
   'us.retirerSecondFacteur': 'Remove the second factor',
   'us.pasDeSuppression': 'An account is deactivated, not deleted: entries and documents carry their author’s name, and erasing it would break the traceability CO art. 957a requires. A deactivated account can do nothing further, including through an already-open session.',
   'us.ajouterCompte': 'Add an account',
-  'us.motDePasseAide': 'At least 8 characters. Pass it to the person through a channel other than the e-mail announcing their access.',
+  'us.motDePasseAide': 'At least 12 characters, with a lowercase letter, an uppercase letter and a digit. Pass it to the person through a channel other than the e-mail announcing their access.',
   'us.creerCompte': 'Create the account',
 
   // ─── Diagnostic ───
@@ -1276,7 +1286,7 @@ export const en: Catalogue = {
 
   // ─── Écran de connexion — gabarit à deux panneaux ───
   'cx.garantieLocalTitre': 'Local data',
-  'cx.garantieLocalAide': 'No cloud, no third party, no outbound connection',
+  'cx.garantieLocalAide': 'No cloud, no third party: your data stays on this computer. The only outbound connections are the update check (can be turned off) and the company lookup, on your request',
   'cx.garantieLegaleTitre': 'CO and FADP compliance',
   'cx.garantieLegaleAide': 'Traceable entries, ten-year retention',
   'cx.afficherMotDePasse': 'Show the password',

@@ -1490,6 +1490,96 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Il conto %s è assente dal piano dei conti: la fattura non può essere contabilizzata",
 		EN: "Account %s is missing from the chart of accounts: the invoice cannot be posted",
 	},
+	"ce document est déjà comptabilisé : il n'y a rien à reprendre": {
+		DE: "Dieses Dokument ist bereits verbucht: es gibt nichts nachzuholen",
+		IT: "Questo documento è già contabilizzato: non c’è nulla da recuperare",
+		EN: "This document is already posted: there is nothing to catch up on",
+	},
+	"seul un document envoyé ou encaissé se comptabilise": {
+		DE: "Nur ein versendetes oder bezahltes Dokument wird verbucht",
+		IT: "Solo un documento inviato o incassato viene contabilizzato",
+		EN: "Only a sent or paid document is posted",
+	},
+	"la comptabilisation automatique des factures est éteinte : saisissez l'écriture à la main ou activez-la dans les paramètres": {
+		DE: "Die automatische Verbuchung der Rechnungen ist ausgeschaltet: Erfassen Sie die Buchung von Hand oder schalten Sie sie in den Einstellungen ein",
+		IT: "La contabilizzazione automatica delle fatture è disattivata: registrate la scrittura a mano o attivatela nelle impostazioni",
+		EN: "Automatic invoice posting is turned off: enter the entry by hand or turn it on in the settings",
+	},
+	"comptabilisez d'abord la facture que cette note de crédit corrige": {
+		DE: "Verbuchen Sie zuerst die Rechnung, die diese Gutschrift korrigiert",
+		IT: "Contabilizzate prima la fattura che questa nota di credito corregge",
+		EN: "Post the invoice this credit note corrects first",
+	},
+	"la devise %s n'est pas admise : CHF ou EUR": {
+		DE: "Die Währung %s ist nicht zulässig: CHF oder EUR",
+		IT: "La valuta %s non è ammessa: CHF o EUR",
+		EN: "The currency %s is not accepted: CHF or EUR",
+	},
+	"un document ne peut pas comporter plus de %d lignes": {
+		DE: "Ein Dokument darf höchstens %d Zeilen enthalten",
+		IT: "Un documento non può contenere più di %d righe",
+		EN: "A document cannot hold more than %d lines",
+	},
+	"ligne %d : le libellé dépasse %d caractères": {
+		DE: "Zeile %d: Die Bezeichnung überschreitet %d Zeichen",
+		IT: "Riga %d: la descrizione supera %d caratteri",
+		EN: "Line %d: the description exceeds %d characters",
+	},
+	"ligne %d : la quantité doit être strictement positive et ne pas dépasser %d": {
+		DE: "Zeile %d: Die Menge muss grösser als null sein und darf %d nicht überschreiten",
+		IT: "Riga %d: la quantità deve essere strettamente positiva e non superare %d",
+		EN: "Line %d: the quantity must be greater than zero and not exceed %d",
+	},
+	"ligne %d : le prix unitaire doit être compris entre 0 et %.2f": {
+		DE: "Zeile %d: Der Einzelpreis muss zwischen 0 und %.2f liegen",
+		IT: "Riga %d: il prezzo unitario deve essere compreso tra 0 e %.2f",
+		EN: "Line %d: the unit price must be between 0 and %.2f",
+	},
+	"ligne %d : le rabais doit être compris entre 0 et 100": {
+		DE: "Zeile %d: Der Rabatt muss zwischen 0 und 100 liegen",
+		IT: "Riga %d: lo sconto deve essere compreso tra 0 e 100",
+		EN: "Line %d: the discount must be between 0 and 100",
+	},
+	"ligne %d : le taux de TVA doit être compris entre 0 et 100": {
+		DE: "Zeile %d: Der MWST-Satz muss zwischen 0 und 100 liegen",
+		IT: "Riga %d: l’aliquota IVA deve essere compresa tra 0 e 100",
+		EN: "Line %d: the VAT rate must be between 0 and 100",
+	},
+	"ligne %d : le montant de la ligne dépasse la borne admise de %.2f": {
+		DE: "Zeile %d: Der Zeilenbetrag überschreitet die zulässige Grenze von %.2f",
+		IT: "Riga %d: l’importo della riga supera il limite ammesso di %.2f",
+		EN: "Line %d: the line amount exceeds the allowed limit of %.2f",
+	},
+	"ligne %d : un compte est débité ou crédité, pas les deux": {
+		DE: "Zeile %d: Ein Konto wird belastet oder gutgeschrieben, nicht beides",
+		IT: "Riga %d: un conto è addebitato o accreditato, non entrambi",
+		EN: "Line %d: an account is debited or credited, not both",
+	},
+	"ligne %d : ni débit ni crédit": {
+		DE: "Zeile %d: weder Soll noch Haben",
+		IT: "Riga %d: né dare né avere",
+		EN: "Line %d: neither debit nor credit",
+	},
+	"la date %s est hors des bornes admises : les années %d à %d": {
+		DE: "Das Datum %s liegt ausserhalb der zulässigen Grenzen: die Jahre %d bis %d",
+		IT: "La data %s è fuori dai limiti ammessi: gli anni da %d a %d",
+		EN: "The date %s is outside the allowed range: years %d to %d",
+	},
+	"le montant %v est hors des bornes admises : de 0 à %.2f, au centime près": {
+		DE: "Der Betrag %v liegt ausserhalb der zulässigen Grenzen: von 0 bis %.2f, auf den Rappen genau",
+		IT: "L’importo %v è fuori dai limiti ammessi: da 0 a %.2f, al centesimo",
+		EN: "The amount %v is outside the allowed range: from 0 to %.2f, to the cent",
+	},
+	"la devise du document (%s) n'est pas celle de la comptabilité (%s) : la tenue en plusieurs devises n'est pas prise en charge": {
+		DE: "Die Währung des Dokuments (%s) ist nicht die der Buchhaltung (%s): die Führung in mehreren Währungen wird nicht unterstützt",
+		IT: "La valuta del documento (%s) non è quella della contabilità (%s): la tenuta in più valute non è supportata",
+		EN: "The document currency (%s) is not the books’ currency (%s): multi-currency bookkeeping is not supported",
+	},
+	"hôte non autorisé : ouvrez LedgerAlps par son adresse locale": {
+		DE: "Host nicht zugelassen: öffnen Sie LedgerAlps über seine lokale Adresse",
+		IT: "Host non autorizzato: aprite LedgerAlps dal suo indirizzo locale",
+		EN: "Host not allowed: open LedgerAlps through its local address",
+	},
 	"seule une facture envoyée accepte un paiement": {
 		DE: "Nur eine versendete Rechnung nimmt eine Zahlung entgegen",
 		IT: "Solo una fattura inviata accetta un pagamento",

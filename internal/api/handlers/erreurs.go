@@ -30,9 +30,14 @@ func erreurInterne(c *gin.Context, message string, cause error) {
 
 // marquesTechniques sont des fragments qu'aucun message métier ne contient et
 // que les pilotes de base de données, eux, produisent.
+//
+// « syntax error » n'y figure PAS (audit 9, M-02). Il y était, et un relevé
+// camt.053 malformé — « XML syntax error on line 1 » — répondait 500 au lieu de
+// 422 : l'analyseur XML dit la même chose que le moteur SQL, et c'est le premier
+// qui parle ici. Le moteur SQL, lui, s'annonce par « sql logic error ».
 var marquesTechniques = []string{
-	"sqlite", "sql:", "pgx", "constraint failed", "unique constraint",
-	"foreign key", "no such table", "no such column", "syntax error",
+	"sqlite", "sql:", "sql logic error", "pgx", "constraint failed", "unique constraint",
+	"foreign key", "no such table", "no such column",
 	"database is locked", "database disk image", "unable to open database",
 	"disk i/o error", "driver:",
 }

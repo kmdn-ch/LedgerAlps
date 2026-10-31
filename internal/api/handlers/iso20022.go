@@ -278,7 +278,9 @@ func (h *ISO20022Handler) ImportCamt053(c *gin.Context) {
 	if h.reconcile != nil {
 		res, impErr := h.reconcile.Import(c.Request.Context(), entries)
 		if impErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": impErr.Error()})
+			// La cause part au journal du serveur : elle vient de la base et nomme
+			// tables et colonnes (CWE-209, audit 9, M-02).
+			erreurInterne(c, msgErreurInterne, impErr)
 			return
 		}
 		imported, duplicate = res.Imported, res.Duplicate

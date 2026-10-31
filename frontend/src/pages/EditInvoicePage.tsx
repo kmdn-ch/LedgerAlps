@@ -11,7 +11,7 @@ import { PageHeader, ErrorBanner, LoadingSpinner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import { QuickContactModal } from '@/components/invoice/QuickContactModal'
 import {
-  invoiceFormSchema, computeLineTotals,
+  invoiceFormSchema, computeDocumentTotals,
   type InvoiceFormData as FormData,
   type InvoiceFormInput as FormInput,
 } from '@/schemas/invoiceForm'
@@ -84,7 +84,8 @@ export function EditInvoicePage() {
   const watchedContactId = useWatch({ control, name: 'contact_id' })
   const watchedDocType   = useWatch({ control, name: 'document_type' })
 
-  const totals     = (watchedLines ?? []).map(computeLineTotals)
+  const doc    = computeDocumentTotals(watchedLines ?? [])
+  const totals = doc.lines
 
   // QR bill readiness: check what's missing so the payment slip can be
   // generated. Une offre devient une facture d'un clic : elle a besoin des
@@ -101,9 +102,7 @@ export function EditInvoicePage() {
       if (!selectedContact.postal_code || !selectedContact.city) qrIssues.push(t('nf.qrSansNPA'))
     }
   }
-  const subtotal   = totals.reduce((s, t) => s + t.base,  0)
-  const totalVAT   = totals.reduce((s, t) => s + t.vat,   0)
-  const grandTotal = totals.reduce((s, t) => s + t.total, 0)
+  const { subtotal, vat: totalVAT, total: grandTotal } = doc
 
   const save = useMutation({
     mutationFn: (data: FormData) => invoicesApi.update(invoiceId!, data),

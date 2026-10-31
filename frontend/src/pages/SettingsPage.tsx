@@ -327,7 +327,7 @@ export function SettingsPage() {
                       {company?.logo_data ? (
                         <img
                           src={company.logo_data}
-                          alt="Logo société"
+                          alt={t('pr.logoSociete')}
                           className="w-full h-full object-contain p-1"
                         />
                       ) : (

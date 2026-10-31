@@ -1,6 +1,7 @@
 package compliance_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
@@ -137,4 +138,52 @@ func TestRoundTo5RappenEstSymetrique(t *testing.T) {
 			t.Errorf("RoundTo5Rappen(%v) = %v mais RoundTo5Rappen(%v) = %v : pas opposés", x, a, -x, b)
 		}
 	}
+}
+
+// ─── RoundCents ──────────────────────────────────────────────────────────────
+
+func TestRoundCents(t *testing.T) {
+	cases := []struct {
+		name        string
+		input, want float64
+	}{
+		{"déjà au centime", 12.34, 12.34},
+		{"demi-centime monte", 1.005, 1.01}, // 1.005*100 = 100.49999999999999 en flottant
+		{"piège classique 2.675", 2.675, 2.68},
+		{"demi négatif à l'écart de zéro", -1.005, -1.01},
+		{"en dessous du demi", 1.004, 1.00},
+		{"petit négatif ne donne pas -0", -0.004, 0},
+		{"zéro", 0, 0},
+		{"grand montant", 123456789.126, 123456789.13},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := compliance.RoundCents(tc.input)
+			if math.Abs(got-tc.want) > 1e-9 || (got == 0 && math.Signbit(got)) {
+				t.Errorf("RoundCents(%v) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+// Un montant déjà au centime ne bouge pas : l'opération est idempotente, sinon un
+// total relu puis rearrondi dériverait.
+func TestRoundCentsEstIdempotent(t *testing.T) {
+	for k := -200000; k <= 200000; k++ {
+		v := float64(k) / 100
+		if got := compliance.RoundCents(v); got != v {
+			t.Fatalf("RoundCents(%v) = %v", v, got)
+		}
+	}
+}
+
+func TestRoundCentsLaisseLesValeursNonFiniesEtGigantesques(t *testing.T) {
+	if !math.IsNaN(compliance.RoundCents(math.NaN())) {
+		t.Error("NaN doit rester NaN")
+	}
+	if !math.IsInf(compliance.RoundCents(math.Inf(1)), 1) {
+		t.Error("+Inf doit rester +Inf")
+	}
+	// Au-delà de ±9·10¹² les millionièmes entiers débordent : ne pas planter.
+	_ = compliance.RoundCents(1e300)
 }

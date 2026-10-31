@@ -92,8 +92,14 @@ type createSupplierInvoiceRequest struct {
 	Lines              []supplierInvoiceLine `json:"lines"              binding:"required,min=1,dive"`
 }
 
-// computeTotals derives HT, VAT and TTC from the lines. Amounts are rounded to
-// 5 rappen, the Swiss cash-rounding rule already used across the codebase.
+// computeTotals derives HT, VAT and TTC from the lines, to the centime.
+//
+// Une facture REÇUE est une pièce : la comptabilité doit en reprendre les montants
+// tels qu'ils sont imprimés (CO art. 957a), et l'ordre de paiement doit verser ce
+// que le bulletin QR du fournisseur fixe. Elle était arrondie à 5 centimes comme
+// une facture émise : 1234.56 devenait 1234.55, et le fournisseur recevait un
+// centime de moins (audit 9, A-04). Les 5 centimes sont une règle d'encaissement
+// en espèces, qui ne s'applique pas à ce qu'on doit.
 //
 // Returns the dominant VAT rate for the header (the rate carrying the largest
 // base), which is only a convenience for display — per-rate figures for the
@@ -105,7 +111,7 @@ func computeTotals(lines []supplierInvoiceLine) (subtotal, vat, total, dominantR
 		if l.Quantity == 0 {
 			l.Quantity = 1
 		}
-		lineHT := l.Quantity * l.UnitPrice
+		lineHT := compliance.RoundCents(l.Quantity * l.UnitPrice)
 		l.LineTotal = lineHT
 		subtotal += lineHT
 		vat += lineHT * l.VATRate
@@ -117,9 +123,9 @@ func computeTotals(lines []supplierInvoiceLine) (subtotal, vat, total, dominantR
 			maxBase, dominantRate = base, rate
 		}
 	}
-	subtotal = compliance.RoundTo5Rappen(subtotal)
-	vat = compliance.RoundTo5Rappen(vat)
-	total = compliance.RoundTo5Rappen(subtotal + vat)
+	subtotal = compliance.RoundCents(subtotal)
+	vat = compliance.RoundCents(vat)
+	total = compliance.RoundCents(subtotal + vat)
 	return subtotal, vat, total, dominantRate
 }
 
@@ -274,6 +280,45 @@ func (h *SupplierInvoicesHandler) loadLines(ctx context.Context, invoiceID strin
 	return lines, rows.Err()
 }
 
+// validateSupplierBounds borne dates, devise, lignes et totaux d'une facture
+// reçue (audit 9, A-03, A-05, M-05), avant qu'elle n'entre dans les livres.
+//
+// Les dates sont déjà lues au bon format ; ce contrôle les borne. La devise est
+// CHF ou EUR, les deux que porte un bulletin QR : une facture en EUR n'est PAS
+// convertie, la tenue en plusieurs devises n'étant pas prise en charge (voir la
+// documentation). Le taux de TVA d'une ligne est ici une FRACTION (0.081).
+func validateSupplierBounds(req *createSupplierInvoiceRequest) error {
+	issue, _ := time.Parse("2006-01-02", req.IssueDate)
+	if err := compliance.CheckBookingDate(issue); err != nil {
+		return err
+	}
+	if req.DueDate != "" {
+		due, _ := time.Parse("2006-01-02", req.DueDate)
+		if err := compliance.CheckBookingDate(due); err != nil {
+			return err
+		}
+	}
+	if req.Currency == "" {
+		req.Currency = "CHF"
+	}
+	if req.Currency != "CHF" && req.Currency != "EUR" {
+		return fmt.Errorf("la devise %s n'est pas admise : CHF ou EUR", req.Currency)
+	}
+	if len(req.Lines) > compliance.MaxDocumentLines {
+		return fmt.Errorf("un document ne peut pas comporter plus de %d lignes", compliance.MaxDocumentLines)
+	}
+	for i, l := range req.Lines {
+		qty := l.Quantity
+		if qty == 0 {
+			qty = 1 // computeTotals lit « 0 » comme « 1 »
+		}
+		if err := compliance.CheckDocumentLine(i+1, l.Description, qty, l.UnitPrice, 0, l.VATRate*100); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // CreateSupplierInvoice POST /api/v1/supplier-invoices
 func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 	var req createSupplierInvoiceRequest
@@ -291,8 +336,9 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 			return
 		}
 	}
-	if req.Currency == "" {
-		req.Currency = "CHF"
+	if err := validateSupplierBounds(&req); err != nil {
+		refus(c, http.StatusUnprocessableEntity, err)
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
@@ -318,6 +364,10 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 	}
 
 	subtotal, vat, total, dominantRate := computeTotals(req.Lines)
+	if err := compliance.CheckAmount(total); err != nil {
+		refus(c, http.StatusUnprocessableEntity, err)
+		return
+	}
 
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {

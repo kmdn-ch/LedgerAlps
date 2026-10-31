@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
 
@@ -50,8 +51,9 @@ func (h *SupplierInvoicesHandler) UpdateSupplierInvoice(c *gin.Context) {
 			return
 		}
 	}
-	if req.Currency == "" {
-		req.Currency = "CHF"
+	if err := validateSupplierBounds(&req); err != nil {
+		refus(c, http.StatusUnprocessableEntity, err)
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
@@ -77,6 +79,10 @@ func (h *SupplierInvoicesHandler) UpdateSupplierInvoice(c *gin.Context) {
 	}
 
 	subtotal, vat, total, dominantRate := computeTotals(req.Lines)
+	if err := compliance.CheckAmount(total); err != nil {
+		refus(c, http.StatusUnprocessableEntity, err)
+		return
+	}
 
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {

@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -56,6 +58,51 @@ func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), prehash(password)) == nil
 }
 
+// MinPasswordLength est le plancher d'un mot de passe de connexion choisi par son
+// titulaire : douze caractères, avec minuscule, majuscule et chiffre.
+const MinPasswordLength = 12
+
+// ValidatePasswordPolicy dit pourquoi un mot de passe est trop faible, ou rien.
+//
+// Le message nomme ce qui manque. « Mot de passe trop faible » oblige à
+// deviner, et la plupart des gens devinent en ajoutant un chiffre à la fin.
+//
+// La règle vaut pour TOUT mot de passe qui entre dans le système : celui qu'on
+// choisit à l'installation, celui qu'un administrateur donne à un nouveau compte,
+// celui qu'on change. Elle ne valait que pour le dernier, si bien que `12345678`
+// ouvrait un compte créé par un administrateur et le premier administrateur
+// lui-même (audit 9, F-02).
+func ValidatePasswordPolicy(p string) error {
+	var lower, upper, digit bool
+	for _, r := range p {
+		switch {
+		case unicode.IsLower(r):
+			lower = true
+		case unicode.IsUpper(r):
+			upper = true
+		case unicode.IsDigit(r):
+			digit = true
+		}
+	}
+	var missing []string
+	if len([]rune(p)) < MinPasswordLength {
+		missing = append(missing, fmt.Sprintf("%d caractères au minimum", MinPasswordLength))
+	}
+	if !lower {
+		missing = append(missing, "une minuscule")
+	}
+	if !upper {
+		missing = append(missing, "une majuscule")
+	}
+	if !digit {
+		missing = append(missing, "un chiffre")
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("il manque : %s", strings.Join(missing, ", "))
+}
+
 // ─── JWT ──────────────────────────────────────────────────────────────────────
 
 type Claims struct {
@@ -72,8 +119,27 @@ type Claims struct {
 	// qu'il faudrait penser à vérifier serait oublié, et un jeton de moitié de
 	// connexion vaudrait alors une session complète.
 	MFAPending bool `json:"mfa_pending,omitempty"`
+	// Typ dit À QUOI le jeton sert : accès, rafraîchissement ou attente de second
+	// facteur. Chaque porte n'accepte que le sien.
+	//
+	// Les trois jetons partageaient la même structure, le même secret et le même
+	// algorithme, sans rien qui les distingue (audit 9, A-02). Un jeton de
+	// rafraîchissement — trente jours — présenté en `Authorization: Bearer`
+	// ouvrait donc toute l'API, survivait à la déconnexion et au changement de mot
+	// de passe (la révocation en base ne le touche pas : l'authentification des
+	// routes est sans état) et contournait le second facteur. Un jeton sans `typ`
+	// n'est accepté nulle part : les sessions ouvertes avant cette version se
+	// reconnectent une fois.
+	Typ string `json:"typ,omitempty"`
 	// NOTE: email is intentionally excluded from the JWT payload (nLPD data minimisation)
 }
+
+// Les trois usages d'un jeton : voir Claims.Typ.
+const (
+	TokenTypeAccess  = "access"
+	TokenTypeRefresh = "refresh"
+	TokenTypeMFA     = "mfa"
+)
 
 // newJTI generates a cryptographically random hex-encoded 16-byte token ID.
 func newJTI() (string, error) {
@@ -100,6 +166,7 @@ func GenerateAccessToken(secret, userID string, isAdmin bool, ttl time.Duration)
 		UserID:  userID,
 		IsAdmin: isAdmin,
 		JTI:     jti,
+		Typ:     TokenTypeAccess,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
@@ -131,6 +198,7 @@ func GenerateMFAChallengeToken(secret, userID string, isAdmin bool) (string, err
 		IsAdmin:    isAdmin,
 		JTI:        jti,
 		MFAPending: true,
+		Typ:        TokenTypeMFA,
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
 }
@@ -153,6 +221,7 @@ func GenerateRefreshToken(secret, userID string, isAdmin bool, ttl time.Duration
 		UserID:  userID,
 		IsAdmin: isAdmin,
 		JTI:     jti,
+		Typ:     TokenTypeRefresh,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err = token.SignedString([]byte(secret))

@@ -173,7 +173,8 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 		       i.created_at, i.updated_at,
 		       COALESCE(co.name, ''),
 		       COALESCE((SELECT SUM(cn.total_amount) FROM invoices cn
-		                 WHERE cn.corrects_invoice_id = i.id AND cn.status <> 'cancelled'), 0)
+		                 WHERE cn.corrects_invoice_id = i.id AND cn.status <> 'cancelled'), 0),
+		       NULLIF(i.journal_entry_id, '')
 		FROM invoices i
 		LEFT JOIN contacts co ON co.id = i.contact_id
 		WHERE i.id = ?`, h.usePostgres)
@@ -184,7 +185,7 @@ func (h *InvoicesHandler) GetInvoice(c *gin.Context) {
 		&inv.IssueDate, &inv.DueDate, &inv.Currency,
 		&inv.SubtotalAmount, &inv.VATAmount, &inv.TotalAmount, &inv.VATRate, &inv.AmountPaid,
 		&inv.Notes, &inv.Terms, &inv.ConvertedFromID, &inv.QuoteOutcome, &inv.CorrectsInvoiceID,
-		&inv.CreatedAt, &inv.UpdatedAt, &inv.ContactName, &inv.CreditedAmount)
+		&inv.CreatedAt, &inv.UpdatedAt, &inv.ContactName, &inv.CreditedAmount, &inv.JournalEntryID)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "facture introuvable"})
 		return
@@ -418,6 +419,39 @@ func (h *InvoicesHandler) TransitionInvoice(c *gin.Context) {
 		return
 	}
 	h.GetInvoice(c)
+}
+
+// PostInvoiceJournal POST /api/v1/invoices/:id/post-journal
+//
+// Reprend la comptabilisation d'un document envoyé dont l'écriture d'émission
+// manque, ainsi que celle de ses encaissements (voir invoicing/reprise.go). C'est
+// une action explicite et non une réparation d'office : le journal est immuable
+// et l'écriture a pu être saisie à la main.
+func (h *InvoicesHandler) PostInvoiceJournal(c *gin.Context) {
+	actor := invoicing.Actor{IP: c.ClientIP()}
+	if claims := mw.GetClaims(c); claims != nil {
+		actor.UserID = claims.UserID
+	}
+	res, err := h.svc.PostPending(c.Request.Context(), actor, c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, invoicing.ErrInvoiceNotFound):
+			refus(c, http.StatusNotFound, err)
+		case errors.Is(err, invoicing.ErrNothingToPost):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "reason": "already_posted"})
+		case errors.Is(err, invoicing.ErrPostingNotApplicable),
+			errors.Is(err, invoicing.ErrAutoPostOff),
+			errors.Is(err, invoicing.ErrOriginalNotPosted):
+			refus(c, http.StatusConflict, err)
+		default:
+			refus(c, http.StatusUnprocessableEntity, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"journal_entry_id": res.JournalEntryID,
+		"payment_entries":  res.PaymentEntries,
+	})
 }
 
 // ConvertQuote POST /api/v1/invoices/:id/convert

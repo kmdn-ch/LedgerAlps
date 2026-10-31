@@ -109,7 +109,9 @@ func newTestServer(t *testing.T) (*gin.Engine, *sql.DB, *config.Config) {
 	ih := handlers.NewInvoicesHandler(database, false, accountingSvc)
 	api.GET("/invoices", ih.ListInvoices)
 	api.POST("/invoices", ih.CreateInvoice)
+	api.GET("/invoices/:id", ih.GetInvoice)
 	api.POST("/invoices/:id/transition", ih.TransitionInvoice)
+	api.POST("/invoices/:id/post-journal", ih.PostInvoiceJournal)
 	api.PATCH("/invoices/:id", ih.UpdateInvoice)
 
 	ph := handlers.NewPaymentsHandler(database, false, accountingSvc)
@@ -170,7 +172,7 @@ func TestBootstrap(t *testing.T) {
 	w := doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
 		"email":    "admin@example.com",
 		"name":     "Admin",
-		"password": "strongpassword123",
+		"password": "StrongPassword123",
 	}), "")
 	assertStatus(t, w, http.StatusCreated)
 
@@ -183,7 +185,7 @@ func TestBootstrap(t *testing.T) {
 	w2 := doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
 		"email":    "admin2@example.com",
 		"name":     "Admin2",
-		"password": "strongpassword123",
+		"password": "StrongPassword123",
 	}), "")
 	assertStatus(t, w2, http.StatusConflict)
 }
@@ -202,13 +204,13 @@ func TestLInscriptionPubliqueNExistePlus(t *testing.T) {
 	r, _, _ := newTestServer(t)
 
 	doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
-		"email": "admin@test.com", "name": "Admin", "password": "adminpass1234",
+		"email": "admin@test.com", "name": "Admin", "password": "AdminPass1234!",
 	}), "")
 
 	w := doJSON(t, r, "POST", "/api/v1/auth/register", mustJSON(t, map[string]any{
 		"email":    "intrus@test.com",
 		"name":     "Intrus",
-		"password": "userpass1234",
+		"password": "UserPass1234xyz",
 	}), "")
 
 	if w.Code != http.StatusNotFound {
@@ -223,13 +225,13 @@ func TestLogin(t *testing.T) {
 
 	// Bootstrap
 	doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
-		"email": "admin@test.com", "name": "Admin", "password": "adminpass1234",
+		"email": "admin@test.com", "name": "Admin", "password": "AdminPass1234!",
 	}), "")
 
 	// Successful login
 	w := doJSON(t, r, "POST", "/api/v1/auth/login", mustJSON(t, map[string]any{
 		"email":    "admin@test.com",
-		"password": "adminpass1234",
+		"password": "AdminPass1234!",
 	}), "")
 	assertStatus(t, w, http.StatusOK)
 
@@ -270,11 +272,11 @@ func TestRefreshAndLogout(t *testing.T) {
 
 	// Bootstrap + login
 	doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
-		"email": "admin@test.com", "name": "Admin", "password": "adminpass1234",
+		"email": "admin@test.com", "name": "Admin", "password": "AdminPass1234!",
 	}), "")
 	loginW := doJSON(t, r, "POST", "/api/v1/auth/login", mustJSON(t, map[string]any{
 		"email":    "admin@test.com",
-		"password": "adminpass1234",
+		"password": "AdminPass1234!",
 	}), "")
 	assertStatus(t, loginW, http.StatusOK)
 
@@ -312,11 +314,11 @@ func TestRefreshAndLogout(t *testing.T) {
 func loginAdmin(t *testing.T, r *gin.Engine) string {
 	t.Helper()
 	doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
-		"email": "admin@test.com", "name": "Admin", "password": "adminpass1234",
+		"email": "admin@test.com", "name": "Admin", "password": "AdminPass1234!",
 	}), "")
 	w := doJSON(t, r, "POST", "/api/v1/auth/login", mustJSON(t, map[string]any{
 		"email":    "admin@test.com",
-		"password": "adminpass1234",
+		"password": "AdminPass1234!",
 	}), "")
 	body := parseBody(t, w)
 	token, _ := body["access_token"].(string)
@@ -575,7 +577,7 @@ func TestBootstrapPersistsCompanySettings(t *testing.T) {
 	r, database, _ := newTestServer(t)
 
 	w := doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
-		"email": "admin@test.com", "name": "Admin", "password": "adminpass1234",
+		"email": "admin@test.com", "name": "Admin", "password": "AdminPass1234!",
 		"company_name":        "KMDN",
 		"legal_form":          "Entreprise individuelle",
 		"address_street":      "Chemin des Truits 13 A",
@@ -616,7 +618,7 @@ func TestSettingsReturnsBootstrappedCompany(t *testing.T) {
 	r, _, _ := newTestServer(t)
 
 	doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
-		"email": "admin@test.com", "name": "Admin", "password": "adminpass1234",
+		"email": "admin@test.com", "name": "Admin", "password": "AdminPass1234!",
 		"company_name": "KMDN", "address_city": "Ollon VD",
 	}), "")
 
@@ -922,4 +924,164 @@ func TestLesEncaissementsSoldentLaCreanceAuJournal(t *testing.T) {
 	if parseBody(t, w)["reason"] != "invoice_has_payments" {
 		t.Fatalf("annulation d'une facture encaissée : %s", w.Body.String())
 	}
+}
+
+// Audit 9, A-01 : des montants ordinaires au centime près (12.34, 99.99, 1234.56)
+// partaient au client puis voyaient leur écriture refusée — envoyée, jamais
+// comptabilisée. Rejoué ici de bout en bout par HTTP, avec la reprise.
+func TestUneFactureAuCentimeEstComptabiliseeEtLaRepriseRattrapeLesAutres(t *testing.T) {
+	r, database, _ := newTestServer(t)
+	token := loginAdmin(t, r)
+	if res, _ := database.Exec(`UPDATE company_settings SET auto_post_invoices = 1`); res != nil {
+		if n, _ := res.RowsAffected(); n == 0 {
+			database.Exec(`INSERT INTO company_settings (id, company_name, auto_post_invoices) VALUES ('cs','Test SA',1)`)
+		}
+	}
+	cw := doJSON(t, r, "POST", "/api/v1/contacts", mustJSON(t, map[string]any{
+		"contact_type": "customer", "name": "Client AG", "address": "Rue 1",
+		"postal_code": "8001", "city": "Zurich", "country": "CH",
+	}), token)
+	cid, _ := parseBody(t, cw)["id"].(string)
+	jour := time.Now().Format("2006-01-02")
+	creer := func(prix float64) string {
+		iw := doJSON(t, r, "POST", "/api/v1/invoices", mustJSON(t, map[string]any{
+			"contact_id": cid, "issue_date": jour,
+			"due_date": time.Now().AddDate(0, 0, 30).Format("2006-01-02"),
+			"currency": "CHF", "vat_rate": 0.0,
+			"lines": []map[string]any{{"description": "Service", "quantity": 1.0, "unit_price": prix, "vat_rate": 0.0}},
+		}), token)
+		assertStatus(t, iw, http.StatusCreated)
+		id, _ := parseBody(t, iw)["id"].(string)
+		return id
+	}
+
+	for _, prix := range []float64{12.34, 33.33, 99.99, 1234.56} {
+		id := creer(prix)
+		assertStatus(t, doJSON(t, r, "POST", "/api/v1/invoices/"+id+"/transition", `{"status":"sent"}`, token), http.StatusOK)
+		gw := doJSON(t, r, "GET", "/api/v1/invoices/"+id, "", token)
+		g := parseBody(t, gw)
+		if g["total_amount"] != prix {
+			t.Errorf("HT %.2f : total %v, attendu le même montant au centime", prix, g["total_amount"])
+		}
+		if lien, _ := g["journal_entry_id"].(string); lien == "" {
+			t.Errorf("HT %.2f : envoyée sans écriture (journal_entry_id absent)", prix)
+		}
+	}
+
+	// Un document resté sans écriture (état laissé par la 1.6.5) : la reprise.
+	orphelin := creer(250.50)
+	assertStatus(t, doJSON(t, r, "POST", "/api/v1/invoices/"+orphelin+"/transition", `{"status":"sent"}`, token), http.StatusOK)
+	if _, err := database.Exec(`UPDATE invoices SET journal_entry_id = NULL WHERE id = ?`, orphelin); err != nil {
+		t.Fatal(err)
+	}
+	w := doJSON(t, r, "POST", "/api/v1/invoices/"+orphelin+"/post-journal", "", token)
+	assertStatus(t, w, http.StatusOK)
+	if b := parseBody(t, w); b["journal_entry_id"] == "" || b["journal_entry_id"] == nil {
+		t.Fatalf("reprise sans écriture : %v", b)
+	}
+	// Un second appel ne repasse rien.
+	w = doJSON(t, r, "POST", "/api/v1/invoices/"+orphelin+"/post-journal", "", token)
+	assertStatus(t, w, http.StatusConflict)
+	if parseBody(t, w)["reason"] != "already_posted" {
+		t.Fatalf("second appel : %s", w.Body.String())
+	}
+	// Un brouillon ne se reprend pas.
+	assertStatus(t, doJSON(t, r, "POST", "/api/v1/invoices/"+creer(10)+"/post-journal", "", token), http.StatusConflict)
+}
+
+// Audit 9, A-03, A-05, M-05, M-06 : les valeurs absurdes que l'API acceptait puis
+// comptabilisait — pour toujours, le journal étant immuable.
+func TestLesValeursAbsurdesSontRefuseesParLAPI(t *testing.T) {
+	r, database, _ := newTestServer(t)
+	token := loginAdmin(t, r)
+	cw := doJSON(t, r, "POST", "/api/v1/contacts", mustJSON(t, map[string]any{
+		"contact_type": "customer", "name": "Client AG", "address": "Rue 1",
+		"postal_code": "8001", "city": "Zurich", "country": "CH",
+	}), token)
+	cid, _ := parseBody(t, cw)["id"].(string)
+	jour := time.Now().Format("2006-01-02")
+	echeance := time.Now().AddDate(0, 0, 30).Format("2006-01-02")
+
+	facture := func(issue, devise string, ligne map[string]any) *httptest.ResponseRecorder {
+		corps := map[string]any{
+			"contact_id": cid, "issue_date": issue, "due_date": echeance, "currency": devise,
+			"lines": []map[string]any{ligne},
+		}
+		return doJSON(t, r, "POST", "/api/v1/invoices", mustJSON(t, corps), token)
+	}
+	ok := func(over map[string]any) map[string]any {
+		l := map[string]any{"description": "Service", "quantity": 1.0, "unit_price": 100.0, "vat_rate": 0.0}
+		for k, v := range over {
+			l[k] = v
+		}
+		return l
+	}
+
+	refuses := map[string]*httptest.ResponseRecorder{
+		"prix négatif":      facture(jour, "CHF", ok(map[string]any{"unit_price": -250.0})),
+		"quantité négative": facture(jour, "CHF", ok(map[string]any{"quantity": -3.0})),
+		"rabais de 150":     facture(jour, "CHF", ok(map[string]any{"discount_pct": 150.0})),
+		"prix de 1e300":     facture(jour, "CHF", ok(map[string]any{"unit_price": 1e300})),
+		"année 0026":        facture("0026-10-30", "CHF", ok(nil)),
+		"année 9999":        facture("9999-12-31", "CHF", ok(nil)),
+		"devise EUR":        facture(jour, "EUR", ok(nil)),
+		"devise XXX":        facture(jour, "XXX", ok(nil)),
+	}
+	for nom, w := range refuses {
+		if w.Code < 400 || w.Code >= 500 {
+			t.Errorf("%s : statut %d, attendu un refus 4xx — %s", nom, w.Code, w.Body.String())
+		}
+	}
+	assertStatus(t, facture(jour, "CHF", ok(nil)), http.StatusCreated)
+
+	// Journal : égalité exacte au centime, deux décimales au plus.
+	var bank, sales string
+	if err := database.QueryRow(`SELECT id FROM accounts WHERE code = '1020'`).Scan(&bank); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow(`SELECT id FROM accounts WHERE code = '3200'`).Scan(&sales); err != nil {
+		t.Fatal(err)
+	}
+	ecriture := func(date string, debit, credit float64) *httptest.ResponseRecorder {
+		return doJSON(t, r, "POST", "/api/v1/journal", mustJSON(t, map[string]any{
+			"date": date, "description": "essai",
+			"lines": []map[string]any{
+				{"account_id": bank, "debit_amount": debit, "sequence": 1},
+				{"account_id": sales, "credit_amount": credit, "sequence": 2},
+			},
+		}), token)
+	}
+	for nom, w := range map[string]*httptest.ResponseRecorder{
+		"déséquilibre de 0.0009": ecriture(jour, 100.0009, 100),
+		"trois décimales":        ecriture(jour, 100.123, 100.123),
+		"1e300":                  ecriture(jour, 1e300, 1e300),
+		"année 0026":             ecriture("0026-10-30", 1, 1),
+	} {
+		if w.Code < 400 || w.Code >= 500 {
+			t.Errorf("écriture %s : statut %d — %s", nom, w.Code, w.Body.String())
+		}
+	}
+	assertStatus(t, ecriture(jour, 100, 100), http.StatusCreated)
+
+	// Aucun exercice n'a été créé par ces dates absurdes.
+	var n int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM fiscal_years WHERE name IN ('26','0026','9999')`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("%d exercice(s) créé(s) par des dates absurdes (%v)", n, err)
+	}
+}
+
+// Audit 9, F-02 : la politique des mots de passe (12 caractères, minuscule,
+// majuscule, chiffre) ne valait qu'au changement. Le premier administrateur
+// s'amorçait avec 8 caractères sans complexité.
+func TestLePremierAdministrateurSuitLaPolitiqueDesMotsDePasse(t *testing.T) {
+	r, _, _ := newTestServer(t)
+	for _, faible := range []string{"12345678", "password", "aaaaaaaaaaaa", "Abcdefgh1", "ABCDEFGHIJKL1"} {
+		w := doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
+			"email": "admin@test.com", "name": "Admin", "password": faible,
+		}), "")
+		assertStatus(t, w, http.StatusUnprocessableEntity)
+	}
+	assertStatus(t, doJSON(t, r, "POST", "/api/v1/auth/bootstrap", mustJSON(t, map[string]any{
+		"email": "admin@test.com", "name": "Admin", "password": "BienAssezLong1",
+	}), ""), http.StatusCreated)
 }

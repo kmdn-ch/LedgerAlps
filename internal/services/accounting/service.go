@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/core/security"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
@@ -187,7 +188,10 @@ func (s *Service) PostEntry(ctx context.Context, userID, entryID, ipAddress stri
 	if err := s.db.QueryRowContext(ctx, sumQ, entryID).Scan(&totalDebit, &totalCredit); err != nil {
 		return fmt.Errorf("sum lines: %w", err)
 	}
-	if abs(totalDebit-totalCredit) > 0.001 {
+	// Égalité EXACTE au centime : une tolérance de 0,001 laissait comptabiliser
+	// 100.0009 contre 100.00, et ce qui est comptabilisé ne se défait plus
+	// (audit 9, M-06). Les sommes flottantes se comparent en centimes entiers.
+	if compliance.Cents(totalDebit) != compliance.Cents(totalCredit) {
 		return ErrNotDoubleEntry{Debit: totalDebit, Credit: totalCredit}
 	}
 
@@ -487,18 +491,46 @@ func (s *Service) nextReference(ctx context.Context, tx *sql.Tx, date time.Time)
 	return fmt.Sprintf("%s%03d", stem, last+1), nil
 }
 
-// validateDoubleEntry returns ErrNotDoubleEntry if sum(debit) ≠ sum(credit).
+// validateDoubleEntry vérifie la forme et l'équilibre d'une écriture.
+//
+// Ces règles vivent ICI et non seulement dans la route HTTP (audit 9, A-05, M-06) :
+// la facturation, les encaissements, la reprise et les contrepassations créent
+// aussi des écritures, et le journal est immuable — une ligne négative ou à trois
+// décimales, une fois comptabilisée, reste.
+//
+//   - chaque montant est fini, positif ou nul, borné, et tombe sur un centime ;
+//   - une ligne est débitée OU créditée, et porte un montant ;
+//   - débit et crédit s'égalent EXACTEMENT, comptés en centimes entiers.
+//
+// Rend ErrNotDoubleEntry si sum(débit) ≠ sum(crédit).
 func validateDoubleEntry(lines []LineInput) error {
 	var debit, credit float64
-	for _, l := range lines {
+	var debitC, creditC int64
+	for i, l := range lines {
+		var d, c float64
 		if l.DebitAmount != nil {
-			debit += *l.DebitAmount
+			d = *l.DebitAmount
 		}
 		if l.CreditAmount != nil {
-			credit += *l.CreditAmount
+			c = *l.CreditAmount
 		}
+		for _, v := range []float64{d, c} {
+			if err := compliance.CheckCents(v); err != nil {
+				return fmt.Errorf("ligne %d : %w", i+1, err)
+			}
+		}
+		if d != 0 && c != 0 {
+			return fmt.Errorf("ligne %d : un compte est débité ou crédité, pas les deux", i+1)
+		}
+		if d == 0 && c == 0 && len(lines) > 1 {
+			return fmt.Errorf("ligne %d : ni débit ni crédit", i+1)
+		}
+		debit += d
+		credit += c
+		debitC += compliance.Cents(d)
+		creditC += compliance.Cents(c)
 	}
-	if abs(debit-credit) > 0.001 {
+	if debitC != creditC {
 		return ErrNotDoubleEntry{Debit: debit, Credit: credit}
 	}
 	if len(lines) < 2 {

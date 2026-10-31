@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
@@ -57,6 +58,12 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 	paymentDate, err := time.Parse("2006-01-02", req.PaymentDate)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "la date de paiement doit être au format AAAA-MM-JJ"})
+		return
+	}
+	// 0001-01-01 est l'instant nul de Go : le service le lirait comme « pas de
+	// date » et enregistrerait aujourd'hui, en silence. Le refuser ici (A-03).
+	if err := compliance.CheckBookingDate(paymentDate); err != nil {
+		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
 

@@ -101,7 +101,11 @@ export function UsersPanel() {
   }
 
   const items = users.data?.items ?? []
-  const passwordOK = form.password.length >= 8
+  // La politique du serveur (security.ValidatePasswordPolicy) : douze caractères,
+  // une minuscule, une majuscule, un chiffre. Le serveur reste juge ; ceci évite
+  // seulement d'offrir un bouton qui sera refusé.
+  const passwordOK = [...form.password].length >= 12
+    && /\p{Ll}/u.test(form.password) && /\p{Lu}/u.test(form.password) && /\p{Nd}/u.test(form.password)
   const canCreate = form.name.trim() !== '' && form.email.includes('@') && passwordOK
 
   return (

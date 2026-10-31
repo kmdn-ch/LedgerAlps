@@ -361,3 +361,24 @@ func mustMigrationSQLFor(t *testing.T, version string) string {
 	}
 	return s
 }
+
+// Audit 9, F-02 : le mot de passe initial d'un compte créé par un administrateur
+// n'était contrôlé que sur sa longueur (8). `12345678`, `password`, `aaaaaaaaaaaa`
+// ouvraient un compte tant que son titulaire ne s'y était pas connecté.
+func TestLeMotDePasseInitialSuitLaPolitique(t *testing.T) {
+	database, r := usersEnv(t)
+	seedUser(t, database, "adm", authz.RoleAdmin, true)
+
+	for _, faible := range []string{"12345678", "password", "aaaaaaaaaaaa", "Abcdefgh1", "MOTDEPASSE2026"} {
+		w := do(r, http.MethodPost, "/users", "adm", map[string]any{
+			"email": "x@t.ch", "name": "X", "password": faible, "role": "viewer"})
+		if w.Code != http.StatusUnprocessableEntity {
+			t.Errorf("%q : statut %d, attendu 422 — %s", faible, w.Code, w.Body.String())
+		}
+	}
+	w := do(r, http.MethodPost, "/users", "adm", map[string]any{
+		"email": "ok@t.ch", "name": "Ok", "password": "MotDePasse2026", "role": "viewer"})
+	if w.Code != http.StatusCreated {
+		t.Errorf("mot de passe conforme refusé : %d — %s", w.Code, w.Body.String())
+	}
+}

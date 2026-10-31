@@ -446,6 +446,9 @@ export const invoicesApi = {
   // Alias kept for compatibility with pages that use updateStatus
   updateStatus: (id: string, status: string) =>
     api.post(`/invoices/${id}/transition`, { status }),
+  // Reprend la comptabilisation d'un document envoyé dont l'écriture manque.
+  postJournal: (id: string) =>
+    api.post<{ journal_entry_id: string; payment_entries: number }>(`/invoices/${id}/post-journal`),
   // Convertit une offre en facture. L'offre est conservée ; la facture créée
   // porte son propre numéro FA- et référence l'offre.
   convertQuote: (id: string, data?: { issue_date?: string; due_date?: string }) =>

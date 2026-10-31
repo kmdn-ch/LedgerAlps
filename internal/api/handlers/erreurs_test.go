@@ -73,7 +73,9 @@ func TestRefusGardeLesMessagesMetierEtMasqueLesDetailsTechniques(t *testing.T) {
 // écrivant `StatusInternalServerError … err.Error()` ou en collant la cause au
 // message.
 func TestAucuneReponse500NeRevelleSaCause(t *testing.T) {
-	re := regexp.MustCompile(`StatusInternalServerError[^\n]*(err\.Error\(\)|\+\s*err\b|%v"\s*,\s*err)`)
+	// (?i) : la variable s'appelle parfois `impErr` — l'ancienne expression ne voyait
+	// que `err` en minuscules, et une fuite de la base est passée dessous (audit 9, M-02).
+	re := regexp.MustCompile(`(?i)StatusInternalServerError[^\n]*(\w*err\w*\.Error\(\)|\+\s*\w*err\b|%v"\s*,\s*\w*err)`)
 	fichiers, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +93,33 @@ func TestAucuneReponse500NeRevelleSaCause(t *testing.T) {
 				t.Errorf("%s:%d renvoie la cause d'une erreur au client : %s — passer par erreurInterne(c, message, err)",
 					f, i+1, strings.TrimSpace(ligne))
 			}
+		}
+	}
+}
+
+// Audit 9, M-02 : « syntax error » figurait parmi les marques d'une erreur de base
+// de données. Un relevé camt.053 malformé — « XML syntax error on line 1 » —
+// répondait donc 500 au lieu de 422, régression de la 1.6.5.
+func TestUnReleveXMLMalformeResteUnRefus(t *testing.T) {
+	c, w := contexteDeTest()
+	refus(c, http.StatusUnprocessableEntity,
+		errors.New("camt.053: parse XML: XML syntax error on line 1: unexpected EOF"))
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("statut = %d, attendu 422 : un fichier mal formé est un refus, pas une panne", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "XML syntax error") {
+		t.Errorf("le motif n'est plus rendu à l'utilisateur : %s", w.Body.String())
+	}
+
+	// Le moteur SQL, lui, reste masqué sous toutes ses formes.
+	for _, sql := range []string{
+		`SQL logic error: near "FROM": syntax error`,
+		"sqlite3: SQL logic error: incomplete input",
+	} {
+		c, w := contexteDeTest()
+		refus(c, http.StatusUnprocessableEntity, errors.New(sql))
+		if w.Code != http.StatusInternalServerError || strings.Contains(w.Body.String(), "FROM") {
+			t.Errorf("%q : statut %d, corps %s", sql, w.Code, w.Body.String())
 		}
 	}
 }

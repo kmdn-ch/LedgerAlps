@@ -43,6 +43,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
 	accsvc "github.com/kmdn-ch/ledgeralps/internal/services/accounting"
@@ -155,6 +156,11 @@ func (s *Service) RecordPayment(ctx context.Context, actor Actor, req PaymentReq
 	date := req.Date
 	if date.IsZero() {
 		date = time.Now()
+	}
+	// Une date de paiement absurde (0001, 9999) serait comptabilisée dans un
+	// exercice créé pour l'occasion (audit 9, A-03).
+	if err := compliance.CheckBookingDate(date); err != nil {
+		return nil, err
 	}
 
 	// L'écriture d'abord (voir l'en-tête).

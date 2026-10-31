@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
@@ -183,10 +184,19 @@ func (s *Service) PostIssuedDocument(
 }
 
 // buildIssueLines assembles the debit/credit lines for one issued document.
+//
+// Le produit est le total MOINS la TVA, et non le HT lu tel quel. Depuis la 1.6.6
+// les deux sont égaux (le total est HT + TVA au centime). Ils diffèrent pour les
+// documents établis avant : leur total était arrondi à 5 centimes, ce que le
+// client a payé ou doit payer. L'écriture doit porter ce montant-là, sinon elle
+// ne s'équilibre pas et le document reste envoyé sans écriture (audit 9, A-01).
+// L'écart, de quelques centimes, rejoint le produit : c'est la contrepartie que
+// le client a effectivement versée.
 func (s *Service) buildIssueLines(
 	ctx context.Context, credit bool, a documentAmounts, arID, revID, number string,
 ) ([]accounting.LineInput, error) {
-	total, subtotal, vat := a.Total, a.Subtotal, a.VAT
+	total, vat := a.Total, a.VAT
+	subtotal := compliance.RoundCents(total - vat)
 
 	arLine := accounting.LineInput{
 		AccountID:   arID,

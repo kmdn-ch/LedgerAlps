@@ -256,6 +256,7 @@ export const fr = {
   'pay.intro': 'Sélectionnez les factures à régler : LedgerAlps produit un fichier XML que vous déposez dans votre e-banking. Compatible UBS, PostFinance, Raiffeisen et Banques cantonales.',
   'pay.compteADebiter': 'Compte à débiter',
   'pay.aucuneAPayer': 'Aucune facture à payer',
+  'pay.erreurLecture': 'La liste des factures à payer n’a pas pu être lue.',
   'pay.aucuneAPayerAide': 'Seules les factures fournisseurs comptabilisées apparaissent ici. Une facture encore au brouillon doit d’abord être comptabilisée : la charge doit exister dans les livres avant que la trésorerie bouge.',
   'pay.toutSelectionner': 'Tout sélectionner',
   'pay.colFacture': 'Facture',
@@ -574,6 +575,15 @@ export const fr = {
   'fd.erreurStatut': 'Erreur lors du changement de statut.',
   'fd.erreurConversion': 'La conversion a échoué. Cette offre a peut-être déjà donné lieu à une facture.',
   'fd.erreurNoteCredit': 'La note de crédit a été refusée : le total crédité dépasserait le montant de la facture.',
+  'fd.comptabiliserMaintenant': 'Comptabiliser maintenant',
+  'fd.comptabilisationEnCours': 'Comptabilisation…',
+  'fd.infoBulleComptabiliser': 'Ce document est envoyé mais ne figure pas au journal : le produit et la TVA due manquent à la comptabilité.',
+  'fd.titreComptabiliser': 'Comptabiliser {numero} maintenant ?',
+  'fd.consComptabiliser1': 'L’écriture d’émission (débiteurs / produits / TVA due) est passée au journal, à la date d’émission du document.',
+  'fd.consComptabiliser2': 'Les encaissements déjà enregistrés pour ce document sans écriture sont passés aussi.',
+  'fd.rassurComptabiliser': 'Si vous avez déjà saisi cette écriture à la main, ne continuez pas : elle serait doublée. Une écriture comptabilisée ne se supprime plus (CO art. 957a).',
+  'fd.confirmerComptabiliser': 'Comptabiliser',
+  'fd.erreurComptabiliser': 'La comptabilisation a échoué.',
   'fd.crediteeEnTotalite': 'Facture créditée en totalité ({montant}). La facture reste telle qu’elle a été émise ; la correction vit dans la note de crédit.',
   'fd.noteCreditAnnulantAvant': 'Note de crédit annulant la',
   'fd.factureOrigine': 'facture d’origine',
@@ -759,7 +769,7 @@ export const fr = {
   'us.retirerSecondFacteur': 'Retirer le second facteur',
   'us.pasDeSuppression': 'Un compte se désactive, il ne se supprime pas : les écritures et les documents portent le nom de leur auteur, et l’effacer romprait la traçabilité que le CO art. 957a exige. Un compte désactivé ne peut plus rien faire, y compris avec une session déjà ouverte.',
   'us.ajouterCompte': 'Ajouter un compte',
-  'us.motDePasseAide': 'Au moins 8 caractères. Transmettez-le à la personne par un autre canal que l’e-mail où vous lui annoncez son accès.',
+  'us.motDePasseAide': 'Au moins 12 caractères, dont une minuscule, une majuscule et un chiffre. Transmettez-le à la personne par un autre canal que l’e-mail où vous lui annoncez son accès.',
   'us.creerCompte': 'Créer le compte',
 
   // ─── Diagnostic ───
@@ -1320,7 +1330,7 @@ export const fr = {
 
   // ─── Écran de connexion — gabarit à deux panneaux ───
   'cx.garantieLocalTitre': 'Données locales',
-  'cx.garantieLocalAide': 'Aucun nuage, aucun tiers, aucune connexion sortante',
+  'cx.garantieLocalAide': 'Aucun nuage, aucun tiers : vos données restent sur cet ordinateur. Seules connexions sortantes : la vérification des mises à jour (désactivable) et la recherche d’entreprise, à votre demande',
   'cx.garantieLegaleTitre': 'Conformité CO et nLPD',
   'cx.garantieLegaleAide': 'Traçabilité des écritures, conservation dix ans',
   'cx.afficherMotDePasse': 'Afficher le mot de passe',

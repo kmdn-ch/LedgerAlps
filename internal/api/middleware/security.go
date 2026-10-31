@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -11,6 +13,17 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		// Rien de ce produit n'a besoin de l'appareil de la personne.
+		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+		// Aucune réponse de l'API ne doit rester dans un cache : jetons d'accès,
+		// données comptables, PDF de factures. Sans cet en-tête, un cache partagé
+		// (mandataire d'entreprise) ou le disque du navigateur les conservait
+		// (audit 9, F-01). Les fichiers de l'interface gardent leur cache. Un
+		// gestionnaire qui pose son propre Cache-Control (un PDF) l'emporte, posé
+		// après.
+		if p := c.Request.URL.Path; strings.HasPrefix(p, "/api/") || p == "/health" {
+			c.Header("Cache-Control", "no-store")
+		}
 		// img-src includes data: for base64 company logos stored as data URLs.
 		// style-src includes 'unsafe-inline' for Tailwind utility classes injected at runtime.
 		c.Header("Content-Security-Policy",

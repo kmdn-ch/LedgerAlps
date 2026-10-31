@@ -282,7 +282,7 @@ func (a *Authorizer) DenyWritesWithoutPermission() gin.HandlerFunc {
 				gin.H{"error": "ce compte n'est plus actif"})
 			return
 		}
-		if role == authz.RoleViewer {
+		if role == authz.RoleViewer && !postEnLecture[c.FullPath()] {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error": "votre rôle (" + role.Label() + ") ne permet aucune modification",
 			})
@@ -290,6 +290,24 @@ func (a *Authorizer) DenyWritesWithoutPermission() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// postEnLecture liste les routes POST qui ne MODIFIENT RIEN : le corps de la
+// requête porte seulement ce qu'une URL ne peut pas porter (une liste
+// d'identifiants, une période). Le rôle en lecture seule les reçoit.
+//
+// Le filtre refusait « toute méthode d'écriture », donc tout POST, sans regarder
+// ce que la route fait : la fiduciaire en lecture seule ne pouvait ni télécharger
+// un lot de PDF ni préparer la déclaration TVA, que docs/DROITS.md lui accorde
+// (audit 9, M-03).
+//
+// La liste est EXPLICITE et courte à dessein : une route y entre quand on a lu
+// qu'elle ne fait aucune écriture, pas parce qu'elle déclare PermRead — la
+// seconde barrière existe justement pour le jour où cette déclaration est fausse.
+// Une entrée est la valeur de c.FullPath() de la route.
+var postEnLecture = map[string]bool{
+	"/api/v1/invoices/bulk-pdf": true, // lot de PDF : lecture, aucune écriture
+	"/api/v1/vat/declaration":   true, // calcul de la déclaration : lecture, aucune écriture
 }
 
 // RoleOf rend le rôle résolu pour cette requête, quand un filtre l'a posé.

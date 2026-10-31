@@ -104,10 +104,13 @@ func (h *UsersHandler) CreateUser(c *gin.Context) {
 		return
 	}
 	// Le mot de passe d'un compte partagé avec un tiers mérite au moins la même
-	// exigence que celui de l'administrateur.
-	if len([]rune(body.Password)) < 8 {
+	// exigence que celui de l'administrateur : la politique des mots de passe
+	// vaut dès le premier, pas seulement au changement (audit 9, F-02). Un compte
+	// ouvert avec `12345678` restait ouvert à qui le devine tant que son titulaire
+	// ne s'était pas connecté.
+	if err := ValidateUserPassword(body.Password); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
-			"error": "le mot de passe doit contenir au moins 8 caractères"})
+			"error": "mot de passe trop faible — " + err.Error()})
 		return
 	}
 
