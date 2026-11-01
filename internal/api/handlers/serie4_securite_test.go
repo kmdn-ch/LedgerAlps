@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -312,6 +313,26 @@ func TestUnRefusNeLaisseRienEcritDansLaFicheSociete(t *testing.T) {
 	}
 }
 
+// jetonsRestants liste les jetons de rafraîchissement d'un compte. Une fonction à part : le curseur
+// se ferme par defer (sqlclosecheck, comme dans le reste du dépôt).
+func jetonsRestants(t *testing.T, database *sql.DB, compte string) []string {
+	t.Helper()
+	rows, err := database.Query(`SELECT jti FROM refresh_tokens WHERE user_id = ?`, compte)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var j string
+		if err := rows.Scan(&j); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, j)
+	}
+	return out
+}
+
 // HIGH-20. Changer son mot de passe fermait TOUTES les sessions du compte, la sienne comprise,
 // alors que le message dit « les autres sessions » : l'utilisateur était renvoyé à l'écran de
 // connexion à la fin de son jeton d'accès, sans explication.
@@ -363,14 +384,7 @@ func TestChangerSonMotDePasseGardeLaSessionCourante(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var restants []string
-	rows, _ := database.Query(`SELECT jti FROM refresh_tokens WHERE user_id = 'u1'`)
-	for rows.Next() {
-		var j string
-		rows.Scan(&j)
-		restants = append(restants, j)
-	}
-	rows.Close()
+	restants := jetonsRestants(t, database, "u1")
 	if len(restants) != 1 || restants[0] != rc.JTI {
 		t.Errorf("sessions restantes %v, attendu la seule session courante (%s)", restants, rc.JTI)
 	}

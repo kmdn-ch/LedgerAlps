@@ -118,7 +118,7 @@ func TestUnNomDExerciceDejaPrisRepond409(t *testing.T) {
 		"name": "2030", "start_date": "2030-01-01", "end_date": "2030-12-31"}); w.Code != http.StatusCreated {
 		t.Fatalf("premier exercice : %d — %s", w.Code, w.Body.String())
 	}
-	var w *httptest.ResponseRecorder = do(r, http.MethodPost, "/fiscal-years", "", map[string]string{
+	w := do(r, http.MethodPost, "/fiscal-years", "", map[string]string{
 		"name": "2030", "start_date": "2031-01-01", "end_date": "2031-12-31"})
 	if w.Code != http.StatusConflict {
 		t.Fatalf("nom en double : %d, attendu 409 — %s", w.Code, w.Body.String())
