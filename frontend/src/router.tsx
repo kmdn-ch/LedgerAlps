@@ -15,10 +15,9 @@ import { SettingsPage }   from '@/pages/SettingsPage'
 import { InvoiceDetailPage }  from '@/pages/InvoiceDetailPage'
 import { EditInvoicePage }    from '@/pages/EditInvoicePage'
 import { ContactDetailPage } from '@/pages/ContactDetailPage'
-import { useEffect, useState } from 'react'
 import { useAuthStore }   from '@/store/auth'
 import { useCanWrite } from '@/hooks/usePermissions'
-import { authApi }        from '@/api/client'
+import { useRestoreSession } from '@/hooks/useRestoreSession'
 import { useT }           from '@/i18n/useT'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { MFAEnrolmentPage } from '@/pages/MFAEnrolmentPage'
@@ -48,36 +47,9 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const mustChange = useAuthStore(s => s.mustChangePassword)
   const needsMfa   = useAuthStore(s => s.mfaEnrolmentRequired)
   const isAuth     = useAuthStore(s => s.isAuth)
-  // État initial calculé une seule fois : y a-t-il une session à restaurer ?
-  const [restoring, setRestoring] = useState(() => {
-    const s = useAuthStore.getState()
-    return s.isAuth && !s.accessToken
-  })
-
-  // Tableau de dépendances vide, délibérément : l'effet ne doit s'exécuter
-  // qu'au montage. Avec [isAuth, accessToken], poser le nouveau jeton
-  // déclenchait le nettoyage de l'effet AVANT que le .finally ne s'exécute —
-  // « annulé » passait à vrai, setRestoring(false) était sauté, et l'écran
-  // restait bloqué sur « Restauration de la session… » alors que l'appel avait
-  // pourtant réussi.
-  useEffect(() => {
-    if (!restoring) return
-    let monte = true
-
-    authApi.refresh()
-      .then((res) => {
-        if (monte) useAuthStore.getState().setAccessToken(res.data.access_token)
-      })
-      .catch(() => {
-        // Cookie absent, expiré ou révoqué : la session est bel et bien finie.
-        if (monte) useAuthStore.getState().logout()
-      })
-      .finally(() => {
-        if (monte) setRestoring(false)
-      })
-
-    return () => { monte = false }
-  }, [])
+  // La restauration de session vit dans un hook partagé : les écrans hors de cette coquille
+  // (changement du mot de passe temporaire, second facteur) en ont besoin aussi.
+  const restoring = useRestoreSession()
 
   if (mustChange) return <Navigate to="/change-password" replace />
   if (needsMfa) return <Navigate to="/second-facteur" replace />

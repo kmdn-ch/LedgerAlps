@@ -1282,7 +1282,7 @@ var catalogue = map[string]map[Lang]string{
 		IT: "URL di dati non valido",
 		EN: "Invalid data URL",
 	},
-	"invalid or expired token": {
+	"jeton invalide ou expiré": {
 		DE: "Token ungültig oder abgelaufen",
 		IT: "Token non valido o scaduto",
 		EN: "Invalid or expired token",
@@ -1966,7 +1966,7 @@ var catalogue = map[string]map[Lang]string{
 		IT: "mascherati in questa esportazione, come nel JSON. L’esportazione completa di un IBAN\n",
 		EN: "masked in this export, as in the JSON. The full export of an IBAN\n",
 	},
-	"missing or malformed Authorization header": {
+	"en-tête Authorization absent ou mal formé": {
 		DE: "Authorization-Kopfzeile fehlt oder ist fehlerhaft",
 		IT: "Intestazione Authorization assente o malformata",
 		EN: "Missing or malformed Authorization header",

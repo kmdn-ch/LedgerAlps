@@ -113,10 +113,24 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	// Les autres sessions du compte tombent. Le mot de passe temporaire a
-	// circulé ; si quelqu'un s'en était servi, sa session doit mourir avec lui.
-	revoke := db.Rebind(`DELETE FROM refresh_tokens WHERE user_id = ?`, h.cfg.UsePostgres())
-	if _, err := h.db.ExecContext(ctx, revoke, claims.UserID); err != nil {
+	// Les AUTRES sessions du compte tombent. Le mot de passe temporaire a circulé ; si quelqu'un
+	// s'en était servi, sa session doit mourir avec lui. Celle de la personne qui vient de changer
+	// son mot de passe, non (audit croisé Gemini, HIGH-20) : elle les supprimait toutes, la
+	// sienne comprise, alors que le message dit « les autres sessions » — elle était renvoyée à
+	// l'écran de connexion à la fin de son jeton d'accès, sans explication.
+	//
+	// La session courante se reconnaît au cookie de rafraîchissement de la requête. Sans cookie
+	// (client sans navigateur), toutes tombent : mieux vaut en fermer une de trop que d'en
+	// laisser une ouverte.
+	garder := ""
+	if raw, ok := refreshTokenFromRequest(c); ok {
+		if rc, err := security.ParseToken(h.cfg.JWTSecret, raw); err == nil &&
+			rc.Typ == security.TokenTypeRefresh && rc.UserID == claims.UserID {
+			garder = rc.JTI
+		}
+	}
+	revoke := db.Rebind(`DELETE FROM refresh_tokens WHERE user_id = ? AND jti <> ?`, h.cfg.UsePostgres())
+	if _, err := h.db.ExecContext(ctx, revoke, claims.UserID, garder); err != nil {
 		_ = err // non bloquant : le mot de passe est déjà changé
 	}
 

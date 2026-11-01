@@ -16,6 +16,7 @@ import {
 import { usersApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
+import { useAuthStore } from '@/store/auth'
 import type { AppUser, UserRole } from '@/types'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
@@ -30,6 +31,8 @@ const ROLES: Array<{ v: UserRole; cle: Cle; icon: typeof Eye; desc: Cle }> = [
 
 export function UsersPanel() {
   const t = useT()
+  // Le compte connecté : sa propre ligne n'offre pas le retrait du second facteur.
+  const moi = useAuthStore(s => s.user?.email)
   const qc = useQueryClient()
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -160,14 +163,18 @@ export function UsersPanel() {
                           <KeyRound size={13} /> {t('us.reinitialiser')}
                         </button>
                       )}
-                      <button
-                        onClick={() => { setError(null); setConfirmMfa(u) }}
-                        disabled={removeMfa.isPending}
-                        title={t('us.infoBulleMfa')}
-                        className="btn-ghost btn-sm flex items-center gap-1"
-                      >
-                        <Smartphone size={13} /> {t('us.secondFacteur')}
-                      </button>
+                      {/* Pas sur sa propre ligne : le serveur le refuse, et retirer son propre
+                          second facteur passe par le mot de passe, depuis son compte. */}
+                      {u.email !== moi && (
+                        <button
+                          onClick={() => { setError(null); setConfirmMfa(u) }}
+                          disabled={removeMfa.isPending}
+                          title={t('us.infoBulleMfa')}
+                          className="btn-ghost btn-sm flex items-center gap-1"
+                        >
+                          <Smartphone size={13} /> {t('us.secondFacteur')}
+                        </button>
+                      )}
                       <button
                         onClick={() => setActive.mutate({ id: u.id, active: !u.is_active })}
                         disabled={setActive.isPending}

@@ -108,7 +108,7 @@ export function PaymentRunPanel() {
     onSuccess: (r) => { setError(null); setDone(r); setSelected(new Set()) },
     onError: (e) => {
       setDone(null)
-      setError(refusalMessage(e, "Le fichier de paiement n'a pas pu être produit."))
+      setError(refusalMessage(e, t('pay.erreurFichier')))
     },
   })
 
@@ -139,7 +139,7 @@ export function PaymentRunPanel() {
     },
     onError: (e) => {
       setARetirer(false)
-      setError(refusalMessage(e, "Les factures n'ont pas pu être retirées."))
+      setError(refusalMessage(e, t('pay.erreurRetrait')))
     },
   })
 
@@ -261,7 +261,7 @@ export function PaymentRunPanel() {
               <li key={i.id} className="flex items-start gap-2">
                 {peutEcrire && (
                   <input type="checkbox" className="mt-1" checked={selected.has(i.id)}
-                         aria-label={`Sélectionner ${i.reference}`}
+                         aria-label={t('pay.ariaSelectionner', { ref: i.reference })}
                          onChange={() => toggle(i.id)} />
                 )}
                 <span>

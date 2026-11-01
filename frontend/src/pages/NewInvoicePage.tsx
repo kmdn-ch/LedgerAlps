@@ -323,7 +323,11 @@ export function NewInvoicePage() {
                         <td className="px-2 py-2 w-20">
                           <input type="number" step="0.001" min="0.001"
                             aria-label={t('nf.ariaQuantite', { n: i + 1 })}
-                            className="input text-right" {...register(`lines.${i}.quantity`)} />
+                            className={`input text-right ${errors.lines?.[i]?.quantity ? 'input-error' : ''}`}
+                            {...register(`lines.${i}.quantity`)} />
+                          {errors.lines?.[i]?.quantity && (
+                            <p className="error-msg">{tv(errors.lines[i]?.quantity?.message)}</p>
+                          )}
                         </td>
                         <td className="px-2 py-2 w-16">
                           <input className="input" placeholder={t('nf.placeholderUnite')}

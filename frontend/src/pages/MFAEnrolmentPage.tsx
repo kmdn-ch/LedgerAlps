@@ -2,10 +2,12 @@
 //
 // Un compte administrateur peut créer des comptes, restaurer une sauvegarde,
 // déverrouiller une période. Son mot de passe est la seule chose qui en sépare
-// quelqu'un. Cet écran n'offre donc aucune sortie pour un administrateur qui
+// quelqu'un. Cet écran n'offre donc aucun « plus tard » à un administrateur qui
 // n'est pas encore inscrit : le serveur refuse de toute façon toute autre
-// requête, et proposer un bouton « plus tard » ne ferait qu'afficher une
-// application dont chaque appel échouerait.
+// requête, et proposer ce bouton ne ferait qu'afficher une application dont
+// chaque appel échouerait. Se DÉCONNECTER reste possible — il ne dispense de
+// rien, le compte revient ici à la prochaine connexion — pour que l'écran ne
+// soit pas une impasse.
 //
 // Ce que le second facteur protège : le cas où le MOT DE PASSE fuit — réutilisé
 // ailleurs, deviné, lu par-dessus l'épaule. Il ne protège pas de quelqu'un qui
@@ -13,7 +15,7 @@
 // à cette menace est le chiffrement de la base et celui du disque.
 
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import {
   Mountain, Smartphone, Copy, Check, Loader2, ShieldCheck, KeyRound, AlertTriangle,
@@ -22,6 +24,7 @@ import { authApi } from '@/api/client'
 import { ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import { useAuthStore } from '@/store/auth'
+import { useRestoreSession } from '@/hooks/useRestoreSession'
 import { useT } from '@/i18n/useT'
 
 interface SetupData {
@@ -35,6 +38,11 @@ export function MFAEnrolmentPage() {
   const t = useT()
   const navigate = useNavigate()
   const clearMfaEnrolment = useAuthStore(s => s.clearMfaEnrolment)
+  const logout = useAuthStore(s => s.logout)
+  const isAuth = useAuthStore(s => s.isAuth)
+  // Hors de la coquille protégée, donc sans sa restauration de session : après un F5 le jeton
+  // d'accès (en mémoire) est perdu et chaque appel partait sans jeton (HIGH-20).
+  const restoring = useRestoreSession()
 
   const [setup, setSetup] = useState<SetupData | null>(null)
   const [code, setCode] = useState('')
@@ -66,6 +74,28 @@ export function MFAEnrolmentPage() {
       setTimeout(() => setCopied(false), 2500)
     } catch {
       setError(t('mf.echecCopie'))
+    }
+  }
+
+  if (!isAuth) return <Navigate to="/login" replace />
+  if (restoring) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-alpine-950 text-sm text-alpine-400">
+        {t('rt.restauration')}
+      </div>
+    )
+  }
+
+  // La sortie : se déconnecter. Elle ne dispense PAS de l'inscription — le compte revient ici à la
+  // prochaine connexion —, mais l'écran n'est plus une impasse après un F5 ou un onglet rouvert.
+  async function quitter() {
+    try {
+      await authApi.logout()
+    } catch {
+      // Serveur injoignable ou session déjà finie : on déconnecte quand même localement.
+    } finally {
+      logout()
+      navigate('/login', { replace: true })
     }
   }
 
@@ -221,6 +251,16 @@ export function MFAEnrolmentPage() {
             </>
           )}
         </div>
+
+        {/* Pas de sortie une fois les codes affichés : « J'ai noté mes codes » est la seule suite. */}
+        {!codes && (
+          <div className="mt-4 text-center">
+            <button type="button" onClick={quitter}
+                    className="text-xs text-alpine-400 hover:text-white underline underline-offset-2">
+              {t('nav.deconnexion')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

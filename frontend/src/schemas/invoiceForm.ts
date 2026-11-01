@@ -20,9 +20,12 @@ import { z } from 'zod'
 
 const lineSchema = z.object({
   description:  z.string().min(1, 'val.requis'),
-  quantity:     z.coerce.number().positive(),
+  quantity:     z.coerce.number().positive('val.quantitePositive'),
   unit:         z.string().optional(),
-  unit_price:   z.coerce.number().positive('val.prixRequis'),
+  // Zéro est un prix (un échantillon, une ligne offerte) : le serveur l'accepte, et l'écran le
+  // refusait. Seul un prix négatif est une faute — la correction d'une facture est la note de
+  // crédit, pas une ligne négative (audit croisé Gemini, MED-14).
+  unit_price:   z.coerce.number().min(0, 'val.prixNegatif'),
   discount_pct: z.coerce.number().min(0).max(100).default(0),
   vat_rate:     z.coerce.number().min(0).default(8.1),
 })

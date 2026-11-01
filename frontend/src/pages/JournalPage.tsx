@@ -164,7 +164,7 @@ export function JournalPage() {
     // Le refus du serveur est affiché TEL QUEL. Il nomme la ligne et la cause :
     // « ligne 1 : le compte 10 n'existe pas dans le plan comptable », « écart
     // 90.00 ». Le remplacer par un message générique était le défaut d'origine.
-    onError: (e) => setError(refusalMessage(e, "L'écriture n'a pas pu être enregistrée.")),
+    onError: (e) => setError(refusalMessage(e, t('jr.erreurEnregistrement'))),
   })
 
   const post = useMutation({
@@ -177,7 +177,7 @@ export function JournalPage() {
     },
     onError: (e) => {
       setToPost(null)
-      setError(refusalMessage(e, "L'écriture n'a pas pu être comptabilisée."))
+      setError(refusalMessage(e, t('jr.erreurComptabilisation')))
     },
   })
 
@@ -390,7 +390,7 @@ export function JournalPage() {
             {list.isLoading && <tr><td colSpan={8}><LoadingSpinner /></td></tr>}
             {list.isError && (
               <tr><td colSpan={8}>
-                <ErrorBanner message="Le journal n'a pas pu être lu." />
+                <ErrorBanner message={t('jr.erreurLecture')} />
               </td></tr>
             )}
             {!list.isLoading && !list.isError && items.length === 0 && (
@@ -462,12 +462,13 @@ export function JournalPage() {
 
 /** Le nom du compte sous le champ : la seule façon de voir qu'on s'est trompé. */
 function AccountHint({ code, byCode }: { code: string; byCode: Map<string, Account> }) {
+  const t = useT()
   const c = code.trim()
   if (c === '') return null
   const a = byCode.get(c)
   return (
     <span className={`block text-[11px] mt-0.5 truncate ${a ? 'text-alpine-500' : 'text-danger-600'}`}>
-      {a ? a.name : 'numéro inconnu'}
+      {a ? a.name : t('jr.numeroInconnu')}
     </span>
   )
 }
@@ -483,6 +484,9 @@ interface EntryRowProps {
 
 function EntryRow({ entry, open, detail, loadingDetail, onToggle, onPost }: EntryRowProps) {
   const t = useT()
+  // « Comptabiliser » n'est offert qu'à qui peut écrire : le serveur répond 403 à la lecture seule,
+  // et un bouton qui échoue use la confiance dans l'écran (audit croisé Gemini, MED-13).
+  const peutEcrire = useCanWrite()
   return (
     <>
       <tr className="cursor-pointer hover:bg-alpine-50" onClick={onToggle}>
@@ -500,7 +504,7 @@ function EntryRow({ entry, open, detail, loadingDetail, onToggle, onPost }: Entr
           </span>
         </td>
         <td className="text-right">
-          {entry.status === 'draft' && (
+          {entry.status === 'draft' && peutEcrire && (
             <button onClick={ev => { ev.stopPropagation(); onPost() }}
                     className="btn-ghost btn-sm text-success-700">
               {t('ach.comptabiliser')}

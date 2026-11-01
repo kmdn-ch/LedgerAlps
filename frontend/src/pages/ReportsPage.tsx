@@ -54,7 +54,7 @@ export function ReportsPage() {
       a.remove()
       URL.revokeObjectURL(url)
     } catch (e) {
-      setError(refusalMessage(e, "Le fichier n'a pas pu être produit."))
+      setError(refusalMessage(e, t('rp.erreurFichier')))
     } finally {
       setLoading(null)
     }

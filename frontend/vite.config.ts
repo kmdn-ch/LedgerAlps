@@ -16,6 +16,12 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      // L'interface sonde /health (attente d'un redémarrage) : sans cette entrée, le serveur de
+      // développement répondait 404 et le redémarrage semblait ne jamais finir.
+      '/health': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
 })

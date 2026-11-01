@@ -10,13 +10,14 @@
 // n'offre aucune sortie : le serveur refuse de toute façon toute autre requête.
 
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Mountain, KeyRound, Check, Minus, Loader2 } from 'lucide-react'
 import { authApi } from '@/api/client'
 import { ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import { useAuthStore } from '@/store/auth'
+import { useRestoreSession } from '@/hooks/useRestoreSession'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
 
@@ -41,6 +42,13 @@ export function ChangePasswordPage() {
   const t = useT()
   const navigate = useNavigate()
   const clearMustChange = useAuthStore(s => s.clearMustChange)
+  const logout = useAuthStore(s => s.logout)
+  const isAuth = useAuthStore(s => s.isAuth)
+  // Cet écran est hors de la coquille protégée, donc de sa restauration de session : après un F5
+  // ou une fenêtre rouverte, le jeton d'accès (en mémoire) est perdu, et « Changer mon mot de
+  // passe » partait sans jeton — une impasse, `mustChangePassword` étant persisté (audit croisé
+  // Gemini, HIGH-20).
+  const restoring = useRestoreSession()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -56,6 +64,29 @@ export function ChangePasswordPage() {
     onSuccess: () => { clearMustChange(); navigate('/', { replace: true }) },
     onError: (e) => setError(refusalMessage(e, t('mdp.echecChangement'))),
   })
+
+  // Plus de session (cookie expiré ou révoqué) : il n'y a plus personne dont changer le mot de passe.
+  if (!isAuth) return <Navigate to="/login" replace />
+  if (restoring) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-alpine-950 text-sm text-alpine-400">
+        {t('rt.restauration')}
+      </div>
+    )
+  }
+
+  // La sortie : se déconnecter. Elle ne donne aucun accès — le compte revient ici à la prochaine
+  // connexion —, mais l'écran n'est plus une impasse.
+  async function quitter() {
+    try {
+      await authApi.logout()
+    } catch {
+      // Serveur injoignable ou session déjà finie : on déconnecte quand même localement.
+    } finally {
+      logout()
+      navigate('/login', { replace: true })
+    }
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-alpine-950 p-4">
@@ -130,6 +161,11 @@ export function ChangePasswordPage() {
             <p className="text-xs text-alpine-500">
               {t('mdp.autresSessions')}
             </p>
+
+            <button type="button" onClick={quitter}
+                    className="text-xs text-alpine-400 hover:text-white underline underline-offset-2">
+              {t('nav.deconnexion')}
+            </button>
           </div>
         </div>
       </div>

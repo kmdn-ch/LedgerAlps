@@ -50,9 +50,30 @@ function processQueue(error: unknown, token: string | null = null) {
 // vide, sans savoir s'il s'était trompé ou si le logiciel avait planté.
 const ROUTES_AUTH = ['/auth/login', '/auth/refresh', '/auth/mfa/verify', '/auth/change-password']
 
+// Hors du mode JSON, axios rend AUSSI le corps d'une erreur dans la forme demandée : un Blob en
+// mode `blob`, un TEXTE en mode `text` — `error.response.data.error` est alors indéfini, et
+// refusalMessage retombait sur son texte de repli. Le refus d'un ordre de paiement — qui nomme la
+// facture et ce qui manque — s'affichait « Le fichier n'a pas pu être produit », comme ceux du PDF,
+// de l'archive et du dossier SIX (audit croisé Gemini, MED-15). Le corps est relu ici, une fois pour
+// toutes, et remplacé par son JSON quand c'en est un.
+async function lireRefusBlob(error: unknown): Promise<void> {
+  const rep = (error as { response?: { data?: unknown } } | null | undefined)?.response
+  if (!rep) return
+  try {
+    if (typeof Blob !== 'undefined' && rep.data instanceof Blob) {
+      rep.data = JSON.parse(await rep.data.text())
+    } else if (typeof rep.data === 'string' && rep.data.trimStart().startsWith('{')) {
+      rep.data = JSON.parse(rep.data)
+    }
+  } catch {
+    // Pas du JSON (un fichier tronqué, une page d'erreur d'un mandataire) : le corps reste tel quel.
+  }
+}
+
 api.interceptors.response.use(
   (r) => r,
   async (error) => {
+    await lireRefusBlob(error)
     const original = error.config
     if (error.response?.status !== 401 || original._retry) {
       return Promise.reject(error)
@@ -579,8 +600,13 @@ export function downloadBlob(blob: Blob, filename: string): void {
   const a   = document.createElement('a')
   a.href    = url
   a.download = filename
+  // Dans le document, le temps du clic : Firefox ignore un clic sur un lien qui n'y est pas.
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  // L'adresse n'est révoquée qu'APRÈS le début du téléchargement : le faire aussitôt le coupait
+  // sous Firefox et Safari, où il démarre de façon asynchrone (MED-15).
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 // ─── Avis de conformité ───────────────────────────────────────────────────────

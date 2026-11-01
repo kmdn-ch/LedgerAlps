@@ -17,7 +17,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Lock, LockOpen, AlertTriangle, Loader2, KeyRound } from 'lucide-react'
 import { databaseApi } from '@/api/client'
-import { SectionTitle, ErrorBanner, PassphraseField, passphraseIsStrong } from '@/components/ui'
+import { SectionTitle, ErrorBanner, PassphraseField, passphraseIsStrong, ConfirmDialog } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import type { DatabaseEncryption } from '@/types'
 import { useT } from '@/i18n/useT'
@@ -28,6 +28,9 @@ export function DatabaseEncryptionPanel() {
   const [mode, setMode] = useState<'idle' | 'enable' | 'recover' | 'rekey'>('idle')
   const [pass, setPass] = useState('')
   const [noted, setNoted] = useState(false)
+  // Revenir en clair affaiblit la protection de dix ans de pièces : la demande passe par une
+  // confirmation qui dit ce que cela change (audit croisé Gemini, MED-13).
+  const [confirmClair, setConfirmClair] = useState(false)
 
   const status = useQuery<DatabaseEncryption>({
     queryKey: ['database', 'encryption'],
@@ -155,7 +158,7 @@ export function DatabaseEncryptionPanel() {
                 {t('be.changerPhrase')}
               </button>
               <button
-                onClick={() => disable.mutate()}
+                onClick={() => setConfirmClair(true)}
                 disabled={disable.isPending}
                 className="text-xs text-alpine-600 hover:text-danger-700 underline underline-offset-2"
               >
@@ -165,6 +168,18 @@ export function DatabaseEncryptionPanel() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmClair}
+        title={t('be.clairTitre')}
+        consequences={[t('be.clairConseq1'), t('be.clairConseq2')]}
+        reassurance={t('be.clairRassure')}
+        confirmLabel={t('be.clairConfirmer')}
+        tone="danger"
+        busy={disable.isPending}
+        onConfirm={() => { setConfirmClair(false); disable.mutate() }}
+        onCancel={() => setConfirmClair(false)}
+      />
 
       {mode !== 'idle' && (
         <div className="mt-3 space-y-3 text-sm">

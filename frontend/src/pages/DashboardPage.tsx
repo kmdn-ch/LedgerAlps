@@ -16,20 +16,22 @@ import { RevenuePanel } from '@/components/dashboard/RevenuePanel'
 import { OnboardingPanel } from '@/components/dashboard/OnboardingPanel'
 import { useCanWrite } from '@/hooks/usePermissions'
 import { formatCHF, formatDate, isOverdue, dateLocale } from '@/utils'
-import { useT } from '@/i18n/useT'
+import { useT, useLangue } from '@/i18n/useT'
+import { localeIntl } from '@/i18n'
 import type { Invoice } from '@/types'
 
-// Format "YYYY-MM" → short French month label
-function shortMonth(yyyyMM: string): string {
+// Format "YYYY-MM" → libellé court du mois, dans la langue de l'interface
+function shortMonth(yyyyMM: string, loc: string): string {
   const [y, m] = yyyyMM.split('-').map(Number)
   const d = new Date(y, m - 1, 1)
-  return d.toLocaleDateString('fr-CH', { month: 'short' })
+  return d.toLocaleDateString(loc, { month: 'short' })
     .replace('.', '')
     .replace(/^./, s => s.toUpperCase())
 }
 
 export function DashboardPage() {
   const t = useT()
+  const langue = useLangue()
   const peutEcrire = useCanWrite()
   const { data: invoices = [], isLoading: invLoading } = useQuery<Invoice[]>({
     queryKey: ['invoices', 'all'],
@@ -54,7 +56,7 @@ export function DashboardPage() {
 
   // Real chart data from stats API
   const chartData = (stats?.monthly_revenue ?? []).map((p: { month: string; total: number; paid: number }) => ({
-    month: shortMonth(p.month),
+    month: shortMonth(p.month, localeIntl(langue)),
     ca:    p.total,
     paid:  p.paid,
   }))

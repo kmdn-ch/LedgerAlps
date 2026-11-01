@@ -16,7 +16,7 @@ import { InvoicePayments } from '@/components/invoice/InvoicePayments'
 import { useCanWrite } from '@/hooks/usePermissions'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
-import { formatCHF, formatDate, isOverdue, dateLocale } from '@/utils'
+import { formatCHF, formatDate, isOverdue } from '@/utils'
 import { businessRefusal } from '@/utils/refusal'
 import type { DocumentStatus, Invoice, QuoteOutcome } from '@/types'
 
@@ -215,7 +215,7 @@ export function InvoiceDetailPage() {
   })
 
   const transition = useMutation({
-    mutationFn: ({ status }: { status: DocumentStatus; paymentDate?: string }) =>
+    mutationFn: ({ status }: { status: DocumentStatus }) =>
       invoicesApi.updateStatus(invoiceId!, status),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoice', invoiceId] })
@@ -273,15 +273,12 @@ export function InvoiceDetailPage() {
   })
 
   const handleTransition = (status: DocumentStatus) => {
-    const extra = status === 'paid'
-      ? { paymentDate: dateLocale() }
-      : {}
     ask(
       transitionCopy(
         t, status, invoice?.document_type === 'quote', invoice?.invoice_number ?? '',
         invoice ? (invoice.balance_due ?? invoice.total_amount - invoice.amount_paid) : 0,
       ),
-      () => transition.mutate({ status, ...extra }),
+      () => transition.mutate({ status }),
     )
   }
 

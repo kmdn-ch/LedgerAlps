@@ -293,11 +293,18 @@ export function EditInvoicePage() {
                             aria-label={t('nf.ariaDescription', { n: i + 1 })}
                             {...register(`lines.${i}.description`)}
                           />
+                          {errors.lines?.[i]?.description && (
+                            <p className="error-msg">{tv(errors.lines[i]?.description?.message)}</p>
+                          )}
                         </td>
                         <td className="px-2 py-2 w-20">
                           <input type="number" step="0.001" min="0.001"
                             aria-label={t('nf.ariaQuantite', { n: i + 1 })}
-                            className="input text-right" {...register(`lines.${i}.quantity`)} />
+                            className={`input text-right ${errors.lines?.[i]?.quantity ? 'input-error' : ''}`}
+                            {...register(`lines.${i}.quantity`)} />
+                          {errors.lines?.[i]?.quantity && (
+                            <p className="error-msg">{tv(errors.lines[i]?.quantity?.message)}</p>
+                          )}
                         </td>
                         <td className="px-2 py-2 w-16">
                           <input className="input" placeholder={t('nf.placeholderUnite')}
@@ -309,6 +316,9 @@ export function EditInvoicePage() {
                             aria-label={t('nf.ariaPrix', { n: i + 1 })}
                             className={`input text-right font-mono ${errors.lines?.[i]?.unit_price ? 'input-error' : ''}`}
                             {...register(`lines.${i}.unit_price`)} />
+                          {errors.lines?.[i]?.unit_price && (
+                            <p className="error-msg">{tv(errors.lines[i]?.unit_price?.message)}</p>
+                          )}
                         </td>
                         <td className="px-2 py-2 w-20">
                           <input type="number" step="0.1" min="0" max="100"

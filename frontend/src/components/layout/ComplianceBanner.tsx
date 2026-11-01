@@ -19,7 +19,7 @@ import {
 import { complianceApi, updateApi } from '@/api/client'
 import { cn } from '@/utils'
 import { useT, useLangue } from '@/i18n/useT'
-import type { Cle } from '@/i18n'
+import { localeIntl, type Cle } from '@/i18n'
 
 export interface Advisory {
   id: string
@@ -72,11 +72,13 @@ const STYLES = {
   },
 } as const
 
-function formatDate(iso?: string): string | null {
+function formatDate(iso: string | undefined, loc: string): string | null {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleDateString('fr-CH', { day: '2-digit', month: 'long', year: 'numeric' })
+  // La langue de l'interface, pas « fr-CH » figé : le mois d'une date allemande s'écrit en allemand
+  // (audit croisé Gemini, MED-16).
+  return d.toLocaleDateString(loc, { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
 /** Ligne repliable commune aux avis et à la notification de mise à jour. */
@@ -204,7 +206,7 @@ export function ComplianceBanner() {
 
       {visible.map((a) => {
         const style = STYLES[a.severity] ?? STYLES.info
-        const effective = formatDate(a.effective_from)
+        const effective = formatDate(a.effective_from, localeIntl(langue))
 
         return (
           <CollapsibleNotice

@@ -53,7 +53,7 @@ déconnexion : l'authentification des routes est sans état.
 | POST | `/auth/refresh` | public | Renouveler le jeton d'accès |
 | POST | `/auth/logout` | public | Révoquer le jeton de rafraîchissement |
 | POST | `/auth/activity` | auth | Battement d'activité : note qu'une session est utilisée, sans rien modifier. L'interface l'envoie (au plus une fois par minute) quand quelqu'un se sert du clavier ou de la souris — voir « Déconnexion sur inactivité » |
-| POST | `/auth/change-password` | auth | Choisir son mot de passe. Seule route ouverte à un compte au mot de passe temporaire. Le mot de passe actuel est redemandé : **cinq refus ferment la voie du compte** (`429`, `retry_after`), un succès la rouvre |
+| POST | `/auth/change-password` | auth | Choisir son mot de passe. Seule route ouverte à un compte au mot de passe temporaire. Le mot de passe actuel est redemandé : **cinq refus ferment la voie du compte** (`429`, `retry_after`), un succès la rouvre. Elle ferme les **autres** sessions du compte — le cookie de rafraîchissement de la requête désigne la courante, qui reste ouverte ; sans cookie, toutes tombent |
 | POST | `/auth/mfa/verify` | jeton d'attente | Deuxième étape de la connexion : code TOTP ou code de secours |
 | GET | `/auth/mfa` | auth | État du second facteur du compte connecté |
 | POST | `/auth/mfa/setup` | auth | Préparer une inscription — rend le secret, l'URI `otpauth://` et le QR |

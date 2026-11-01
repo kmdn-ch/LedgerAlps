@@ -240,7 +240,7 @@ export function PurchasesPage() {
       qc.invalidateQueries({ queryKey: ['supplier-invoices'] })
       qc.invalidateQueries({ queryKey: ['payments-payable'] })
     },
-    onError: (e) => setError(refusalMessage(e, "La facture n'a pas pu être enregistrée.")),
+    onError: (e) => setError(refusalMessage(e, t('ach.erreurEnregistrement'))),
   })
 
   // Ouvre le formulaire sur une facture existante. Seul un brouillon est
@@ -284,7 +284,7 @@ export function PurchasesPage() {
       const created = r.data as { id?: string }
       if (created.id) setForm(f => ({ ...f, supplier_id: created.id as string }))
     },
-    onError: (e) => setError(refusalMessage(e, "Le fournisseur n'a pas pu être créé.")),
+    onError: (e) => setError(refusalMessage(e, t('ach.erreurFournisseur'))),
   })
 
   // Le QR ne remplace pas la saisie : il la prépare. Le montant hors taxe, le
@@ -362,25 +362,25 @@ export function PurchasesPage() {
       // Chaque valeur est annoncée AVEC l'étiquette qui l'a produite : c'est ce
       // qui permet de repérer une lecture de travers sans rouvrir le PDF.
       const lues: string[] = []
-      if (h?.invoice_number) lues.push(`n° ${h.invoice_number} (« ${h.invoice_number_label} »)`)
-      if (h?.issue_date) lues.push(`date ${h.issue_date} (« ${h.issue_date_label} »)`)
-      if (h?.due_date) lues.push(`échéance ${h.due_date} (« ${h.due_date_label} »)`)
+      if (h?.invoice_number) lues.push(t('ach.luNumero', { n: h.invoice_number, libelle: h.invoice_number_label }))
+      if (h?.issue_date) lues.push(t('ach.luDate', { d: h.issue_date, libelle: h.issue_date_label }))
+      if (h?.due_date) lues.push(t('ach.luEcheance', { d: h.due_date, libelle: h.due_date_label }))
       lues.push(h?.vat_mentioned
-        ? `TVA ${h.vat_rate} % (« ${h.vat_label} »)`
-        : 'aucune TVA mentionnée → 0 %, le montant payé est le montant hors taxe')
+        ? t('ach.luTVA', { taux: h.vat_rate, libelle: h.vat_label })
+        : t('ach.luAucuneTVA'))
 
-      const suite = d.supplier?.id
-        ? ''
-        : ` Ce fournisseur n’est pas encore enregistré — sa fiche est pré-remplie ci-dessous.`
+      const suite = d.supplier?.id ? '' : ' ' + t('ach.luFournisseurNouveau')
       setScan({
         ok: true,
-        message: `${d.bill.creditor_name}, ${d.bill.amount.toFixed(2)} ` +
-          `${d.bill.currency} à payer (TTC). Lu sur la facture : ${lues.join(' · ')}.` + suite,
+        message: t('ach.luResume', {
+          creancier: d.bill.creditor_name, montant: d.bill.amount.toFixed(2),
+          devise: d.bill.currency, lues: lues.join(' · '),
+        }) + suite,
       })
     },
     onError: (e) => setScan({
       ok: false,
-      message: refusalMessage(e, "Le document n'a pas pu être lu."),
+      message: refusalMessage(e, t('ach.erreurLecture')),
     }),
   })
 
@@ -395,7 +395,7 @@ export function PurchasesPage() {
     },
     onError: (e) => {
       setToBook(null)
-      setError(refusalMessage(e, "La facture n'a pas pu être comptabilisée."))
+      setError(refusalMessage(e, t('ach.erreurComptabilisation')))
     },
   })
 
@@ -748,7 +748,7 @@ export function PurchasesPage() {
             {list.isLoading && <tr><td colSpan={9}><LoadingSpinner /></td></tr>}
             {list.isError && (
               <tr><td colSpan={9}>
-                <ErrorBanner message="Les factures fournisseurs n'ont pas pu être lues." />
+                <ErrorBanner message={t('ach.erreurListe')} />
               </td></tr>
             )}
             {!list.isLoading && !list.isError && items.length === 0 && (

@@ -27,13 +27,13 @@ const claimsKey = "claims"
 func authenticate(c *gin.Context, jwtSecret string) bool {
 	header := c.GetHeader("Authorization")
 	if !strings.HasPrefix(header, "Bearer ") {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing or malformed Authorization header"})
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "en-tête Authorization absent ou mal formé"})
 		return false
 	}
 	token := strings.TrimPrefix(header, "Bearer ")
 	claims, err := security.ParseToken(jwtSecret, token)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "jeton invalide ou expiré"})
 		return false
 	}
 	// Un jeton d'attente de second facteur n'est pas une session. Le refus est
@@ -52,7 +52,7 @@ func authenticate(c *gin.Context, jwtSecret string) bool {
 	// en obtenir un (A-02) ; un jeton sans type — émis avant cette version — n'est
 	// plus reconnu, l'utilisateur se reconnecte.
 	if claims.Typ != security.TokenTypeAccess {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "jeton invalide ou expiré"})
 		return false
 	}
 	c.Set(claimsKey, claims)
@@ -70,7 +70,7 @@ func RequireMFAChallenge(jwtSecret string) gin.HandlerFunc {
 		header := c.GetHeader("Authorization")
 		if !strings.HasPrefix(header, "Bearer ") {
 			c.AbortWithStatusJSON(http.StatusUnauthorized,
-				gin.H{"error": "missing or malformed Authorization header"})
+				gin.H{"error": "en-tête Authorization absent ou mal formé"})
 			return
 		}
 		claims, err := security.ParseToken(jwtSecret, strings.TrimPrefix(header, "Bearer "))

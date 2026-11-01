@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -306,5 +309,86 @@ func TestUnRefusNeLaisseRienEcritDansLaFicheSociete(t *testing.T) {
 	}
 	if n := compteAudit(); n != avant {
 		t.Errorf("%d ligne(s) d'audit après un refus, attendu %d", n, avant)
+	}
+}
+
+// HIGH-20. Changer son mot de passe fermait TOUTES les sessions du compte, la sienne comprise,
+// alors que le message dit « les autres sessions » : l'utilisateur était renvoyé à l'écran de
+// connexion à la fin de son jeton d'accès, sans explication.
+func TestChangerSonMotDePasseGardeLaSessionCourante(t *testing.T) {
+	database, r, cfg := mfaEnv(t)
+	seedLogin(t, database, "u1", "MotDePasseSolide1", false)
+
+	connexion := func(motDePasse string) (acces, cookie string) {
+		body, _ := json.Marshal(map[string]string{"email": "u1@t.ch", "password": motDePasse})
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("connexion : %d — %s", w.Code, w.Body.String())
+		}
+		acces, _ = decode(t, w)["access_token"].(string)
+		for _, c := range w.Result().Cookies() {
+			if c.Name == refreshCookieName {
+				cookie = c.Value
+			}
+		}
+		if acces == "" || cookie == "" {
+			t.Fatalf("session incomplète : jeton %q, cookie %q", acces, cookie)
+		}
+		return
+	}
+	accesA, cookieA := connexion("MotDePasseSolide1")
+	_, _ = connexion("MotDePasseSolide1") // une autre session, ouverte ailleurs
+
+	var avant int
+	database.QueryRow(`SELECT COUNT(*) FROM refresh_tokens WHERE user_id = 'u1'`).Scan(&avant)
+	if avant != 2 {
+		t.Fatalf("%d session(s) ouvertes avant le changement, attendu 2", avant)
+	}
+
+	body, _ := json.Marshal(map[string]string{"current_password": "MotDePasseSolide1", "new_password": "NouveauMotDePasse33"})
+	req := httptest.NewRequest(http.MethodPost, "/auth/change-password", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+accesA)
+	req.AddCookie(&http.Cookie{Name: refreshCookieName, Value: cookieA})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("changement : %d — %s", w.Code, w.Body.String())
+	}
+
+	rc, err := security.ParseToken(cfg.JWTSecret, cookieA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restants []string
+	rows, _ := database.Query(`SELECT jti FROM refresh_tokens WHERE user_id = 'u1'`)
+	for rows.Next() {
+		var j string
+		rows.Scan(&j)
+		restants = append(restants, j)
+	}
+	rows.Close()
+	if len(restants) != 1 || restants[0] != rc.JTI {
+		t.Errorf("sessions restantes %v, attendu la seule session courante (%s)", restants, rc.JTI)
+	}
+
+	// Sans cookie (client sans navigateur), toutes tombent : mieux vaut en fermer une de trop.
+	accesC, _ := connexion("NouveauMotDePasse33")
+	body, _ = json.Marshal(map[string]string{"current_password": "NouveauMotDePasse33", "new_password": "EncoreUnAutre4455"})
+	req = httptest.NewRequest(http.MethodPost, "/auth/change-password", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+accesC)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("second changement : %d — %s", w.Code, w.Body.String())
+	}
+	var apres int
+	database.QueryRow(`SELECT COUNT(*) FROM refresh_tokens WHERE user_id = 'u1'`).Scan(&apres)
+	if apres != 0 {
+		t.Errorf("%d session(s) restantes après un changement sans cookie, attendu 0", apres)
 	}
 }
