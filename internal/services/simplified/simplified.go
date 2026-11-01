@@ -509,13 +509,22 @@ func (s *Service) patrimoine(ctx context.Context, c *Carnet) error {
 		if solde == 0 {
 			continue
 		}
+		// Un compte du côté « avoirs » à solde CRÉDITEUR est un engagement — un découvert bancaire,
+		// l'acompte d'un client —, et un compte d'engagement à solde DÉBITEUR est un avoir. Les
+		// ranger du mauvais côté, avec un montant négatif, compensait des avoirs et des engagements
+		// que la présentation doit montrer séparément (CO art. 958c al. 1 ch. 7) ; la fortune nette,
+		// elle, ne change pas (audit croisé Gemini, MED-03).
 		p := PostePatrimoine{Code: code, Libelle: nom, Montant: solde}
-		if typ == "asset" {
+		avoir := (typ == "asset") == (solde > 0)
+		if solde < 0 {
+			p.Montant = -solde
+		}
+		if avoir {
 			c.Avoirs = append(c.Avoirs, p)
-			c.TotalAvoirs += solde
+			c.TotalAvoirs += p.Montant
 		} else {
 			c.Engagements = append(c.Engagements, p)
-			c.TotalEngagements += solde
+			c.TotalEngagements += p.Montant
 		}
 	}
 	if err := rows.Err(); err != nil {

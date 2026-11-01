@@ -304,6 +304,15 @@ func carnetMentions(pdf *fpdf.Fpdf, d CarnetData, L libellésCarnet) {
 		pdf.SetTextColor(120, 90, 20)
 		pdf.MultiCell(largeurUtile, 4.5, latin1(L.PeriodePartielle), "", "L", false)
 		pdf.SetTextColor(0, 0, 0)
+		// Le dépassement du seuil de la TVA est, lui aussi, concluant sur toute période : un
+		// chiffre d'affaires de 150 000 sur un trimestre dépasse les 100 000, et ne peut que
+		// s'aggraver en s'allongeant. La mention d'assujettissement était supprimée avec le
+		// verdict sur le régime, alors que seule l'absence de dépassement est invérifiable
+		// (audit croisé Gemini, MED-03).
+		if d.AssujettiTVA {
+			pdf.SetFont("Helvetica", "", 8.5)
+			pdf.MultiCell(largeurUtile, 4.5, latin1(L.TVADue), "", "L", false)
+		}
 		return
 	case d.Eligible:
 		pdf.SetTextColor(30, 100, 50)

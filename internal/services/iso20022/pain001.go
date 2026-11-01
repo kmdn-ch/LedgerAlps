@@ -89,23 +89,51 @@ func GeneratePain001(req Pain001Request) ([]byte, error) {
 
 	msgID := newMessageID(time.Now().UTC())
 
-	var ctrlSum float64
-	for _, t := range req.Transactions {
-		ctrlSum += t.Amount
+	// Un bloc de paiement PAR DEVISE (audit croisé Gemini, HIGH-06). Le niveau de service
+	// « SEPA » et la somme de contrôle valent pour un bloc entier : un lot mêlant euros et francs,
+	// avec un euro en tête, déclarait SEPA le paiement en francs. Chaque devise a donc son
+	// <PmtInf>, dans l'ordre où elle apparaît ; un lot d'une seule devise reste un seul bloc,
+	// identique à ce qu'il était.
+	type groupe struct {
+		devise string
+		txs    []CreditTransfer
+		infos  []p1CdtTrfTxInf
+		cents  int64
 	}
-	ctrlSum = math.Round(ctrlSum*100) / 100
+	var groupes []*groupe
+	parDevise := map[string]*groupe{}
+	var totalCents int64
 
-	txInfos := make([]p1CdtTrfTxInf, 0, len(req.Transactions))
 	for _, t := range req.Transactions {
+		t.Currency = strings.ToUpper(strings.TrimSpace(t.Currency))
 		if t.Currency == "" {
 			t.Currency = "CHF"
 		}
+		// L'identifiant de bout en bout n'est jamais vide : « NOTPROVIDED » est la valeur que les
+		// Swiss Payment Standards prévoient quand l'ordre n'en porte pas.
+		if strings.TrimSpace(t.EndToEndID) == "" {
+			t.EndToEndID = "NOTPROVIDED"
+		}
+		// Les montants se comptent en CENTIMES ENTIERS, et la somme de contrôle est celle des
+		// montants IMPRIMÉS : sommer les montants bruts puis arrondir donnait 20.01 pour deux
+		// virements imprimés à 10.00.
+		cents := int64(math.Round(math.Round(t.Amount*1e6) / 1e4))
+		g := parDevise[t.Currency]
+		if g == nil {
+			g = &groupe{devise: t.Currency}
+			parDevise[t.Currency] = g
+			groupes = append(groupes, g)
+		}
+		g.cents += cents
+		totalCents += cents
+		g.txs = append(g.txs, t)
+
 		txInfo := p1CdtTrfTxInf{
 			PmtID: p1PmtID{EndToEndID: t.EndToEndID},
 			Amt: p1Amt{
 				InstdAmt: p1InstdAmt{
 					Ccy:   t.Currency,
-					Value: fmt.Sprintf("%.2f", math.Round(t.Amount*100)/100),
+					Value: centsToAmount(cents),
 				},
 			},
 			Cdtr:     p1Party{Nm: t.CreditorName},
@@ -133,7 +161,30 @@ func GeneratePain001(req Pain001Request) ([]byte, error) {
 		} else if t.Unstructured != "" {
 			txInfo.RmtInf = &p1RmtInf{Ustrd: t.Unstructured}
 		}
-		txInfos = append(txInfos, txInfo)
+		g.infos = append(g.infos, txInfo)
+	}
+
+	blocs := make([]p1PmtInf, 0, len(groupes))
+	for i, g := range groupes {
+		id := msgID + "-BATCH"
+		if len(groupes) > 1 {
+			// Max35Text : « -B1 » tient où « -BATCH-CHF » ne tenait pas.
+			id = fmt.Sprintf("%s-B%d", msgID, i+1)
+		}
+		blocs = append(blocs, p1PmtInf{
+			PmtInfID: id,
+			PmtMtd:   "TRF",
+			NbOfTxs:  len(g.txs),
+			CtrlSum:  centsToAmount(g.cents),
+			PmtTpInf: paymentTypeInfo(g.txs),
+			ReqdExctnDt: p1ReqdExctnDt{
+				Dt: req.ExecutionDate.Format("2006-01-02"),
+			},
+			Dbtr:        p1Party{Nm: req.DebtorName},
+			DbtrAcct:    p1Acct{ID: p1AcctID{IBAN: normalizeIBAN(req.DebtorIBAN)}},
+			DbtrAgt:     buildDbtrAgt(req.DebtorBIC),
+			CdtTrfTxInf: g.infos,
+		})
 	}
 
 	doc := p1Document{
@@ -144,23 +195,10 @@ func GeneratePain001(req Pain001Request) ([]byte, error) {
 				MsgID:    msgID,
 				CreDtTm:  time.Now().UTC().Format("2006-01-02T15:04:05"),
 				NbOfTxs:  len(req.Transactions),
-				CtrlSum:  fmt.Sprintf("%.2f", ctrlSum),
+				CtrlSum:  centsToAmount(totalCents),
 				InitgPty: p1Party{Nm: req.DebtorName},
 			},
-			PmtInf: p1PmtInf{
-				PmtInfID: msgID + "-BATCH",
-				PmtMtd:   "TRF",
-				NbOfTxs:  len(req.Transactions),
-				CtrlSum:  fmt.Sprintf("%.2f", ctrlSum),
-				PmtTpInf: paymentTypeInfo(req.Transactions),
-				ReqdExctnDt: p1ReqdExctnDt{
-					Dt: req.ExecutionDate.Format("2006-01-02"),
-				},
-				Dbtr:        p1Party{Nm: req.DebtorName},
-				DbtrAcct:    p1Acct{ID: p1AcctID{IBAN: normalizeIBAN(req.DebtorIBAN)}},
-				DbtrAgt:     buildDbtrAgt(req.DebtorBIC),
-				CdtTrfTxInf: txInfos,
-			},
+			PmtInf: blocs,
 		},
 	}
 
@@ -180,8 +218,8 @@ type p1Document struct {
 }
 
 type p1CstmrCdtTrfInitn struct {
-	GrpHdr p1GrpHdr `xml:"GrpHdr"`
-	PmtInf p1PmtInf `xml:"PmtInf"`
+	GrpHdr p1GrpHdr   `xml:"GrpHdr"`
+	PmtInf []p1PmtInf `xml:"PmtInf"`
 }
 
 type p1GrpHdr struct {
@@ -311,6 +349,15 @@ func paymentTypeInfo(txs []CreditTransfer) *p1PmtTpInf {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// centsToAmount écrit un montant en centimes entiers « 1250.50 », sans passer par un flottant.
+func centsToAmount(c int64) string {
+	signe := ""
+	if c < 0 {
+		signe, c = "-", -c
+	}
+	return fmt.Sprintf("%s%d.%02d", signe, c/100, c%100)
+}
 
 func normalizeIBAN(iban string) string {
 	out := make([]byte, 0, len(iban))

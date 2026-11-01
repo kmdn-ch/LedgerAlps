@@ -105,7 +105,7 @@ func (h *InvoicesHandler) invoiceDataFor2(ctx context.Context, id string) (pdfsv
 
 	// Load invoice lines
 	linesQ := db.Rebind(`
-		SELECT description, quantity, unit_price, vat_rate, line_total
+		SELECT description, quantity, unit_price, COALESCE(discount_pct, 0), vat_rate, line_total
 		FROM invoice_lines WHERE invoice_id = ? ORDER BY sequence`, h.usePostgres)
 	rows, err := h.db.QueryContext(ctx, linesQ, id)
 	if err != nil {
@@ -115,7 +115,7 @@ func (h *InvoicesHandler) invoiceDataFor2(ctx context.Context, id string) (pdfsv
 	var pdfLines []pdfsvc.InvoiceLine
 	for rows.Next() {
 		var l pdfsvc.InvoiceLine
-		if err := rows.Scan(&l.Description, &l.Quantity, &l.UnitPrice, &l.VATRate, &l.LineTotal); err != nil {
+		if err := rows.Scan(&l.Description, &l.Quantity, &l.UnitPrice, &l.DiscountPct, &l.VATRate, &l.LineTotal); err != nil {
 			return pdfsvc.InvoiceData{}, "", errors.New("scan error")
 		}
 		pdfLines = append(pdfLines, l)
@@ -169,6 +169,7 @@ func (h *InvoicesHandler) invoiceDataFor2(ctx context.Context, id string) (pdfsv
 		}
 		if dbPostal.Valid || dbCity.Valid {
 			company.City = fmt.Sprintf("%s %s", dbPostal.String, dbCity.String)
+			company.PostalCode, company.Town = dbPostal.String, dbCity.String
 		}
 		if dbCountry.Valid && dbCountry.String != "" {
 			company.Country = dbCountry.String
@@ -239,6 +240,7 @@ func (h *InvoicesHandler) invoiceDataFor2(ctx context.Context, id string) (pdfsv
 	switch {
 	case rcp.PostalCode != "" && rcp.City != "":
 		customer.City = fmt.Sprintf("%s %s", rcp.PostalCode, rcp.City)
+		customer.PostalCode, customer.Town = rcp.PostalCode, rcp.City
 	case rcp.City != "":
 		customer.City = rcp.City
 	}

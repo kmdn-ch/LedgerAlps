@@ -42,8 +42,16 @@ const PortalURL = "https://validation.iso-payments.ch/"
 func (h *InvoicesHandler) SixValidationDossier(c *gin.Context) {
 	id := c.Param("id")
 
-	pdfBytes, invoiceNumber, err := h.buildInvoicePDF(c.Request.Context(), id, i18n.Langue(c))
-	if err != nil {
+	// `buildInvoicePDF` rend le NOM DE FICHIER du PDF, pas le numéro de la facture : il était pris
+	// pour le numéro, et l'archive s'appelait « facture-FA-2026-0001.pdf-bulletin.pdf » (audit
+	// croisé Gemini, MED-08). Le numéro vient de la donnée du document.
+	pdfBytes, _, err := h.buildInvoicePDF(c.Request.Context(), id, i18n.Langue(c))
+	switch {
+	case err == errInvoiceNotFound:
+		// Comme le PDF seul : une facture inconnue est un 404, pas un refus de forme.
+		c.JSON(http.StatusNotFound, gin.H{"error": "facture introuvable"})
+		return
+	case err != nil:
 		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
@@ -53,6 +61,7 @@ func (h *InvoicesHandler) SixValidationDossier(c *gin.Context) {
 		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
+	invoiceNumber := inv.InvoiceNumber
 	payload, err := pdfsvc.QRPayload(inv)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{

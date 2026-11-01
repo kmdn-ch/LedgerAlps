@@ -296,6 +296,24 @@ func validateQRBillData(d QRBillData) error {
 		return fmt.Errorf("creditor name exceeds 70 chars")
 	}
 
+	// Les champs libres : ni caractère de contrôle (il décalerait les 31 lignes du payload), ni
+	// dépassement de la longueur de la norme.
+	champs := []champTexteQR{
+		{"nom du créancier", d.CreditorName, 70}, {"rue du créancier", d.CreditorStreet, 70},
+		{"numéro du créancier", d.CreditorBuildingNr, 16},
+		{"code postal du créancier", d.CreditorPostalCode, 16}, {"localité du créancier", d.CreditorTown, 35},
+	}
+	if d.DebtorName != "" {
+		champs = append(champs,
+			champTexteQR{"nom du débiteur", d.DebtorName, 70}, champTexteQR{"rue du débiteur", d.DebtorStreet, 70},
+			champTexteQR{"numéro du débiteur", d.DebtorBuildingNr, 16},
+			champTexteQR{"code postal du débiteur", d.DebtorPostalCode, 16}, champTexteQR{"localité du débiteur", d.DebtorTown, 35})
+	}
+	champs = append(champs, champTexteQR{"message", d.Message, 140})
+	if err := verifierTexteQR(champs); err != nil {
+		return err
+	}
+
 	// Creditor structured address — postal code, town and country are mandatory (§4.2.2)
 	if d.CreditorPostalCode == "" {
 		return fmt.Errorf("creditor postal code is required (address type S)")
@@ -393,6 +411,56 @@ func validateQRBillData(d QRBillData) error {
 		}
 	default:
 		return fmt.Errorf("reference type must be QRR, SCOR, or NON; got %q", d.ReferenceType)
+	}
+	return nil
+}
+
+// SanitizeQRText rend un texte libre propre à entrer dans le payload d'une QR-facture : les
+// retours à la ligne, tabulations et autres blancs sont ramenés à UNE espace, les caractères de
+// contrôle disparaissent, le tout est borné à `max` runes.
+//
+// Le payload est un texte à lignes (31, séparées par LF) : un nom « Dupont⏎Fils » le décalait
+// d'une ligne, et tous les champs suivants se lisaient dans la mauvaise case — un QR que la banque
+// refuse (audit croisé Gemini, HIGH-05).
+func SanitizeQRText(s string, max int) string {
+	var b strings.Builder
+	espace := false
+	for _, r := range strings.TrimSpace(s) {
+		switch {
+		case unicode.IsSpace(r):
+			espace = true
+		case unicode.IsControl(r):
+			// supprimé
+		default:
+			if espace && b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			espace = false
+			b.WriteRune(r)
+		}
+	}
+	return truncate(b.String(), max)
+}
+
+// champsTexteQR : les champs libres du payload et leur longueur maximale (IG SIX v2.4 §4.2.2).
+type champTexteQR struct {
+	nom string
+	val string
+	max int
+}
+
+// verifierTexteQR refuse un champ qui porterait un caractère de contrôle (il décalerait les
+// lignes du payload) ou dépasserait la longueur de la norme.
+func verifierTexteQR(champs []champTexteQR) error {
+	for _, c := range champs {
+		for _, r := range c.val {
+			if unicode.IsControl(r) {
+				return fmt.Errorf("%s : caractère de contrôle interdit (retour à la ligne, tabulation…)", c.nom)
+			}
+		}
+		if n := len([]rune(c.val)); n > c.max {
+			return fmt.Errorf("%s : %d caractères, %d au plus", c.nom, n, c.max)
+		}
 	}
 	return nil
 }

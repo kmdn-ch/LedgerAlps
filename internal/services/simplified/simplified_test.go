@@ -612,3 +612,42 @@ func posteDuPatrimoine(postes []PostePatrimoine, code string) float64 {
 	}
 	return -1
 }
+
+// Audit croisé Gemini, série 4, MED-03. Un découvert bancaire (compte d'avoir à solde créditeur)
+// est un ENGAGEMENT, et un acompte versé à un fournisseur (compte d'engagement à solde débiteur) un
+// AVOIR. Les montrer en négatif du mauvais côté compensait des avoirs et des engagements que la
+// présentation doit montrer séparément. La fortune nette ne change pas.
+func TestUnDecouvertEstUnEngagementPasUnAvoirNegatif(t *testing.T) {
+	s, d := baseTest(t)
+	// La banque est à découvert de 300 : le compte 1020 est créditeur.
+	ecriture(t, d, "2026-03-01", "Paiement à découvert", "6100", "1020", 300)
+	// Un acompte de 200 versé à un fournisseur : le compte 2000 est débiteur.
+	ecriture(t, d, "2026-03-02", "Acompte fournisseur", "2000", "1000", 200)
+
+	k, err := s.Etablir(context.Background(), "2026-01-01", "2026-12-31")
+	if err != nil {
+		t.Fatalf("Etablir: %v", err)
+	}
+	if got := posteDuPatrimoine(k.Engagements, "1020"); got != 300 {
+		t.Errorf("découvert 1020 dans les engagements = %.2f, attendu 300.00", got)
+	}
+	if got := posteDuPatrimoine(k.Avoirs, "1020"); got != -1 {
+		t.Errorf("le découvert figure encore dans les avoirs (%.2f)", got)
+	}
+	if got := posteDuPatrimoine(k.Avoirs, "2000"); got != 200 {
+		t.Errorf("acompte 2000 dans les avoirs = %.2f, attendu 200.00", got)
+	}
+	if got := posteDuPatrimoine(k.Engagements, "2000"); got != -1 {
+		t.Errorf("l'acompte figure encore dans les engagements (%.2f)", got)
+	}
+	for _, p := range append(append([]PostePatrimoine{}, k.Avoirs...), k.Engagements...) {
+		if p.Montant < 0 {
+			t.Errorf("poste %s à %.2f : plus aucun montant négatif dans le patrimoine", p.Code, p.Montant)
+		}
+	}
+	// Les totaux sont des sommes de montants positifs, et la fortune nette est inchangée :
+	// avoirs 200 (acompte) − engagements 300 (découvert) − autres = ce que donnent les soldes.
+	if want := k.TotalAvoirs - k.TotalEngagements; k.Fortune != want {
+		t.Errorf("fortune %.2f != avoirs − engagements (%.2f)", k.Fortune, want)
+	}
+}

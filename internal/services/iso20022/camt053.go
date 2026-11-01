@@ -71,12 +71,14 @@ func ParseCamt053(xmlData []byte) ([]BankEntry, error) {
 				IsReversal: strings.EqualFold(strings.TrimSpace(ntry.RvslInd), "true") || strings.TrimSpace(ntry.RvslInd) == "1",
 			}
 
-			// Booking date
-			if d := parseDate(ntry.BookgDt.Dt); !d.IsZero() {
+			// Booking date. <Dt> OU <DtTm> : le schéma admet les deux, et certaines banques ne
+			// donnent que l'horodatage. <DtTm> n'était jamais lu : l'écriture sortait sans
+			// date (audit croisé Gemini, MED-10).
+			if d := parseDate(premierNonVide(ntry.BookgDt.Dt, ntry.BookgDt.DtTm)); !d.IsZero() {
 				be.BookingDate = d
 			}
 			// Value date
-			if d := parseDate(ntry.ValDt.Dt); !d.IsZero() {
+			if d := parseDate(premierNonVide(ntry.ValDt.Dt, ntry.ValDt.DtTm)); !d.IsZero() {
 				be.ValueDate = d
 			}
 
@@ -275,15 +277,32 @@ type c53RltdAcct struct {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// premierNonVide rend le premier texte non vide.
+func premierNonVide(textes ...string) string {
+	for _, t := range textes {
+		if strings.TrimSpace(t) != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+// parseDate lit une date « AAAA-MM-JJ » ou un horodatage ISO 8601, avec ou sans fuseau
+// (« 2026-10-31T23:30:00+01:00 »).
+//
+// Elle rend LA DATE TELLE QU'ELLE EST ÉCRITE, à minuit UTC : la date de comptabilisation est celle
+// du calendrier de la banque. La ramener en UTC ferait passer 23:30 +01:00 au 31 octobre à 22:30
+// UTC — le même jour ici, mais à 00:30 +01:00 le 1er novembre ce serait la veille. Un horodatage
+// n'a pas d'heure à conserver : seule la date entre dans le rapprochement.
 func parseDate(s string) time.Time {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return time.Time{}
 	}
-	// Try ISO 8601 date first, then datetime
-	for _, layout := range []string{"2006-01-02", "2006-01-02T15:04:05", "2006-01-02T15:04:05Z"} {
+	// Try ISO 8601 date first, then datetime (RFC 3339 : fuseau, fraction de seconde facultative)
+	for _, layout := range []string{"2006-01-02", "2006-01-02T15:04:05", time.RFC3339Nano, "2006-01-02T15:04:05.999999999"} {
 		if t, err := time.Parse(layout, s); err == nil {
-			return t
+			return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 		}
 	}
 	return time.Time{}

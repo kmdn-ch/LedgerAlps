@@ -259,7 +259,7 @@ est le rôle, pas un filtre par créateur.
 | POST | `/invoices/:id/convert` | auth | Convertir une offre en facture |
 | POST | `/invoices/:id/outcome` | auth | Enregistrer l'issue d'une offre (`refused`, `expired`) |
 | POST | `/invoices/:id/credit-note` | auth | Émettre une note de crédit contre une facture |
-| GET | `/invoices/:id/pdf` | auth | PDF — bulletin QR-facture sur les factures uniquement |
+| GET | `/invoices/:id/pdf` | auth | PDF — bulletin QR-facture sur les factures uniquement. Une colonne **Rabais** s'ajoute quand une ligne en porte un (le total de la ligne est net) ; la TVA s'imprime **taux par taux** dès qu'il y en a deux non nuls (la ligne unique est conservée quand les lignes ne retombent pas sur la TVA enregistrée) ; les **conditions de paiement** saisies sont imprimées ; le bloc « virement bancaire » porte l'IBAN **ordinaire**, jamais le QR-IBAN. Les textes libres du payload QR (nom, rue, localité, message) sont nettoyés — retours à la ligne, tabulations, espaces en série — et bornés à la longueur de la norme : un retour à la ligne décalait les 31 champs. `PostalCode`/`Town` séparés l'emportent sur le collage « NPA ville » (codes postaux étrangers à espace) |
 | POST | `/invoices/bulk-pdf` | auth | Téléchargement groupé (`POST` mais **lecture** : le rôle lecture seule le reçoit). Corps `{"ids": [...]}`. **Un** identifiant renvoie un PDF, **plusieurs** un ZIP — emballer un unique PDF obligerait à le dézipper pour le lire. Doublons ignorés, 200 documents au maximum. Un document disparu entre l'affichage et le clic est omis et compté dans l'en-tête `X-LedgerAlps-Missing` plutôt que passé sous silence |
 
 ### Encaissements nets des notes de crédit
@@ -778,8 +778,8 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/exports/journal.csv` | lecture | Journal général en CSV. `from`, `to`. Point-virgule + BOM UTF-8, ligne de total |
 | GET | `/exports/ledger.csv` | lecture | Grand livre : mouvements par compte avec solde cumulé |
 | GET | `/exports/trial-balance.csv` | lecture | Balance de vérification, comptes sans mouvement omis |
-| GET | `/payments/payable` | lecture | Factures fournisseurs comptabilisées et non réglées, avec le compte à débiter et, le cas échéant, ce qui empêche le paiement |
-| POST | `/payments/export` | écriture comptable | Ordre de virement `pain.001.001.09` |
+| GET | `/payments/payable` | lecture | Factures fournisseurs comptabilisées et non réglées, avec le compte à débiter et, le cas échéant, ce qui empêche le paiement. La **clé de contrôle** d'une référence QR (modulo 10 récursif) et d'une référence créancière RF (modulo 97) est vérifiée : une référence mal recopiée bloque la facture, au lieu d'être refusée par la banque après le dépôt |
+| POST | `/payments/export` | écriture comptable | Ordre de virement `pain.001.001.09`. **Un bloc `<PmtInf>` par devise** (le niveau de service SEPA ne vaut que pour le bloc en euros) ; `CtrlSum` en centimes entiers, celle des montants imprimés ; `<EndToEndId>` vaut `NOTPROVIDED` quand l'ordre n'en porte pas ; l'en-tête additionne toutes les devises, comme la norme le définit |
 
 ### Enregistrer un paiement
 
@@ -853,7 +853,7 @@ en francs vers un IBAN suisse décrit un service que l'opération n'utilise pas 
 expose au rejet. La référence QR s'écrit dans `<Prtry>` — « QRR » ne figure pas
 dans la liste de codes externes ISO 20022 — tandis que `SCOR`, qui y figure,
 s'écrit dans `<Cd>`.
-| POST | `/bank-statements/import` | auth | Import relevés `camt.053.001.08`. Une écriture marquée `RvslInd` (**storno** : l'annulation d'une opération antérieure) est conservée avec `is_reversal: true`, jamais proposée à une facture, et n'est pas prise pour un doublon de l'opération qu'elle annule. Les références QR se retrouvent depuis le **numéro de la facture** (la colonne `qr_reference`, écrite nulle part, n'a jamais servi) |
+| POST | `/bank-statements/import` | auth | Import relevés `camt.053.001.08`. Le type de média se lit **sans ses paramètres** (`application/xml; charset=utf-8` est accepté) ; `<BookgDt>`/`<ValDt>` en `<Dt>` **ou** `<DtTm>` (avec fuseau : la date est celle du calendrier de la banque) ; un relevé de plus de **10 Mo** est refusé (`413`) au lieu d'être coupé. Une écriture marquée `RvslInd` (**storno** : l'annulation d'une opération antérieure) est conservée avec `is_reversal: true`, jamais proposée à une facture, et n'est pas prise pour un doublon de l'opération qu'elle annule. Les références QR se retrouvent depuis le **numéro de la facture** (la colonne `qr_reference`, écrite nulle part, n'a jamais servi) |
 
 La réponse porte `entries` (ce qui a été lu), `count`, puis `imported` et
 `duplicate` — ce que l'appel a réellement ajouté et ce qu'il a reconnu comme

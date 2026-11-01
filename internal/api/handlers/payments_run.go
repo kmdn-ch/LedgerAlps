@@ -197,6 +197,24 @@ func decidePayment(it *payableItem, iban, qrIBAN string) {
 	isQRRef := len(ref) == 27 && allDigits(ref)
 	isSCOR := strings.HasPrefix(ref, "RF") && len(ref) >= 5 && len(ref) <= 25
 
+	// La clé de contrôle se vérifie AVANT de bâtir l'ordre : une référence mal recopiée passait
+	// (27 chiffres, c'est tout ce qu'on regardait) et la banque refusait le paiement — ou le
+	// fichier entier — après le dépôt (audit croisé Gemini, HIGH-06).
+	if isQRRef {
+		if cle, err := compliance.ComputeQRRCheckDigit(ref[:26]); err != nil || cle != int(ref[26]-'0') {
+			it.BlockedReason = "La clé de contrôle de la référence QR est fausse : un chiffre a " +
+				"probablement été mal recopié. Corrigez la référence sur la facture du fournisseur."
+			return
+		}
+	}
+	if isSCOR {
+		if err := compliance.ValidateCreditorReference(ref); err != nil {
+			it.BlockedReason = "La référence créancière (RF…) n'est pas valide : sa clé de contrôle " +
+				"est fausse. Corrigez la référence sur la facture du fournisseur."
+			return
+		}
+	}
+
 	switch {
 	case isQRRef:
 		if strings.TrimSpace(qrIBAN) == "" {

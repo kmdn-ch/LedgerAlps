@@ -150,3 +150,30 @@ func TestLIdentifiantDeBoutEnBoutEstNettoye(t *testing.T) {
 		t.Error("aucun repli quand la référence ne laisse rien")
 	}
 }
+
+// Audit croisé Gemini, HIGH-06 : la clé de contrôle d'une référence se vérifie avant de bâtir l'ordre.
+// « 27 chiffres » passait une référence mal recopiée, que la banque refusait après le dépôt.
+func TestUneCleDeControleFausseBloqueLaFacture(t *testing.T) {
+	for nom, tc := range map[string]struct{ ref, qr string }{
+		// refQR dont le dernier chiffre (la clé) est changé.
+		"référence QR": {ref: refQR[:26] + "0", qr: qrIBAN},
+		// refSCOR dont les deux chiffres de contrôle sont changés.
+		"référence créancière": {ref: "RF00539007547034", qr: ""},
+	} {
+		t.Run(nom, func(t *testing.T) {
+			it := payableItem{SupplierName: "Papeterie", Amount: 100, PaymentReference: tc.ref}
+			decidePayment(&it, ibanOrdinaire, tc.qr)
+			if it.BlockedReason == "" || !strings.Contains(it.BlockedReason, "clé de contrôle") {
+				t.Fatalf("référence à la clé fausse acceptée ou refus muet : %q", it.BlockedReason)
+			}
+		})
+	}
+	// Les bonnes passent.
+	for _, ref := range []string{refQR, refSCOR} {
+		it := payableItem{SupplierName: "Papeterie", Amount: 100, PaymentReference: ref}
+		decidePayment(&it, ibanOrdinaire, qrIBAN)
+		if it.BlockedReason != "" {
+			t.Errorf("référence valide %s refusée : %s", ref, it.BlockedReason)
+		}
+	}
+}

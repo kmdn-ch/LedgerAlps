@@ -114,7 +114,7 @@ func TestGeneratePain001StructureDeBase(t *testing.T) {
 		t.Errorf("partie initiatrice = %q", hdr.InitgPty.Nm)
 	}
 
-	pmt := doc.CstmrCdtTrfInitn.PmtInf
+	pmt := doc.CstmrCdtTrfInitn.PmtInf[0]
 	if pmt.PmtMtd != "TRF" {
 		t.Errorf("méthode de paiement = %q, attendu TRF", pmt.PmtMtd)
 	}
@@ -160,7 +160,7 @@ func TestGeneratePain001LaDeviseParDefautEstCHF(t *testing.T) {
 		t.Fatalf("GeneratePain001: %v", err)
 	}
 	doc := unmarshalPain001(t, xmlBytes)
-	if got := doc.CstmrCdtTrfInitn.PmtInf.CdtTrfTxInf[0].Amt.InstdAmt.Ccy; got != "CHF" {
+	if got := doc.CstmrCdtTrfInitn.PmtInf[0].CdtTrfTxInf[0].Amt.InstdAmt.Ccy; got != "CHF" {
 		t.Errorf("devise par défaut = %q, attendu CHF", got)
 	}
 }
@@ -188,13 +188,13 @@ func TestGeneratePain001SommeDeControleEtNbOfTxs(t *testing.T) {
 	if doc.CstmrCdtTrfInitn.GrpHdr.CtrlSum != totalAttendu {
 		t.Errorf("CtrlSum (en-tête) = %q, attendu %q", doc.CstmrCdtTrfInitn.GrpHdr.CtrlSum, totalAttendu)
 	}
-	if doc.CstmrCdtTrfInitn.PmtInf.CtrlSum != totalAttendu {
-		t.Errorf("CtrlSum (lot) = %q, attendu %q", doc.CstmrCdtTrfInitn.PmtInf.CtrlSum, totalAttendu)
+	if doc.CstmrCdtTrfInitn.PmtInf[0].CtrlSum != totalAttendu {
+		t.Errorf("CtrlSum (lot) = %q, attendu %q", doc.CstmrCdtTrfInitn.PmtInf[0].CtrlSum, totalAttendu)
 	}
 	if n := doc.CstmrCdtTrfInitn.GrpHdr.NbOfTxs; n != 3 {
 		t.Errorf("NbOfTxs (en-tête) = %d, attendu 3", n)
 	}
-	if n := doc.CstmrCdtTrfInitn.PmtInf.NbOfTxs; n != 3 {
+	if n := doc.CstmrCdtTrfInitn.PmtInf[0].NbOfTxs; n != 3 {
 		t.Errorf("NbOfTxs (lot) = %d, attendu 3", n)
 	}
 
@@ -209,7 +209,7 @@ func TestGeneratePain001SommeDeControleEtNbOfTxs(t *testing.T) {
 	// coïncident — ce que ce test établit pour un lot réaliste à plusieurs
 	// lignes.
 	var sommeLignes float64
-	for _, tx := range doc.CstmrCdtTrfInitn.PmtInf.CdtTrfTxInf {
+	for _, tx := range doc.CstmrCdtTrfInitn.PmtInf[0].CdtTrfTxInf {
 		v, err := strconv.ParseFloat(tx.Amt.InstdAmt.Value, 64)
 		if err != nil {
 			t.Fatalf("montant de ligne illisible : %q", tx.Amt.InstdAmt.Value)
@@ -256,7 +256,7 @@ func TestGeneratePain001ReferenceQRREtSCOR(t *testing.T) {
 				t.Fatalf("GeneratePain001: %v", err)
 			}
 			doc := unmarshalPain001(t, xmlBytes)
-			tx := doc.CstmrCdtTrfInitn.PmtInf.CdtTrfTxInf[0]
+			tx := doc.CstmrCdtTrfInitn.PmtInf[0].CdtTrfTxInf[0]
 			if tx.RmtInf == nil || tx.RmtInf.Strd == nil {
 				t.Fatal("aucune référence structurée dans le document")
 			}
@@ -292,7 +292,7 @@ func TestGeneratePain001MotifLibreQuandPasDeReference(t *testing.T) {
 		t.Fatalf("GeneratePain001: %v", err)
 	}
 	doc := unmarshalPain001(t, xmlBytes)
-	tx := doc.CstmrCdtTrfInitn.PmtInf.CdtTrfTxInf[0]
+	tx := doc.CstmrCdtTrfInitn.PmtInf[0].CdtTrfTxInf[0]
 	if tx.RmtInf == nil {
 		t.Fatal("aucune information de remise dans le document")
 	}
@@ -318,7 +318,7 @@ func TestGeneratePain001AucuneRemiseQuandRienNEstFourni(t *testing.T) {
 		t.Fatalf("GeneratePain001: %v", err)
 	}
 	doc := unmarshalPain001(t, xmlBytes)
-	if tx := doc.CstmrCdtTrfInitn.PmtInf.CdtTrfTxInf[0]; tx.RmtInf != nil {
+	if tx := doc.CstmrCdtTrfInitn.PmtInf[0].CdtTrfTxInf[0]; tx.RmtInf != nil {
 		t.Errorf("RmtInf présent alors qu'aucune référence ni motif n'a été fourni : %+v", tx.RmtInf)
 	}
 }
@@ -340,8 +340,8 @@ func TestGeneratePain001NiveauDeServiceSEPASeulementEnEuros(t *testing.T) {
 			t.Fatalf("GeneratePain001: %v", err)
 		}
 		doc := unmarshalPain001(t, xmlBytes)
-		if doc.CstmrCdtTrfInitn.PmtInf.PmtTpInf != nil {
-			t.Errorf("PmtTpInf présent pour un virement CHF : %+v", doc.CstmrCdtTrfInitn.PmtInf.PmtTpInf)
+		if doc.CstmrCdtTrfInitn.PmtInf[0].PmtTpInf != nil {
+			t.Errorf("PmtTpInf présent pour un virement CHF : %+v", doc.CstmrCdtTrfInitn.PmtInf[0].PmtTpInf)
 		}
 	})
 	t.Run("EUR : SEPA annoncé", func(t *testing.T) {
@@ -356,7 +356,7 @@ func TestGeneratePain001NiveauDeServiceSEPASeulementEnEuros(t *testing.T) {
 			t.Fatalf("GeneratePain001: %v", err)
 		}
 		doc := unmarshalPain001(t, xmlBytes)
-		pmtTpInf := doc.CstmrCdtTrfInitn.PmtInf.PmtTpInf
+		pmtTpInf := doc.CstmrCdtTrfInitn.PmtInf[0].PmtTpInf
 		if pmtTpInf == nil || pmtTpInf.SvcLvl == nil || pmtTpInf.SvcLvl.Cd != "SEPA" {
 			t.Errorf("PmtTpInf/SvcLvl = %+v, attendu SEPA", pmtTpInf)
 		}
@@ -373,7 +373,7 @@ func TestGeneratePain001NiveauDeServiceSEPASeulementEnEuros(t *testing.T) {
 			t.Fatalf("GeneratePain001: %v", err)
 		}
 		doc := unmarshalPain001(t, xmlBytes)
-		if doc.CstmrCdtTrfInitn.PmtInf.PmtTpInf == nil {
+		if doc.CstmrCdtTrfInitn.PmtInf[0].PmtTpInf == nil {
 			t.Error("« eur » en minuscules n'a pas déclenché le niveau de service SEPA")
 		}
 	})
@@ -394,10 +394,10 @@ func TestGeneratePain001IBANNormaliseEspacesRetires(t *testing.T) {
 		t.Fatalf("GeneratePain001: %v", err)
 	}
 	doc := unmarshalPain001(t, xmlBytes)
-	if got := doc.CstmrCdtTrfInitn.PmtInf.DbtrAcct.ID.IBAN; got != ibanDebiteur {
+	if got := doc.CstmrCdtTrfInitn.PmtInf[0].DbtrAcct.ID.IBAN; got != ibanDebiteur {
 		t.Errorf("IBAN débiteur = %q, attendu %q (espaces non retirés)", got, ibanDebiteur)
 	}
-	if got := doc.CstmrCdtTrfInitn.PmtInf.CdtTrfTxInf[0].CdtrAcct.ID.IBAN; got != ibanCrediteur {
+	if got := doc.CstmrCdtTrfInitn.PmtInf[0].CdtTrfTxInf[0].CdtrAcct.ID.IBAN; got != ibanCrediteur {
 		t.Errorf("IBAN créancier = %q, attendu %q (espaces non retirés)", got, ibanCrediteur)
 	}
 }
@@ -418,7 +418,7 @@ func TestGeneratePain001AgentDuDebiteurBICOuNotProvided(t *testing.T) {
 			t.Fatalf("GeneratePain001: %v", err)
 		}
 		doc := unmarshalPain001(t, xmlBytes)
-		agt := doc.CstmrCdtTrfInitn.PmtInf.DbtrAgt.FinInstnID
+		agt := doc.CstmrCdtTrfInitn.PmtInf[0].DbtrAgt.FinInstnID
 		if agt.BICFI != "UBSWCHZH80A" {
 			t.Errorf("BICFI = %q, attendu UBSWCHZH80A", agt.BICFI)
 		}
@@ -438,7 +438,7 @@ func TestGeneratePain001AgentDuDebiteurBICOuNotProvided(t *testing.T) {
 			t.Fatalf("GeneratePain001: %v", err)
 		}
 		doc := unmarshalPain001(t, xmlBytes)
-		agt := doc.CstmrCdtTrfInitn.PmtInf.DbtrAgt.FinInstnID
+		agt := doc.CstmrCdtTrfInitn.PmtInf[0].DbtrAgt.FinInstnID
 		if agt.BICFI != "" {
 			t.Errorf("BICFI = %q, attendu vide", agt.BICFI)
 		}
@@ -471,8 +471,8 @@ func TestGeneratePain001IdentifiantDeMessageVarieAvecLeLot(t *testing.T) {
 	if id1 == id2 {
 		t.Errorf("le même identifiant de message %q sert deux lots différents", id1)
 	}
-	if doc1.CstmrCdtTrfInitn.PmtInf.PmtInfID != id1+"-BATCH" {
-		t.Errorf("PmtInfId = %q, attendu %q", doc1.CstmrCdtTrfInitn.PmtInf.PmtInfID, id1+"-BATCH")
+	if doc1.CstmrCdtTrfInitn.PmtInf[0].PmtInfID != id1+"-BATCH" {
+		t.Errorf("PmtInfId = %q, attendu %q", doc1.CstmrCdtTrfInitn.PmtInf[0].PmtInfID, id1+"-BATCH")
 	}
 }
 
@@ -516,7 +516,7 @@ func TestGeneratePain001LesIdentifiantsTiennentDansTrenteCinqCaracteres(t *testi
 	doc := unmarshalPain001(t, raw)
 	for nom, id := range map[string]string{
 		"MsgId":    doc.CstmrCdtTrfInitn.GrpHdr.MsgID,
-		"PmtInfId": doc.CstmrCdtTrfInitn.PmtInf.PmtInfID,
+		"PmtInfId": doc.CstmrCdtTrfInitn.PmtInf[0].PmtInfID,
 	} {
 		if n := len([]rune(id)); n == 0 || n > 35 {
 			t.Errorf("%s = %q : %d caractères, attendu de 1 à 35", nom, id, n)

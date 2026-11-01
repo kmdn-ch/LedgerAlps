@@ -11,6 +11,7 @@ import (
 	"image/draw"
 	"image/png"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -35,7 +36,13 @@ type CompanyInfo struct {
 	// UIDNumber est le numéro d'identification des entreprises (IDE), commun à
 	// toutes les entreprises inscrites au registre — assujetties à la TVA ou
 	// non. Il n'était pas rendu du tout, alors qu'il identifie l'émetteur.
-	UIDNumber   string // p. ex. "CHE-123.456.789"
+	UIDNumber string // p. ex. "CHE-123.456.789"
+	// PostalCode et Town sont l'adresse SÉPARÉE : City est leur collage « 1000 Lausanne », et
+	// le redécouper à la première espace coupait de travers un code postal étranger qui en
+	// contient une (« SW1A 1AA », « 1234 AB »). Vides, le collage est découpé (audit croisé
+	// Gemini, LOW-02).
+	PostalCode  string
+	Town        string
 	Phone       string
 	Email       string
 	BankName    string
@@ -49,6 +56,10 @@ type InvoiceLine struct {
 	Description string
 	Quantity    float64
 	UnitPrice   float64
+	// DiscountPct : le rabais de la ligne, en pour cent. LineTotal en est NET : sans cette
+	// colonne, « 2 × 100.00 » s'imprimait en face de « 180.00 » et la ligne ne se recalculait
+	// pas (audit croisé Gemini, HIGH-05).
+	DiscountPct float64
 	VATRate     float64
 	LineTotal   float64
 }
@@ -109,6 +120,9 @@ type CustomerInfo struct {
 	Address string
 	City    string
 	Country string
+	// Adresse séparée, comme CompanyInfo (LOW-02).
+	PostalCode string
+	Town       string
 }
 
 // ─── Generator ────────────────────────────────────────────────────────────────
@@ -356,10 +370,25 @@ func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		}
 	}
 
-	wDesc, wQty, wPrice, wVAT, wTotal := 90.0, 20.0, 30.0, 15.0, 25.0
+	// La colonne Rabais, de même, ne s'affiche que si une ligne en porte un : sur la plupart
+	// des factures elle ne dirait que « - » partout.
+	showDiscount := false
+	for _, l := range inv.Lines {
+		if l.DiscountPct != 0 {
+			showDiscount = true
+		}
+	}
+
+	wDesc, wQty, wPrice, wDisc, wVAT, wTotal := 90.0, 20.0, 30.0, 15.0, 15.0, 25.0
 	if !showVAT {
 		wDesc += wVAT
 		wVAT = 0
+	}
+	if showDiscount {
+		wDesc -= wDisc
+	} else {
+		wDesc += wDisc
+		wDisc = 0
 	}
 
 	header := func() {
@@ -369,6 +398,9 @@ func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		pdf.CellFormat(wDesc, 7, latin1(inv.t("Description")), "1", 0, "L", true, 0, "")
 		pdf.CellFormat(wQty, 7, latin1(inv.t("Qté")), "1", 0, "C", true, 0, "")
 		pdf.CellFormat(wPrice, 7, latin1(inv.t("Prix unit.")), "1", 0, "R", true, 0, "")
+		if showDiscount {
+			pdf.CellFormat(wDisc, 7, latin1(inv.t("Rabais")), "1", 0, "C", true, 0, "")
+		}
 		if showVAT {
 			pdf.CellFormat(wVAT, 7, latin1(inv.t("TVA%")), "1", 0, "C", true, 0, "")
 		}
@@ -417,6 +449,13 @@ func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		pdf.SetXY(15+wDesc, y)
 		pdf.CellFormat(wQty, rowH, fmtFloat(line.Quantity), "1", 0, "C", fill, 0, "")
 		pdf.CellFormat(wPrice, rowH, fmtMoney(line.UnitPrice, inv.Currency), "1", 0, "R", fill, 0, "")
+		if showDiscount {
+			disc := "-"
+			if line.DiscountPct != 0 {
+				disc = fmtFloat(line.DiscountPct) + "%"
+			}
+			pdf.CellFormat(wDisc, rowH, disc, "1", 0, "C", fill, 0, "")
+		}
 		if showVAT {
 			pdf.CellFormat(wVAT, rowH, fmt.Sprintf("%.1f%%", line.VATRate), "1", 0, "C", fill, 0, "")
 		}
@@ -454,7 +493,15 @@ func renderTotals(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	// même à 0 %, ce qu'une entreprise non assujettie n'a pas le droit de faire
 	// figurer sur ses factures (LTVA art. 27 al. 1) — et qui la rendrait
 	// redevable de l'impôt ainsi mentionné (al. 2).
-	if inv.VATAmount != 0 || inv.VATRate != 0 {
+	//
+	// Une facture à PLUSIEURS taux imprime l'impôt TAUX PAR TAUX (LTVA art. 26 al. 2 let. g). Une
+	// seule ligne « TVA 8.1 % : 17.18 » pour 14.58 à 8,1 % et 2.60 à 2,6 % donnait un montant qui
+	// n'est le produit d'aucun taux (audit croisé Gemini, HIGH-05).
+	if rows := vatByRate(inv); len(rows) > 1 {
+		for _, r := range rows {
+			totalRow(inv.t("TVA %.1f%%:", r.rate), fmtMoney(r.amount, inv.Currency), false)
+		}
+	} else if inv.VATAmount != 0 || inv.VATRate != 0 {
 		totalRow(inv.t("TVA %.1f%%:", inv.VATRate), fmtMoney(inv.VATAmount, inv.Currency), false)
 	}
 
@@ -465,6 +512,43 @@ func renderTotals(pdf *gofpdf.Fpdf, inv InvoiceData) {
 
 	totalRow(inv.t("TOTAL ")+inv.Currency+":", fmtMoney(inv.TotalAmount, inv.Currency), true)
 	pdf.SetY(pdf.GetY() + 5)
+}
+
+// vatRateRow est l'impôt d'un taux.
+type vatRateRow struct {
+	rate   float64
+	amount float64
+}
+
+// vatByRate répartit la TVA de la facture par taux, du plus haut au plus bas.
+//
+// Comme le serveur la calcule (invoicing.computeTotals) : pour chaque taux, la somme des
+// bases de ses lignes, multipliée par le taux, arrondie au centime. Rend nil — l'appelant
+// retombe sur la ligne unique — quand il n'y a pas deux taux non nuls, ou quand la somme des
+// lignes ne retombe pas sur la TVA enregistrée au centime (une facture d'une version qui
+// calculait autrement) : mieux vaut une ligne exacte que deux lignes qui ne s'additionnent pas.
+func vatByRate(inv InvoiceData) []vatRateRow {
+	base := map[float64]float64{}
+	for _, l := range inv.Lines {
+		if l.VATRate != 0 {
+			base[l.VATRate] += l.LineTotal
+		}
+	}
+	if len(base) < 2 {
+		return nil
+	}
+	var rows []vatRateRow
+	var sum int64
+	for rate, b := range base {
+		amount := compliance.RoundCents(b * rate / 100)
+		rows = append(rows, vatRateRow{rate: rate, amount: amount})
+		sum += compliance.Cents(amount)
+	}
+	if sum != compliance.Cents(inv.VATAmount) {
+		return nil
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].rate > rows[j].rate })
+	return rows
 }
 
 // renderBankDetails imprime les coordonnées de virement quand elles existent.
@@ -501,11 +585,14 @@ func renderBankDetails(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	line(inv.t("Banque :"), c.BankName)
 	line(inv.t("Adresse :"), c.BankAddress)
 	line(inv.t("BIC/SWIFT :"), c.BankBIC)
-	iban := c.IBAN
-	if c.QRIBAN != "" {
-		iban = c.QRIBAN
+	// L'IBAN ORDINAIRE, jamais le QR-IBAN (audit croisé Gemini, HIGH-05). Un QR-IBAN n'accepte
+	// que les paiements portant une référence QR (IG SIX v2.4 §4.2.2) : le donner à qui saisit
+	// un virement à la main, c'est un virement refusé. Quand le seul compte renseigné est un
+	// QR-IBAN — la fiche société n'a qu'une case —, la ligne est omise ; le bulletin porte le
+	// compte pour qui paie par QR.
+	if iban := c.IBAN; iban != "" && !compliance.IsQRIBAN(iban) {
+		line(inv.t("IBAN :"), formatIBAN(iban))
 	}
-	line(inv.t("IBAN :"), formatIBAN(iban))
 	line(inv.t("Bénéficiaire :"), c.Name)
 
 	pdf.SetY(pdf.GetY() + 3)
@@ -519,6 +606,20 @@ func renderNotes(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		pdf.SetFont("Helvetica", "I", 9)
 		pdf.SetX(15)
 		pdf.MultiCell(180, 5, latin1(*inv.Notes), "", "L", false)
+		pdf.SetY(pdf.GetY() + 3)
+	}
+	// Les conditions de paiement saisies à l'écran, enregistrées et relues par l'API, ne sortaient
+	// sur aucun PDF : `Terms` n'était jamais imprimé (audit croisé Gemini, HIGH-05).
+	if inv.Terms != nil && *inv.Terms != "" {
+		if pdf.GetY()+15 > contentBottom {
+			pdf.AddPage()
+		}
+		pdf.SetFont("Helvetica", "B", 9)
+		pdf.SetX(15)
+		pdf.CellFormat(180, 5, latin1(inv.t("Conditions de paiement :")), "", 1, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "", 9)
+		pdf.SetX(15)
+		pdf.MultiCell(180, 5, latin1(*inv.Terms), "", "L", false)
 		pdf.SetY(pdf.GetY() + 3)
 	}
 }
@@ -798,6 +899,15 @@ func customerLines(c CustomerInfo) []string {
 	return lines
 }
 
+// postalAndTown rend le code postal et la localité : l'adresse SÉPARÉE quand on l'a, sinon le
+// collage « 4001 Basel » découpé à la première espace (LOW-02).
+func postalAndTown(postal, town, combined string) (string, string) {
+	if strings.TrimSpace(postal) != "" && strings.TrimSpace(town) != "" {
+		return strings.TrimSpace(postal), strings.TrimSpace(town)
+	}
+	return splitPostalCity(combined)
+}
+
 // splitPostalCity splits a combined "4001 Basel" string into ("4001", "Basel").
 // Swiss postal codes are the first whitespace-delimited token.
 func splitPostalCity(s string) (postalCode, town string) {
@@ -1069,8 +1179,8 @@ func normaliseUID(v string) string {
 // jour, et ce jour-là on ferait valider autre chose que ce qu'on envoie aux
 // clients — c'est-à-dire qu'on validerait pour rien.
 func buildQRBillData(inv InvoiceData, iban, refType, ref string) compliance.QRBillData {
-	credPostal, credTown := splitPostalCity(inv.Company.City)
-	debtorPostal, debtorTown := splitPostalCity(inv.Customer.City)
+	credPostal, credTown := postalAndTown(inv.Company.PostalCode, inv.Company.Town, inv.Company.City)
+	debtorPostal, debtorTown := postalAndTown(inv.Customer.PostalCode, inv.Customer.Town, inv.Customer.City)
 
 	credCountry := inv.Company.Country
 	if credCountry == "" {
@@ -1081,28 +1191,33 @@ func buildQRBillData(inv InvoiceData, iban, refType, ref string) compliance.QRBi
 		debtorCountry = "CH"
 	}
 
+	// Les textes libres du payload sont NETTOYÉS (retours à la ligne, tabulations, espaces en
+	// série) et bornés à la longueur de la norme : le payload est un texte à lignes, et un nom de
+	// client « Dupont⏎Fils » le décalait d'une ligne — un QR que la banque refuse (audit croisé
+	// Gemini, HIGH-05).
+	q := compliance.SanitizeQRText
 	return compliance.QRBillData{
 		// Creditor — structured address (S), building nr included in Street per §4.2.2
 		CreditorIBAN:       iban,
-		CreditorName:       inv.Company.Name,
-		CreditorStreet:     inv.Company.Address, // "Bahnhofstrasse 1" — building nr allowed in StrtNm
-		CreditorPostalCode: credPostal,
-		CreditorTown:       credTown,
+		CreditorName:       q(inv.Company.Name, 70),
+		CreditorStreet:     q(inv.Company.Address, 70), // "Bahnhofstrasse 1" — building nr allowed in StrtNm
+		CreditorPostalCode: q(credPostal, 16),
+		CreditorTown:       q(credTown, 35),
 		CreditorCountry:    credCountry,
 		// Amount
 		Amount:   inv.TotalAmount,
 		Currency: inv.Currency,
 		// Debtor — only include when name is non-empty and address is complete enough
-		DebtorName:       inv.Customer.Name,
-		DebtorStreet:     inv.Customer.Address,
-		DebtorPostalCode: debtorPostal,
-		DebtorTown:       debtorTown,
+		DebtorName:       q(inv.Customer.Name, 70),
+		DebtorStreet:     q(inv.Customer.Address, 70),
+		DebtorPostalCode: q(debtorPostal, 16),
+		DebtorTown:       q(debtorTown, 35),
 		DebtorCountry:    debtorCountry,
 		// Reference
 		ReferenceType: refType,
 		Reference:     ref,
 		// Message — unstructured, max 140 chars
-		Message:       inv.InvoiceNumber,
+		Message:       q(inv.InvoiceNumber, 140),
 		InvoiceNumber: inv.InvoiceNumber,
 		InvoiceDate:   inv.IssueDate,
 	}

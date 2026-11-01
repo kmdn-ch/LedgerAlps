@@ -15,6 +15,26 @@ package i18n
 // Écrit par scratchpad/cat_go.py — modifiable à la main sans dommage.
 
 var catalogue = map[string]map[Lang]string{
+	"%s : caractère de contrôle interdit (retour à la ligne, tabulation…)": {
+		DE: "%s: Steuerzeichen nicht erlaubt (Zeilenumbruch, Tabulator …)",
+		IT: "%s: carattere di controllo non consentito (a capo, tabulazione …)",
+		EN: "%s: control character not allowed (line break, tab …)",
+	},
+	"%s : %d caractères, %d au plus": {
+		DE: "%s: %d Zeichen, höchstens %d",
+		IT: "%s: %d caratteri, al massimo %d",
+		EN: "%s: %d characters, at most %d",
+	},
+	"le relevé dépasse 10 Mo : exportez une période plus courte": {
+		DE: "der Kontoauszug ist grösser als 10 MB: exportieren Sie einen kürzeren Zeitraum",
+		IT: "l'estratto conto supera i 10 MB: esportate un periodo più breve",
+		EN: "the statement exceeds 10 MB: export a shorter period",
+	},
+	"Conditions de paiement :": {
+		DE: "Zahlungsbedingungen:",
+		IT: "Condizioni di pagamento:",
+		EN: "Payment terms:",
+	},
 	// Série 4 (audit croisé Gemini) : un code de compte déjà pris est une erreur de saisie.
 	"aucune référence de clôture libre pour l'année %d": {
 		DE: "keine freie Abschlussreferenz für das Jahr %d",

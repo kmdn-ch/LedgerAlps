@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -225,6 +226,23 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 
 // ─── camt.053 — Bank Statement Import ────────────────────────────────────────
 
+// maxRelevePoids borne un relevé camt.053 : 10 Mo.
+const maxRelevePoids = 10 << 20
+
+// lireBorne lit au plus `max` octets et REFUSE ce qui dépasse. `io.LimitReader` coupait sans le
+// dire : un relevé de plus de 10 Mo arrivait tronqué, et l'analyse répondait « XML illisible » — un
+// message qui ne dit pas que le fichier est trop gros (audit croisé Gemini, MED-10).
+func lireBorne(r io.Reader, max int64) (data []byte, tropGros bool, err error) {
+	b, err := io.ReadAll(io.LimitReader(r, max+1))
+	if err != nil {
+		return nil, false, err
+	}
+	if int64(len(b)) > max {
+		return nil, true, nil
+	}
+	return b, false, nil
+}
+
 // ImportCamt053 godoc
 // POST /api/v1/bank-statements/import
 // Accepts a raw camt.053.001.08 XML body (Content-Type: application/xml)
@@ -233,11 +251,19 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 func (h *ISO20022Handler) ImportCamt053(c *gin.Context) {
 	var xmlData []byte
 
-	contentType := c.GetHeader("Content-Type")
-	if contentType == "application/xml" || contentType == "text/xml" {
+	// Le type de média se lit SANS ses paramètres : « application/xml; charset=utf-8 » est le
+	// type que la plupart des clients HTTP envoient, et la comparaison par égalité le refusait
+	// (audit croisé Gemini, MED-10).
+	mediaType, _, _ := mime.ParseMediaType(c.GetHeader("Content-Type"))
+	if mediaType == "application/xml" || mediaType == "text/xml" {
 		// Raw XML body
 		var err error
-		xmlData, err = io.ReadAll(io.LimitReader(c.Request.Body, 10<<20)) // 10 MB max
+		var tropGros bool
+		xmlData, tropGros, err = lireBorne(c.Request.Body, maxRelevePoids)
+		if tropGros {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "le relevé dépasse 10 Mo : exportez une période plus courte"})
+			return
+		}
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "le corps de la requête n'a pas pu être lu"})
 			return
@@ -252,7 +278,12 @@ func (h *ISO20022Handler) ImportCamt053(c *gin.Context) {
 			return
 		}
 		defer file.Close()
-		xmlData, err = io.ReadAll(io.LimitReader(file, 10<<20))
+		var tropGros bool
+		xmlData, tropGros, err = lireBorne(file, maxRelevePoids)
+		if tropGros {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "le relevé dépasse 10 Mo : exportez une période plus courte"})
+			return
+		}
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "le fichier déposé n'a pas pu être lu"})
 			return
