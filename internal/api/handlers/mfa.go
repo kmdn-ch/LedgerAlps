@@ -292,14 +292,16 @@ func (h *AuthHandler) MFAVerify(c *gin.Context) {
 	accepted := false
 
 	if window, ok := mfa.Verify(secret, code, time.Now(), lastWindow); ok {
-		accepted = true
-		upd := db.Rebind(`UPDATE user_mfa SET last_window = ?, updated_at = ? WHERE user_id = ?`,
-			h.cfg.UsePostgres())
-		if _, err := h.db.ExecContext(ctx, upd, window, time.Now().UTC(), claims.UserID); err != nil {
-			// Le code est bon ; ne pas bloquer l'entrée pour un défaut
-			// d'écriture. La réutilisation reste bornée par la fenêtre.
-			_ = err
-		}
+		// Le code est REVENDIQUÉ par un UPDATE conditionnel, et c'est le nombre de
+		// lignes touchées qui décide (audit croisé Gemini, HIGH-16). La version
+		// précédente lisait la fenêtre déjà consommée, vérifiait le code, puis
+		// écrivait SANS condition : deux requêtes simultanées portant le même
+		// code lisaient la même fenêtre et passaient toutes deux. Ici la seconde
+		// trouve `last_window` déjà avancé et ne touche aucune ligne.
+		revendique, err := h.claimTOTPWindow(ctx, claims.UserID, window)
+		// Le code est bon ; ne pas bloquer l'entrée pour un défaut d'écriture (la base
+		// ne répond pas : un refus n'y gagnerait rien).
+		accepted = revendique || err != nil
 	} else if ok, err := h.consumeRecoveryCode(ctx, claims.UserID, code); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
@@ -346,6 +348,20 @@ func (h *AuthHandler) MFAVerify(c *gin.Context) {
 	}
 
 	h.issueSession(c, claims.UserID, isAdmin, role, mustChange == 1)
+}
+
+// claimTOTPWindow revendique la fenêtre d'un code accepté : vrai pour la requête qui
+// la prend la première, faux pour toute autre qui porterait le même code (ou un plus
+// ancien) — l'UPDATE ne touche alors aucune ligne.
+func (h *AuthHandler) claimTOTPWindow(ctx context.Context, userID string, window int64) (bool, error) {
+	upd := db.Rebind(`UPDATE user_mfa SET last_window = ?, updated_at = ?
+		WHERE user_id = ? AND COALESCE(last_window, 0) < ?`, h.cfg.UsePostgres())
+	res, err := h.db.ExecContext(ctx, upd, window, time.Now().UTC(), userID, window)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
 }
 
 // Plafond des essais de code de secours ratés : cinq par quart d'heure et par
@@ -405,10 +421,21 @@ func (h *AuthHandler) consumeRecoveryCode(ctx context.Context, userID, code stri
 
 	for _, cd := range all {
 		if security.CheckPassword(cd.hash, normalised) {
-			upd := db.Rebind(`UPDATE mfa_recovery_codes SET used_at = ? WHERE id = ?`,
-				h.cfg.UsePostgres())
-			if _, err := h.db.ExecContext(ctx, upd, time.Now().UTC(), cd.id); err != nil {
+			// Le code est REVENDIQUÉ : `used_at IS NULL` dans la condition, et le
+			// nombre de lignes touchées décide (audit croisé Gemini, HIGH-16). Entre
+			// la lecture ci-dessus et cette écriture passent dix hachages bcrypt —
+			// une fenêtre de plusieurs centaines de millisecondes : deux requêtes
+			// portant le même code « à usage unique » ouvraient chacune une session
+			// (trois essais sur trois en rejeu).
+			upd := db.Rebind(`UPDATE mfa_recovery_codes SET used_at = ?
+				WHERE id = ? AND used_at IS NULL`, h.cfg.UsePostgres())
+			res, err := h.db.ExecContext(ctx, upd, time.Now().UTC(), cd.id)
+			if err != nil {
 				return false, err
+			}
+			if n, _ := res.RowsAffected(); n != 1 {
+				// Une autre requête l'a consommé entre-temps : ce code ne vaut plus.
+				return false, nil
 			}
 			h.recovery.reset(userID)
 			return true, nil

@@ -131,7 +131,14 @@ func (s *FiscalYearService) CloseYear(ctx context.Context, fiscalYearID, userID 
 				"elle n'est pas passée", fyName, float64(debitCents)/100, float64(creditCents)/100)
 		}
 
-		closingRef := fmt.Sprintf("%s%d", ClosingReferencePrefix, fyEndDate.Year())
+		// La référence vient de l'ANNÉE DE FIN, et deux exercices peuvent finir la même
+		// année (un exercice court, un changement de date de clôture) : la seconde
+		// clôture tombait sur `UNIQUE(reference)` et répondait 500 — l'exercice ne pouvait
+		// plus être clos (audit croisé Gemini, MED-04).
+		closingRef, err := closingReferenceFor(ctx, tx, s.usePostgres, fyEndDate.Year())
+		if err != nil {
+			return err
+		}
 		closingDesc := fmt.Sprintf("Clôture exercice %s", fyName)
 		closingDate := fyEndDate.Format("2006-01-02")
 		entryID := db.NewID()
@@ -174,7 +181,7 @@ func (s *FiscalYearService) CloseYear(ctx context.Context, fiscalYearID, userID 
 		// une panne entre les deux laisserait un exercice clos sur une écriture
 		// de clôture restée en brouillon.
 		chainedHash, now, err := AppendAuditEntry(ctx, tx, s.usePostgres,
-			userID, "close", entryID, "",
+			userID, "close", entryID, clientIPFrom(ctx),
 			map[string]any{
 				"entry_id":     entryID,
 				"status":       "posted",
@@ -206,21 +213,31 @@ func (s *FiscalYearService) CloseYear(ctx context.Context, fiscalYearID, userID 
 		return fmt.Errorf("fiscal year %q is already closed", fyName)
 	}
 
-	// ── 7. Create next fiscal year if not already existing ────────────────────
-	nextYear := fyEndDate.Year() + 1
-	nextName := fmt.Sprintf("%d", nextYear)
-	var existingCount int
-	checkNextQ := db.Rebind(`SELECT COUNT(*) FROM fiscal_years WHERE name = ?`, s.usePostgres)
-	if err := tx.QueryRowContext(ctx, checkNextQ, nextName).Scan(&existingCount); err != nil {
+	// ── 7. Create next fiscal year if the period is not already covered ────────
+	//
+	// Un an civil après le début, moins un jour — et non « fin + 365 jours » :
+	// l'exercice suivant d'un 31.12.2027 est 2028, bissextile, et 365 jours
+	// arrêtaient la nouvelle année au 30.12.2028. Le 31 n'appartenait alors à
+	// aucun exercice, et toute écriture de ce jour était refusée.
+	//
+	// « Déjà couverte » se juge sur les DATES, pas sur le nom (audit croisé Gemini,
+	// MED-04). Le nom seul laissait créer un exercice « 2032 » du 1.7.2031 au 30.6.2032
+	// par-dessus un exercice existant du 1.7 au 31.12.2031, ou par-dessus un exercice
+	// suivant que l'utilisateur avait nommé autrement : deux exercices se
+	// chevauchaient, et le rattachement d'une écriture devenait arbitraire.
+	nextStart := fyEndDate.AddDate(0, 0, 1)
+	nextEnd := nextStart.AddDate(1, 0, 0).AddDate(0, 0, -1)
+	var covered int
+	overlapQ := db.Rebind(`SELECT COUNT(*) FROM fiscal_years WHERE start_date <= ? AND end_date >= ?`, s.usePostgres)
+	if err := tx.QueryRowContext(ctx, overlapQ,
+		nextEnd.Format("2006-01-02"), nextStart.Format("2006-01-02")).Scan(&covered); err != nil {
 		return fmt.Errorf("check next fiscal year: %w", err)
 	}
-	if existingCount == 0 {
-		nextStart := fyEndDate.AddDate(0, 0, 1)
-		// Un an civil après le début, moins un jour — et non « fin + 365 jours » :
-		// l'exercice suivant d'un 31.12.2027 est 2028, bissextile, et 365 jours
-		// arrêtaient la nouvelle année au 30.12.2028. Le 31 n'appartenait alors à
-		// aucun exercice, et toute écriture de ce jour était refusée.
-		nextEnd := nextStart.AddDate(1, 0, 0).AddDate(0, 0, -1)
+	if covered == 0 {
+		nextName, err := freeFiscalYearName(ctx, tx, s.usePostgres, nextEnd.Year(), nextStart)
+		if err != nil {
+			return err
+		}
 		insertNext := db.Rebind(`
 			INSERT INTO fiscal_years (id, name, start_date, end_date, is_closed)
 			VALUES (?, ?, ?, ?, 0)
@@ -235,6 +252,50 @@ func (s *FiscalYearService) CloseYear(ctx context.Context, fiscalYearID, userID 
 	}
 
 	return tx.Commit()
+}
+
+// closingReferenceFor choisit la référence de l'écriture de clôture d'un exercice qui
+// finit l'année `endYear` : « CLOTURE-2031 », puis « CLOTURE-2031-2 » si un autre exercice
+// finissant la même année a déjà pris la première. Elle commence toujours par le préfixe
+// des clôtures (les rapports l'écartent par ce préfixe) et ne finit jamais par « -C »
+// (suffixe du complément).
+func closingReferenceFor(ctx context.Context, tx *sql.Tx, usePostgres bool, endYear int) (string, error) {
+	base := fmt.Sprintf("%s%d", ClosingReferencePrefix, endYear)
+	ref := base
+	for n := 2; n < 100; n++ {
+		var used int
+		if err := tx.QueryRowContext(ctx,
+			db.Rebind(`SELECT COUNT(*) FROM journal_entries WHERE reference = ?`, usePostgres), ref,
+		).Scan(&used); err != nil {
+			return "", fmt.Errorf("check closing reference: %w", err)
+		}
+		if used == 0 {
+			return ref, nil
+		}
+		ref = fmt.Sprintf("%s-%d", base, n)
+	}
+	return "", fmt.Errorf("aucune référence de clôture libre pour l'année %d", endYear)
+}
+
+// freeFiscalYearName donne son nom à l'exercice créé à la clôture : l'année de sa fin, ou
+// — si un exercice la porte déjà sans chevaucher celui-ci — l'année suivie du mois de début.
+func freeFiscalYearName(ctx context.Context, tx *sql.Tx, usePostgres bool, endYear int, start time.Time) (string, error) {
+	for _, name := range []string{
+		fmt.Sprintf("%d", endYear),
+		fmt.Sprintf("%d-%s", endYear, start.Format("01")),
+		fmt.Sprintf("%d-%s", endYear, start.Format("0102")),
+	} {
+		var n int
+		if err := tx.QueryRowContext(ctx,
+			db.Rebind(`SELECT COUNT(*) FROM fiscal_years WHERE name = ?`, usePostgres), name,
+		).Scan(&n); err != nil {
+			return "", fmt.Errorf("check next fiscal year name: %w", err)
+		}
+		if n == 0 {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("aucun nom libre pour l'exercice suivant (%d)", endYear)
 }
 
 // closingLine est une ligne de l'écriture de clôture.

@@ -7,7 +7,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
-Audit croisé de Gemini (`review-Gemini1.md`) : première série, les chiffres faux, deuxième série (second facteur, navigation, accents du PDF), troisième série (données, sécurité, assainissement), dans l'ordre du rapport. Chaque correctif a un test qui échoue sans lui ; l'interface est vérifiée dans un navigateur.
+Audit croisé de Gemini (`review-Gemini1.md`) : première série, les chiffres faux, deuxième série (second facteur, navigation, accents du PDF), troisième série (données, sécurité, assainissement), quatrième série (données et sécurité, documents, interface, déploiement), dans l'ordre du rapport. Chaque correctif a un test qui échoue sans lui ; l'interface est vérifiée dans un navigateur.
 
 ### Corrigé — les états financiers et la clôture
 
@@ -15,6 +15,16 @@ Audit croisé de Gemini (`review-Gemini1.md`) : première série, les chiffres f
 - **Le compte de résultat tombait à 0.00 sur tout exercice clôturé (CRIT-01).** L'écriture de clôture, qui remet les comptes à zéro, était comptée : produits, charges et résultat disparaissaient. Elle est exclue (`CLOTURE-…`, référence réservée à la clôture).
 - **Le bilan d'un exercice ouvert ne s'équilibrait jamais (CRIT-03).** Il ne lisait que l'actif, le passif et les fonds propres : une facture de 1 000 + 81 de TVA donnait 1 081 à l'actif contre 81 au passif, tous les jours de l'exercice. Le résultat non clôturé (produits − charges) figure désormais dans les fonds propres (`unclosed_result`), et l'actif égale le passif plus les fonds propres avant, pendant et après la clôture.
 - **Le carnet du lait imprimait un chiffre d'affaires de 0.00 après la clôture (CRIT-02)** — donc « éligible » et « non assujetti à la TVA » pour 650 000 francs de chiffre d'affaires, sur la pièce remise à l'administration. L'écriture de clôture est exclue de l'éligibilité. Par ailleurs un emprunt, un apport ou un prélèvement du propriétaire se comptaient en recettes et en dépenses, et une extourne gonflait les deux côtés : le **financement** (capital, réserves, compte du propriétaire, dettes financières 21xx/24xx/26xx) est isolé dans son bloc (écran, PDF en quatre langues, CSV), les extournes viennent en déduction, et le résultat plus le financement égale toujours le mouvement net des liquidités.
+
+### Corrigé — quatrième série : données et sécurité
+
+Les 28 constats que le premier recoupement n'avait pas instruits (`review-Gemini2.md`) : 17 justes, 8 partiels, 3 faux. Cette partie traite ceux qui touchent aux données et aux accès.
+
+- **Un refus de la fiche société avait déjà écrit l'IBAN (HIGH-15).** `PUT /settings/company` avec un nouvel IBAN et un statut TVA inconnu répondait `422`… après avoir écrit l'IBAN — le compte qui reçoit tous les virements des clients —, sans aucune ligne d'audit. Le statut est validé **avant** toute écriture, et la fiche (champs principaux, comptabilisation automatique, statut, effacement du numéro) s'écrit en une transaction.
+- **Un code de secours « à usage unique » ouvrait deux sessions (HIGH-16).** Deux requêtes simultanées portant le même code passaient toutes deux (trois essais sur trois en rejeu) : le code était lu, comparé — dix hachages bcrypt — puis marqué utilisé sans condition. Même défaut, plus étroit, pour le code de l'application. Les deux sont maintenant *revendiqués* par une écriture conditionnelle, et le nombre de lignes touchées décide. La réinitialisation d'un mot de passe par un administrateur et la désactivation d'un compte retirent aussi les postes de confiance, qui dispensent du second facteur trente jours. Le changement de mot de passe et le retrait du second facteur redemandaient le mot de passe actuel sans borner les essais : cinq refus ferment désormais la voie du compte (tracé `password_lockout`).
+- **Deux exercices qui finissent la même année ne se clôturaient pas (MED-04).** La référence de clôture venait de l'année de fin : la seconde clôture tombait sur `UNIQUE(reference)` (`500`), et la première avait créé un exercice « 2032 » **par-dessus** le second, parce que « l'exercice suivant existe-t-il ? » ne se jugeait que sur le **nom**. La période se juge maintenant sur les dates, la seconde clôture s'appelle `CLOTURE-AAAA-2`, et la réparation retrouve la clôture de son exercice au journal.
+- **Comptes et exercices (MED-11).** Un code de compte en double répondait `500` ; il répond `409`, et la création d'un compte est tracée. Le contrôle de chevauchement des exercices et l'insertion vivent dans une transaction ; toute erreur d'insertion ne se déguise plus en « nom déjà pris » ; la clôture d'un exercice note l'adresse du client dans son maillon d'audit.
+- **Un compte soldé affichait 5,55e-17 (MED-05).** 0,10 + 0,20 au débit contre 0,30 au crédit : la balance donnait ce résidu comme solde, le compte de résultat listait une ligne « 6000 » à cette valeur, et le CSV écrivait « -0.00 ». Balance, compte de résultat, grand livre et exports sont arrondis au centime.
 
 ### Corrigé — troisième série : données, sécurité, assainissement
 

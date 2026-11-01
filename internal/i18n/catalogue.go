@@ -15,6 +15,22 @@ package i18n
 // Écrit par scratchpad/cat_go.py — modifiable à la main sans dommage.
 
 var catalogue = map[string]map[Lang]string{
+	// Série 4 (audit croisé Gemini) : un code de compte déjà pris est une erreur de saisie.
+	"aucune référence de clôture libre pour l'année %d": {
+		DE: "keine freie Abschlussreferenz für das Jahr %d",
+		IT: "nessun riferimento di chiusura libero per l'anno %d",
+		EN: "no free closing reference for the year %d",
+	},
+	"aucun nom libre pour l'exercice suivant (%d)": {
+		DE: "kein freier Name für das folgende Geschäftsjahr (%d)",
+		IT: "nessun nome libero per l'esercizio successivo (%d)",
+		EN: "no free name for the next financial year (%d)",
+	},
+	"un compte porte déjà ce code": {
+		DE: "ein Konto mit diesem Code existiert bereits",
+		IT: "esiste già un conto con questo codice",
+		EN: "an account with this code already exists",
+	},
 	// Le logo est refuse sur le format REELLEMENT detecte dans ses octets,
 	// pas sur ce que l'entete annonce. La personne qui envoie un GIF doit
 	// comprendre ce qui est attendu, dans sa langue.

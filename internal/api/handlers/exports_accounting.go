@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
 
@@ -83,7 +84,9 @@ func writeCSV(c *gin.Context, filename string, rows [][]string) {
 // Sans séparateur de milliers : un CSV se recalcule, il ne se lit pas. Une
 // apostrophe suisse dans un nombre en fait du texte pour tout tableur.
 func money(v float64) string {
-	return strconv.FormatFloat(v, 'f', 2, 64)
+	// Au centime d'abord (audit croisé Gemini, MED-05) : 5,55e-17 s'écrivait « -0.00 » dans
+	// un fichier remis à la fiduciaire. RoundCents rend un vrai zéro, sans signe.
+	return strconv.FormatFloat(compliance.RoundCents(v), 'f', 2, 64)
 }
 
 // periodFromQuery lit la période, en refusant une date mal formée plutôt que de
@@ -251,7 +254,7 @@ func (h *AccountingExportHandler) ExportLedgerCSV(c *gin.Context) {
 		if code != current {
 			current, solde = code, 0
 		}
-		solde += d - cr
+		solde = compliance.RoundCents(solde + d - cr)
 		out = append(out, []string{
 			code, aname, accountTypeLabel(atype), firstTen(date), ref, desc,
 			money(d), money(cr), money(solde),

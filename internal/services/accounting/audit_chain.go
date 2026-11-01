@@ -22,6 +22,22 @@ import (
 //
 // Deux implémentations auraient fini par diverger. Il n'y en a plus qu'une.
 
+// ctxIP est la clé du contexte qui porte l'adresse du client jusqu'aux services qui n'ont pas
+// de requête HTTP en main (la clôture d'un exercice, la réparation d'une clôture).
+type ctxIP struct{}
+
+// WithClientIP rend un contexte qui porte l'adresse du client. Les maillons d'audit que
+// les services écrivent la lisent : la clôture d'un exercice, l'acte le plus lourd du
+// produit, était la seule à ne pas dire d'où elle venait (audit croisé Gemini, MED-11).
+func WithClientIP(ctx context.Context, ip string) context.Context {
+	return context.WithValue(ctx, ctxIP{}, ip)
+}
+
+func clientIPFrom(ctx context.Context) string {
+	ip, _ := ctx.Value(ctxIP{}).(string)
+	return ip
+}
+
 // AppendAuditEntry écrit le maillon d'audit pour `recordID` et retourne
 // l'empreinte chaînée à stocker sur l'écriture, ainsi que l'horodatage retenu.
 //

@@ -110,6 +110,13 @@ func (h *UsersHandler) ResetPassword(c *gin.Context) {
 		_ = err // non bloquant : le mot de passe est déjà remplacé
 	}
 
+	// Les postes de confiance tombent aussi (audit croisé Gemini, HIGH-16). Un
+	// poste « de confiance » dispense du second facteur trente jours ; réinitialiser
+	// l'accès d'un compte qu'on croit compromis sans les retirer laissait justement
+	// cette dispense à qui détient le cookie de l'appareil. Le changement de mot de
+	// passe par le titulaire le faisait déjà ; la réinitialisation ne le faisait pas.
+	forgetDevices(c.Request.Context(), h.db, h.usePostgres, targetID)
+
 	h.recordSecurityEvent(c, "user_password_reset", targetID, "")
 
 	c.JSON(http.StatusOK, gin.H{

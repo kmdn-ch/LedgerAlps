@@ -140,6 +140,16 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
+	// Le contrôle de chevauchement et l'insertion vivent dans UNE transaction (audit
+	// croisé Gemini, MED-11) : lus l'un après l'autre hors transaction, deux créations
+	// simultanées passaient toutes deux le contrôle.
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	// Deux exercices qui se chevauchent rendraient le rattachement d'une
 	// écriture arbitraire, donc la clôture arbitraire. Refuser ici est la seule
 	// occasion de l'empêcher.
@@ -148,7 +158,7 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 		SELECT name FROM fiscal_years
 		WHERE start_date <= ? AND end_date >= ?
 		LIMIT 1`, h.usePostgres)
-	err = h.db.QueryRowContext(ctx, overlapQ, req.EndDate, req.StartDate).Scan(&overlapping)
+	err = tx.QueryRowContext(ctx, overlapQ, req.EndDate, req.StartDate).Scan(&overlapping)
 	if err == nil {
 		c.JSON(http.StatusConflict, gin.H{
 			"error": "la période chevauche l'exercice « " + overlapping + " »",
@@ -164,8 +174,19 @@ func (h *FiscalYearHandler) CreateFiscalYear(c *gin.Context) {
 	insertQ := db.Rebind(`
 		INSERT INTO fiscal_years (id, name, start_date, end_date, is_closed)
 		VALUES (?, ?, ?, ?, 0)`, h.usePostgres)
-	if _, err := h.db.ExecContext(ctx, insertQ, id, req.Name, req.StartDate, req.EndDate); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "un exercice porte déjà ce nom"})
+	if _, err := tx.ExecContext(ctx, insertQ, id, req.Name, req.StartDate, req.EndDate); err != nil {
+		// 409 pour le SEUL cas qu'il décrit : le nom est pris. Toute erreur d'insertion
+		// répondait « un exercice porte déjà ce nom » — un disque plein s'y lisait comme
+		// une faute de saisie (MED-11).
+		if isUniqueViolation(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": "un exercice porte déjà ce nom"})
+			return
+		}
+		erreurInterne(c, msgErreurInterne, err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		erreurInterne(c, msgErreurInterne, err)
 		return
 	}
 
@@ -189,7 +210,8 @@ func (h *FiscalYearHandler) CloseFiscalYear(c *gin.Context) {
 
 	userID := currentUserID(c)
 
-	if err := h.fySvc.CloseYear(c.Request.Context(), fiscalYearID, userID); err != nil {
+	ctx := accounting.WithClientIP(c.Request.Context(), c.ClientIP())
+	if err := h.fySvc.CloseYear(ctx, fiscalYearID, userID); err != nil {
 		refus(c, http.StatusUnprocessableEntity, err)
 		return
 	}
@@ -231,7 +253,7 @@ func (h *FiscalYearHandler) RepairClosing(c *gin.Context) {
 		})
 		return
 	}
-	plan, err := h.fySvc.RepairClosing(c.Request.Context(), c.Param("id"), currentUserID(c))
+	plan, err := h.fySvc.RepairClosing(accounting.WithClientIP(c.Request.Context(), c.ClientIP()), c.Param("id"), currentUserID(c))
 	if err != nil {
 		h.refuserReparation(c, err)
 		return

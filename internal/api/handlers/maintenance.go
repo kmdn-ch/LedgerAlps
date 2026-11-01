@@ -793,7 +793,7 @@ func (h *MaintenanceHandler) SystemHealth(c *gin.Context) {
 	}
 	resp["personal_data"] = personal
 
-	if n, err := h.count(ctx, `SELECT COUNT(*) FROM security_events WHERE event_type IN ('login_lockout', 'mfa_lockout')`); err == nil {
+	if n, err := h.count(ctx, `SELECT COUNT(*) FROM security_events WHERE event_type IN ('login_lockout', 'mfa_lockout', 'password_lockout')`); err == nil {
 		resp["login_lockouts"] = n
 	}
 

@@ -129,6 +129,21 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		req.FiscalYearStartMonth = 1
 	}
 
+	// Le statut TVA se valide AVANT la première écriture (audit croisé Gemini,
+	// HIGH-15). Il l'était après l'UPDATE des champs principaux : un statut inconnu
+	// répondait 422… alors que l'IBAN — le compte qui reçoit tous les virements des
+	// clients — était déjà écrit, sans la moindre trace d'audit.
+	var statutTVA string
+	if req.VatStatus != nil {
+		statutTVA = strings.TrimSpace(*req.VatStatus)
+		if statutTVA != "" && statutTVA != models.VatLiable && statutTVA != models.VatExempt {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": "statut TVA inconnu : attendu « assujetti » ou « non assujetti »",
+			})
+			return
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
@@ -190,7 +205,19 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 
 	now := time.Now().UTC()
 
-	if err == sql.ErrNoRows {
+	// Toutes les écritures de la fiche vivent dans UNE transaction : le jeu de champs
+	// principaux, la comptabilisation automatique, le statut TVA et l'effacement du
+	// numéro. Écrites une à une, une panne au milieu laissait une fiche à moitié
+	// enregistrée (HIGH-15). La trace d'audit, elle, suit la validation — voir plus bas.
+	lecture := err
+	tx, txErr := h.db.BeginTx(ctx, nil)
+	if txErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if lecture == sql.ErrNoRows {
 		// No row yet — INSERT.
 		newID := db.NewID()
 		insertQ := db.Rebind(`
@@ -202,7 +229,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 			     fiscal_year_start_month, currency,
 			     created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, h.usePostgres)
-		if _, err := h.db.ExecContext(ctx, insertQ,
+		if _, err := tx.ExecContext(ctx, insertQ,
 			newID, req.CompanyName, req.LegalForm,
 			req.AddressStreet, req.AddressPostalCode, req.AddressCity, req.AddressCountry,
 			req.CheNumber, req.VatNumber, req.Phone, req.Email,
@@ -214,7 +241,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 			return
 		}
 		existingID = newID
-	} else if err != nil {
+	} else if lecture != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	} else {
@@ -239,7 +266,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 			    currency                = ?,
 			    updated_at              = ?
 			WHERE id = ?`, h.usePostgres)
-		if _, err := h.db.ExecContext(ctx, updateQ,
+		if _, err := tx.ExecContext(ctx, updateQ,
 			req.CompanyName, req.LegalForm,
 			req.AddressStreet, req.AddressPostalCode, req.AddressCity, req.AddressCountry,
 			req.CheNumber, req.VatNumber, req.Phone, req.Email,
@@ -260,7 +287,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	// comptabilisation sans que personne ne l'ait demandé.
 	if req.AutoPostInvoices != nil {
 		autoQ := db.Rebind(`UPDATE company_settings SET auto_post_invoices = ?, updated_at = ?`, h.usePostgres)
-		if _, err := h.db.ExecContext(ctx, autoQ, boolToSQL(*req.AutoPostInvoices), now); err != nil {
+		if _, err := tx.ExecContext(ctx, autoQ, boolToSQL(*req.AutoPostInvoices), now); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
@@ -276,25 +303,23 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 	// là où elle naît ; la laisser vivre pour la rattraper plus loin, c'est
 	// signer qu'un chemin l'oubliera.
 	if req.VatStatus != nil {
-		statut := strings.TrimSpace(*req.VatStatus)
-		if statut != "" && statut != models.VatLiable && statut != models.VatExempt {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{
-				"error": "statut TVA inconnu : attendu « assujetti » ou « non assujetti »",
-			})
-			return
-		}
 		vatQ := db.Rebind(`UPDATE company_settings SET vat_status = ?, updated_at = ?`, h.usePostgres)
-		if _, err := h.db.ExecContext(ctx, vatQ, statut, now); err != nil {
+		if _, err := tx.ExecContext(ctx, vatQ, statutTVA, now); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 			return
 		}
-		if statut == models.VatExempt {
+		if statutTVA == models.VatExempt {
 			clearQ := db.Rebind(`UPDATE company_settings SET vat_number = '', updated_at = ?`, h.usePostgres)
-			if _, err := h.db.ExecContext(ctx, clearQ, now); err != nil {
+			if _, err := tx.ExecContext(ctx, clearQ, now); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 				return
 			}
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+		return
 	}
 
 	// Return the updated row.

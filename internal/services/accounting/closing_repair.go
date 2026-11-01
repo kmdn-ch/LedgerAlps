@@ -129,7 +129,7 @@ func (s *FiscalYearService) RepairClosing(ctx context.Context, fiscalYearID, use
 		return nil, err
 	}
 	chainedHash, now, err := AppendAuditEntry(ctx, tx, s.usePostgres,
-		userID, "close_repair", entryID, "",
+		userID, "close_repair", entryID, clientIPFrom(ctx),
 		map[string]any{
 			"entry_id":          entryID,
 			"status":            "posted",
@@ -185,7 +185,19 @@ func (s *FiscalYearService) computeRepair(ctx context.Context, tx *sql.Tx, fisca
 		return nil, nil, ErrReparationExerciceOuvert
 	}
 
-	closingRef := fmt.Sprintf("%s%d", ClosingReferencePrefix, endDate.Year())
+	// La référence est celle de la clôture DE CET EXERCICE, lue au journal : elle ne se
+	// déduit plus de l'année de fin, deux exercices pouvant finir la même année (MED-04).
+	var closingRef string
+	switch err := tx.QueryRowContext(ctx, db.Rebind(`
+		SELECT reference FROM journal_entries
+		WHERE fiscal_year_id = ? AND status = 'posted'
+		  AND reference LIKE 'CLOTURE-%' AND reference NOT LIKE 'CLOTURE-%-C'
+		ORDER BY reference LIMIT 1`, s.usePostgres), fiscalYearID).Scan(&closingRef); {
+	case err == sql.ErrNoRows:
+		return nil, nil, ErrReparationSansCloture
+	case err != nil:
+		return nil, nil, fmt.Errorf("load closing reference: %w", err)
+	}
 	complementRef := closingRef + ComplementSuffix
 
 	var existing int

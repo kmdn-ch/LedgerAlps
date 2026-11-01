@@ -67,6 +67,7 @@ const (
 	ActionSupplierInvoiceCancelled = "supplier_invoice_cancelled"
 	ActionSupplierInvoiceDeleted   = "supplier_invoice_deleted"
 
+	ActionAccountCreated         = "account_created"
 	ActionCompanySettingsUpdated = "company_settings_updated"
 	ActionBankStatementImported  = "bank_statement_imported"
 	ActionPaymentFileGenerated   = "payment_file_generated"
@@ -81,6 +82,7 @@ const (
 // Tables suivies, en plus de celles nommées dans le paquet accounting.
 const (
 	TableSupplierInvoices = "supplier_invoices"
+	TableAccounts         = "accounts"
 	TableCompanySettings  = "company_settings"
 	TableExports          = "exports"
 	TableBankEntries      = "bank_entries"

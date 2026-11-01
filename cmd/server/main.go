@@ -331,7 +331,9 @@ func main() {
 	// Hors du groupe filtré : c'est la seule action qu'un compte au mot de passe
 	// temporaire puisse faire, et la placer dans le groupe la bloquerait
 	// elle-même — le compte serait alors définitivement enfermé.
-	v1.POST("/auth/change-password", middleware.RequireAuth(cfg.JWTSecret), authHandler.ChangePassword)
+	v1.POST("/auth/change-password", append(
+		append([]gin.HandlerFunc{middleware.RequireAuth(cfg.JWTSecret)}, limiters.ForPasswordCheck()...),
+		authHandler.ChangePassword)...)
 
 	// Battement d'activité : l'interface l'envoie quand quelqu'un se sert du
 	// clavier ou de la souris, pour qu'une longue saisie sans requête ne soit pas
@@ -356,7 +358,9 @@ func main() {
 	v1.GET("/auth/mfa", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFAStatus)
 	v1.POST("/auth/mfa/setup", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFASetup)
 	v1.POST("/auth/mfa/confirm", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFAConfirm)
-	v1.DELETE("/auth/mfa", middleware.RequireAuth(cfg.JWTSecret), authHandler.MFADisable)
+	v1.DELETE("/auth/mfa", append(
+		append([]gin.HandlerFunc{middleware.RequireAuth(cfg.JWTSecret)}, limiters.ForPasswordCheck()...),
+		authHandler.MFADisable)...)
 	// Ordinateurs de confiance. Hors du groupe filtre pour la meme raison que le
 	// reste du second facteur : ces routes doivent rester joignables pendant
 	// qu'un compte est encore bloque sur l'inscription.

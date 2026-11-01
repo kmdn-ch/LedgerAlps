@@ -53,12 +53,12 @@ déconnexion : l'authentification des routes est sans état.
 | POST | `/auth/refresh` | public | Renouveler le jeton d'accès |
 | POST | `/auth/logout` | public | Révoquer le jeton de rafraîchissement |
 | POST | `/auth/activity` | auth | Battement d'activité : note qu'une session est utilisée, sans rien modifier. L'interface l'envoie (au plus une fois par minute) quand quelqu'un se sert du clavier ou de la souris — voir « Déconnexion sur inactivité » |
-| POST | `/auth/change-password` | auth | Choisir son mot de passe. Seule route ouverte à un compte au mot de passe temporaire |
+| POST | `/auth/change-password` | auth | Choisir son mot de passe. Seule route ouverte à un compte au mot de passe temporaire. Le mot de passe actuel est redemandé : **cinq refus ferment la voie du compte** (`429`, `retry_after`), un succès la rouvre |
 | POST | `/auth/mfa/verify` | jeton d'attente | Deuxième étape de la connexion : code TOTP ou code de secours |
 | GET | `/auth/mfa` | auth | État du second facteur du compte connecté |
 | POST | `/auth/mfa/setup` | auth | Préparer une inscription — rend le secret, l'URI `otpauth://` et le QR |
 | POST | `/auth/mfa/confirm` | auth | Confirmer par un premier code — rend les codes de secours, une seule fois |
-| DELETE | `/auth/mfa` | auth | Retirer le second facteur. Mot de passe redemandé |
+| DELETE | `/auth/mfa` | auth | Retirer le second facteur. Mot de passe redemandé ; **même voie fermée que `change-password`** après cinq refus (`429`) |
 | GET | `/auth/devices` | auth | Ordinateurs de confiance de ce compte, et la durée accordée |
 | DELETE | `/auth/devices` | auth | Les oublier tous — un code sera redemandé partout |
 
@@ -96,6 +96,16 @@ plutôt que route par route où il finirait par être oublié une fois.
 et rend alors la réponse de session habituelle. Un code TOTP ne sert qu'une
 fois : la fenêtre acceptée est enregistrée et refusée ensuite. La route est
 derrière la limitation de tentatives — cinq échecs, quinze minutes de fermeture.
+
+Le code TOTP **et** le code de secours sont *revendiqués* par une écriture
+conditionnelle (`last_window` avancé, `used_at IS NULL`) dont le nombre de lignes
+touchées décide : deux requêtes simultanées portant le même code n'ouvrent qu'**une**
+session. Les postes de confiance d'un compte tombent quand son mot de passe est
+changé, quand un administrateur le **réinitialise** ou le **désactive**, et quand le
+second facteur est inscrit ou retiré.
+
+Les verrouillages du changement de mot de passe et du retrait du second facteur sont
+tracés (`security_events`, `password_lockout`) et comptés avec les autres au diagnostic.
 
 ### Ce que le second facteur protège
 
@@ -183,7 +193,7 @@ de passe utilisable à quelqu'un qui n'a plus le droit d'entrer.
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
 | GET | `/accounts` | lecture | Plan comptable. Champs : `id`, `code`, `name`, `account_type`, `description`, `is_active` |
-| POST | `/accounts` | écriture comptable | Créer un compte |
+| POST | `/accounts` | écriture comptable | Créer un compte. Un code déjà pris répond `409` (`un compte porte déjà ce code`) ; la création est **tracée** au journal d'audit (`account_created`) |
 | GET | `/accounts/trial-balance` | lecture | Balance de vérification. Champs : `code`, `name`, `total_debit`, `total_credit`, `balance`. Optionnel : `as_of=AAAA-MM-JJ`. **Écritures comptabilisées uniquement** |
 | GET | `/accounts/:code/balance` | lecture | Solde d'un compte |
 | GET | `/journal` | lecture | Liste paginée. Filtres : `date_from`, `date_to`, `status`, `reference`, `page`, `page_size`. Chaque ligne porte son `total` (somme des débits) et l'`author` de l'écriture |
@@ -609,7 +619,7 @@ jusqu'à réponse avant de recharger la page.
 |---|---|---|---|
 | GET | `/onboarding` | auth | Mise en route : les cinq étapes sans lesquelles une facture suisse ne tient pas, et ce qui bloque chacune. Ne rend que des **états** et des noms de champs — les phrases sont au catalogue du frontend |
 | POST | `/settings/logo` | **admin** | Logo de la société, en adresse de données PNG ou JPEG (2 Mo au plus). Toute image dont un côté dépasse **300 px** est réduite, sans déformation, et ré-encodée en PNG. La réponse rend `logo_data`, `width`, `height` et `resized` — ce qui a été RETENU, pas ce qui a été envoyé |
-| PUT | `/settings/company` | **admin** | `vat_status` vaut `""` (non déclaré), `"liable"` ou `"exempt"`. **Absent = ne touche pas** ; toute autre valeur répond `422`. `"exempt"` efface `vat_number` — il s'imprime sur la facture, et le garder contredirait la déclaration (LTVA art. 27 al. 1) |
+| PUT | `/settings/company` | **admin** | `vat_status` vaut `""` (non déclaré), `"liable"` ou `"exempt"`. **Absent = ne touche pas** ; toute autre valeur répond `422`. `"exempt"` efface `vat_number` — il s'imprime sur la facture, et le garder contredirait la déclaration (LTVA art. 27 al. 1). Le statut est **validé avant toute écriture** et la fiche s'écrit en **une transaction** : un refus `422` n'a rien écrit — ni l'IBAN, ni une ligne d'audit |
 | GET | `/maintenance/integrity` | **admin** | Contrôle de cohérence des données |
 | GET | `/maintenance/health` | **admin** | État du système, sauvegardes, exposition réseau |
 | GET | `/settings/server` | **admin** | Réglages réseau en vigueur |
@@ -719,8 +729,8 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/vat/rates` | auth | Taux suisses en vigueur |
 | POST | `/vat/declaration` | auth | Déclaration TVA (effective ou TDFN) ; les factures `sent`, `paid` **et `archived`** comptent (on n'archive qu'une facture payée). `POST` mais **lecture** : elle ne modifie rien, et le rôle lecture seule la reçoit |
 | GET | `/fiscal-years` | auth | Exercices déclarés, du plus récent au plus ancien |
-| POST | `/fiscal-years` | **admin** | Déclarer un exercice (`name`, `start_date`, `end_date`). Refuse tout chevauchement |
-| POST | `/fiscal-years/:id/close` | **admin** | Clôture (CO art. 958) : vire produits et charges au résultat, verrouille la période, ouvre la suivante. Une seule transaction ; **chaque** compte de produits ou de charges reçoit sa ligne de clôture quel que soit le sens de son solde, et l'écriture (`CLOTURE-AAAA`) est refusée si elle ne s'équilibre pas au centime |
+| POST | `/fiscal-years` | **admin** | Déclarer un exercice (`name`, `start_date`, `end_date`). Refuse tout chevauchement (`409`) ; le contrôle et l'insertion vivent dans une transaction. `409` aussi pour un nom pris — et seulement pour lui : toute autre panne répond `500` |
+| POST | `/fiscal-years/:id/close` | **admin** | Clôture (CO art. 958) : vire produits et charges au résultat, verrouille la période, ouvre la suivante. Une seule transaction ; **chaque** compte de produits ou de charges reçoit sa ligne de clôture quel que soit le sens de son solde, et l'écriture (`CLOTURE-AAAA`) est refusée si elle ne s'équilibre pas au centime. Deux exercices qui finissent la **même année** (exercice court, changement de date de clôture) reçoivent `CLOTURE-AAAA` puis `CLOTURE-AAAA-2` ; l'exercice suivant n'est créé que si sa période n'est **couverte par aucun exercice** (jugé sur les dates, pas sur le nom). L'adresse du client entre au maillon d'audit |
 
 > **Rattachement à l'exercice.** Chaque écriture et chaque document est rattaché
 > à l'exercice couvrant sa date. Si aucun ne la couvre, LedgerAlps crée l'**année

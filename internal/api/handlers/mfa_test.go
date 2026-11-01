@@ -79,7 +79,17 @@ func mfaEnvOpt(t *testing.T, limite bool) (*sql.DB, *gin.Engine, *config.Config)
 	authed.GET("/auth/mfa", h.MFAStatus)
 	authed.POST("/auth/mfa/setup", h.MFASetup)
 	authed.POST("/auth/mfa/confirm", h.MFAConfirm)
-	authed.DELETE("/auth/mfa", h.MFADisable)
+	if limite {
+		lim := mw.NewAuthLimiters(func(kind, key string, until time.Time) {
+			RecordAuthLockout(database, false, kind, key, until)
+		})
+		// Le limiteur des mots de passe de session ouverte, monté comme au serveur.
+		authed.DELETE("/auth/mfa", append(lim.ForPasswordCheck(), h.MFADisable)...)
+		authed.POST("/auth/change-password", append(lim.ForPasswordCheck(), h.ChangePassword)...)
+	} else {
+		authed.DELETE("/auth/mfa", h.MFADisable)
+		authed.POST("/auth/change-password", h.ChangePassword)
+	}
 	// Une route ordinaire, pour prouver que le jeton d'attente n'y donne accès.
 	authed.GET("/protegee", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 	return database, r, cfg

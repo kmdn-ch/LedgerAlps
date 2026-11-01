@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/models"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
 // ─── Trial Balance response DTO ───────────────────────────────────────────────
@@ -100,9 +102,25 @@ func (h *AccountsHandler) CreateAccount(c *gin.Context) {
 		INSERT INTO accounts (id, code, name, account_type, description, parent_id, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, h.usePostgres)
 	if _, err := h.db.ExecContext(ctx, q, id, req.Code, req.Name, req.AccountType, req.Description, req.ParentID, now, now); err != nil {
+		// Un code déjà pris est une erreur de saisie, pas une panne : 409 avec la phrase qui
+		// dit quoi faire (audit croisé Gemini, MED-11). Elle répondait 500 « erreur de base
+		// de données ».
+		if isUniqueViolation(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": "un compte porte déjà ce code"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
+
+	// Le plan comptable est la grille de lecture de tout le journal : y ajouter un compte
+	// laissait jusqu'ici aucune trace, alors que le journal d'audit sait dire qui a changé
+	// l'IBAN ou clos l'exercice. La désignation du compte ne s'écrit pas sous la clé « name »,
+	// que le masquage nLPD remplacerait : un libellé de compte n'est pas une donnée personnelle.
+	trace(c, h.db, h.usePostgres, TableAccounts, ActionAccountCreated, id,
+		accounting.Creation(map[string]any{
+			"code": req.Code, "account_type": req.AccountType, "designation": req.Name,
+		}))
 
 	c.JSON(http.StatusCreated, models.Account{
 		ID:          id,
@@ -179,7 +197,12 @@ func (h *AccountsHandler) TrialBalance(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "scan error"})
 			return
 		}
-		l.Balance = l.TotalDebit - l.TotalCredit
+		// Au centime (audit croisé Gemini, MED-05). Les montants sont des REAL : 0,10 + 0,20 au
+		// débit contre 0,30 au crédit laissent 5,55e-17 sur un compte pourtant soldé, que la
+		// balance affichait comme solde.
+		l.TotalDebit = compliance.RoundCents(l.TotalDebit)
+		l.TotalCredit = compliance.RoundCents(l.TotalCredit)
+		l.Balance = compliance.RoundCents(l.TotalDebit - l.TotalCredit)
 		lines = append(lines, l)
 	}
 	if err := rows.Err(); err != nil {
@@ -262,9 +285,9 @@ func (h *AccountsHandler) AccountBalance(c *gin.Context) {
 		Code:        acct.Code,
 		Name:        acct.Name,
 		AccountType: acct.AccountType,
-		DebitTotal:  debitTotal,
-		CreditTotal: creditTotal,
-		Balance:     debitTotal - creditTotal,
+		DebitTotal:  compliance.RoundCents(debitTotal),
+		CreditTotal: compliance.RoundCents(creditTotal),
+		Balance:     compliance.RoundCents(debitTotal - creditTotal),
 		AsOf:        asOfDisplay,
 	})
 }

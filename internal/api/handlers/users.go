@@ -271,6 +271,9 @@ func (h *UsersHandler) SetUserActive(c *gin.Context) {
 		if _, err := h.db.ExecContext(c.Request.Context(), revoke, targetID); err != nil {
 			_ = err // non bloquant : le compte est déjà inactif
 		}
+		// Un compte désactivé puis réactivé ne doit pas retrouver les postes de
+		// confiance d'avant (HIGH-16).
+		forgetDevices(c.Request.Context(), h.db, h.usePostgres, targetID)
 	}
 
 	action := "user_deactivated"

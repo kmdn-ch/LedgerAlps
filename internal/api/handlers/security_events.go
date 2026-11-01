@@ -50,6 +50,8 @@ func RecordAuthLockout(database *sql.DB, usePostgres bool, kind, key string, unt
 		recordLockout(database, usePostgres, "login_lockout", ip, "compte="+compte+" ; "+fin)
 	case mw.LockoutMFA:
 		recordLockout(database, usePostgres, "mfa_lockout", "", "compte="+key+" ; "+fin)
+	case mw.LockoutPassword:
+		recordLockout(database, usePostgres, "password_lockout", "", "compte="+key+" ; "+fin)
 	default:
 		recordLockout(database, usePostgres, "login_lockout", key, fin)
 	}

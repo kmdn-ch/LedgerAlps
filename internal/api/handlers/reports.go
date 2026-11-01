@@ -302,14 +302,14 @@ func (h *ReportsHandler) IncomeStatement(c *gin.Context) {
 		switch accountType {
 		case "revenue":
 			// Revenue increases with credits; normal balance is credit.
-			line.Amount = totalCredit - totalDebit
+			line.Amount = compliance.RoundCents(totalCredit - totalDebit)
 			if line.Amount != 0 {
 				resp.Revenue = append(resp.Revenue, line)
 				resp.TotalRevenue += line.Amount
 			}
 		case "expense":
 			// Expenses increase with debits; normal balance is debit.
-			line.Amount = totalDebit - totalCredit
+			line.Amount = compliance.RoundCents(totalDebit - totalCredit)
 			if line.Amount != 0 {
 				resp.Expenses = append(resp.Expenses, line)
 				resp.TotalExpenses += line.Amount
@@ -321,7 +321,10 @@ func (h *ReportsHandler) IncomeStatement(c *gin.Context) {
 		return
 	}
 
-	resp.NetIncome = resp.TotalRevenue - resp.TotalExpenses
+	// Les lignes sont au centime ; leur somme l'est aussi (MED-05).
+	resp.TotalRevenue = compliance.RoundCents(resp.TotalRevenue)
+	resp.TotalExpenses = compliance.RoundCents(resp.TotalExpenses)
+	resp.NetIncome = compliance.RoundCents(resp.TotalRevenue - resp.TotalExpenses)
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -382,7 +385,7 @@ func (h *ReportsHandler) GeneralLedger(c *gin.Context) {
 		}
 		// Use debit - credit as the running balance basis (adjusted per account type
 		// at display time by the consumer; we expose raw debit-minus-credit here).
-		openingBalance = obDebit - obCredit
+		openingBalance = compliance.RoundCents(obDebit - obCredit)
 	}
 
 	// Build the main ledger query with optional date filters.
@@ -438,7 +441,7 @@ func (h *ReportsHandler) GeneralLedger(c *gin.Context) {
 		if len(dateStr) > 10 {
 			dateStr = dateStr[:10]
 		}
-		runningBalance += debit - credit
+		runningBalance = compliance.RoundCents(runningBalance + debit - credit)
 		resp.Lines = append(resp.Lines, generalLedgerLine{
 			EntryID:     entryID,
 			Reference:   reference,

@@ -58,6 +58,7 @@ const (
 	LockoutLoginAccount = "login_account"
 	LockoutMFA          = "mfa"
 	LockoutRefresh      = "refresh"
+	LockoutPassword     = "password"
 )
 
 const (
@@ -74,6 +75,16 @@ const (
 // KeyByMFAAccount compte par compte : celui que nomme le jeton d'attente.
 // À placer APRÈS RequireMFAChallenge.
 func KeyByMFAAccount(c *gin.Context) (string, bool) {
+	claims := GetClaims(c)
+	if claims == nil || claims.UserID == "" {
+		return "", false
+	}
+	return claims.UserID, true
+}
+
+// KeyByAccount compte par compte authentifié : celui que nomme le jeton d'accès.
+// À placer APRÈS RequireAuth.
+func KeyByAccount(c *gin.Context) (string, bool) {
 	claims := GetClaims(c)
 	if claims == nil || claims.UserID == "" {
 		return "", false
@@ -120,6 +131,12 @@ type AuthLimiters struct {
 	LoginAccount *LoginRateLimiter
 	Refresh      *LoginRateLimiter
 	MFA          *LoginRateLimiter
+	// Password borne les essais de mot de passe d'une SESSION OUVERTE : le changement
+	// de mot de passe et le retrait du second facteur redemandent le mot de passe
+	// actuel, et rien ne bornait ces essais (audit croisé Gemini, HIGH-16). Un jeton
+	// d'accès volé ou un poste laissé ouvert permettait de le deviner à la vitesse du
+	// hachage. Compté par compte, comme le second facteur.
+	Password *LoginRateLimiter
 }
 
 // NewAuthLimiters construit les limiteurs. `onLockout` reçoit la nature du
@@ -141,12 +158,20 @@ func NewAuthLimiters(onLockout func(kind, key string, until time.Time)) *AuthLim
 		LoginAccount: faire(LockoutLoginAccount, DefaultLoginMaxAttempts, KeyByIPAndEmail),
 		Refresh:      faire(LockoutRefresh, DefaultLoginMaxAttempts, nil),
 		MFA:          faire(LockoutMFA, MFAMaxAttempts, KeyByMFAAccount),
+		Password:     faire(LockoutPassword, MFAMaxAttempts, KeyByAccount),
 	}
 }
 
 // ForLogin rend les filtres de POST /auth/login, à placer devant le gestionnaire.
 func (a *AuthLimiters) ForLogin() []gin.HandlerFunc {
 	return []gin.HandlerFunc{a.Login.Middleware(), a.LoginAccount.Middleware()}
+}
+
+// ForPasswordCheck rend le filtre des routes qui redemandent le mot de passe d'une
+// session ouverte (changement de mot de passe, retrait du second facteur). À placer
+// APRÈS RequireAuth, qui fournit le compte.
+func (a *AuthLimiters) ForPasswordCheck() []gin.HandlerFunc {
+	return []gin.HandlerFunc{a.Password.Middleware()}
 }
 
 // ForMFAVerify rend les filtres de POST /auth/mfa/verify : le jeton d'attente
