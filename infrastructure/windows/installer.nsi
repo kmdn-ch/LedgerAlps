@@ -128,6 +128,13 @@ LangString DataDeleted ${LANG_FRENCH}  "Données supprimées : $APPDATA\LedgerAl
 LangString DataDeleted ${LANG_GERMAN}  "Daten gelöscht: $APPDATA\LedgerAlps"
 LangString DataDeleted ${LANG_ITALIAN} "Dati eliminati: $APPDATA\LedgerAlps"
 
+; Le dossier a ete vide en partie seulement (fichiers tenus par un autre programme, droits refuses).
+; Annoncer « supprimees » alors qu'il en reste ferait croire a un effacement qui n'a pas eu lieu.
+LangString DataNotDeleted ${LANG_ENGLISH} "Some data under $APPDATA\LedgerAlps could NOT be deleted (files in use or access denied). Delete the folder manually."
+LangString DataNotDeleted ${LANG_FRENCH}  "Une partie des données de $APPDATA\LedgerAlps n'a PAS pu être supprimée (fichiers utilisés ou accès refusé). Supprimez le dossier à la main."
+LangString DataNotDeleted ${LANG_GERMAN}  "Ein Teil der Daten unter $APPDATA\LedgerAlps konnte NICHT gelöscht werden (Dateien in Gebrauch oder Zugriff verweigert). Löschen Sie den Ordner von Hand."
+LangString DataNotDeleted ${LANG_ITALIAN} "Una parte dei dati in $APPDATA\LedgerAlps NON è stata eliminata (file in uso o accesso negato). Eliminate la cartella manualmente."
+
 ; Ne JAMAIS annoncer une suppression qui n'a pas eu lieu.
 ;
 ; Sous une elevation UAC par identifiants, $APPDATA designe le profil de
@@ -484,8 +491,14 @@ Section "Uninstall"
     StrCmp $APPDATA "" lbl_data_absent 0
     IfFileExists "$APPDATA\LedgerAlps\*.*" 0 lbl_data_absent
       RMDir /r "$APPDATA\LedgerAlps"
-      DetailPrint "$(DataDeleted)"
-      Goto lbl_done_data
+      ; On ne dit « supprimées » que si le dossier est VRAIMENT vide : RMDir /r échoue sans bruit sur
+      ; un fichier tenu, et le message annonçait quand même l'effacement (audit croisé Gemini, HIGH-25).
+      IfFileExists "$APPDATA\LedgerAlps\*.*" lbl_data_partial 0
+        DetailPrint "$(DataDeleted)"
+        Goto lbl_done_data
+      lbl_data_partial:
+        DetailPrint "$(DataNotDeleted)"
+        Goto lbl_done_data
   lbl_data_absent:
     DetailPrint "$(DataNotFound)"
     Goto lbl_done_data

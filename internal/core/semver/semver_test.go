@@ -77,3 +77,29 @@ func TestAuMoinsCompareCorrectement(t *testing.T) {
 		}
 	}
 }
+
+// Audit croisé Gemini, série 4, HIGH-26. Parse confond « 1.5.0-rc1 » et « 1.5.0 » (son contrat) ;
+// AuMoins ne doit pas les confondre : un avis « corrigé en 1.5.0 » n'est pas appliqué chez qui
+// exécute la 1.5.0-rc1, qui peut précéder le correctif.
+func TestUnePreVersionPrecedeLaVersion(t *testing.T) {
+	cas := []struct {
+		cur, tgt string
+		want     bool
+	}{
+		{"1.5.0-rc1", "1.5.0", false},
+		{"v1.5.0-rc1", "v1.5.0", false},
+		{"1.5.0", "1.5.0-rc1", true},
+		{"1.5.0-rc2", "1.5.0-rc1", true}, // deux pré-versions : on ne sait pas les ordonner, on n'avertit pas
+		{"1.5.1-rc1", "1.5.0", true},     // les nombres décident d'abord
+		{"1.4.9", "1.5.0-rc1", false},
+		{"1.5.0+build7", "1.5.0", true}, // des métadonnées de construction ne sont pas une pré-version
+	}
+	for _, c := range cas {
+		if got := AuMoins(c.cur, c.tgt); got != c.want {
+			t.Errorf("AuMoins(%q, %q) = %v, attendu %v", c.cur, c.tgt, got, c.want)
+		}
+	}
+	if !PreRelease("1.5.0-rc1") || !PreRelease("v2.0.0-beta") || PreRelease("1.5.0") || PreRelease("1.5.0+build7") {
+		t.Error("PreRelease se trompe de pré-version")
+	}
+}

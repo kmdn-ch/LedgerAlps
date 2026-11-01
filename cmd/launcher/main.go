@@ -49,6 +49,13 @@ type config struct {
 	Port           string `json:"port"`
 	Debug          bool   `json:"debug"`
 	AllowedOrigins string `json:"allowed_origins"`
+	// Hôte et TLS, réglés dans l'application (Paramètres → Sécurité et réseau) et lus par le
+	// serveur dans le même fichier. Le lanceur ne s'en sert QUE pour chercher l'adresse à laquelle le
+	// serveur répond (voir adresse.go) ; omitempty, pour que l'assistant n'écrive rien de plus
+	// qu'avant.
+	Host    string `json:"host,omitempty"`
+	TLSCert string `json:"tls_cert,omitempty"`
+	TLSKey  string `json:"tls_key,omitempty"`
 }
 
 func appDataDir() string {
@@ -167,8 +174,9 @@ func openBrowser(url string) {
 // waitForServer polls GET /health on the given base URL until it responds 200
 // or the context is cancelled.
 
-// Le lanceur ne parle qu'au serveur local, servi en clair : l'écoute réseau
-// (et donc TLS) se règle dans l'application, pas ici.
+// L'assistant d'installation parle à SON serveur, lancé avec l'environnement par défaut, donc en
+// clair sur la boucle locale. Pour retrouver un serveur déjà réglé (TLS, adresse d'écoute), le
+// lanceur cherche son adresse : voir adresse.go.
 
 func waitForServer(ctx context.Context, baseURL string, client *http.Client) error {
 	tick := time.NewTicker(300 * time.Millisecond)
@@ -1417,28 +1425,38 @@ func main() {
 	}
 
 	// Config exists — ensure server is running, then open browser.
+	//
+	// L'adresse se CHERCHE (adresse.go) au lieu de se supposer en clair sur « localhost » : un serveur
+	// réglé en TLS, ou à l'écoute sur une adresse du réseau, ne répond pas à http://localhost:<port>
+	// (audit croisé Gemini, HIGH-25).
 	appURL := fmt.Sprintf("http://localhost:%s", cfg.Port)
+	enMarche := false
+	if base, ok := serveurJoignable(cfg); ok {
+		appURL, enMarche = base, true
+	}
 
 	// If a reinstall sentinel exists, start the server first then show the
 	// "configuration preserved" notification page.
 	if _, err := os.Stat(reinstalledMarkerPath()); err == nil {
-		if !isServerRunning(appURL, http.DefaultClient) {
+		if !enMarche {
 			logInfo("Starting server after reinstall…")
 			if _, err := startServer(cfg); err != nil {
 				logFatal("Cannot start server: %v", err)
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
-			if err := waitForServer(ctx, appURL, http.DefaultClient); err != nil {
+			base, err := joindreServeur(ctx, cfg)
+			if err != nil {
 				logFatal("Server did not become ready: %v", err)
 			}
+			appURL = base
 		}
 		runReinstallNotification(appURL)
 		// After notification, the browser is already open — nothing more to do.
 		return
 	}
 
-	if !isServerRunning(appURL, http.DefaultClient) {
+	if !enMarche {
 		logInfo("Starting server…")
 		if _, err := startServer(cfg); err != nil {
 			logFatal("Cannot start server: %v", err)
@@ -1446,9 +1464,11 @@ func main() {
 		// Wait for server (up to 20 s).
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		if err := waitForServer(ctx, appURL, http.DefaultClient); err != nil {
+		base, err := joindreServeur(ctx, cfg)
+		if err != nil {
 			logFatal("Server did not become ready: %v", err)
 		}
+		appURL = base
 	}
 
 	logInfo("Opening browser at %s", appURL)

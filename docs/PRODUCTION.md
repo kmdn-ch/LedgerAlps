@@ -167,6 +167,15 @@ l'empreinte SHA-256 de l'archive avant de l'installer.
 irm https://raw.githubusercontent.com/kmdn-ch/ledgeralps/main/scripts/install.ps1 | iex
 ```
 
+Le script **refuse un dossier de données préexistant qui n'est pas digne de confiance** :
+`C:\ProgramData` laisse tout utilisateur local créer un sous-dossier, et son créateur en reste
+propriétaire — il garde alors le droit de modifier les droits, donc de lire la clé de session et la
+comptabilité, quoi que l'installation fasse ensuite. Il s'arrête si `C:\ProgramData\LedgerAlps` est
+une jonction, ou n'appartient ni à SYSTEM, ni au groupe Administrateurs, ni au compte qui installe, et dit
+quoi faire. Sur une mise à jour, le service en marche est arrêté **avant** le remplacement de ses
+binaires. *Ce chemin reste celui de l'audit « service Windows » (CRIT-15) : il ne devient pas un
+service tant que cette décision n'est pas prise.*
+
 Choisissez-le pour un poste partagé ou un petit serveur, où LedgerAlps doit
 tourner sans session ouverte. Choisissez l'installeur `.exe` pour un poste de
 travail : c'est le seul des trois à fournir l'assistant de configuration et la
@@ -210,6 +219,13 @@ réseau.
 
 Pour éviter l'avertissement, fournissez un certificat d'une autorité interne, ou
 placez un reverse proxy (nginx, Caddy) devant.
+
+**Le lanceur Windows suit le réglage.** Il cherche l'adresse à laquelle le serveur *répond* — l'hôte
+précis de `config.json` s'il y en a un, puis `localhost`, en HTTPS d'abord quand un certificat est
+configuré — au lieu de supposer `http://localhost:<port>`. Avant, un serveur réglé en TLS ou à l'écoute sur
+une adresse du réseau répondait 400 à son sondage : le lanceur en lançait un second, abandonnait au bout de
+vingt secondes et n'ouvrait jamais le navigateur. Son sondage `/health` accepte le certificat
+auto-signé (il ne fait qu'un GET, sans rien envoyer) ; le navigateur, lui, affiche son avertissement.
 
 ```bash
 export ALLOWED_ORIGINS="https://compta.entreprise.local"

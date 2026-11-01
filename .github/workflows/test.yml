@@ -69,6 +69,34 @@ jobs:
       - name: Build launcher (cross-compile for Windows)
         run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-H=windowsgui" ./cmd/launcher
 
+  # Le frontend était COMPILÉ une seule fois par version, à la répétition de publication
+  # (`release-dryrun.yml`) : une erreur de type — ou un import oublié — traversait les
+  # poussées et les PR sans que personne le sache, jusqu'au jour de la publication (audit croisé
+  # Gemini, HIGH-26). Les tests de structure Go lisent les sources, ils ne les compilent pas.
+  frontend:
+    name: Frontend (types et build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm ci, et non npm install : le fichier de verrouillage fait foi, comme à la publication.
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Type check
+        run: cd frontend && npm run typecheck
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

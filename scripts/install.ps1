@@ -67,6 +67,51 @@ function Assert-CheminSain {
     }
 }
 
+# Assert-DossierDeDonnees refuse un dossier de donnees PREEXISTANT qui n'est pas digne de confiance
+# (audit croise Gemini, HIGH-25).
+#
+# C:\ProgramData laisse tout utilisateur local CREER un sous-dossier. Quelqu'un qui cree
+# C:\ProgramData\LedgerAlps avant l'installation en reste le PROPRIETAIRE -- et un proprietaire
+# garde WRITE_DAC, quoi que l'installeur fasse ensuite de l'heritage et des droits : il se rend
+# l'acces quand il veut, et lit la cle qui signe les sessions et la comptabilite entiere. Une
+# jonction deposee au meme endroit ferait suivre a icacls un chemin choisi par lui.
+#
+# Le dossier est donc accepte s'il n'existe pas, ou s'il n'est ni un lien ni une jonction ET
+# appartient a SYSTEM, au groupe Administrateurs ou au compte qui lance l'installation. Sinon
+# l'installation s'arrete en disant quoi faire : l'administrateur regarde le dossier, puis le
+# supprime ou en reprend la propriete en connaissance de cause.
+#
+# $SidsDeConfiance ne sert qu'aux essais.
+function Assert-DossierDeDonnees {
+    param(
+        [string]$Chemin,
+        [string[]]$SidsDeConfiance = @(
+            'S-1-5-18',                                               # SYSTEM
+            'S-1-5-32-544',                                           # Administrateurs
+            [Security.Principal.WindowsIdentity]::GetCurrent().User.Value  # qui installe
+        )
+    )
+    if (-not (Test-Path -LiteralPath $Chemin)) { return }
+
+    $item = Get-Item -LiteralPath $Chemin -Force
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        Write-Fail ("$Chemin est une jonction ou un lien symbolique : l'installation ne le suit pas. " +
+                    "Examinez-le, supprimez-le s'il n'a pas de raison d'etre, puis relancez.")
+    }
+    $proprio = (Get-Acl -LiteralPath $Chemin).Owner
+    try {
+        $sid = (New-Object Security.Principal.NTAccount($proprio)).Translate([Security.Principal.SecurityIdentifier]).Value
+    } catch {
+        Write-Fail "Le proprietaire de $Chemin ($proprio) n'a pas pu etre identifie : installation abandonnee."
+    }
+    if ($sid -notin $SidsDeConfiance) {
+        Write-Fail ("$Chemin existe deja et appartient a $proprio, ni SYSTEM, ni les Administrateurs, ni le compte " +
+                    "qui installe : son proprietaire en garderait le controle des droits, et lirait la cle de session " +
+                    "et la comptabilite. Supprimez-le s'il a ete cree par un autre compte, ou reprenez-en la " +
+                    "propriete (icacls `"$Chemin`" /setowner *S-1-5-32-544) apres l'avoir examine, puis relancez.")
+    }
+}
+
 # --------------------------------------------------------------------------- #
 # Elevation check                                                             #
 # --------------------------------------------------------------------------- #
@@ -187,6 +232,16 @@ function Install-Binaries {
                     "  L'archive a ete modifiee ou le telechargement est corrompu. NE PAS INSTALLER.")
     }
     Write-Success "Checksum verified"
+
+    # Le service est ARRETE avant de remplacer ses binaires (audit croise Gemini, HIGH-25). Il l'etait
+    # plus loin, a l'enregistrement : la copie qui precede echouait donc -- « fichier utilise par un
+    # autre processus » -- sur toute mise a jour par-dessus un service en marche.
+    $enMarche = Get-Service -Name "LedgerAlps" -ErrorAction SilentlyContinue
+    if ($enMarche -and $enMarche.Status -ne "Stopped") {
+        Write-Info "Stopping the running service before replacing its binaries..."
+        Stop-Service -Name "LedgerAlps" -Force
+        $enMarche.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
+    }
 
     Write-Info "Extracting to $InstallDir..."
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
@@ -436,6 +491,7 @@ function Write-NextSteps {
 Assert-Elevated
 Assert-CheminSain -Nom 'InstallDir' -Chemin $InstallDir
 Assert-CheminSain -Nom 'DataDir'    -Chemin $DataDir
+Assert-DossierDeDonnees -Chemin $DataDir
 
 $arch   = Get-Arch
 $tag    = Resolve-Version

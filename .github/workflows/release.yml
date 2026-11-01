@@ -320,8 +320,15 @@ jobs:
           sums="ledgeralps_${VERSION_NUM}_checksums.txt"
           mkdir -p sums
           gh release download "$VERSION" --pattern "$sums" --dir sums --clobber
-          ( cd infrastructure/windows \
-            && sha256sum "LedgerAlps_Setup_${VERSION_NUM}_windows_amd64.exe" ) >> "sums/$sums"
+          installer="LedgerAlps_Setup_${VERSION_NUM}_windows_amd64.exe"
+          # IDEMPOTENT : relancer ce job (une publication qui echoue plus loin, un
+          # Re-run) AJOUTAIT une seconde ligne pour l'installeur a un fichier qui en
+          # portait deja une (audit croise Gemini, HIGH-26). On retire d'abord la ligne
+          # existante. `|| true` : grep rend 1 quand il ne reste aucune ligne, ce que
+          # `set -e` prendrait pour une panne.
+          grep -v -F " ${installer}" "sums/$sums" > "sums/$sums.tmp" || true
+          mv "sums/$sums.tmp" "sums/$sums"
+          ( cd infrastructure/windows && sha256sum "$installer" ) >> "sums/$sums"
           gh release upload "$VERSION" "sums/$sums" --clobber
           echo "Empreintes publiees :"
           cat "sums/$sums"

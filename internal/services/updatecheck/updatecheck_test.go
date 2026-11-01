@@ -181,3 +181,23 @@ func TestUneAdresseDePublicationDouteuseNEstPasRendue(t *testing.T) {
 		}
 	}
 }
+
+// Audit croisé Gemini, série 4, HIGH-26. Qui exécute la 1.5.0-rc1 doit être invité à passer à la
+// 1.5.0 : les deux se lisaient « 1.5.0 », et la publiée n'était « pas plus récente ».
+func TestLaVersionPubliéeEstPlusRécenteQueSaPréVersion(t *testing.T) {
+	for _, c := range []struct {
+		candidate, current string
+		want               bool
+	}{
+		{"1.5.0", "1.5.0-rc1", true},
+		{"v1.5.0", "v1.5.0-rc2", true},
+		{"1.5.0", "1.5.0", false},
+		{"1.5.0-rc1", "1.5.0", false},
+		{"1.5.1", "1.5.0-rc1", true},
+		{"1.4.9", "1.5.0-rc1", false},
+	} {
+		if got := IsNewer(c.candidate, c.current); got != c.want {
+			t.Errorf("IsNewer(%q, %q) = %v, attendu %v", c.candidate, c.current, got, c.want)
+		}
+	}
+}

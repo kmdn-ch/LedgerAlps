@@ -53,7 +53,23 @@ func Parse(v string) ([3]int, bool) {
 	return out, true
 }
 
+// PreRelease dit si la version porte un suffixe de pré-version (« 1.5.0-rc1 »). Les métadonnées
+// de construction (« +build ») n'en sont pas.
+func PreRelease(v string) bool {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	if i := strings.IndexByte(v, '+'); i >= 0 {
+		v = v[:i]
+	}
+	return strings.Contains(v, "-")
+}
+
 // AuMoins dit si current >= target.
+//
+// À nombres égaux, une PRÉ-VERSION précède la version : « 1.5.0-rc1 » n'est pas « au moins 1.5.0 ».
+// Parse les confond (c'est son contrat), et AuMoins le faisait aussi : un avis « corrigé en 1.5.0 »
+// était tenu pour appliqué chez qui exécute la 1.5.0-rc1 — qui peut précéder le correctif. Tenir
+// pour corrigé ce qui ne l'est peut-être pas fait TAIRE l'avis ; on préfère l'avertissement de trop
+// (audit croisé Gemini, HIGH-26).
 //
 // Les deux cas d'illisibilité sont dissymétriques, et c'est voulu :
 //
@@ -76,5 +92,6 @@ func AuMoins(current, target string) bool {
 			return cur[i] > tgt[i]
 		}
 	}
-	return true
+	// Nombres égaux : la pré-version précède la version.
+	return !(PreRelease(current) && !PreRelease(target))
 }

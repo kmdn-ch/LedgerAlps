@@ -89,7 +89,7 @@ resolve_version() {
   local api_url="https://api.github.com/repos/${REPO}/releases/latest"
 
   if command -v curl >/dev/null 2>&1; then
-    RESPONSE="$(curl -fsSL "$api_url" 2>/dev/null)"
+    RESPONSE="$(curl --proto '=https' --tlsv1.2 -fsSL "$api_url" 2>/dev/null)"
   elif command -v wget >/dev/null 2>&1; then
     RESPONSE="$(wget -qO- "$api_url" 2>/dev/null)"
   else
@@ -129,8 +129,9 @@ install_binaries() {
 
   info "Downloading $archive…"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$url"      -o "$tmp_dir/$archive"
-    curl -fsSL "$sums_url" -o "$tmp_dir/$sums"
+    # HTTPS seulement (aucune redirection vers http), TLS 1.2 au moins.
+    curl --proto '=https' --tlsv1.2 -fsSL "$url"      -o "$tmp_dir/$archive"
+    curl --proto '=https' --tlsv1.2 -fsSL "$sums_url" -o "$tmp_dir/$sums"
   else
     wget -qO "$tmp_dir/$archive" "$url"
     wget -qO "$tmp_dir/$sums"    "$sums_url"

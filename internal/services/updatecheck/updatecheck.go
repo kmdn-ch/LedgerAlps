@@ -211,5 +211,7 @@ func IsNewer(candidate, current string) bool {
 			return cand[i] > cur[i]
 		}
 	}
-	return false
+	// Nombres égaux : la version publiée est plus récente que SA pré-version. Qui exécute la
+	// 1.5.0-rc1 n'était jamais invité à passer à la 1.5.0 (audit croisé Gemini, HIGH-26).
+	return semver.PreRelease(current) && !semver.PreRelease(candidate)
 }
