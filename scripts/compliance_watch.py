@@ -36,20 +36,28 @@ SPARQL_ENDPOINT = "https://fedlex.data.admin.ch/sparqlendpoint"
 UA = {"User-Agent": "LedgerAlps-compliance-watch/1.0 (+https://github.com/kmdn-ch/LedgerAlps)"}
 TIMEOUT = 90
 
-# Latest consolidation date for a given SR (RS) number. dateApplicability is the
-# date from which a consolidated text applies, so a new value means the act was
-# amended — exactly the signal we want.
+# Every consolidation date for a given SR (RS) number. dateApplicability is the
+# date from which a consolidated text applies, so a NEW date in the set means the
+# act was amended — exactly the signal we want.
+#
+# The whole set, not its maximum. The query used to keep only the latest date
+# (`ORDER BY DESC … LIMIT 1`), and Fedlex publishes consolidations AHEAD of
+# time: checked against the live endpoint, the Code of Obligations (RS 220)
+# already carries one dated 2027-07-01 beside 2026-10-01 and 2026-01-01. With
+# that future date as the maximum, a consolidation inserted between two existing
+# ones changed nothing the watcher looked at, and an amendment went unreported
+# (audit croisé Gemini, HIGH-26).
 FEDLEX_QUERY = """
 PREFIX jolux: <http://data.legilux.public.lu/resource/ontology/jolux#>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-SELECT ?dateApplicability WHERE {
+SELECT DISTINCT ?dateApplicability WHERE {
   ?c a jolux:Consolidation ;
      jolux:dateApplicability ?dateApplicability ;
      jolux:isMemberOf ?act .
   ?act jolux:classifiedByTaxonomyEntry ?e .
   ?e skos:notation ?sr .
   FILTER(str(?sr) = "%s")
-} ORDER BY DESC(?dateApplicability) LIMIT 1
+} ORDER BY DESC(?dateApplicability)
 """
 
 
@@ -109,9 +117,22 @@ def fetch_fedlex(source: dict) -> str:
         raise  # already carries a precise message
     except Exception as e:  # any failure is a check failure
         raise CheckError(f"{type(e).__name__}: {e}") from e
-    if not rows:
+    return fedlex_fingerprint([r["dateApplicability"]["value"] for r in rows], sr)
+
+
+def fedlex_fingerprint(dates: list[str], sr: str = "?") -> str:
+    """Latest date, how many consolidations, and a digest of the whole set.
+
+    Readable in an issue (« 2027-07-01 · 31 consolidations · 3fa9c1d2 ») and
+    sensitive to ANY change in the set: an added date, a removed one, a date
+    that moved. The count alone would miss a swap; the maximum alone misses
+    everything below it.
+    """
+    distinct = sorted(set(dates))
+    if not distinct:
         raise CheckError(f"no consolidation found for RS {sr}")
-    return rows[0]["dateApplicability"]["value"]
+    digest = hashlib.sha256(",".join(distinct).encode("utf-8")).hexdigest()[:8]
+    return f"{distinct[-1]} · {len(distinct)} consolidations · {digest}"
 
 
 def fetch_sha256(source: dict) -> str:

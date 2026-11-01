@@ -73,6 +73,11 @@ type pain001Transaction struct {
 	Reference     string  `json:"reference"`      // reference structuree
 	ReferenceType string  `json:"reference_type"` // QRR ou SCOR
 	Unstructured  string  `json:"unstructured"`   // motif en texte libre
+	// Adresse postale du bénéficiaire, facultative : sans localité ni pays, elle n'est pas émise.
+	CreditorStreet   string `json:"creditor_street"`
+	CreditorPostCode string `json:"creditor_post_code"`
+	CreditorTown     string `json:"creditor_town"`
+	CreditorCountry  string `json:"creditor_country"`
 }
 
 // pain001Request accepte DEUX formes.
@@ -117,6 +122,7 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 	}
 
 	var txs []iso20022.CreditTransfer
+	var debtorAddress iso20022.PostalAddress
 
 	switch {
 	case len(req.SupplierInvoiceIDs) > 0:
@@ -137,6 +143,9 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 			name, iban := h.run.debtor(c.Request.Context())
 			if req.DebtorName == "" {
 				req.DebtorName = name
+				// L'adresse de la fiche entreprise ne va qu'avec SON nom : un débiteur nommé par
+				// l'appelant n'a pas cette adresse.
+				debtorAddress = h.run.debtorAddress(c.Request.Context())
 			}
 			if req.DebtorIBAN == "" {
 				req.DebtorIBAN = iban
@@ -159,6 +168,10 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 				Reference:     t.Reference,
 				ReferenceType: t.ReferenceType,
 				Unstructured:  t.Unstructured,
+				CreditorAddress: iso20022.PostalAddress{
+					Street: t.CreditorStreet, PostCode: t.CreditorPostCode,
+					Town: t.CreditorTown, Country: t.CreditorCountry,
+				},
 			}
 		}
 
@@ -184,8 +197,15 @@ func (h *ISO20022Handler) ExportPain001(c *gin.Context) {
 		return
 	}
 
+	// Un QR-IBAN reçoit, il ne paie pas : la banque refuserait l'ordre APRÈS son dépôt.
+	if compliance.IsQRIBAN(req.DebtorIBAN) {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": msgDebiteurQRIBAN})
+		return
+	}
+
 	xmlBytes, err := iso20022.GeneratePain001(iso20022.Pain001Request{
 		DebtorName:    req.DebtorName,
+		DebtorAddress: debtorAddress,
 		DebtorIBAN:    req.DebtorIBAN,
 		DebtorBIC:     req.DebtorBIC,
 		ExecutionDate: execDate,

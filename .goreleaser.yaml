@@ -191,7 +191,13 @@ release:
   github:
     owner: kmdn-ch
     name: ledgeralps
-  draft: false
+  # BROUILLON : GoReleaser dépose les binaires, les paquets, les sommes de contrôle et la nomenclature
+  # logicielle, mais la release n'est PUBLIÉE qu'à la dernière étape du job `windows-installer`
+  # (release.yml), une fois l'installeur envoyé et son empreinte ajoutée. Elle était publiée d'emblée :
+  # pendant le temps de construire l'installeur, et à jamais si ce job échouait, la page « Latest »
+  # proposait une version sans son téléchargement recommandé sous Windows ni son empreinte (audit croisé
+  # Gemini, HIGH-26). Un échec laisse maintenant un brouillon invisible, qu'on relance.
+  draft: true
   prerelease: auto
   name_template: "LedgerAlps {{.Tag}}"
   # Note: no Docker instructions here. docker-compose.yml existed only to run

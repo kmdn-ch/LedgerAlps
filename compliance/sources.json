@@ -12,7 +12,7 @@
       "kind": "fedlex_sparql",
       "sr_number": "235.1",
       "human_url": "https://www.fedlex.admin.ch/eli/cc/2022/491/fr",
-      "last_seen": "2025-07-07",
+      "last_seen": "2025-07-07 · 17 consolidations · abb8ab20",
       "watched_articles": [
         {
           "article": "art. 6",
@@ -52,7 +52,7 @@
       "kind": "fedlex_sparql",
       "sr_number": "235.11",
       "human_url": "https://www.fedlex.admin.ch/eli/cc/2022/568/fr",
-      "last_seen": "2025-12-01"
+      "last_seen": "2025-12-01 · 13 consolidations · d3602784"
     },
     {
       "id": "fedlex-ltva",
@@ -64,7 +64,7 @@
       "kind": "fedlex_sparql",
       "sr_number": "641.20",
       "human_url": "https://www.fedlex.admin.ch/eli/cc/2009/615/fr",
-      "last_seen": "2025-03-31"
+      "last_seen": "2025-03-31 · 56 consolidations · 1e17b29c"
     },
     {
       "id": "fedlex-co",
@@ -76,7 +76,7 @@
       "kind": "fedlex_sparql",
       "sr_number": "220",
       "human_url": "https://www.fedlex.admin.ch/eli/cc/27/317_321_377/fr",
-      "last_seen": "2027-07-01"
+      "last_seen": "2027-07-01 · 101 consolidations · 1661f17f"
     },
     {
       "id": "six-qr-bill-ig",

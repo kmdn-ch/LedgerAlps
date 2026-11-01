@@ -845,7 +845,7 @@ export const it: Catalogue = {
   'be.sansRecuperation': 'Nessuna passphrase di recupero è registrata. Se questo account Windows scompare, questa base non si aprirà più.',
   'be.chiffrementProgramme': 'Cifratura programmata al prossimo avvio',
   'be.clairProgramme': 'Ritorno in chiaro programmato al prossimo avvio',
-  'be.conversionAide': 'La conversione sostituisce il file che il server ha aperto: non può avvenire adesso. Chiudete e riaprite LedgerAlps.',
+  'be.conversionAide': 'La conversione sostituisce il file che il server ha aperto: non può avvenire adesso. Riavviate LedgerAlps, oppure chiudetelo e riapritelo.',
   'be.chiffrerLaBase': 'Cifrare la base di dati',
   'be.recupererCle': 'Recuperare la chiave',
   'be.changerPhrase': 'Cambiare la passphrase di recupero',

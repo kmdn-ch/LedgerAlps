@@ -24,7 +24,7 @@ const LOOPBACK = ['127.0.0.1', 'localhost', '::1']
 export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
   const t = useT()
   const { data, isLoading, isError, refetch } = useQuery<{
-    settings: ServerSettings; restart_required: boolean; config_file: string
+    settings: ServerSettings; restart_required: boolean; network_restart_required: boolean; config_file: string
   }>({
     queryKey: ['settings', 'server'],
     queryFn: () => maintenanceApi.getServerSettings().then(r => r.data),
@@ -69,7 +69,7 @@ export function NetworkSettings({ onSaved }: { onSaved: () => void }) {
   }
 
   const loopback = LOOPBACK.includes(form.host)
-  const pending = save.isSuccess || data?.restart_required
+  const pending = save.isSuccess || data?.network_restart_required
   const certPlaceholder = 'C:\\LedgerAlps\\cert.pem'
   const keyPlaceholder = 'C:\\LedgerAlps\\key.pem'
 

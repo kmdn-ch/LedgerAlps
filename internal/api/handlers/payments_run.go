@@ -42,6 +42,13 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/services/iso20022"
 )
 
+// msgDebiteurQRIBAN : un QR-IBAN identifie un compte pour RECEVOIR des paiements à référence QR ; il ne sert
+// pas de compte à débiter (audit croisé Gemini, HIGH-06). Le mettre dans le champ IBAN de l'entreprise donne
+// un ordre que la banque refuse après le dépôt.
+const msgDebiteurQRIBAN = "L'IBAN de votre entreprise est un QR-IBAN : il ne sert qu'à recevoir des paiements " +
+	"à référence QR, pas à en débiter. Renseignez l'IBAN ordinaire du compte (Paramètres → Entreprise), " +
+	"et gardez le QR-IBAN dans son champ."
+
 // payableItem est une facture fournisseur en attente de règlement.
 type payableItem struct {
 	ID           string  `json:"id"`
@@ -61,6 +68,9 @@ type payableItem struct {
 	// Référence de paiement et son type déduit : QRR, SCOR, ou vide.
 	PaymentReference string `json:"payment_reference"`
 	ReferenceType    string `json:"reference_type"`
+
+	// Address est l'adresse de la fiche du fournisseur, pour l'ordre de paiement (jamais renvoyée à l'écran).
+	Address iso20022.PostalAddress `json:"-"`
 
 	// BlockedReason est vide quand la facture est payable. Sinon il dit ce qui
 	// manque ET où le corriger : « IBAN manquant » sans indiquer la fiche du
@@ -99,6 +109,8 @@ func (h *PaymentRunHandler) ListPayable(c *gin.Context) {
 			"Paramètres → Entreprise : sans lui, aucun fichier de paiement ne peut être produit."
 	case compliance.ValidateIBAN(debtorIBAN) != nil:
 		debtorProblem = "L'IBAN de votre entreprise n'est pas valide (Paramètres → Entreprise)."
+	case compliance.IsQRIBAN(debtorIBAN):
+		debtorProblem = msgDebiteurQRIBAN
 	case strings.TrimSpace(debtorName) == "":
 		debtorProblem = "Le nom de votre entreprise n'est pas renseigné (Paramètres → Entreprise)."
 	}
@@ -122,6 +134,15 @@ func (h *PaymentRunHandler) debtor(ctx context.Context) (name, iban string) {
 	return name, iban
 }
 
+// debtorAddress lit l'adresse de l'entreprise qui paie, pour le bloc débiteur de l'ordre.
+func (h *PaymentRunHandler) debtorAddress(ctx context.Context) (a iso20022.PostalAddress) {
+	q := db.Rebind(`SELECT COALESCE(address_street,''), COALESCE(address_postal_code,''),
+	                       COALESCE(address_city,''), COALESCE(address_country,'')
+	                FROM company_settings LIMIT 1`, h.usePostgres)
+	_ = h.db.QueryRowContext(ctx, q).Scan(&a.Street, &a.PostCode, &a.Town, &a.Country)
+	return a
+}
+
 // loadPayable charge les factures payables, éventuellement restreintes à une
 // sélection.
 //
@@ -134,7 +155,8 @@ func (h *PaymentRunHandler) loadPayable(ctx context.Context, ids []string) ([]pa
 		SELECT si.id, si.supplier_id, COALESCE(c.name,''), si.supplier_reference,
 		       si.total_amount - si.amount_paid, si.currency,
 		       COALESCE(si.due_date, ''), COALESCE(si.payment_reference, ''),
-		       COALESCE(c.iban, ''), COALESCE(c.qr_iban, '')
+		       COALESCE(c.iban, ''), COALESCE(c.qr_iban, ''),
+		       COALESCE(c.address, ''), COALESCE(c.postal_code, ''), COALESCE(c.city, ''), COALESCE(c.country, '')
 		FROM supplier_invoices si
 		LEFT JOIN contacts c ON c.id = si.supplier_id
 		WHERE si.status = 'booked' AND si.total_amount - si.amount_paid > 0`
@@ -161,7 +183,8 @@ func (h *PaymentRunHandler) loadPayable(ctx context.Context, ids []string) ([]pa
 		var iban, qrIBAN string
 		if err := rows.Scan(&it.ID, &it.SupplierID, &it.SupplierName, &it.Reference,
 			&it.Amount, &it.Currency, &it.DueDate, &it.PaymentReference,
-			&iban, &qrIBAN); err != nil {
+			&iban, &qrIBAN,
+			&it.Address.Street, &it.Address.PostCode, &it.Address.Town, &it.Address.Country); err != nil {
 			return nil, err
 		}
 		if it.Currency == "" {
@@ -284,11 +307,12 @@ func (h *PaymentRunHandler) buildRunTransactions(
 			// L'identifiant de bout en bout permet de reconnaître le débit au
 			// relevé. Il porte la référence du fournisseur, pas un compteur :
 			// c'est ce qu'on cherche quand on remonte une ligne bancaire.
-			EndToEndID:   endToEndID(it.Reference, it.ID),
-			CreditorName: it.SupplierName,
-			CreditorIBAN: it.IBAN,
-			Amount:       it.Amount,
-			Currency:     it.Currency,
+			EndToEndID:      endToEndID(it.Reference, it.ID),
+			CreditorName:    it.SupplierName,
+			CreditorIBAN:    it.IBAN,
+			CreditorAddress: it.Address,
+			Amount:          it.Amount,
+			Currency:        it.Currency,
 		}
 		if it.ReferenceType != "" {
 			t.Reference = it.PaymentReference

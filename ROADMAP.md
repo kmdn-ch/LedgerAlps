@@ -239,10 +239,13 @@ conditions de paiement, l'ordre de paiement par devise, l'écran du mot de passe
 après un F5, les explications de refus perdues pour tout téléchargement, le lanceur incapable de
 retrouver un serveur en TLS, et un job de CI pour le frontend. Les constats de faible gravité du même
 rapport sont repris à part : masquage de l'audit, modification des achats, neutralisation des formules
-CSV, CORS et limiteur, rapport de chiffre d'affaires, mémoire de l'archive légale. Restent ouverts : les
-décisions du propriétaire (TDFN, service Windows, contenu de l'archive légale), HIGH-17 (le
-chiffrement programmé ne déclenche pas le redémarrage proposé), et la requête Fedlex de la
-veille légale, qu'on ne peut corriger sans l'interroger en ligne.
+CSV, CORS et limiteur, rapport de chiffre d'affaires, mémoire de l'archive légale. Le reste du second
+rapport suit : le chiffrement programmé appelle désormais le redémarrage (et le mode récupération
+contrôle hôte et origine), la veille Fedlex surveille **l'ensemble** des consolidations (la date
+maximale masquait une consolidation intermédiaire), l'ordre de paiement porte les adresses postales
+structurées et refuse un QR-IBAN comme compte à débiter, et la release naît en brouillon, publiée une
+fois l'installeur envoyé — ce dernier point n'est éprouvé que par la prochaine rc. Restent ouverts :
+les décisions du propriétaire (TDFN, service Windows, contenu de l'archive légale).
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions

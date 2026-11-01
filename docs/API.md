@@ -577,7 +577,7 @@ fournisseur. C'est elle qui voyage dans l'ordre de virement.
 | POST | `/backups` | **admin** | Créer un instantané (`passphrase` facultative) |
 | POST | `/backups/restore` | **admin** | **Préparer** une restauration (`confirm` requis) |
 | DELETE | `/backups/restore` | **admin** | Annuler une restauration préparée |
-| POST | `/system/restart` | **admin** | Redémarrer pour appliquer la restauration préparée |
+| POST | `/system/restart` | **admin** | Redémarrer pour appliquer ce qui attend : restauration préparée, conversion du chiffrement, réglages réseau |
 
 Réservé aux administrateurs : une restauration remplace toute la comptabilité.
 
@@ -600,14 +600,16 @@ application serait pire que de ne pas restaurer.
 
 ### Redémarrer
 
-`POST /system/restart` — **refusé (`422`) s'il n'y a aucune restauration en
-attente**. En dehors de ce cas, un bouton de redémarrage n'est qu'un moyen
-supplémentaire d'interrompre quelqu'un en pleine saisie.
+`POST /system/restart` — **refusé (`422`) si rien n'attend un redémarrage** :
+une restauration préparée, une conversion du chiffrement programmée, ou des
+réglages réseau écrits depuis le démarrage. En dehors de ces cas, un bouton de
+redémarrage n'est qu'un moyen supplémentaire d'interrompre quelqu'un en pleine
+saisie.
 
 Le serveur répond `202` **avant** de s'arrêter, puis : arrêt de l'écoute HTTP,
 fermeture de la base, lancement d'une copie neuve de son propre binaire, sortie.
-L'ordre compte — le nouveau processus applique la restauration avant d'ouvrir
-la base, ce qu'il ne peut pas faire tant que l'ancien détient le fichier.
+L'ordre compte — le nouveau processus applique la restauration, puis la conversion
+du chiffrement, avant d'ouvrir la base, ce qu'il ne peut pas faire tant que l'ancien détient le fichier.
 
 Le lanceur Windows démarre le serveur sans le superviser : personne d'autre ne
 le relancerait, d'où ce redémarrage auto-porté. L'interface interroge `/health`
@@ -622,7 +624,7 @@ jusqu'à réponse avant de recharger la page.
 | PUT | `/settings/company` | **admin** | `vat_status` vaut `""` (non déclaré), `"liable"` ou `"exempt"`. **Absent = ne touche pas** ; toute autre valeur répond `422`. `"exempt"` efface `vat_number` — il s'imprime sur la facture, et le garder contredirait la déclaration (LTVA art. 27 al. 1). Le statut est **validé avant toute écriture** et la fiche s'écrit en **une transaction** : un refus `422` n'a rien écrit — ni l'IBAN, ni une ligne d'audit |
 | GET | `/maintenance/integrity` | **admin** | Contrôle de cohérence des données |
 | GET | `/maintenance/health` | **admin** | État du système, sauvegardes, exposition réseau |
-| GET | `/settings/server` | **admin** | Réglages réseau en vigueur |
+| GET | `/settings/server` | **admin** | Réglages réseau en vigueur. `restart_required` : quelque chose attend un redémarrage (réglages réseau écrits, restauration préparée, conversion du chiffrement programmée) ; `network_restart_required` : les réglages réseau eux-mêmes |
 | PUT | `/settings/server` | **admin** | Écrire les réglages réseau (effet au redémarrage) |
 
 **Lecture seule.** Ces vues montrent, elles ne réparent pas : une comptabilité
@@ -779,7 +781,7 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/exports/ledger.csv` | lecture | Grand livre : mouvements par compte avec solde cumulé |
 | GET | `/exports/trial-balance.csv` | lecture | Balance de vérification, comptes sans mouvement omis |
 | GET | `/payments/payable` | lecture | Factures fournisseurs comptabilisées et non réglées, avec le compte à débiter et, le cas échéant, ce qui empêche le paiement. La **clé de contrôle** d'une référence QR (modulo 10 récursif) et d'une référence créancière RF (modulo 97) est vérifiée : une référence mal recopiée bloque la facture, au lieu d'être refusée par la banque après le dépôt |
-| POST | `/payments/export` | écriture comptable | Ordre de virement `pain.001.001.09`. **Un bloc `<PmtInf>` par devise** (le niveau de service SEPA ne vaut que pour le bloc en euros) ; `CtrlSum` en centimes entiers, celle des montants imprimés ; `<EndToEndId>` vaut `NOTPROVIDED` quand l'ordre n'en porte pas ; l'en-tête additionne toutes les devises, comme la norme le définit |
+| POST | `/payments/export` | écriture comptable | Ordre de virement `pain.001.001.09`. **Un bloc `<PmtInf>` par devise** (le niveau de service SEPA ne vaut que pour le bloc en euros) ; `CtrlSum` en centimes entiers, celle des montants imprimés ; `<EndToEndId>` vaut `NOTPROVIDED` quand l'ordre n'en porte pas ; l'en-tête additionne toutes les devises, comme la norme le définit. Le **débiteur** (fiche entreprise) et chaque **bénéficiaire** (fiche du fournisseur) portent une adresse postale **structurée** (`StrtNm`, `PstCd`, `TwnNm`, `Ctry`) quand la fiche donne au moins la localité et un pays à deux lettres ; sinon elle n'est pas émise. La forme historique accepte `creditor_street`, `creditor_post_code`, `creditor_town`, `creditor_country`. **Refusé (`422`)** : un QR-IBAN comme IBAN de l'entreprise — il reçoit, il ne paie pas |
 
 ### Enregistrer un paiement
 

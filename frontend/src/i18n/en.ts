@@ -845,7 +845,7 @@ export const en: Catalogue = {
   'be.sansRecuperation': 'No recovery passphrase is stored. If this Windows account disappears, this database will no longer open.',
   'be.chiffrementProgramme': 'Encryption scheduled for the next start',
   'be.clairProgramme': 'Return to unencrypted scheduled for the next start',
-  'be.conversionAide': 'The conversion replaces the file the server has open: it cannot happen now. Close LedgerAlps and open it again.',
+  'be.conversionAide': 'The conversion replaces the file the server has open: it cannot happen now. Restart LedgerAlps, or close it and open it again.',
   'be.chiffrerLaBase': 'Encrypt the database',
   'be.recupererCle': 'Recover the key',
   'be.changerPhrase': 'Change the recovery passphrase',

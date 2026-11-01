@@ -24,6 +24,9 @@ type Pain001Request struct {
 	DebtorName string
 	DebtorIBAN string
 	DebtorBIC  string // optional — bank BIC/SWIFT
+	// DebtorAddress est l'adresse postale du débiteur. Voir PostalAddress : sans ville ni pays, elle
+	// n'est pas émise.
+	DebtorAddress PostalAddress
 
 	// Execution date (ISO 8601 date)
 	ExecutionDate time.Time
@@ -52,6 +55,52 @@ type CreditTransfer struct {
 	// existant.
 	ReferenceType string
 	Unstructured  string // motif en texte libre, quand il n'y a pas de référence
+	// CreditorAddress est l'adresse postale du bénéficiaire. Voir PostalAddress.
+	CreditorAddress PostalAddress
+}
+
+// PostalAddress est une adresse STRUCTURÉE, telle que les banques suisses l'attendent dans un ordre
+// de paiement (audit croisé Gemini, HIGH-06).
+//
+// Ce que les banques en disent, lu sur leurs avis aux clients (PostFinance, ZKB, UBS ; le texte des
+// lignes directrices de SIX n'a pas pu être lu ici) : dans une adresse structurée la **localité** et
+// le **pays** sont obligatoires ; la rue, le numéro et le code postal sont facultatifs ; les adresses
+// non structurées ne sont plus garanties de bout en bout à partir de novembre 2026. Les banques suisses
+// tolèrent « jusqu'à nouvel avis » le numéro de rue dans l'élément rue : `Street` est donc émise
+// telle quelle, sans tenter de la scinder — une heuristique qui se tromperait sur « Rue du 1er-Août 3 »
+// ferait pire que ne rien scinder.
+//
+// Une adresse sans localité ou sans pays valide (deux lettres) n'est PAS émise : un élément à moitié
+// rempli est refusé, une adresse absente ne l'est pas.
+type PostalAddress struct {
+	Street   string
+	PostCode string
+	Town     string
+	Country  string // code pays ISO 3166 à deux lettres
+}
+
+// structured rend l'élément XML, ou nil quand l'adresse ne peut pas être émise.
+func (a PostalAddress) structured() *p1PstlAdr {
+	town := tronque(a.Town, 35)
+	country := strings.ToUpper(strings.TrimSpace(a.Country))
+	if town == "" || len(country) != 2 || country[0] < 'A' || country[0] > 'Z' || country[1] < 'A' || country[1] > 'Z' {
+		return nil
+	}
+	return &p1PstlAdr{
+		StrtNm: tronque(a.Street, 70),
+		PstCd:  tronque(a.PostCode, 16),
+		TwnNm:  town,
+		Ctry:   country,
+	}
+}
+
+// tronque réduit les blancs successifs et borne la longueur, en caractères et non en octets.
+func tronque(s string, max int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > max {
+		s = strings.TrimSpace(string(r[:max]))
+	}
+	return s
 }
 
 // newMessageID rend l'identifiant de message d'un fichier de virements.
@@ -136,7 +185,7 @@ func GeneratePain001(req Pain001Request) ([]byte, error) {
 					Value: centsToAmount(cents),
 				},
 			},
-			Cdtr:     p1Party{Nm: t.CreditorName},
+			Cdtr:     p1Party{Nm: t.CreditorName, PstlAdr: t.CreditorAddress.structured()},
 			CdtrAcct: p1Acct{ID: p1AcctID{IBAN: normalizeIBAN(t.CreditorIBAN)}},
 		}
 		if t.Reference != "" {
@@ -180,7 +229,7 @@ func GeneratePain001(req Pain001Request) ([]byte, error) {
 			ReqdExctnDt: p1ReqdExctnDt{
 				Dt: req.ExecutionDate.Format("2006-01-02"),
 			},
-			Dbtr:        p1Party{Nm: req.DebtorName},
+			Dbtr:        p1Party{Nm: req.DebtorName, PstlAdr: req.DebtorAddress.structured()},
 			DbtrAcct:    p1Acct{ID: p1AcctID{IBAN: normalizeIBAN(req.DebtorIBAN)}},
 			DbtrAgt:     buildDbtrAgt(req.DebtorBIC),
 			CdtTrfTxInf: g.infos,
@@ -263,7 +312,16 @@ type p1ReqdExctnDt struct {
 }
 
 type p1Party struct {
-	Nm string `xml:"Nm"`
+	Nm      string     `xml:"Nm"`
+	PstlAdr *p1PstlAdr `xml:"PstlAdr,omitempty"`
+}
+
+// p1PstlAdr : l'ordre des éléments est celui du schéma pain.001.001.09 — rue, code postal, localité, pays.
+type p1PstlAdr struct {
+	StrtNm string `xml:"StrtNm,omitempty"`
+	PstCd  string `xml:"PstCd,omitempty"`
+	TwnNm  string `xml:"TwnNm"`
+	Ctry   string `xml:"Ctry"`
 }
 
 type p1Acct struct {

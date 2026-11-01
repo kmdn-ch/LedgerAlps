@@ -48,12 +48,25 @@ func NewSystemHandler(restart chan<- struct{}, cfg *config.Config, database *sql
 	return &SystemHandler{restart: restart, cfg: cfg, db: database, usePostgres: cfg.UsePostgres()}
 }
 
-// restartPending reports whether a restart would actually achieve something.
-func (h *SystemHandler) restartPending() bool {
+// networkChanged reports whether config.json was edited since this process started: the one
+// thing the network settings screen has to say "saved but not applied" about.
+func (h *SystemHandler) networkChanged() bool {
 	h.mu.Lock()
-	changed := h.settingsChanged
-	h.mu.Unlock()
-	return changed || db.ReadPendingRestore(db.BackupDir()) != nil
+	defer h.mu.Unlock()
+	return h.settingsChanged
+}
+
+// restartPending reports whether a restart would actually achieve something.
+//
+// Three things wait for one: network settings written since this process started, a staged
+// restore, and a staged encryption or decryption of the database. The last was missing (audit
+// croisé Gemini, HIGH-17): after `POST /database/encryption` the screen said "restart" and the
+// server answered "nothing to apply" when asked to — the conversion could only happen if the
+// owner closed and reopened the application by hand.
+func (h *SystemHandler) restartPending() bool {
+	return h.networkChanged() ||
+		db.ReadPendingRestore(db.BackupDir()) != nil ||
+		db.ReadPendingEncryption(config.AppDataDir()) != nil
 }
 
 // Restart POST /api/v1/system/restart
@@ -66,7 +79,7 @@ func (h *SystemHandler) Restart(c *gin.Context) {
 	if !h.restartPending() {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
 			"error": "rien à appliquer : le redémarrage n'est proposé que pour une restauration " +
-				"préparée ou un changement de réglages réseau",
+				"préparée, une conversion du chiffrement programmée ou un changement de réglages réseau",
 		})
 		return
 	}
@@ -90,9 +103,13 @@ func (h *SystemHandler) Restart(c *gin.Context) {
 // GetServerSettings GET /api/v1/settings/server
 func (h *SystemHandler) GetServerSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"settings":         config.CurrentServerSettings(h.cfg),
-		"restart_required": h.restartPending(),
-		"config_file":      config.ConfigFilePath(),
+		"settings": config.CurrentServerSettings(h.cfg),
+		// `restart_required` : QUELQUE CHOSE attend un redémarrage. `network_restart_required` :
+		// ce sont les réglages réseau eux-mêmes — l'écran qui les édite n'a pas à dire « réglages
+		// enregistrés mais pas appliqués » parce qu'une restauration ou un chiffrement attend.
+		"restart_required":         h.restartPending(),
+		"network_restart_required": h.networkChanged(),
+		"config_file":              config.ConfigFilePath(),
 	})
 }
 

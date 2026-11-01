@@ -15,10 +15,11 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Lock, LockOpen, AlertTriangle, Loader2, KeyRound } from 'lucide-react'
-import { databaseApi } from '@/api/client'
+import { Lock, LockOpen, AlertTriangle, Loader2, KeyRound, RefreshCw } from 'lucide-react'
+import { databaseApi, backupsApi } from '@/api/client'
 import { SectionTitle, ErrorBanner, PassphraseField, passphraseIsStrong, ConfirmDialog } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
+import { waitForShutdownThenGo } from '@/utils/restart'
 import type { DatabaseEncryption } from '@/types'
 import { useT } from '@/i18n/useT'
 
@@ -44,6 +45,18 @@ export function DatabaseEncryptionPanel() {
                                  onSuccess: () => { reset(); invalidate() } })
   const disable  = useMutation({ mutationFn: () => databaseApi.disableEncryption(), onSuccess: invalidate })
   const cancel   = useMutation({ mutationFn: () => databaseApi.cancelEncryption(),  onSuccess: invalidate })
+  // La conversion remplace le fichier que le serveur tient ouvert : elle ne se fait qu'au démarrage.
+  // Le serveur propose désormais ce redémarrage (HIGH-17) ; la logique d'attente est celle des
+  // autres écrans — deux copies finiraient par diverger.
+  const [restarting, setRestarting] = useState(false)
+  const restart  = useMutation({
+    mutationFn: async () => {
+      await backupsApi.restart()
+      setRestarting(true)
+      await waitForShutdownThenGo(window.location.origin + '/')
+    },
+    onError: () => setRestarting(false),
+  })
   const recover  = useMutation({ mutationFn: () => databaseApi.recoverKey(pass),
                                  onSuccess: () => { reset(); invalidate() } })
   const rekey    = useMutation({ mutationFn: () => databaseApi.changeRecovery(pass),
@@ -121,13 +134,28 @@ export function DatabaseEncryptionPanel() {
               <p className="mt-1">
                 {t('be.conversionAide')}
               </p>
-              <button
-                onClick={() => cancel.mutate()}
-                disabled={cancel.isPending}
-                className="btn-ghost btn-sm mt-2"
-              >
-                {t('action.annuler')}
-              </button>
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => restart.mutate()}
+                  disabled={restart.isPending || restarting || cancel.isPending}
+                  className="btn-primary btn-sm flex items-center gap-1.5"
+                >
+                  {(restart.isPending || restarting)
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : <RefreshCw size={14} />}
+                  {restarting ? t('sv.redemarrage') : t('sv.redemarrerMaintenant')}
+                </button>
+                <button
+                  onClick={() => cancel.mutate()}
+                  disabled={cancel.isPending || restart.isPending || restarting}
+                  className="btn-ghost btn-sm"
+                >
+                  {t('action.annuler')}
+                </button>
+              </div>
+              {restart.isError && (
+                <p className="mt-2 text-danger-700">{t('rs.redemarrageEchoue')}</p>
+              )}
             </div>
           </div>
         </div>

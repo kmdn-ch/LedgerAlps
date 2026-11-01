@@ -12,8 +12,9 @@ name: Release (dry run)
 # ou via Actions → Release (dry run) → Run workflow.
 #
 # Pourquoi c'est nécessaire : `release.yml` se déclenche sur tout tag `v*`,
-# quelle que soit la branche, et `.goreleaser.yaml` a `draft: false`. Poser un
-# tag pour « voir si ça passe » publie donc une release réelle et visible.
+# quelle que soit la branche. Poser un tag pour « voir si ça passe » crée donc une
+# vraie release : un brouillon (`draft: true`) tant que l'installeur n'est pas
+# envoyé, mais publiée à la fin du job — réelle et visible.
 
 on:
   workflow_dispatch:

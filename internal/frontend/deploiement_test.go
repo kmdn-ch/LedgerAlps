@@ -127,3 +127,30 @@ func TestInstallShNeTelechargeQuEnHTTPSTLS12(t *testing.T) {
 		t.Errorf("%d appel(s) curl reconnu(s), attendu au moins 3 — la forme du script a changé", appels)
 	}
 }
+
+// HIGH-26. La release naît en brouillon et n'est publiée qu'APRÈS son installeur et l'empreinte de
+// celui-ci. Elle était publiée d'emblée : pendant la construction de l'installeur, et pour toujours si
+// ce job échouait, la page « Latest » proposait une version sans son téléchargement recommandé sous
+// Windows. Ce test ne remplace pas une publication réelle (un brouillon ne se répète pas à blanc) : il
+// garde que l'ordre ne s'inverse pas sans que quelqu'un le décide.
+func TestLaReleaseNEstPublieeQuApresSonInstalleur(t *testing.T) {
+	if !regexp.MustCompile(`(?m)^  draft: true\s*$`).MatchString(racine(t, ".goreleaser.yaml")) {
+		t.Error(".goreleaser.yaml ne crée plus la release en brouillon : elle serait visible avant son installeur")
+	}
+	r := racine(t, ".github", "workflows", "release.yml")
+	publier := strings.Index(r, `gh release edit "$VERSION" --draft=false`)
+	if publier < 0 {
+		t.Fatal("release.yml ne publie plus la release : elle resterait un brouillon pour toujours")
+	}
+	for _, avant := range []string{
+		`gh release upload "$VERSION" "$installer" --clobber`,
+		`gh release upload "$VERSION" "sums/$sums" --clobber`,
+	} {
+		if i := strings.Index(r, avant); i < 0 || i > publier {
+			t.Errorf("%q n'est pas AVANT la publication de la release", avant)
+		}
+	}
+	if strings.Count(r, "--draft=false") != 1 {
+		t.Error("la release doit être publiée par une seule étape, la dernière du job de l'installeur")
+	}
+}

@@ -29,7 +29,7 @@ Enregistrées dans [`sources.json`](sources.json), classées par fiabilité.
 
 | Fiabilité | Source | Signal | Pourquoi |
 |---|---|---|---|
-| **primaire** | Fedlex — nLPD (RS 235.1), OPDo (235.11), LTVA (641.20), CO (220) | SPARQL `dateApplicability` | Plateforme officielle de publication de la Confédération : le texte consolidé qu'elle sert **est** la version qui fait foi. Endpoint public, sans authentification, donnée structurée. |
+| **primaire** | Fedlex — nLPD (RS 235.1), OPDo (235.11), LTVA (641.20), CO (220) | SPARQL `dateApplicability` : **l'ensemble** des consolidations (dernière date, nombre, condensé) | Plateforme officielle de publication de la Confédération : le texte consolidé qu'elle sert **est** la version qui fait foi. Endpoint public, sans authentification, donnée structurée. Pas la seule date maximale : Fedlex publie des consolidations **à l'avance** (le CO en porte déjà une au 2027-07-01), et une consolidation insérée sous cette date ne changerait pas le maximum. |
 | **primaire** | SIX — Implementation Guidelines QR-facture | SHA-256 du PDF | Spécification normative des Swiss Payment Standards. Fichier statique : le hachage est stable (vérifié). |
 | **primaire** | EUR-Lex — RGPD 2016/679 | Identifiants de versions consolidées `02016R0679-AAAAMMJJ` | Voir ci-dessous. |
 | secondaire | SIX — page d'accueil QR-facture | Numéro de version le plus élevé dans les liens `ig-qr-bill-v*.pdf` | Détecte l'apparition d'une nouvelle version avant même de la télécharger. |

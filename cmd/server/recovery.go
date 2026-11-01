@@ -22,10 +22,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 )
@@ -91,6 +94,38 @@ func (e *essaisRecuperation) autorise(adresse string) bool {
 	}
 	e.essais[adresse] = append(recents, maintenant)
 	return true
+}
+
+// protegerRecuperation met les gardes du serveur normal devant la page de récupération (audit croisé
+// Gemini, HIGH-17). Elle demande la phrase qui enveloppe la clé de dix ans de comptabilité, et n'avait
+// ni contrôle d'hôte ni contrôle d'origine :
+//
+//   - l'hôte : sur la loopback, un nom de domaine hostile qui pointe vers 127.0.0.1 (« DNS rebinding »)
+//     pouvait lire la page — son détail technique nomme des chemins du poste — et la faire poster.
+//     Même règle que le serveur normal (middleware.HostAllowed) ;
+//   - l'origine : un formulaire posté depuis une AUTRE origine est refusé. Le navigateur envoie
+//     l'en-tête Origin sur tout POST ; une requête sans Origin (un outil en ligne de commande) reste
+//     acceptée, comme partout ailleurs dans le produit ;
+//   - la page ne se met ni en cache ni dans un cadre.
+func protegerRecuperation(listenHost string, allowedOrigins []string, suite http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Frame-Options", "DENY")
+		if !middleware.HostAllowed(listenHost, r.Host, allowedOrigins...) {
+			http.Error(w, "hôte non autorisé : ouvrez LedgerAlps par son adresse locale", http.StatusMisdirectedRequest)
+			return
+		}
+		if r.Method == http.MethodPost {
+			if origine := r.Header.Get("Origin"); origine != "" {
+				u, err := url.Parse(origine)
+				if err != nil || !strings.EqualFold(u.Host, r.Host) {
+					http.Error(w, "origine non autorisée", http.StatusForbidden)
+					return
+				}
+			}
+		}
+		suite.ServeHTTP(w, r)
+	})
 }
 
 // runRecoveryServer serves the recovery page until the key is restored, then
@@ -182,7 +217,7 @@ func runRecoveryServer(cfg *config.Config, cause error) {
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           protegerRecuperation(cfg.Host, strings.Split(cfg.AllowedOrigins, ","), mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Le serveur normal borne ses quatre delais ; celui-ci n'en bornait
 		// qu'un. Une connexion lente y tenait donc un descripteur sans terme,

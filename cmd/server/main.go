@@ -829,7 +829,7 @@ func main() {
 		shutdown(srv, database)
 
 	case <-restartCh:
-		fmt.Println("LedgerAlps: redémarrage pour appliquer la restauration…")
+		fmt.Println("LedgerAlps: redémarrage pour appliquer ce qui est en attente (restauration, chiffrement, réglages)…")
 		// Let the HTTP response reach the browser: the user is looking at a
 		// page that is about to reload itself.
 		time.Sleep(300 * time.Millisecond)

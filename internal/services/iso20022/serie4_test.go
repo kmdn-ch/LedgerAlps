@@ -120,3 +120,114 @@ func TestLesDatesEnHorodatageAvecFuseauSontLues(t *testing.T) {
 		t.Errorf("la forme <Dt> ne se lit plus : %v", es[1].BookingDate)
 	}
 }
+
+// ─── Audit croisé Gemini, HIGH-06 (reliquat) : l'adresse postale structurée ───────────────────────
+//
+// Les banques suisses attendent une adresse STRUCTURÉE dans l'ordre de paiement — localité et pays
+// obligatoires — et ne garantissent plus les adresses non structurées de bout en bout à partir de
+// novembre 2026 (avis PostFinance, ZKB, UBS). Le texte des lignes directrices de SIX n'a pas pu être lu.
+
+func ordreAdresse(t *testing.T, xml string, bloc string) string {
+	t.Helper()
+	i := strings.Index(xml, "<"+bloc+">")
+	j := strings.Index(xml[i:], "</"+bloc+">")
+	if i < 0 || j < 0 {
+		t.Fatalf("bloc <%s> introuvable dans :\n%s", bloc, xml)
+	}
+	return xml[i : i+j]
+}
+
+func TestLesAdressesStructureesSontEmisesDansLOrdreDuSchema(t *testing.T) {
+	out, err := GeneratePain001(Pain001Request{
+		DebtorName: "Debiteur SA", DebtorIBAN: ibanDebiteur, ExecutionDate: dateExecution(t),
+		DebtorAddress: PostalAddress{Street: "Rue du Lac 3", PostCode: "1003", Town: "Lausanne", Country: "ch"},
+		Transactions: []CreditTransfer{{
+			EndToEndID: "A", CreditorName: "Papeterie Alpes", CreditorIBAN: ibanCrediteur, Amount: 100,
+			CreditorAddress: PostalAddress{Street: "Bahnhofstrasse 1", PostCode: "8001", Town: "Zürich", Country: "CH"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	xml := string(out)
+
+	for nom, attendu := range map[string][]string{
+		"Dbtr": {"<StrtNm>Rue du Lac 3</StrtNm>", "<PstCd>1003</PstCd>", "<TwnNm>Lausanne</TwnNm>", "<Ctry>CH</Ctry>"},
+		"Cdtr": {"<StrtNm>Bahnhofstrasse 1</StrtNm>", "<PstCd>8001</PstCd>", "<TwnNm>Zürich</TwnNm>", "<Ctry>CH</Ctry>"},
+	} {
+		bloc := ordreAdresse(t, xml, nom)
+		dernier := -1
+		for _, el := range attendu {
+			i := strings.Index(bloc, el)
+			if i < 0 {
+				t.Errorf("<%s> sans %s :\n%s", nom, el, bloc)
+				continue
+			}
+			if i < dernier {
+				t.Errorf("<%s> : %s n'est pas dans l'ordre du schéma (rue, code postal, localité, pays)", nom, el)
+			}
+			dernier = i
+		}
+		// Le nom précède l'adresse.
+		if strings.Index(bloc, "<Nm>") > strings.Index(bloc, "<PstlAdr>") {
+			t.Errorf("<%s> : <Nm> doit précéder <PstlAdr>", nom)
+		}
+	}
+	// L'initiateur n'a que son nom : l'adresse suit le débiteur, pas l'en-tête.
+	if strings.Contains(ordreAdresse(t, xml, "InitgPty"), "PstlAdr") {
+		t.Error("l'initiateur du message porte une adresse")
+	}
+}
+
+// Un élément à moitié rempli est refusé par la banque ; une adresse absente ne l'est pas. Sans localité
+// ou sans pays valide, l'adresse n'est PAS émise — le fichier reste celui d'avant.
+func TestUneAdresseSansLocaliteOuPaysValideNEstPasEmise(t *testing.T) {
+	for nom, a := range map[string]PostalAddress{
+		"vide":                   {},
+		"sans localité":          {Street: "Rue 1", PostCode: "1000", Country: "CH"},
+		"sans pays":              {Street: "Rue 1", PostCode: "1000", Town: "Lausanne"},
+		"pays en toutes lettres": {Street: "Rue 1", Town: "Lausanne", Country: "Suisse"},
+		"pays chiffré":           {Town: "Lausanne", Country: "12"},
+		"localité de blancs":     {Street: "Rue 1", Town: "   ", Country: "CH"},
+	} {
+		out, err := GeneratePain001(Pain001Request{
+			DebtorName: "D", DebtorIBAN: ibanDebiteur, ExecutionDate: dateExecution(t), DebtorAddress: a,
+			Transactions: []CreditTransfer{{EndToEndID: "A", CreditorName: "C", CreditorIBAN: ibanCrediteur,
+				Amount: 1, CreditorAddress: a}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(out), "PstlAdr") {
+			t.Errorf("%s : une adresse incomplète est émise\n%s", nom, out)
+		}
+	}
+}
+
+// Une rue ou une localité trop longue se tronque aux longueurs du schéma, en caractères et non en octets
+// (« é » n'en vaut qu'un), et les blancs successifs se réduisent.
+func TestLesLongueursDeLAdresseSontBornees(t *testing.T) {
+	long := strings.Repeat("é", 100)
+	out, err := GeneratePain001(Pain001Request{
+		DebtorName: "D", DebtorIBAN: ibanDebiteur, ExecutionDate: dateExecution(t),
+		DebtorAddress: PostalAddress{Street: long, PostCode: strings.Repeat("9", 30), Town: long + "  x", Country: "CH"},
+		Transactions:  []CreditTransfer{{EndToEndID: "A", CreditorName: "C", CreditorIBAN: ibanCrediteur, Amount: 1}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := unmarshalPain001(t, out)
+	a := doc.CstmrCdtTrfInitn.PmtInf[0].Dbtr.PstlAdr
+	if a == nil {
+		t.Fatal("adresse absente")
+	}
+	if n := len([]rune(a.StrtNm)); n != 70 {
+		t.Errorf("rue de %d caractères, attendu 70", n)
+	}
+	if n := len([]rune(a.TwnNm)); n != 35 {
+		t.Errorf("localité de %d caractères, attendu 35", n)
+	}
+	if n := len(a.PstCd); n != 16 {
+		t.Errorf("code postal de %d caractères, attendu 16", n)
+	}
+}

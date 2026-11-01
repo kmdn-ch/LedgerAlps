@@ -19,6 +19,7 @@ on:
     paths:
       - "compliance/sources.json"
       - "scripts/compliance_watch.py"
+      - "scripts/test_compliance_watch.py"
       - ".github/workflows/compliance-watch.yml"
 
 permissions:
@@ -44,6 +45,9 @@ jobs:
 
       # The watcher is deliberately stdlib-only: a compliance check that breaks
       # because a third-party package published a bad release is worse than none.
+      - name: Self-test the watcher
+        run: python -m unittest discover -s scripts -p "test_*.py" -v
+
       - name: Check sources
         id: check
         run: |

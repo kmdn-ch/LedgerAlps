@@ -889,7 +889,7 @@ export const fr = {
   'be.sansRecuperation': 'Aucune phrase de récupération n’est enregistrée. Si ce compte Windows disparaît, cette base ne s’ouvrira plus.',
   'be.chiffrementProgramme': 'Chiffrement programmé au prochain démarrage',
   'be.clairProgramme': 'Retour en clair programmé au prochain démarrage',
-  'be.conversionAide': 'La conversion remplace le fichier que le serveur a ouvert : elle ne peut pas se faire maintenant. Fermez puis rouvrez LedgerAlps.',
+  'be.conversionAide': 'La conversion remplace le fichier que le serveur a ouvert : elle ne peut pas se faire maintenant. Redémarrez LedgerAlps, ou fermez-le puis rouvrez-le.',
   'be.chiffrerLaBase': 'Chiffrer la base de données',
   'be.recupererCle': 'Récupérer la clé',
   'be.changerPhrase': 'Changer la phrase de récupération',

@@ -139,6 +139,7 @@ désormais sa présence à chaque répétition.
 ```bash
 python scripts/compliance_watch.py            # vérifier les sources
 python scripts/compliance_watch.py --update   # enregistrer les empreintes
+python -m unittest discover -s scripts -p "test_*.py"   # le test de la veille, sans réseau
 ```
 
 Bibliothèque standard uniquement, par choix. Voir

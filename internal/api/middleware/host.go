@@ -35,12 +35,7 @@ func HostGuard(listenHost string, allowedOrigins ...string) gin.HandlerFunc {
 	if !hoteLoopback(listenHost) {
 		return func(c *gin.Context) { c.Next() }
 	}
-	autorises := map[string]bool{"localhost": true, "127.0.0.1": true, "::1": true}
-	for _, o := range allowedOrigins {
-		if u, err := url.Parse(strings.TrimSpace(o)); err == nil && u.Hostname() != "" {
-			autorises[strings.ToLower(u.Hostname())] = true
-		}
-	}
+	autorises := hotesAutorises(allowedOrigins)
 	return func(c *gin.Context) {
 		if !autorises[nomDHote(c.Request.Host)] {
 			c.AbortWithStatusJSON(http.StatusMisdirectedRequest, gin.H{
@@ -49,6 +44,27 @@ func HostGuard(listenHost string, allowedOrigins ...string) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// hotesAutorises : la loopback, et le nom d'hôte de chaque origine déclarée.
+func hotesAutorises(allowedOrigins []string) map[string]bool {
+	autorises := map[string]bool{"localhost": true, "127.0.0.1": true, "::1": true}
+	for _, o := range allowedOrigins {
+		if u, err := url.Parse(strings.TrimSpace(o)); err == nil && u.Hostname() != "" {
+			autorises[strings.ToLower(u.Hostname())] = true
+		}
+	}
+	return autorises
+}
+
+// HostAllowed applique la règle de HostGuard à un serveur qui n'est pas gin : le mode
+// récupération (cmd/server/recovery.go), qui demande la phrase enveloppant la clé de la base et
+// n'avait aucun contrôle d'hôte (audit croisé Gemini, HIGH-17).
+func HostAllowed(listenHost, requestHost string, allowedOrigins ...string) bool {
+	if !hoteLoopback(listenHost) {
+		return true
+	}
+	return hotesAutorises(allowedOrigins)[nomDHote(requestHost)]
 }
 
 // nomDHote extrait le nom d'hôte, sans port ni crochets, en minuscules.

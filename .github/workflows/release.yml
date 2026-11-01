@@ -332,3 +332,19 @@ jobs:
           gh release upload "$VERSION" "sums/$sums" --clobber
           echo "Empreintes publiees :"
           cat "sums/$sums"
+
+      # PUBLIER la release. GoReleaser l'a créée en brouillon (.goreleaser.yaml) : tant que cette étape
+      # n'a pas tourné, rien n'est visible, ni la page « Latest » ni l'API que lit la vérification de mise à
+      # jour. Elle vient APRÈS l'installeur et son empreinte, et n'a lieu que si tout ce qui précède a réussi ;
+      # un échec laisse un brouillon qu'on complète en relançant ce job (chaque étape est rejouable).
+      # Le drapeau « préversion » posé par `prerelease: auto` est conservé : une rc ne devient pas « Latest ».
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.goreleaser.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$VERSION" --draft=false
+          gh release view "$VERSION" --json isDraft,isPrerelease,url \
+            --jq '"publiee : draft=\(.isDraft) prerelease=\(.isPrerelease) \(.url)"'

@@ -846,7 +846,7 @@ export const de: Catalogue = {
   'be.sansRecuperation': 'Es ist keine Wiederherstellungs-Passphrase hinterlegt. Verschwindet dieses Windows-Konto, lässt sich diese Datenbank nicht mehr öffnen.',
   'be.chiffrementProgramme': 'Verschlüsselung beim nächsten Start geplant',
   'be.clairProgramme': 'Rückkehr zu unverschlüsselt beim nächsten Start geplant',
-  'be.conversionAide': 'Die Umwandlung ersetzt die vom Server geöffnete Datei: sie kann jetzt nicht erfolgen. Schliessen Sie LedgerAlps und öffnen Sie es erneut.',
+  'be.conversionAide': 'Die Umwandlung ersetzt die vom Server geöffnete Datei: sie kann jetzt nicht erfolgen. Starten Sie LedgerAlps neu, oder schliessen Sie es und öffnen Sie es erneut.',
   'be.chiffrerLaBase': 'Datenbank verschlüsseln',
   'be.recupererCle': 'Schlüssel wiederherstellen',
   'be.changerPhrase': 'Wiederherstellungs-Passphrase ändern',
