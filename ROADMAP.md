@@ -231,9 +231,16 @@ lignes de facture du PDF. La troisième série rend l'immuabilité réelle (lign
 protégés, condensé des lignes scellé), propose le complément des clôtures déjà déséquilibrées,
 protège la clé d'une base chiffrée de l'assistant d'installation, rétablit la rotation de la clé de
 signature sur l'installeur, borne la décompression des PDF et corrige le rapprochement bancaire, les
-avoirs, la balance âgée et les créances du tableau de bord. Restent ouverts : les décisions du
-propriétaire (TDFN, service Windows, contenu de l'archive légale) et les constats de ce rapport que
-je n'ai pas instruits (vingt-huit, listés dans `review-Gemini1.md`).
+avoirs, la balance âgée et les créances du tableau de bord. Les vingt-huit constats restants ont été
+instruits (`review-Gemini2.md`, local) et la quatrième série corrige les plus lourds : la fiche société
+écrite avant validation, le code de secours utilisable deux fois, deux exercices qui finissent la
+même année, le payload QR décalé par un retour à la ligne et le PDF qui taisait remise, TVA par taux et
+conditions de paiement, l'ordre de paiement par devise, l'écran du mot de passe temporaire sans issue
+après un F5, les explications de refus perdues pour tout téléchargement, le lanceur incapable de
+retrouver un serveur en TLS, et un job de CI pour le frontend. Restent ouverts : les décisions du
+propriétaire (TDFN, service Windows, contenu de l'archive légale) et les constats de faible
+gravité de `review-Gemini2.md` non repris (MED-02, 06, 07, 09, 12, LOW-03), ainsi que la requête
+Fedlex de la veille légale, qu'on ne peut corriger sans l'interroger en ligne.
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions
