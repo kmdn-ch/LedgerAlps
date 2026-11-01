@@ -97,16 +97,6 @@ export function formatIBAN(iban: string): string {
   return c.match(/.{1,4}/g)?.join(' ') ?? iban
 }
 
-// ─── Téléchargement blob ──────────────────────────────────────────────────────
-export function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob)
-  const a   = document.createElement('a')
-  a.href    = url
-  a.download = filename
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
 /**
  * dateLocale rend la date de `d` (aujourd'hui par défaut) en `AAAA-MM-JJ`, en heure LOCALE.
  *

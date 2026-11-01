@@ -16,7 +16,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { BookMarked, FileDown, FileSpreadsheet, AlertTriangle, CheckCircle2, Info } from 'lucide-react'
-import { carnetApi, fiscalYearsApi, settingsApi } from '@/api/client'
+import { carnetApi, fiscalYearsApi, settingsApi, downloadBlob } from '@/api/client'
 import { useT, useFormats } from '@/i18n/useT'
 import { refusalMessage } from '@/utils/refusal'
 import { ErrorBanner } from '@/components/ui'
@@ -139,14 +139,7 @@ export function CarnetDuLait({ du, au }: { du: string; au: string }) {
     setErreur('')
     try {
       const res = await fetcher()
-      const url = URL.createObjectURL(new Blob([res.data]))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = nom
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
+      downloadBlob(new Blob([res.data]), nom)
     } catch (e) {
       setErreur(refusalMessage(e, t('carnet.erreur')))
     } finally {

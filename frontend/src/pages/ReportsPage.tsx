@@ -15,7 +15,7 @@ import {
   Archive, Upload, FileSpreadsheet, BookOpen, BarChart3, Calendar, Download, Lock,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { exportApi, accountingExportApi } from '@/api/client'
+import { exportApi, accountingExportApi, downloadBlob } from '@/api/client'
 import { PaymentRunPanel } from '@/components/payments/PaymentRunPanel'
 import { CarnetDuLait } from '@/components/reports/CarnetDuLait'
 import { PageHeader, SectionTitle, ErrorBanner } from '@/components/ui'
@@ -45,14 +45,7 @@ export function ReportsPage() {
     setError('')
     try {
       const res = await fetcher()
-      const url = URL.createObjectURL(new Blob([res.data]))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
+      downloadBlob(new Blob([res.data]), filename)
     } catch (e) {
       setError(refusalMessage(e, t('rp.erreurFichier')))
     } finally {

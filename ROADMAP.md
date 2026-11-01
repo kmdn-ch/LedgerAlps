@@ -237,10 +237,12 @@ instruits (`review-Gemini2.md`, local) et la quatrième série corrige les plus 
 même année, le payload QR décalé par un retour à la ligne et le PDF qui taisait remise, TVA par taux et
 conditions de paiement, l'ordre de paiement par devise, l'écran du mot de passe temporaire sans issue
 après un F5, les explications de refus perdues pour tout téléchargement, le lanceur incapable de
-retrouver un serveur en TLS, et un job de CI pour le frontend. Restent ouverts : les décisions du
-propriétaire (TDFN, service Windows, contenu de l'archive légale) et les constats de faible
-gravité de `review-Gemini2.md` non repris (MED-02, 06, 07, 09, 12, LOW-03), ainsi que la requête
-Fedlex de la veille légale, qu'on ne peut corriger sans l'interroger en ligne.
+retrouver un serveur en TLS, et un job de CI pour le frontend. Les constats de faible gravité du même
+rapport sont repris à part : masquage de l'audit, modification des achats, neutralisation des formules
+CSV, CORS et limiteur, rapport de chiffre d'affaires, mémoire de l'archive légale. Restent ouverts : les
+décisions du propriétaire (TDFN, service Windows, contenu de l'archive légale), HIGH-17 (le
+chiffrement programmé ne déclenche pas le redémarrage proposé), et la requête Fedlex de la
+veille légale, qu'on ne peut corriger sans l'interroger en ligne.
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions

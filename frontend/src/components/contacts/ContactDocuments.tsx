@@ -20,7 +20,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Download, Loader2, FileDown, Info } from 'lucide-react'
-import { invoicesApi } from '@/api/client'
+import { invoicesApi, downloadBlob } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner, EmptyState, StatusBadge } from '@/components/ui'
 import { formatCHF, formatDate, isOverdue } from '@/utils'
 import type { Invoice, DocumentType } from '@/types'
@@ -102,14 +102,7 @@ export function ContactDocuments({ contactId, contactName }: {
       const res = await invoicesApi.bulkPDF(effective)
       const disposition: string = res.headers['content-disposition'] ?? ''
       const match = /filename="([^"]+)"/.exec(disposition)
-      const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = match ? match[1] : 'documents.zip'
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
+      downloadBlob(res.data, match ? match[1] : 'documents.zip')
 
       // Le serveur signale les documents disparus entre l'affichage et le clic.
       // Une archive plus courte que la sélection, sans un mot, se remarque trop

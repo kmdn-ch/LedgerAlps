@@ -118,9 +118,12 @@ func computeTotals(lines []supplierInvoiceLine) (subtotal, vat, total, dominantR
 		vat += lineHT * l.VATRate
 		baseByRate[l.VATRate] += lineHT
 	}
+	// Parcourir une carte donne un ordre aléatoire : à bases égales, le taux « dominant »
+	// changeait d'un appel à l'autre (audit croisé Gemini, MED-07). À égalité, le plus haut
+	// l'emporte ; une base nulle ne désigne aucun taux.
 	var maxBase float64
 	for rate, base := range baseByRate {
-		if base > maxBase {
+		if base > maxBase || (base == maxBase && base > 0 && rate > dominantRate) {
 			maxBase, dominantRate = base, rate
 		}
 	}
@@ -193,14 +196,12 @@ func (h *SupplierInvoicesHandler) ListSupplierInvoices(c *gin.Context) {
 			&s.IssueDate, &s.DueDate, &s.Currency, &s.SubtotalAmount, &s.VATAmount,
 			&s.TotalAmount, &s.VATRate, &s.AmountPaid, &s.ExpenseAccountCode,
 			&s.PaymentReference, &s.JournalEntryID, &s.Notes, &s.CreatedAt); err != nil {
-			// Le detail part dans la reponse : un decalage entre les colonnes
-			// lues et les destinations du Scan ne se voit qu'ici, et « database
-			// error » le rend indiscernable d'une base injoignable. C'est
-			// exactement ce qui s'est produit — deux colonnes ajoutees au SELECT
-			// sans l'etre au Scan, et l'ecran ne disait rien de plus que « les
-			// factures n'ont pas pu etre lues ».
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "lecture des factures fournisseurs: " + err.Error()})
+			// Un decalage entre les colonnes lues et les destinations du Scan (deux
+			// colonnes ajoutees au SELECT sans l'etre au Scan, c'est arrive) doit se
+			// voir : mais dans le JOURNAL du serveur, ou `erreurInterne` met la cause.
+			// Le texte du pilote ne part plus dans la reponse (audit croise Gemini,
+			// MED-07) : il nomme des colonnes et des types de la base.
+			erreurInterne(c, "les factures fournisseurs n'ont pas pu être lues", err)
 			return
 		}
 		items = append(items, s)
@@ -320,6 +321,31 @@ func validateSupplierBounds(req *createSupplierInvoiceRequest) error {
 	return nil
 }
 
+// fournisseurAcceptable vérifie que le contact existe et qu'il est fournisseur (ou les deux),
+// et répond lui-même par un refus sinon. Rend false quand la requête doit s'arrêter.
+//
+// Comptabiliser un achat sur une fiche client est presque toujours une erreur de saisie. La
+// CRÉATION le contrôlait ; la MODIFICATION non, si bien qu'un brouillon se rattachait après coup
+// à un client, ou à un identifiant qui n'existe pas (audit croisé Gemini, MED-07).
+func (h *SupplierInvoicesHandler) fournisseurAcceptable(c *gin.Context, ctx context.Context, supplierID string) bool {
+	var contactType string
+	q := db.Rebind("SELECT contact_type FROM contacts WHERE id = ?", h.usePostgres)
+	switch err := h.db.QueryRowContext(ctx, q, supplierID).Scan(&contactType); {
+	case err == sql.ErrNoRows:
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "fournisseur introuvable"})
+		return false
+	case err != nil:
+		erreurInterne(c, "erreur de base de données", err)
+		return false
+	}
+	if contactType != "supplier" && contactType != "both" {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "ce contact est un client, pas un fournisseur : " +
+			"changez son type dans sa fiche, ou choisissez un autre fournisseur"})
+		return false
+	}
+	return true
+}
+
 // CreateSupplierInvoice POST /api/v1/supplier-invoices
 func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 	var req createSupplierInvoiceRequest
@@ -345,22 +371,7 @@ func (h *SupplierInvoicesHandler) CreateSupplierInvoice(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	// The supplier must exist and be flagged as one — booking a purchase
-	// against a customer record is almost always a data-entry mistake.
-	var contactType string
-	supQ := db.Rebind("SELECT contact_type FROM contacts WHERE id = ?", h.usePostgres)
-	switch err := h.db.QueryRowContext(ctx, supQ, req.SupplierID).Scan(&contactType); {
-	case err == sql.ErrNoRows:
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "fournisseur introuvable"})
-		return
-	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
-		return
-	}
-	if contactType != "supplier" && contactType != "both" {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{
-			"error": fmt.Sprintf("contact is of type %q; expected 'supplier' or 'both'", contactType),
-		})
+	if !h.fournisseurAcceptable(c, ctx, req.SupplierID) {
 		return
 	}
 

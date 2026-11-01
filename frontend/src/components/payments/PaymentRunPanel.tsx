@@ -24,7 +24,7 @@ import {
   Download, AlertTriangle, Loader2, Building2, CalendarClock, Info, Trash2,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { paymentsApi, supplierInvoicesApi } from '@/api/client'
+import { paymentsApi, supplierInvoicesApi, downloadBlob } from '@/api/client'
 import { ConfirmDialog } from '@/components/ui'
 import { useCanWrite } from '@/hooks/usePermissions'
 import { useT, useFormats } from '@/i18n/useT'
@@ -95,14 +95,7 @@ export function PaymentRunPanel() {
       // Le navigateur télécharge le XML. Rien n'est envoyé nulle part : le
       // fichier se dépose ensuite dans l'e-banking, à la main. Ce détour est
       // volontaire — LedgerAlps ne parle à aucun service extérieur.
-      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/xml' }))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `paiements-${execDate}.xml`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
+      downloadBlob(new Blob([res.data], { type: 'application/xml' }), `paiements-${execDate}.xml`)
       return { count: chosen.length, total }
     },
     onSuccess: (r) => { setError(null); setDone(r); setSelected(new Set()) },

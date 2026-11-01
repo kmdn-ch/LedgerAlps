@@ -15,7 +15,7 @@ import {
   Lock, LockOpen, CalendarRange, Plus, Loader2, FileCheck2,
   Download, AlertTriangle, X,
 } from 'lucide-react'
-import { fiscalYearsApi, auditApi, exportApi } from '@/api/client'
+import { fiscalYearsApi, auditApi, exportApi, downloadBlob } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { formatDate } from '@/utils'
 import type { FiscalYear } from '@/types'
@@ -256,14 +256,7 @@ function DownloadRow({ icon: Icon, title, description, filename, fetcher }: {
       const res = await fetcher()
       const disposition = String(res.headers['content-disposition'] ?? '')
       const match = /filename="([^"]+)"/.exec(disposition)
-      const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = match ? match[1] : filename
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
+      downloadBlob(res.data, match ? match[1] : filename)
     } catch {
       setError(t('cf.echecTelechargement'))
     } finally {

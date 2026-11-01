@@ -108,90 +108,90 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 	today := time.Now().Format("2006-01-02")
 	dirName := "legal_archive_" + today
 
-	// ── Fetch all data ────────────────────────────────────────────────────────
-
-	accounts, err := h.fetchAccounts(ctx)
-	if err != nil {
-		erreurInterne(c, "les comptes n'ont pas pu être lus", err)
-		return
+	// ── Une table à la fois ───────────────────────────────────────────────────
+	// Chaque table est lue, sérialisée en JSON, versée à l'archive, convertie en CSV, versée à son
+	// tour, puis LIBÉRÉE avant la suivante. L'archive chargeait d'abord les cinq tables, doublait leur
+	// JSON, y ajoutait le CSV et gardait le tout jusqu'au bout : un pic de mémoire de plusieurs fois
+	// la taille des données (audit croisé Gemini, LOW-03). Le pic est maintenant celui de la PLUS
+	// GROSSE table — le journal.
+	//
+	// Les fichiers vont d'abord dans une archive de travail, empreintes calculées au passage. Le
+	// manifeste, qui doit être la première entrée de l'archive finale, n'est connu qu'à la fin :
+	// l'archive finale est assemblée en COPIANT les entrées déjà compressées (`zip.Writer.Copy`).
+	// Rien n'est recompressé, et la disposition reste celle d'avant — manifeste, JSON, CSV, LISEZ-MOI.
+	var travail bytes.Buffer
+	zt := zip.NewWriter(&travail)
+	hashes := make(map[string]string)
+	// Le manifeste couvre le CSV comme le JSON : un fichier de l'archive sans empreinte serait le
+	// seul qu'on ne pourrait pas vérifier.
+	deposer := func(nom string, data []byte) error {
+		sum := sha256.Sum256(data)
+		hashes[nom] = fmt.Sprintf("%x", sum)
+		return addZipFile(zt, dirName+"/"+nom, data)
 	}
 
-	journalEntries, err := h.fetchJournalEntries(ctx, filters)
-	if err != nil {
-		erreurInterne(c, "les écritures n'ont pas pu être lues", err)
-		return
-	}
-
-	invoices, err := h.fetchInvoices(ctx, filters)
-	if err != nil {
-		erreurInterne(c, "les factures n'ont pas pu être lues", err)
-		return
-	}
-
-	contacts, err := h.fetchContacts(ctx)
-	if err != nil {
-		erreurInterne(c, "les contacts n'ont pas pu être lus", err)
-		return
-	}
-
-	fiscalYears, err := h.fetchFiscalYears(ctx)
-	if err != nil {
-		erreurInterne(c, "les exercices n'ont pas pu être lus", err)
-		return
-	}
-
-	// ── Marshal all files to JSON bytes ───────────────────────────────────────
-	type namedFile struct {
-		name string
-		data []byte
-	}
-
-	files := make([]namedFile, 0, 13)
-	for _, nf := range []struct {
-		name string
-		v    any
+	// Dans l'ordre alphabétique des tables : c'est celui des fichiers CSV de l'archive.
+	tables := []struct {
+		nom, erreur string
+		lire        func() (any, error)
 	}{
-		{"accounts.json", accounts},
-		{"journal_entries.json", journalEntries},
-		{"invoices.json", invoices},
-		{"contacts.json", contacts},
-		{"fiscal_years.json", fiscalYears},
-	} {
-		raw, err := json.MarshalIndent(nf.v, "", "  ")
+		{"accounts", "les comptes n'ont pas pu être lus", func() (any, error) { return h.fetchAccounts(ctx) }},
+		{"contacts", "les contacts n'ont pas pu être lus", func() (any, error) { return h.fetchContacts(ctx) }},
+		{"fiscal_years", "les exercices n'ont pas pu être lus", func() (any, error) { return h.fetchFiscalYears(ctx) }},
+		{"invoices", "les factures n'ont pas pu être lues", func() (any, error) { return h.fetchInvoices(ctx, filters) }},
+		{"journal_entries", "les écritures n'ont pas pu être lues", func() (any, error) { return h.fetchJournalEntries(ctx, filters) }},
+	}
+	// Les CSV déjà versés : leur nom et leur taille, pour le LISEZ-MOI, sans leurs octets.
+	var csvVerses []csvSet
+
+	for _, tb := range tables {
+		valeur, err := tb.lire()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "la sérialisation JSON a échoué pour " + nf.name})
+			erreurInterne(c, tb.erreur, err)
 			return
 		}
-		files = append(files, namedFile{nf.name, raw})
-	}
+		raw, err := json.MarshalIndent(valeur, "", "  ")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "la sérialisation JSON a échoué pour " + tb.nom + ".json"})
+			return
+		}
+		// À partir d'ici la structure typée n'est plus lue : le ramasse-miettes la reprend, le JSON la remplace.
+		if err := deposer(tb.nom+".json", raw); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture dans l'archive impossible : " + tb.nom + ".json"})
+			return
+		}
 
-	// ── Export de réversibilité : les mêmes données en CSV ────────────────────
-	// Le JSON est exact mais suppose d'écrire du code pour l'exploiter. Sans
-	// format ouvrable dans un tableur, « vos données vous appartiennent » reste
-	// une affirmation sans moyen de l'exercer.
-	csvFiles, err := buildCSVFiles(map[string]any{
-		"accounts":        accounts,
-		"journal_entries": journalEntries,
-		"invoices":        invoices,
-		"contacts":        contacts,
-		"fiscal_years":    fiscalYears,
-	})
-	if err != nil {
-		erreurInterne(c, "le fichier CSV n'a pas pu être produit", err)
+		// ── Export de réversibilité : les mêmes données en CSV ────────────────
+		// Le JSON est exact mais suppose d'écrire du code pour l'exploiter. Sans format ouvrable dans
+		// un tableur, « vos données vous appartiennent » reste une affirmation sans moyen de
+		// l'exercer. On décode le JSON qu'on vient d'écrire : le CSV montre exactement les mêmes champs.
+		records, err := recordsFromJSON(raw)
+		if err != nil {
+			erreurInterne(c, "le fichier CSV n'a pas pu être produit", err)
+			return
+		}
+		csvs, err := csvFilesFor(tb.nom, records)
+		if err != nil {
+			erreurInterne(c, "le fichier CSV n'a pas pu être produit", err)
+			return
+		}
+		for _, f := range csvs {
+			nom := "csv/" + f.name
+			if err := deposer(nom, f.data); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture dans l'archive impossible : " + nom})
+				return
+			}
+			csvVerses = append(csvVerses, csvSet{name: f.name, octets: f.octets})
+		}
+	}
+	const lisezMoi = "csv/LISEZ-MOI.txt"
+	if err := deposer(lisezMoi, csvReadme(i18n.Langue(c), csvVerses)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture dans l'archive impossible : " + lisezMoi})
 		return
 	}
-	for _, f := range csvFiles {
-		files = append(files, namedFile{"csv/" + f.name, f.data})
-	}
-	files = append(files, namedFile{"csv/LISEZ-MOI.txt", csvReadme(i18n.Langue(c), csvFiles)})
-
-	// ── Compute SHA-256 hashes ────────────────────────────────────────────────
-	// Le manifeste couvre le CSV comme le JSON : un fichier de l'archive sans
-	// empreinte serait le seul qu'on ne pourrait pas vérifier.
-	hashes := make(map[string]string, len(files))
-	for _, f := range files {
-		sum := sha256.Sum256(f.data)
-		hashes[f.name] = fmt.Sprintf("%x", sum)
+	if err := zt.Close(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "l'archive ZIP n'a pas pu être finalisée"})
+		return
 	}
 
 	// ── Build manifest ────────────────────────────────────────────────────────
@@ -207,23 +207,39 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 		return
 	}
 
-	// ── Write ZIP in memory ───────────────────────────────────────────────────
+	// ── Assemble the final ZIP (manifest first, then the entries as already compressed) ──
+	lu, err := zip.NewReader(bytes.NewReader(travail.Bytes()), int64(travail.Len()))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "l'archive ZIP n'a pas pu être finalisée"})
+		return
+	}
+	entrees := make(map[string]*zip.File, len(lu.File))
+	for _, f := range lu.File {
+		entrees[f.Name] = f
+	}
+
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-
-	// manifest first
 	if err := addZipFile(zw, dirName+"/manifest.json", manifestBytes); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture du manifeste dans l'archive impossible"})
 		return
 	}
-
-	for _, f := range files {
-		if err := addZipFile(zw, dirName+"/"+f.name, f.data); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture dans l'archive impossible : " + f.name})
+	ordre := []string{"accounts.json", "journal_entries.json", "invoices.json", "contacts.json", "fiscal_years.json"}
+	for _, f := range csvVerses {
+		ordre = append(ordre, "csv/"+f.name)
+	}
+	ordre = append(ordre, lisezMoi)
+	for _, nom := range ordre {
+		entree, ok := entrees[dirName+"/"+nom]
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture dans l'archive impossible : " + nom})
+			return
+		}
+		if err := zw.Copy(entree); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture dans l'archive impossible : " + nom})
 			return
 		}
 	}
-
 	if err := zw.Close(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "l'archive ZIP n'a pas pu être finalisée"})
 		return

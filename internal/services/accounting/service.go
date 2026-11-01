@@ -365,8 +365,32 @@ func (s *Service) VerifyEntryIntegrity(ctx context.Context, entryID string) erro
 // leurs valeurs comme leur empreinte. Seuls les maillons écrits ensuite sont
 // plus discrets.
 var sensitiveFieldRe = regexp.MustCompile(
-	`("(?:[a-z0-9]+_)*(?:email|name|address|phone|iban|qr_iban|password_hash)(?:_[a-z0-9]+)*"\s*:\s*)"[^"]*"`,
+	`("(?:[a-z0-9]+_)*(?:` + strings.Join(motsSensibles, "|") + `)(?:_[a-z0-9]+)*"\s*:\s*)"[^"]*"`,
 )
+
+// motsSensibles est la liste des termes qui désignent une donnée personnelle ou un secret,
+// quand ils apparaissent comme MOT dans un nom de clé. C'est l'UNIQUE source : le masquage
+// structurel (`estChampSensible`) et l'expression régulière ci-dessus la lisent toutes deux,
+// pour qu'elles ne divergent pas (audit croisé Gemini, MED-06).
+//
+//   - identité et contact : email, name, phone ;
+//   - adresse, en entier ou en morceaux : address, street, city, town, postal, zip. Chez un
+//     indépendant l'adresse de l'entreprise EST son domicile ; `address_street` passait déjà
+//     par le mot « address », mais `street`, `city` ou `postal_code` seuls, non ;
+//   - banque : iban, bic, swift. Le BIC identifie une banque, pas une personne, mais il n'a
+//     rien à faire lisible dans une table conservée dix ans, à côté d'un IBAN masqué ;
+//   - contrepartie d'un relevé : counterparty (nom du tiers qui a payé ou été payé) ;
+//   - secrets : password, hash, token, secret.
+//
+// Un mot se compare ENTIER (`named_range` ne contient pas « name », `secretary` pas
+// « secret ») ; voir `motsDeLaCle`.
+var motsSensibles = []string{
+	"email", "name", "phone",
+	"address", "street", "city", "town", "postal", "zip",
+	"iban", "bic", "swift",
+	"counterparty",
+	"password", "hash", "token", "secret",
+}
 
 // maskPersonalData remplace la valeur des champs sensibles par "[MASKED]" dans
 // une chaîne JSON (nLPD art. 6 — minimisation des données dans les journaux).
@@ -392,9 +416,10 @@ func maskPersonalData(jsonData string) string {
 // ne le sont pas.
 func estChampSensible(cle string) bool {
 	for _, mot := range motsDeLaCle(cle) {
-		switch mot {
-		case "email", "name", "address", "phone", "iban", "hash", "password":
-			return true
+		for _, sensible := range motsSensibles {
+			if mot == sensible {
+				return true
+			}
 		}
 	}
 	return false

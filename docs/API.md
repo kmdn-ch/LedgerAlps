@@ -498,7 +498,7 @@ comptent dans la déclaration TVA.
 | GET | `/supplier-invoices` | lecture | Liste paginée |
 | GET | `/supplier-invoices/:id` | lecture | Détail avec lignes |
 | POST | `/supplier-invoices` | écriture documents | Créer (refus si doublon fournisseur + référence) |
-| PUT | `/supplier-invoices/:id` | écriture documents | Modifier — **brouillons uniquement** (409 sinon) |
+| PUT | `/supplier-invoices/:id` | écriture documents | Modifier — **brouillons uniquement** (409 sinon). Laisse une trace d'audit (`supplier_invoice_updated`). Si le fournisseur change, le contact doit être un fournisseur ou « les deux » (422 sinon) |
 | POST | `/supplier-invoices/read-qr` | écriture documents | Lire le QR d'un PDF ou d'une image déposée. **Ne crée rien**. Un PDF dont un flux compressé se dilate au-delà de 64 Mo (256 Mo au total) est refusé en `422` **avant** toute décompression : quelques centaines de Ko de zéros compressés faisaient monter la mémoire du serveur à plus de 2 Go |
 | POST | `/supplier-invoices/:id/transition` | écriture comptable | Changer de statut — **machine à états stricte** (voir « Factures fournisseurs : états et règlement ») |
 
@@ -762,7 +762,7 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | GET | `/reports/income-statement` | auth | Compte de résultat. L'écriture de clôture (`CLOTURE-…`) en est **exclue** : elle remet les comptes à zéro, et un exercice clôturé affichait 0.00 |
 | GET | `/reports/general-ledger` | auth | Grand livre |
 | GET | `/reports/ar-aging` | auth | Balance âgée des créances. Chaque ligne porte `total_amount` (le total de la facture) et `balance_due` (ce qui reste **à encaisser**, net des versements et des notes de crédit émises) ; ce sont les restes dus qui sont classés et additionnés, et une facture entièrement créditée n'y figure plus |
-| GET | `/reports/revenue` | auth | Chiffre d'affaires groupé par `year`, `month` ou `contact`, avec `from`/`to`. La réponse porte `basis` : la convention de calcul, pour qu'un total ne soit pas comparé à un autre calculé autrement |
+| GET | `/reports/revenue` | auth | Chiffre d'affaires groupé par `year`, `month` ou `contact`, avec `from`/`to`. La réponse porte `basis` : la convention de calcul, pour qu'un total ne soit pas comparé à un autre calculé autrement. « Encaissé » (`paid`) est ce qui a été reçu à ce jour sur les factures **émises** dans la période, rattaché à leur date d'émission : ce n'est pas un flux de trésorerie. `currencies` liste les devises des pièces comptées : au-delà d'une, les montants sont additionnés **sans conversion** |
 | GET | `/reports/simplified-accounting` | lecture | Comptabilité simplifiée (CO art. 957 al. 2). `from`, `to`. Recettes et dépenses hors écriture de clôture ; extournes en déduction ; **financement** (`financement`, `total_financement` : capital, réserves, compte du propriétaire, emprunts) à part, de sorte que `resultat` + `total_financement` égale le mouvement net des liquidités |
 | GET | `/reports/simplified-accounting.pdf` | lecture | Le même, en PDF — le document remis à l'administration |
 | GET | `/exports/simplified-accounting.csv` | lecture | Le même, en CSV |

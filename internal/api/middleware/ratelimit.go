@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -19,6 +20,12 @@ const (
 	staleAfter = time.Hour
 	// purgeEvery bounds how often the opportunistic sweep runs.
 	purgeEvery = 10 * time.Minute
+
+	// maxRecords borne la table d'un limiteur (audit croisé Gemini, MED-12). Le balayage
+	// ci-dessus ne retire que les enregistrements INACTIFS depuis une heure : un flot de clés
+	// distinctes (adresse|compte, avec des courriels inventés) les gardait tous une heure durant.
+	// 10 000 enregistrements pèsent une fraction de mégaoctet ; une PME n'en approche jamais.
+	maxRecords = 10_000
 
 	// escaladeOubli : après ce temps sans nouvel échec, l'échelle redescend à
 	// son premier barreau. Sans cet oubli, quelqu'un qui s'est trompé dix fois
@@ -216,6 +223,13 @@ func (l *LoginRateLimiter) recordFailure(key string) {
 	now := l.now()
 	rec, ok := l.records[key]
 	if !ok {
+		if len(l.records) >= maxRecords && !l.faireDeLaPlaceLocked(now) {
+			// Table pleine d'enregistrements tous VERROUILLÉS : il faudrait pour cela des
+			// milliers de clés ayant chacune épuisé ses essais. On préfère ne pas suivre cette
+			// clé de plus que de laisser la mémoire croître sans borne.
+			l.mu.Unlock()
+			return
+		}
 		rec = &attemptRecord{windowStart: now}
 		l.records[key] = rec
 	}
@@ -296,6 +310,44 @@ func (l *LoginRateLimiter) purgeLocked(now time.Time) {
 		return
 	}
 	l.lastPurge = now
+	l.balayerLocked(now)
+}
+
+// faireDeLaPlaceLocked ramène la table sous son plafond avant d'y ajouter une clé. Rend false si
+// elle n'y parvient pas. Le verrou doit être tenu.
+//
+// D'abord le balayage ordinaire, sans attendre son prochain tour. Si la table est toujours pleine,
+// on retire les clés les moins récemment vues, jusqu'à 90 % du plafond : la marge évite de
+// recommencer à chaque nouvelle clé. Une clé actuellement VERROUILLÉE n'est jamais évincée —
+// l'évincer rendrait l'accès à qui vient de l'épuiser.
+func (l *LoginRateLimiter) faireDeLaPlaceLocked(now time.Time) bool {
+	l.balayerLocked(now)
+	if len(l.records) < maxRecords {
+		return true
+	}
+	type candidat struct {
+		cle string
+		vu  time.Time
+	}
+	var candidats []candidat
+	for k, rec := range l.records {
+		if !now.Before(rec.lockedUntil) {
+			candidats = append(candidats, candidat{k, rec.lastSeen})
+		}
+	}
+	sort.Slice(candidats, func(i, j int) bool { return candidats[i].vu.Before(candidats[j].vu) })
+	cible := maxRecords - maxRecords/10
+	for _, c := range candidats {
+		if len(l.records) < cible {
+			break
+		}
+		delete(l.records, c.cle)
+	}
+	return len(l.records) < maxRecords
+}
+
+// balayerLocked retire les enregistrements qui ne peuvent plus rien décider.
+func (l *LoginRateLimiter) balayerLocked(now time.Time) {
 	for k, rec := range l.records {
 		if !now.After(rec.lockedUntil) || now.Sub(rec.lastSeen) <= staleAfter {
 			continue

@@ -156,8 +156,17 @@ func TestCSVNeutraliseLesFormules(t *testing.T) {
 		{`-2+3`, `'-2+3`},
 		{`@SUM(A1:A9)`, `'@SUM(A1:A9)`},
 		{"	=1+1", "'	=1+1"},
-		{"=1+1", "'=1+1"},
+		{"=1+1", "'=1+1"},
 		{`+41 79 123 45 67`, `'+41 79 123 45 67`},
+		// Audit croisé Gemini, MED-09 : la formule précédée de blanc ou de caractères invisibles.
+		{"\n=1+1", "'\n=1+1"},
+		{"\r\n=HYPERLINK(\"x\")", "'\r\n=HYPERLINK(\"x\")"},
+		{" =1+1", "' =1+1"},
+		{"   @SUM(A1)", "'   @SUM(A1)"},
+		{"\u00a0=1+1", "'\u00a0=1+1"}, // espace sans chasse
+		{"\u200b=1+1", "'\u200b=1+1"}, // espace de largeur nulle (caractère de format)
+		{"\u200e-2+3", "'\u200e-2+3"}, // marque de sens de lecture
+		{"\x01=1+1", "'\x01=1+1"},     // caractère de contrôle
 		// Intacts : texte ordinaire, vide, montants.
 		{`Menuiserie Dupont`, `Menuiserie Dupont`},
 		{``, ``},
@@ -165,6 +174,10 @@ func TestCSVNeutraliseLesFormules(t *testing.T) {
 		{`+12`, `+12`},
 		{`2026-03-04`, `2026-03-04`},
 		{`a=b`, `a=b`},
+		{`   `, `   `},                   // que des espaces : rien à neutraliser
+		{"Dupont\n=1+1", "Dupont\n=1+1"}, // le « = » n'est pas en tête de cellule
+		{" Dupont", " Dupont"},
+		{"Café - Genève", "Café - Genève"},
 	} {
 		if got := neutraliserFormule(tc.in); got != tc.want {
 			t.Errorf("neutraliserFormule(%q) = %q, attendu %q", tc.in, got, tc.want)

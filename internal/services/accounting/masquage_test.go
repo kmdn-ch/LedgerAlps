@@ -34,6 +34,17 @@ func TestLesDonneesPersonnellesSontMasquees(t *testing.T) {
 		{"suffixée aussi", `{"address_city":"Lausanne"}`, `{"address_city":"[MASKED]"}`},
 		{"QR-IBAN", `{"qr_iban":"CH44 3199 9123 0008 8901 2"}`, `{"qr_iban":"[MASKED]"}`},
 
+		// Audit croisé Gemini, MED-06 : l'adresse en morceaux, le BIC, les secrets et la
+		// contrepartie d'un relevé. Aucun n'est écrit AUJOURD'HUI dans un état d'audit, mais
+		// la prochaine route qui tracera une adresse en morceaux ne doit pas avoir à y penser.
+		{"rue seule", `{"street":"Rue du Lac 3"}`, `{"street":"[MASKED]"}`},
+		{"localité seule", `{"city":"Lausanne"}`, `{"city":"[MASKED]"}`},
+		{"NPA", `{"postal_code":"1003"}`, `{"postal_code":"[MASKED]"}`},
+		{"BIC de la banque", `{"bank_bic":"POFICHBEXXX"}`, `{"bank_bic":"[MASKED]"}`},
+		{"jeton", `{"refresh_token":"abc.def"}`, `{"refresh_token":"[MASKED]"}`},
+		{"secret", `{"totp_secret":"JBSWY3DP"}`, `{"totp_secret":"[MASKED]"}`},
+		{"contrepartie", `{"counterparty":"Paul Dupont"}`, `{"counterparty":"[MASKED]"}`},
+
 		// Espace après les deux-points : un encodeur peut le produire.
 		{"avec espace", `{"iban": "CH93007620116"}`, `{"iban": "[MASKED]"}`},
 
@@ -67,6 +78,9 @@ func TestLeMasquageNeDeborde(t *testing.T) {
 		`{"currency":"CHF"}`,             //
 		`{"named_range":"x"}`,            // « named » n'est pas « name »
 		`{"nameless":"x"}`,               // idem
+		`{"secretary":"x"}`,              // « secretary » n'est pas « secret »
+		`{"citytrip":"x"}`,               // ni « citytrip » « city »
+		`{"zipped":"x"}`,                 // ni « zipped » « zip »
 		`{"total":1500}`,                 // valeur non textuelle
 		`{"champs_modifies":["status"]}`, // la liste des changements reste lisible
 	}
@@ -208,10 +222,14 @@ func TestLeDecoupageDesClesEnMots(t *testing.T) {
 		"company_name": true, "companyName": true, "CompanyName": true,
 		"address_street": true, "Email": true, "password_hash": true,
 		"IBANNumber": true, "supplier_email": true,
+		"street": true, "postal_code": true, "postalCode": true, "bank_bic": true,
+		"refresh_token": true, "client_secret": true, "counterparty_name": true,
+		"BIC": true, "zip": true,
 		// Ne le sont pas — c'est la moitié qui compte autant
 		"number": false, "document_type": false, "invoice_number": false,
 		"champs_modifies": false, "status": false, "created_at": false,
 		"amount": false, "vat_status": false,
+		"secretary": false, "citytrip": false, "bicycle": false, "tokens_count": false,
 	}
 	for cle, attendu := range cas {
 		if got := estChampSensible(cle); got != attendu {

@@ -1242,6 +1242,16 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Fornitore non trovato",
 		EN: "Supplier not found",
 	},
+	"ce contact est un client, pas un fournisseur : changez son type dans sa fiche, ou choisissez un autre fournisseur": {
+		DE: "Dieser Kontakt ist ein Kunde, kein Lieferant: Ändern Sie seinen Typ in seinem Eintrag oder wählen Sie einen anderen Lieferanten",
+		IT: "Questo contatto è un cliente, non un fornitore: cambiate il suo tipo nella scheda, oppure scegliete un altro fornitore",
+		EN: "This contact is a customer, not a supplier: change its type on its record, or pick another supplier",
+	},
+	"les factures fournisseurs n'ont pas pu être lues": {
+		DE: "Die Lieferantenrechnungen konnten nicht gelesen werden",
+		IT: "Le fatture dei fornitori non hanno potuto essere lette",
+		EN: "The supplier invoices could not be read",
+	},
 	"group_by doit valoir year, month ou contact": {
 		DE: "group_by muss year, month oder contact sein",
 		IT: "group_by dev’essere year, month o contact",

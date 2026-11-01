@@ -28,6 +28,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
+	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 )
 
 // UpdateSupplierInvoice PUT /api/v1/supplier-invoices/:id
@@ -59,10 +60,16 @@ func (h *SupplierInvoicesHandler) UpdateSupplierInvoice(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	var status string
+	// L'état d'AVANT sert deux fois : contrôler le fournisseur seulement s'il change, et
+	// laisser une trace qui dit CE QUI a bougé (audit croisé Gemini, MED-07).
+	var (
+		status, ancienFournisseur, ancienneRef, ancienneDevise string
+		ancienTotal                                            float64
+	)
 	if err := h.db.QueryRowContext(ctx,
-		db.Rebind(`SELECT status FROM supplier_invoices WHERE id = ?`, h.usePostgres), id).
-		Scan(&status); err == sql.ErrNoRows {
+		db.Rebind(`SELECT status, supplier_id, supplier_reference, currency, total_amount
+		           FROM supplier_invoices WHERE id = ?`, h.usePostgres), id).
+		Scan(&status, &ancienFournisseur, &ancienneRef, &ancienneDevise, &ancienTotal); err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "facture fournisseur introuvable"})
 		return
 	} else if err != nil {
@@ -75,6 +82,12 @@ func (h *SupplierInvoicesHandler) UpdateSupplierInvoice(c *gin.Context) {
 			"error": "cette facture est déjà comptabilisée : son écriture est scellée " +
 				"(CO art. 957a) et la modifier ferait mentir le journal. Passez par une " +
 				"écriture de correction."})
+		return
+	}
+
+	// Seulement si le fournisseur CHANGE : un brouillon dont le contact a changé de type depuis
+	// la saisie doit rester modifiable (montant, date) sans qu'on lui reproche un choix ancien.
+	if req.SupplierID != ancienFournisseur && !h.fournisseurAcceptable(c, ctx, req.SupplierID) {
 		return
 	}
 
@@ -148,6 +161,16 @@ func (h *SupplierInvoicesHandler) UpdateSupplierInvoice(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
 	}
+
+	// Modifier un brouillon ne laissait AUCUNE trace, alors que la création et les transitions
+	// en laissent (audit croisé Gemini, MED-07). Ce n'est qu'un brouillon, mais sa référence, sa
+	// devise, son montant et son fournisseur sont ce qu'un virement versera plus tard.
+	trace(c, h.db, h.usePostgres, TableSupplierInvoices,
+		ActionSupplierInvoiceUpdated, id, accounting.Modification(
+			map[string]any{"supplier_id": ancienFournisseur, "reference": ancienneRef,
+				"total": ancienTotal, "currency": ancienneDevise},
+			map[string]any{"supplier_id": req.SupplierID, "reference": req.SupplierReference,
+				"total": total, "currency": req.Currency}))
 
 	c.JSON(http.StatusOK, gin.H{
 		"id": id, "status": "draft",

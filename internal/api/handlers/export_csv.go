@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/kmdn-ch/ledgeralps/internal/i18n"
 )
@@ -92,16 +93,28 @@ var nombreSimple = regexp.MustCompile(`^[+-]?[0-9]+([.][0-9]+)?$`)
 //
 // Les nombres décimaux simples restent intacts : un montant négatif doit
 // rester un nombre.
+//
+// # Le premier caractère « utile »
+//
+// Le contrôle ne regardait que l'octet n° 1. Un libellé qui COMMENCE par un retour à la ligne, un
+// espace ou un caractère invisible suivi de « = » passait donc intact (audit croisé Gemini,
+// MED-09) : « ⏎=1+1 » ou « ␠=1+1 ». Aucun tableur n'a été essayé ici (non démontré), mais la
+// défense ne coûte qu'une apostrophe : on saute les espaces, les caractères de contrôle et les
+// caractères de format (espace sans chasse, marque de sens de lecture) avant de regarder, et un
+// retour à la ligne, une tabulation ou un retour chariot en tête suffisent à neutraliser.
 func neutraliserFormule(s string) string {
-	if s == "" {
-		return s
-	}
-	switch s[0] {
-	case '=', '+', '-', '@', '	', '':
-		if nombreSimple.MatchString(s) {
-			return s
+	for _, r := range s {
+		switch r {
+		case '=', '+', '-', '@', '\t', '\r', '\n':
+			if nombreSimple.MatchString(s) {
+				return s
+			}
+			return "'" + s
 		}
-		return "'" + s
+		if unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			continue
+		}
+		return s
 	}
 	return s
 }
@@ -149,6 +162,10 @@ func toRecords(v any) ([]map[string]any, error) {
 
 // extractNested sort les lignes imbriquées sous `field` dans leur propre liste,
 // en y ajoutant la clé étrangère `fkName` pointant sur l'identifiant du parent.
+//
+// La clé est posée sur la carte de la ligne ELLE-MÊME, sans la copier : ces cartes sortent d'un
+// décodage JSON fait pour produire le CSV, personne d'autre ne les lit, et la copie doublait la
+// mémoire des lignes d'écriture — la plus grosse table d'une archive (audit croisé Gemini, LOW-03).
 func extractNested(parents []map[string]any, field, fkName string) []map[string]any {
 	var out []map[string]any
 	for _, p := range parents {
@@ -162,42 +179,73 @@ func extractNested(parents []map[string]any, field, fkName string) []map[string]
 			if !ok {
 				continue
 			}
-			row := make(map[string]any, len(line)+1)
-			for k, v := range line {
-				row[k] = v
-			}
-			row[fkName] = parentID
-			out = append(out, row)
+			line[fkName] = parentID
+			out = append(out, line)
 		}
 	}
 	return out
 }
 
 // csvSet est un fichier CSV prêt à être ajouté à l'archive.
+//
+// `octets` garde la taille quand l'appelant lâche `data` : le LISEZ-MOI la liste, et l'archive ne
+// conserve pas tous les fichiers en mémoire en même temps (audit croisé Gemini, LOW-03).
 type csvSet struct {
-	name string
-	data []byte
+	name   string
+	data   []byte
+	octets int
+}
+
+// recordsFromJSON décode un tableau JSON déjà produit en liste d'objets : le même résultat que
+// `toRecords`, sans resérialiser la valeur d'origine (une copie de moins de toute la table).
+func recordsFromJSON(raw []byte) ([]map[string]any, error) {
+	var out []map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// tablesImbriquees : les tables dont les lignes sont imbriquées. Le parent perd sa colonne
+// `lines`, qui part dans un fichier dédié relié par clé étrangère.
+var tablesImbriquees = map[string]struct{ field, fk, child string }{
+	"journal_entries": {"lines", "entry_id", "journal_lines"},
+	"invoices":        {"lines", "invoice_id", "invoice_lines"},
+}
+
+// csvFilesFor produit les fichiers CSV d'UNE table : d'abord celui de ses lignes imbriquées, s'il
+// y en a, puis le sien. Elle consomme `records` : les lignes imbriquées en sont retirées dès que
+// leur fichier est écrit, pour qu'elles ne coexistent pas en mémoire avec celui du parent.
+func csvFilesFor(name string, records []map[string]any) ([]csvSet, error) {
+	var files []csvSet
+	add := func(file string, recs []map[string]any, skip map[string]bool) error {
+		data, err := csvFromRecords(recs, skip)
+		if err != nil {
+			return fmt.Errorf("%s: %w", file, err)
+		}
+		files = append(files, csvSet{name: file, data: data, octets: len(data)})
+		return nil
+	}
+
+	n, imbriquee := tablesImbriquees[name]
+	if !imbriquee {
+		return files, add(name+".csv", records, nil)
+	}
+	if err := add(n.child+".csv", extractNested(records, n.field, n.fk), nil); err != nil {
+		return nil, err
+	}
+	for _, r := range records {
+		delete(r, n.field)
+	}
+	if err := add(name+".csv", records, nil); err != nil {
+		return nil, err
+	}
+	return files, nil
 }
 
 // buildCSVFiles produit le jeu CSV correspondant aux données déjà exportées.
 func buildCSVFiles(sources map[string]any) ([]csvSet, error) {
 	var files []csvSet
-
-	add := func(name string, records []map[string]any, skip map[string]bool) error {
-		data, err := csvFromRecords(records, skip)
-		if err != nil {
-			return fmt.Errorf("%s: %w", name, err)
-		}
-		files = append(files, csvSet{name: name, data: data})
-		return nil
-	}
-
-	// Les tables dont les lignes sont imbriquées : le parent perd sa colonne
-	// `lines`, qui part dans un fichier dédié relié par clé étrangère.
-	nested := map[string]struct{ field, fk, child string }{
-		"journal_entries": {"lines", "entry_id", "journal_lines"},
-		"invoices":        {"lines", "invoice_id", "invoice_lines"},
-	}
 
 	names := make([]string, 0, len(sources))
 	for n := range sources {
@@ -210,18 +258,11 @@ func buildCSVFiles(sources map[string]any) ([]csvSet, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
-		if n, ok := nested[name]; ok {
-			if err := add(n.child+".csv", extractNested(records, n.field, n.fk), nil); err != nil {
-				return nil, err
-			}
-			if err := add(name+".csv", records, map[string]bool{n.field: true}); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if err := add(name+".csv", records, nil); err != nil {
+		fichiers, err := csvFilesFor(name, records)
+		if err != nil {
 			return nil, err
 		}
+		files = append(files, fichiers...)
 	}
 	return files, nil
 }
@@ -257,7 +298,7 @@ func csvReadme(l i18n.Lang, files []csvSet) []byte {
 	b.WriteString("Fichiers\n")
 	b.WriteString("--------\n")
 	for _, f := range files {
-		b.WriteString(fmt.Sprintf("  %-24s %7d octets\n", f.name, len(f.data)))
+		b.WriteString(fmt.Sprintf("  %-24s %7d octets\n", f.name, f.octets))
 	}
 	b.WriteString(t("\nNote sur les données personnelles (nLPD) : les IBAN des contacts sont\n"))
 	b.WriteString(t("masqués dans cet export, comme dans le JSON. L'export complet d'un IBAN\n"))

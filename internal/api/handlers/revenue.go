@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -48,6 +49,10 @@ type revenueResponse struct {
 	Rows     []revenueRow `json:"rows"`
 	Invoiced float64      `json:"total_invoiced"`
 	Paid     float64      `json:"total_paid"`
+	// Currencies liste les devises des pièces comptées. Les montants s'additionnent SANS
+	// conversion : dès qu'il y en a plus d'une, le total n'est pas un montant en francs, et
+	// l'écran doit le dire (audit croisé Gemini, MED-02).
+	Currencies []string `json:"currencies"`
 	// Basis énonce la convention retenue. Un total sans sa définition invite à
 	// le comparer à un autre calculé autrement.
 	Basis string `json:"basis"`
@@ -79,25 +84,37 @@ func (h *ReportsHandler) Revenue(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	rows, totals, err := h.revenueRows(ctx, groupBy, from, to)
+	rows, totals, currencies, err := h.revenueRows(ctx, groupBy, from, to)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+		erreurInterne(c, "erreur de base de données", err)
 		return
+	}
+
+	basis := "Factures émises (hors brouillons et annulées), notes de crédit déduites. " +
+		"Les offres de prix ne comptent pas : personne ne doit rien dessus. " +
+		"Même convention que la déclaration TVA. " +
+		// « Encaissé » n'est PAS un flux de trésorerie : c'est ce qui a été reçu à ce jour sur
+		// les factures dont la date d'ÉMISSION tombe dans la période (audit croisé Gemini,
+		// MED-02). Un paiement reçu en mars sur une facture de décembre figure en décembre.
+		"« Encaissé » : ce qui a été reçu à ce jour sur les factures émises dans la période, " +
+		"rattaché à leur date d'émission et non à la date du paiement : ce n'est pas un flux de trésorerie."
+	if len(currencies) > 1 {
+		basis += " Attention : les montants en " + strings.Join(currencies, ", ") +
+			" sont additionnés sans conversion ; ce total n'est pas un montant en francs."
 	}
 
 	c.JSON(http.StatusOK, revenueResponse{
 		GroupBy: groupBy, From: from, To: to,
 		Rows:     rows,
 		Invoiced: totals[0], Paid: totals[1],
-		Basis: "Factures émises (hors brouillons et annulées), notes de crédit déduites. " +
-			"Les offres de prix ne comptent pas : personne ne doit rien dessus. " +
-			"Même convention que la déclaration TVA.",
+		Currencies: currencies,
+		Basis:      basis,
 	})
 }
 
 func (h *ReportsHandler) revenueRows(
 	ctx context.Context, groupBy, from, to string,
-) ([]revenueRow, [2]float64, error) {
+) ([]revenueRow, [2]float64, []string, error) {
 	var totals [2]float64
 
 	// Expression de regroupement. `strftime` n'existe pas sur PostgreSQL et
@@ -163,7 +180,7 @@ func (h *ReportsHandler) revenueRows(
 
 	sqlRows, err := h.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, totals, err
+		return nil, totals, nil, err
 	}
 	defer sqlRows.Close()
 
@@ -171,7 +188,7 @@ func (h *ReportsHandler) revenueRows(
 	for sqlRows.Next() {
 		var r revenueRow
 		if err := sqlRows.Scan(&r.Key, &r.Label, &r.Invoiced, &r.Paid, &r.Count); err != nil {
-			return nil, totals, err
+			return nil, totals, nil, err
 		}
 		if r.Label == "" {
 			// Un contact supprimé de la base laisserait une ligne sans nom.
@@ -183,5 +200,33 @@ func (h *ReportsHandler) revenueRows(
 		totals[1] += r.Paid
 		out = append(out, r)
 	}
-	return out, totals, sqlRows.Err()
+	if err := sqlRows.Err(); err != nil {
+		return nil, totals, nil, err
+	}
+	currencies, err := h.revenueCurrencies(ctx, where, args)
+	if err != nil {
+		return nil, totals, nil, err
+	}
+	return out, totals, currencies, nil
+}
+
+// revenueCurrencies rend les devises des pièces que le rapport compte, triées. Même filtre que
+// les lignes : une pièce qui n'entre pas dans le total ne doit pas en annoncer la devise.
+func (h *ReportsHandler) revenueCurrencies(ctx context.Context, where string, args []any) ([]string, error) {
+	rows, err := h.db.QueryContext(ctx,
+		db.Rebind("SELECT DISTINCT i.currency FROM invoices i"+where+" ORDER BY 1", h.usePostgres), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	devises := []string{}
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		devises = append(devises, d)
+	}
+	return devises, rows.Err()
 }

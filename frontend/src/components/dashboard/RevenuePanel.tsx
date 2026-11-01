@@ -11,7 +11,7 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarRange, Users, Calendar, Info } from 'lucide-react'
+import { CalendarRange, Users, Calendar, Info, AlertTriangle } from 'lucide-react'
 import { revenueApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
 import { formatCHF } from '@/utils'
@@ -34,6 +34,7 @@ interface RevenueResponse {
   rows: RevenueRow[]
   total_invoiced: number
   total_paid: number
+  currencies?: string[]
   basis: string
 }
 
@@ -175,10 +176,20 @@ export function RevenuePanel() {
             </table>
           </div>
 
+          {/* Le texte vient de l'interface, pas du champ `basis` du serveur : celui-ci est en
+              français, et s'affichait tel quel sur une interface allemande (MED-02 / MED-16). */}
           <p className="mt-3 text-xs text-alpine-500 flex items-start gap-1.5">
             <Info size={12} className="mt-0.5 flex-shrink-0" />
-            {revenue.data.basis}
+            <span>
+              {t('ca.base')} {t('ca.noteEncaisse')}
+            </span>
           </p>
+          {(revenue.data.currencies?.length ?? 0) > 1 && (
+            <p role="alert" className="mt-2 text-xs text-amber-700 flex items-start gap-1.5">
+              <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+              <span>{t('ca.devisesMelangees', { devises: revenue.data.currencies!.join(', ') })}</span>
+            </p>
+          )}
         </>
       )}
     </div>
