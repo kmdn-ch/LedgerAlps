@@ -118,8 +118,8 @@ func MaybeRotateJWTSecret(cfg *Config, now time.Time) (bool, error) {
 	// que la clé en service restait celle de l'installation. Ne rien faire et
 	// le DIRE (voir RotationStatus) vaut mieux qu'une promesse intenable.
 	//
-	// Deux des trois chemins d'installation livrés sont dans ce cas :
-	// Linux/systemd et Windows Service. Le chemin NSIS/lanceur, lui, ne passe plus le secret
+	// Le chemin Linux/systemd est dans ce cas, comme tout serveur lancé avec JWT_SECRET dans son
+	// environnement. Le chemin NSIS/lanceur, lui, ne passe plus le secret
 	// par l'environnement (cmd/launcher, `serverEnv`) et tourne normalement. Il le faisait
 	// jusqu'à la 1.6.5, et la rotation n'y tournait donc jamais — d'où la revue de ce
 	// commentaire, qui promettait le contraire (audit croisé Gemini, CRIT-16).

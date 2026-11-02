@@ -729,7 +729,7 @@ avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
 | GET | `/vat/rates` | auth | Taux suisses en vigueur |
-| POST | `/vat/declaration` | auth | Déclaration TVA (effective ou TDFN) ; les factures `sent`, `paid` **et `archived`** comptent (on n'archive qu'une facture payée). `POST` mais **lecture** : elle ne modifie rien, et le rôle lecture seule la reçoit |
+| POST | `/vat/declaration` | auth | Déclaration TVA (effective ou TDFN) ; les factures `sent`, `paid` **et `archived`** comptent (on n'archive qu'une facture payée). `POST` mais **lecture** : elle ne modifie rien, et le rôle lecture seule la reçoit. **Méthode `tdfn`** : applique le taux ACCORDÉ par l'AFC (`tdfn_rate` de la fiche entreprise, en %) au chiffre d'affaires **TTC** des factures **à taux positif**, avoirs déduits ; la réponse porte `tdfn_rate` et `tdfn_base`. **Refusée (`422`) sans taux saisi** : LedgerAlps ne le devine pas (il appliquait « taux normal × 0,8 », soit 6,48 %, un taux qu'aucune branche ne porte). Le chiffre d'affaires à 0 % (exportation, prestation exclue) n'entre pas dans la base ; l'impôt préalable n'est pas déductible en TDFN |
 | GET | `/fiscal-years` | auth | Exercices déclarés, du plus récent au plus ancien |
 | POST | `/fiscal-years` | **admin** | Déclarer un exercice (`name`, `start_date`, `end_date`). Refuse tout chevauchement (`409`) ; le contrôle et l'insertion vivent dans une transaction. `409` aussi pour un nom pris — et seulement pour lui : toute autre panne répond `500` |
 | POST | `/fiscal-years/:id/close` | **admin** | Clôture (CO art. 958) : vire produits et charges au résultat, verrouille la période, ouvre la suivante. Une seule transaction ; **chaque** compte de produits ou de charges reçoit sa ligne de clôture quel que soit le sens de son solde, et l'écriture (`CLOTURE-AAAA`) est refusée si elle ne s'équilibre pas au centime. Deux exercices qui finissent la **même année** (exercice court, changement de date de clôture) reçoivent `CLOTURE-AAAA` puis `CLOTURE-AAAA-2` ; l'exercice suivant n'est créé que si sa période n'est **couverte par aucun exercice** (jugé sur les dates, pas sur le nom). L'adresse du client entre au maillon d'audit |
@@ -885,7 +885,7 @@ la chaîne.
 | POST | `/audit-logs/attestation/verify` | **admin** | Vérifier une attestation qu'on nous présente — la sienne, ou celle qu'un client a remise. Le fichier va dans un formulaire (`file`) ou dans le corps. Rend trois contrôles : le sceau du document, la correspondance de l'empreinte de tête avec les livres au même numéro de séquence, et l'état actuel de la chaîne |
 | GET | `/compliance/advisories` | auth | Avis de conformité — voir [compliance](../compliance/README.md) |
 | GET | `/security-events` | **admin** | Verrouillages de connexion (`login_lockout`) et de second facteur (`mfa_lockout`, qui nomme le compte et n'a pas d'adresse). Contient des adresses IP — nLPD |
-| GET | `/exports/legal-archive` | auth | Archive ZIP 10 ans avec manifeste (CO art. 958f). Contient le JSON **et** un dossier `csv/` — export de réversibilité ouvrable dans un tableur, avec les lignes imbriquées extraites dans leurs propres fichiers |
+| GET | `/exports/legal-archive` | auth | Archive ZIP 10 ans avec manifeste (CO art. 958f). Contient le JSON **et** un dossier `csv/` — export de réversibilité ouvrable dans un tableur, avec les lignes imbriquées extraites dans leurs propres fichiers. Plan comptable, écritures, factures émises, contacts, exercices, **et les pièces et mouvements : factures fournisseurs (avec leurs lignes et leur règlement), paiements, écritures de relevé bancaire et journal d'audit**. Le journal d'audit est exporté **en entier**, quels que soient `fiscal_year_id`, `from` et `to` : sa chaîne d'empreintes (`prev_hash`, `entry_hash`) ne se vérifie que continue ; les autres tables suivent la période |
 
 > **Pourquoi une vérification de chaîne, et pas seulement par entrée.** Vérifier
 > une entrée recalcule sa propre empreinte : cela détecte la modification de son
@@ -913,7 +913,7 @@ la chaîne.
 | Méthode | Route | Accès | Description |
 |---|---|---|---|
 | GET | `/settings/company` | auth | Profil de l'entreprise |
-| PUT | `/settings/company` | **admin** | Modifier le profil |
+| PUT | `/settings/company` | **admin** | Modifier le profil. `tdfn_rate` : le taux de la dette fiscale nette que l'AFC a accordé, en pour cent (`0,01` à `8,1`, deux décimales) ; **absent = ne touche pas**, `0` l'efface, hors bornes `422` avant toute écriture |
 | POST | `/settings/logo` | auth | Téléverser le logo |
 | DELETE | `/settings/logo` | auth | Supprimer le logo |
 | POST | `/settings/server/rotate-secret` | **admin** | Régénère le secret de signature des jetons. **Refusé (`409`, `reason: "secret_from_environment"`)** quand la clé vient de la variable `JWT_SECRET` : la variable reprendrait la main au démarrage suivant, et répondre « régénéré » serait faux. Déconnecte toutes les sessions et **rien d'autre** : mots de passe intacts (bcrypt), aucune donnée touchée, sauvegardes toujours utilisables — elles ne contiennent pas `config.json`. Prend effet au redémarrage ; les jetons de rafraîchissement en base sont révoqués au passage |

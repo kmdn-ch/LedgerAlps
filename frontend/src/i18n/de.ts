@@ -387,6 +387,7 @@ export const de: Catalogue = {
 
   // ─── Validation et paramètres ───
   'val.requis': 'Erforderlich',
+  'val.tauxTDFN': 'Ein Satz zwischen 0,01 und 8,1 (z. B. 6,1)',
   'val.nomRequis': 'Name erforderlich',
   'val.adresseRequise': 'Adresse für die QR-Rechnung erforderlich',
   'val.npaRequis': 'PLZ für die QR-Rechnung erforderlich',
@@ -1314,6 +1315,8 @@ export const de: Catalogue = {
   'pr.tvaNonAssujettiAide': 'Umsatz unter der Schwelle, oder ausgenommene Tätigkeit. Ihre Zeilen starten bei 0 %: MWSTG Art. 27 Abs. 1 untersagt Ihnen den Ausweis der Steuer.',
   'pr.tvaNonDeclare': 'Solange Sie nicht geantwortet haben, wendet LedgerAlps standardmässig 8.1 % an und verweigert die Rechnung, wenn keine MWST-Nummer hinterlegt ist.',
   'pr.tvaAFCAide': 'Auf jeder Rechnung mit MWST verlangt (MWSTG Art. 26 Abs. 2 Bst. a). Ohne sie stellt LedgerAlps das Dokument nicht aus.',
+  'pr.tdfnTaux': 'Von der ESTV bewilligter SSS-Satz (%)',
+  'pr.tdfnAide': 'Nur wenn Sie nach dem Saldosteuersatz abrechnen: der Ihnen von der ESTV bewilligte, branchenspezifische Satz (er steht in ihrem Bestätigungsschreiben). LedgerAlps berechnet ihn nicht und schlägt ihn nicht vor; ohne ihn wird die SSS-Abrechnung abgelehnt. Er gilt für den Umsatz inkl. MWST der Rechnungen mit positivem Steuersatz, abzüglich Gutschriften.',
   'pr.tvaNumeroEfface': 'Die MWST-Nummer wurde entfernt: sie wird auf die Rechnung gedruckt, und sie dort zu lassen widerspräche Ihrer Erklärung.',
   'pr.virementAide': 'Diese Angaben erscheinen zusätzlich auf der Rechnung für einen Kunden, der per Überweisung statt mit dem QR-Code zahlt — typischerweise aus dem Ausland. Lassen Sie sie leer, wenn Sie nur in der Schweiz vereinnahmen.',
   'mr.tvaTitre': 'Ihr MWST-Status',

@@ -25,6 +25,12 @@ const schema = z.object({
   // '' = non déclaré. Ce n'est pas un défaut technique mais une réponse
   // manquante : la distinguer de « non assujetti » est tout l'intérêt du champ.
   vat_status:            z.enum(['', 'liable', 'exempt']).default(''),
+  // Le taux de la dette fiscale nette que l'AFC a ACCORDÉ (méthode TDFN) : facultatif, jamais deviné.
+  // Saisi comme du texte pour distinguer « vide » de « 0 », et accepter la virgule suisse.
+  tdfn_rate:             z.string().default('').refine(
+    v => v.trim() === '' || (/^\d+([.,]\d{1,2})?$/.test(v.trim()) &&
+      Number(v.trim().replace(',', '.')) > 0 && Number(v.trim().replace(',', '.')) <= 8.1),
+    'val.tauxTDFN'),
   phone:                 z.string().default(''),
   bank_name:             z.string().default(''),
   bank_address:          z.string().default(''),
@@ -111,6 +117,7 @@ export function SettingsPage() {
       che_number: '',
       vat_number: '',
       vat_status: '',
+      tdfn_rate: '',
       phone: '',
       bank_name: '',
       bank_address: '',
@@ -136,6 +143,7 @@ export function SettingsPage() {
         che_number:            company.che_number             ?? '',
         vat_number:            company.vat_number             ?? '',
         vat_status:            (company.vat_status as FormData['vat_status']) ?? '',
+        tdfn_rate:             company.tdfn_rate ? String(company.tdfn_rate).replace('.', ',') : '',
         phone:                 company.phone                  ?? '',
         bank_name:             company.bank_name              ?? '',
         bank_address:          company.bank_address           ?? '',
@@ -154,7 +162,12 @@ export function SettingsPage() {
   }, [company, reset])
 
   const save = useMutation({
-    mutationFn: (data: FormData) => settingsApi.putCompany(data),
+    // Vide = 0 : le serveur efface le taux. Absent, il ne le toucherait pas — et effacer le champ
+    // à l'écran sans l'effacer en base serait un mensonge.
+    mutationFn: (data: FormData) => settingsApi.putCompany({
+      ...data,
+      tdfn_rate: data.tdfn_rate.trim() === '' ? 0 : Number(data.tdfn_rate.trim().replace(',', '.')),
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['company-settings'] })
       // La liste de mise en route relit ces mêmes champs. Sans cette ligne,
@@ -507,6 +520,22 @@ export function SettingsPage() {
                     <label className="label">{t('pr.tvaAFC')}</label>
                     <input className="input font-mono" placeholder="CHE-123.456.789 MWST" {...register('vat_number')} />
                     <p className="text-xs text-alpine-400 mt-1">{t('pr.tvaAFCAide')}</p>
+                  </div>
+                )}
+                {/* Le taux de la dette fiscale nette : celui que l'AFC a ACCORDÉ, propre à la branche, confirmé
+                    par sa lettre. LedgerAlps ne le calcule pas et ne le propose pas : un taux inventé partirait
+                    dans une déclaration à l'administration. Sans lui, la déclaration TDFN est refusée. */}
+                {watch('vat_status') === 'liable' && (
+                  <div className="col-span-2">
+                    <label className="label" htmlFor="tdfn-rate">
+                      {t('pr.tdfnTaux')} <span className="text-alpine-400">{t('pr.facultatif')}</span>
+                    </label>
+                    <input id="tdfn-rate" className="input w-32 font-mono" inputMode="decimal"
+                           placeholder="6,1" {...register('tdfn_rate')} />
+                    {errors.tdfn_rate && (
+                      <p className="text-xs text-danger-700 mt-1">{tv(errors.tdfn_rate.message)}</p>
+                    )}
+                    <p className="text-xs text-alpine-400 mt-1">{t('pr.tdfnAide')}</p>
                   </div>
                 )}
                 {watch('vat_status') === 'exempt' && (

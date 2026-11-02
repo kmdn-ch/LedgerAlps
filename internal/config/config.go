@@ -61,10 +61,9 @@ type Config struct {
 	// JWTSecretDepuisEnv dit que la clé vient de la variable d'environnement
 	// JWT_SECRET, et non du fichier de configuration.
 	//
-	// Sur les deux chemins d'installation « service » — Linux/systemd via
-	// `EnvironmentFile=`, Windows Service via la valeur REG_MULTI_SZ
-	// `Environment` posée par scripts/install.ps1 — cette variable est chargée
-	// à chaque démarrage. `applyEnvOverrides` la réimpose alors par-dessus toute
+	// Sur le chemin d'installation « service » — Linux/systemd via
+	// `EnvironmentFile=` — cette variable est chargée à chaque démarrage. (Le service Windows
+	// que posait scripts/install.ps1 n'existe plus : le binaire ne sait pas en être un.) `applyEnvOverrides` la réimpose alors par-dessus toute
 	// clé tournée relue du fichier, et cette préséance est VOULUE (voir le
 	// commentaire de Load : le fichier gagnait, ce qui rendait SQLITE_PATH et
 	// consorts inatteignables).

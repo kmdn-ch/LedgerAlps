@@ -75,15 +75,52 @@ func TestLInstallationWindowsGardeSesGardeFous(t *testing.T) {
 			t.Errorf("install.ps1 ne contient plus %q", attendu)
 		}
 	}
-	// L'arrêt du service précède la copie des binaires.
-	stop := strings.Index(ps, `Stop-Service -Name "LedgerAlps"`)
+	// Un service hérité et le serveur en marche sont écartés AVANT la copie des binaires.
 	copie := strings.Index(ps, `Copy-Item $serverExe.FullName`)
-	if stop < 0 || copie < 0 || stop > copie {
-		t.Errorf("le service n'est pas arrêté AVANT la copie des binaires (arrêt %d, copie %d)", stop, copie)
+	for _, appel := range []string{"    Remove-ObsoleteService", "    Assert-AucunServeurEnCours"} {
+		if i := strings.Index(ps, appel); i < 0 || copie < 0 || i > copie {
+			t.Errorf("%q n'est pas appelé AVANT la copie des binaires (appel %d, copie %d)", strings.TrimSpace(appel), i, copie)
+		}
 	}
 	// Le contrôle du dossier précède sa création.
 	if strings.Index(ps, "Assert-DossierDeDonnees -Chemin $DataDir") > strings.Index(ps, "Install-Binaries -Tag") {
 		t.Error("le dossier de données est contrôlé APRÈS le début de l'installation")
+	}
+}
+
+// CRIT-15 (décision du propriétaire : retirer le chemin « service »). ledgeralps-server.exe n'appelle
+// jamais StartServiceCtrlDispatcher : un service qui pointe sur lui échoue au démarrage (erreur 1053).
+// install.ps1 n'en enregistre plus, retire celui d'une exécution antérieure — seulement s'il pointe sur
+// NOTRE binaire — et ne tue pas un serveur en marche.
+func TestInstallPs1NEnregistrePlusDeServiceEtRetireLAncien(t *testing.T) {
+	ps := racine(t, "scripts", "install.ps1")
+	for _, interdit := range []string{"sc.exe create", "New-Service", "Register-Service", "sc.exe failure", "start= auto"} {
+		if strings.Contains(ps, interdit) {
+			t.Errorf("install.ps1 enregistre encore un service (%q) : le binaire ne sait pas en être un", interdit)
+		}
+	}
+	for _, attendu := range []string{
+		"function Remove-ObsoleteService",
+		`-notlike "*ledgeralps-server.exe*"`, // un service du même nom qui n'est pas le nôtre reste intact
+		"function Assert-AucunServeurEnCours",
+		"is obsolete and ignored",
+	} {
+		if !strings.Contains(ps, attendu) {
+			t.Errorf("install.ps1 ne contient plus %q", attendu)
+		}
+	}
+	// Et le binaire n'a toujours pas le protocole de service : s'il l'a un jour, cette décision se rouvre.
+	for _, dossier := range []string{"cmd", "internal"} {
+		_ = filepath.Walk(filepath.Join("..", "..", dossier), func(chemin string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(chemin, ".go") || strings.HasSuffix(chemin, "_test.go") {
+				return nil
+			}
+			b, _ := os.ReadFile(chemin)
+			if strings.Contains(string(b), "windows/svc") {
+				t.Errorf("%s utilise windows/svc : le binaire peut maintenant être un service, la décision CRIT-15 se rouvre", chemin)
+			}
+			return nil
+		})
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -40,6 +41,9 @@ type companySettingsRequest struct {
 	// formulaire qui ne porte pas ce champ remettrait sinon le statut à « non
 	// déclaré » à chaque enregistrement.
 	VatStatus *string `json:"vat_status,omitempty"`
+	// TdfnRate : le taux de la dette fiscale nette que l'AFC a ACCORDÉ, en pour cent. Pointeur, comme
+	// VatStatus — « absent » veut dire « ne touche pas » ; 0 l'efface. Jamais calculé par LedgerAlps.
+	TdfnRate *float64 `json:"tdfn_rate,omitempty"`
 	// Coordonnées de contact. Pas exigées par la LTVA art. 26, mais une facture
 	// qu'on ne peut pas contester facilement se paie tard, ou pas.
 	Phone string `json:"phone"`
@@ -59,6 +63,14 @@ type companySettingsRequest struct {
 	Currency             string `json:"currency"`
 }
 
+// tauxOuZero : l'absence de taux se trace comme 0, la valeur qu'une relecture de `avant` rend aussi.
+func tauxOuZero(t *float64) float64 {
+	if t == nil {
+		return 0
+	}
+	return *t
+}
+
 // GetCompany godoc
 // GET /api/v1/settings/company
 // Returns the singleton company settings row. If no row exists yet, returns
@@ -74,7 +86,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 		       COALESCE(phone,''), COALESCE(email,''),
 		       COALESCE(bank_name,''), COALESCE(bank_address,''), COALESCE(bank_bic,''), iban,
 		       COALESCE(auto_post_invoices,0),
-		       fiscal_year_start_month, currency, logo_data,
+		       fiscal_year_start_month, currency, logo_data, tdfn_rate,
 		       created_at, updated_at
 		FROM company_settings
 		LIMIT 1`, h.usePostgres)
@@ -87,7 +99,7 @@ func (h *SettingsHandler) GetCompany(c *gin.Context) {
 		&s.CheNumber, &s.VatNumber, &s.VatStatus, &s.Phone, &s.Email,
 		&s.BankName, &s.BankAddress, &s.BankBIC, &s.IBAN,
 		&autoPost,
-		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
+		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData, &s.TdfnRate,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -144,6 +156,23 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		}
 	}
 
+	// Le taux TDFN se valide au même endroit, avant la première écriture. Aucun taux n'est « normal » :
+	// celui de l'AFC est propre à la branche de l'entreprise, entre quelques dixièmes de pour cent et
+	// le taux normal, qu'il ne dépasse jamais. 0 efface le taux saisi.
+	var tauxTDFN *float64
+	if req.TdfnRate != nil {
+		r := math.Round(*req.TdfnRate*100) / 100
+		if r < 0 || r > 8.1 {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": "le taux TDFN doit être compris entre 0,01 et 8,1 pour cent : saisissez celui que l'AFC vous a accordé, ou 0 pour l'effacer",
+			})
+			return
+		}
+		if r > 0 {
+			tauxTDFN = &r
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
@@ -173,7 +202,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		       COALESCE(phone,''), COALESCE(email,''),
 		       COALESCE(bank_name,''), COALESCE(bank_address,''),
 		       COALESCE(bank_bic,''), COALESCE(iban,''),
-		       COALESCE(fiscal_year_start_month,1), COALESCE(currency,'')
+		       COALESCE(fiscal_year_start_month,1), COALESCE(currency,''), COALESCE(tdfn_rate,0)
 		  FROM company_settings LIMIT 1`, h.usePostgres)
 	var (
 		avCompanyName, avLegalForm, avStreet, avNPA, avCity, avCountry string
@@ -182,13 +211,14 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		avCHE, avVAT, avPhone, avEmail, avBankName, avBIC, avIBAN      string
 		avCurrency                                                     string
 		avFiscalMonth                                                  int
+		avTDFN                                                         float64
 	)
 	err := h.db.QueryRowContext(ctx, selectQ).Scan(
 		&existingID, &avCompanyName, &avLegalForm,
 		&avStreet, &avNPA, &avCity, &avCountry,
 		&avCHE, &avVAT, &avVatStatus, &avAutoPost, &avPhone, &avEmail,
 		&avBankName, &avBankAddress, &avBIC, &avIBAN,
-		&avFiscalMonth, &avCurrency)
+		&avFiscalMonth, &avCurrency, &avTDFN)
 	if err == nil {
 		avant = map[string]any{
 			"company_name": avCompanyName, "legal_form": avLegalForm,
@@ -200,6 +230,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 			"bank_name": avBankName, "bank_address": avBankAddress,
 			"bank_bic": avBIC, "iban": avIBAN,
 			"fiscal_year_start_month": avFiscalMonth, "currency": avCurrency,
+			"tdfn_rate": avTDFN,
 		}
 	}
 
@@ -317,6 +348,19 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		}
 	}
 
+	// Le taux TDFN : fourni ou pas touché ; 0 l'efface (NULL).
+	if req.TdfnRate != nil {
+		tdfnQ := db.Rebind(`UPDATE company_settings SET tdfn_rate = ?, updated_at = ?`, h.usePostgres)
+		var valeur any
+		if tauxTDFN != nil {
+			valeur = *tauxTDFN
+		}
+		if _, err := tx.ExecContext(ctx, tdfnQ, valeur, now); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
+			return
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
 		return
@@ -330,7 +374,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		       COALESCE(phone,''), COALESCE(email,''),
 		       COALESCE(bank_name,''), COALESCE(bank_address,''), COALESCE(bank_bic,''), iban,
 		       COALESCE(auto_post_invoices,0),
-		       fiscal_year_start_month, currency, logo_data,
+		       fiscal_year_start_month, currency, logo_data, tdfn_rate,
 		       created_at, updated_at
 		FROM company_settings WHERE id = ?`, h.usePostgres)
 
@@ -342,7 +386,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		&s.CheNumber, &s.VatNumber, &s.VatStatus, &s.Phone, &s.Email,
 		&s.BankName, &s.BankAddress, &s.BankBIC, &s.IBAN,
 		&autoPostOut,
-		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData,
+		&s.FiscalYearStartMonth, &s.Currency, &s.LogoData, &s.TdfnRate,
 		&s.CreatedAt, &s.UpdatedAt,
 	); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erreur de base de données"})
@@ -372,6 +416,7 @@ func (h *SettingsHandler) PutCompany(c *gin.Context) {
 		"bank_name": s.BankName, "bank_address": s.BankAddress,
 		"bank_bic": s.BankBIC, "iban": s.IBAN,
 		"fiscal_year_start_month": s.FiscalYearStartMonth, "currency": s.Currency,
+		"tdfn_rate": tauxOuZero(s.TdfnRate),
 	}
 	// C'est `avant` qui dit si une fiche précédait, PAS `existingID`.
 	//

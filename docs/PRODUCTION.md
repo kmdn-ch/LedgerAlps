@@ -43,8 +43,8 @@ export JWT_SECRET=$(openssl rand -hex 32)
 
 ### Ce que fixer `JWT_SECRET` désactive
 
-Poser `JWT_SECRET` dans l'environnement du service — c'est ce que font
-`EnvironmentFile=` sous systemd et la valeur `Environment` du service Windows —
+Poser `JWT_SECRET` dans l'environnement du service — c'est ce que fait
+`EnvironmentFile=` sous systemd —
 **désactive la rotation quotidienne de la clé de signature**.
 
 Ce n'est pas un défaut, c'est une conséquence de la préséance : la variable
@@ -144,13 +144,13 @@ sudo systemctl enable --now ledgeralps
 Il existe **trois** façons d'installer LedgerAlps sous Windows. Deux étaient
 documentées, la troisième vivait dans le dépôt sans que rien ne la mentionne —
 elle l'est maintenant, parce qu'elle change le modèle de données et le
-comportement de la rotation.
+comportement de la rotation. **Aucune n'installe de service Windows** (voir plus bas).
 
 | Chemin | Ce qu'il installe | Où vivent les données | Rotation de la clé |
 |---|---|---|---|
 | **Installeur `.exe` (NSIS)** — le choix par défaut | Lanceur + serveur + CLI, application de bureau | `%APPDATA%\LedgerAlps` (par utilisateur) | **Active**, quotidienne |
 | **Archive `.zip`** — décompression manuelle | Les binaires, rien d'autre | où vous lancez le serveur | Active si vous ne posez pas `JWT_SECRET` |
-| **`scripts/install.ps1`** — service Windows | Serveur + CLI, **sans lanceur ni assistant** | `C:\ProgramData\LedgerAlps` (machine entière) | **Désactivée** (voir §2) |
+| **`scripts/install.ps1`** — binaires seuls | Serveur + CLI, **sans lanceur ni assistant, sans service** | `C:\ProgramData\LedgerAlps` (machine entière) | **Désactivée** si vous posez `JWT_SECRET` (voir §2) |
 
 > **Correction de la 1.6.6 (audit croisé Gemini, CRIT-16).** La colonne « Active, quotidienne » de
 > l'installeur `.exe` était une promesse que le code ne tenait pas : le lanceur passait
@@ -159,9 +159,16 @@ comportement de la rotation.
 > clé dans `config.json`, et la rotation s'applique. **À la première mise à jour vers la 1.6.6,
 > toute session ouverte se reconnecte une fois** (la clé tourne, son âge étant inconnu).
 
-`install.ps1` enregistre un véritable service Windows sous un compte de service
-virtuel dédié (`NT SERVICE\LedgerAlps`), avec des ACL restreintes, et vérifie
-l'empreinte SHA-256 de l'archive avant de l'installer.
+`install.ps1` installe les binaires dans `C:\Program Files\LedgerAlps`, les ajoute au `PATH`, écrit un
+modèle de configuration (`ledgeralps.env.example`) dans un dossier de données aux droits restreints, et
+vérifie l'empreinte SHA-256 de l'archive avant de l'installer. **Il n'enregistre plus de service Windows**
+(audit croisé Gemini, CRIT-15, décision du propriétaire) : `ledgeralps-server.exe` n'appelle jamais
+`StartServiceCtrlDispatcher`, donc le Gestionnaire de services attendait en vain et abandonnait avec
+l'erreur 1053 — le « service » ne pouvait pas démarrer. Un service laissé par une exécution antérieure du
+script est **arrêté et supprimé** (seulement s'il pointe sur `ledgeralps-server.exe`), et un serveur en
+marche depuis le dossier d'installation est **nommé, pas tué**. L'option `-NoService` est obsolète et
+ignorée. Pour garder le serveur actif sans session ouverte, confiez la commande à un superviseur de votre
+choix (Planificateur de tâches, NSSM…) ; l'installeur `.exe` reste la voie recommandée sous Windows.
 
 ```powershell
 irm https://raw.githubusercontent.com/kmdn-ch/ledgeralps/main/scripts/install.ps1 | iex
@@ -172,14 +179,12 @@ Le script **refuse un dossier de données préexistant qui n'est pas digne de co
 propriétaire — il garde alors le droit de modifier les droits, donc de lire la clé de session et la
 comptabilité, quoi que l'installation fasse ensuite. Il s'arrête si `C:\ProgramData\LedgerAlps` est
 une jonction, ou n'appartient ni à SYSTEM, ni au groupe Administrateurs, ni au compte qui installe, et dit
-quoi faire. Sur une mise à jour, le service en marche est arrêté **avant** le remplacement de ses
-binaires. *Ce chemin reste celui de l'audit « service Windows » (CRIT-15) : il ne devient pas un
-service tant que cette décision n'est pas prise.*
+quoi faire. Sur une mise à jour, un serveur encore en marche est signalé **avant** le remplacement de
+ses binaires.
 
-Choisissez-le pour un poste partagé ou un petit serveur, où LedgerAlps doit
-tourner sans session ouverte. Choisissez l'installeur `.exe` pour un poste de
-travail : c'est le seul des trois à fournir l'assistant de configuration et la
-rotation automatique de la clé.
+Choisissez-le pour un petit serveur que vous supervisez vous-même. Choisissez l'installeur `.exe` pour un
+poste de travail : c'est le seul des trois à fournir l'assistant de configuration et la rotation
+automatique de la clé.
 
 **Ne mélangez pas les deux sur la même machine** : ils écrivent à des endroits
 différents (`%APPDATA%` contre `C:\ProgramData`), et vous vous retrouveriez avec

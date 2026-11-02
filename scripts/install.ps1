@@ -5,8 +5,13 @@
 
 .DESCRIPTION
     Downloads and installs LedgerAlps on Windows.
-    Installs ledgeralps-server.exe to C:\Program Files\LedgerAlps\,
-    adds the directory to the system PATH, and registers a Windows Service.
+    Installs ledgeralps-server.exe and ledgeralps-cli.exe to C:\Program Files\LedgerAlps\,
+    adds the directory to the system PATH and writes a configuration template.
+
+    This script does NOT register a Windows Service. ledgeralps-server.exe does not speak
+    the Service Control Manager protocol, so a service pointing at it could never start
+    (error 1053). A service left by an earlier run of this script is stopped and removed.
+    For a desktop installation use the Windows installer (LedgerAlps_Setup_*.exe).
 
 .PARAMETER Version
     Specific version to install (e.g. "v1.2.3"). Defaults to latest release.
@@ -18,7 +23,8 @@
     Data directory for config and SQLite DB. Default: C:\ProgramData\LedgerAlps
 
 .PARAMETER NoService
-    Skip Windows Service registration.
+    Obsolete and ignored: this script no longer registers a service. Kept so that
+    existing command lines keep working.
 
 .EXAMPLE
     # Latest version
@@ -200,7 +206,7 @@ function Install-Binaries {
     # Verifier l'empreinte AVANT d'extraire et d'installer.
     #
     # GoReleaser publie deja ces empreintes. Les ignorer revenait a copier dans
-    # C:\Program Files, puis a enregistrer en service a demarrage automatique,
+    # C:\Program Files, puis a laisser sur le PATH de tous les comptes,
     # ce que le reseau avait bien voulu rendre. Le mode d'emploi documente est
     # « irm ... | iex » : il n'y a aucune autre occasion d'inspecter.
     Write-Info "Verifying checksum..."
@@ -233,15 +239,12 @@ function Install-Binaries {
     }
     Write-Success "Checksum verified"
 
-    # Le service est ARRETE avant de remplacer ses binaires (audit croise Gemini, HIGH-25). Il l'etait
-    # plus loin, a l'enregistrement : la copie qui precede echouait donc -- « fichier utilise par un
-    # autre processus » -- sur toute mise a jour par-dessus un service en marche.
-    $enMarche = Get-Service -Name "LedgerAlps" -ErrorAction SilentlyContinue
-    if ($enMarche -and $enMarche.Status -ne "Stopped") {
-        Write-Info "Stopping the running service before replacing its binaries..."
-        Stop-Service -Name "LedgerAlps" -Force
-        $enMarche.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
-    }
+    # Les binaires ne se remplacent pas tant que le serveur tourne : un service laisse par une
+    # execution anterieure de ce script est retire AVANT la copie (audit croise Gemini, HIGH-25 :
+    # la copie echouait « fichier utilise par un autre processus »), et un serveur lance a la main
+    # ou par le lanceur est nomme, pas tue.
+    Remove-ObsoleteService
+    Assert-AucunServeurEnCours
 
     Write-Info "Extracting to $InstallDir..."
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
@@ -249,7 +252,7 @@ function Install-Binaries {
 
     # Chemins ATTENDUS, pas une fouille recursive : -Recurse ramasserait le
     # premier fichier de ce nom trouve, quelle qu'en soit l'origine, pour aller
-    # l'installer en service.
+    # l'installer dans C:\Program Files.
     $serverExe = Get-Item (Join-Path $tmpDir "ledgeralps-server.exe") -ErrorAction SilentlyContinue
     $cliExe    = Get-Item (Join-Path $tmpDir "ledgeralps-cli.exe")    -ErrorAction SilentlyContinue
 
@@ -313,8 +316,8 @@ function Write-EnvTemplate {
     # Les ACL heritees de C:\ProgramData donnent la lecture au groupe Users :
     # tout compte local de la machine lisait la cle et pouvait forger un jeton
     # administrateur. On coupe l'heritage et on ne laisse que SYSTEM et les
-    # administrateurs ; le compte de service recoit son acces plus tard, a
-    # l'enregistrement du service, et lui seul.
+    # administrateurs. Le compte qui lancera le serveur a la main doit en recevoir l'acces
+    # explicitement (voir Write-NextSteps) : il n'y a plus de compte de service qui l'aurait.
     icacls $DataDir /inheritance:r `
         /grant "*S-1-5-18:(OI)(CI)F" `
         /grant "*S-1-5-32-544:(OI)(CI)F" | Out-Null
@@ -352,110 +355,61 @@ DEBUG=false
 }
 
 # --------------------------------------------------------------------------- #
-# Register Windows Service                                                    #
+# Remove the service an earlier version of this script registered              #
 # --------------------------------------------------------------------------- #
-function Register-Service {
-    if ($NoService) {
-        Write-Warn "Skipping Windows Service registration (--NoService)"
+#
+# Ce script enregistrait un service Windows (« LedgerAlps », NT SERVICE\LedgerAlps). Il ne pouvait
+# pas demarrer : ledgeralps-server.exe n'appelle jamais StartServiceCtrlDispatcher, donc le
+# Gestionnaire de services attendait en vain et abandonnait avec l'erreur 1053 (audit croise Gemini,
+# CRIT-15, decision du proprietaire : retirer ce chemin). Le laisser en place donnerait un service
+# « demarrage automatique » qui echoue a chaque demarrage de la machine.
+#
+# Il n'est retire que s'il POINTE sur notre binaire : un service du meme nom qui serait autre chose
+# n'est pas le notre a supprimer.
+function Remove-ObsoleteService {
+    $serviceName = "LedgerAlps"
+    $existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if (-not $existing) { return }
+
+    $cle = "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName"
+    $chemin = $null
+    try { $chemin = (Get-ItemProperty -Path $cle -Name ImagePath -ErrorAction Stop).ImagePath } catch { }
+    if (-not $chemin -or $chemin -notlike "*ledgeralps-server.exe*") {
+        Write-Warn "Un service '$serviceName' existe mais ne pointe pas sur ledgeralps-server.exe ($chemin) : laisse tel quel."
         return
     }
 
-    $serviceName = "LedgerAlps"
-    $exePath     = "$InstallDir\ledgeralps-server.exe"
-    $envFile     = "$DataDir\ledgeralps.env"
-
-    # Remove existing service if present
-    $existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-    if ($existing) {
-        Write-Info "Stopping and removing existing service..."
-        if ($existing.Status -eq "Running") {
-            Stop-Service -Name $serviceName -Force
-            Start-Sleep -Seconds 2
-        }
-        sc.exe delete $serviceName | Out-Null
-        if ($LASTEXITCODE -ne 0) { Write-Fail "sc.exe delete a echoue (code $LASTEXITCODE)" }
-        # Un service reste « marque pour suppression » tant qu'un handle est
-        # ouvert dessus. Attendre sa disparition REELLE, plutot qu'une seconde
-        # au hasard : sinon sc.exe create echoue avec 1072 et le script
-        # annoncait quand meme « registered ».
-        for ($i = 0; $i -lt 60; $i++) {
-            if (-not (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)) { break }
-            Start-Sleep -Milliseconds 500
-        }
-        if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
-            Write-Fail "Le service '$serviceName' est toujours marque pour suppression. Fermez services.msc et relancez."
-        }
+    Write-Info "Removing the Windows service registered by an earlier version of this script (it could never start)..."
+    if ($existing.Status -ne "Stopped") {
+        Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
     }
-
-    Write-Info "Registering Windows Service '$serviceName'..."
-
-    # PAS de fichier .bat intermediaire.
-    #
-    # Le SCM attend que le processus qu'il lance appelle StartServiceCtrlDispatcher
-    # dans le delai imparti. cmd.exe executant un script batch ne le fait jamais :
-    # le service echouait donc au demarrage avec l'erreur 1053, systematiquement,
-    # quel qu'ait ete le contenu du .bat. Celui-ci avait par ailleurs deux
-    # defauts propres — « %%A:~0,1% » n'est pas une syntaxe valide sur une
-    # metavariable for, donc le filtre de commentaires ne filtrait rien, et
-    # set "%%A=%%B" sortait de ses guillemets sur une valeur contenant " et &.
-    #
-    # Le SCM sait charger un environnement lui-meme, via la valeur REG_MULTI_SZ
-    # « Environment » sous la cle du service. Plus d'interpreteur au milieu.
+    sc.exe delete $serviceName | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Fail "sc.exe delete a echoue (code $LASTEXITCODE)" }
+    # Un service reste « marque pour suppression » tant qu'un handle est ouvert dessus : attendre
+    # sa disparition REELLE plutot qu'une seconde au hasard.
+    for ($i = 0; $i -lt 60; $i++) {
+        if (-not (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Milliseconds 500
+    }
+    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+        Write-Fail "Le service '$serviceName' est toujours marque pour suppression. Fermez services.msc et relancez."
+    }
     $ancien = "$InstallDir\start-service.bat"
-    if (Test-Path $ancien) {
-        Write-Info "Removing obsolete start-service.bat wrapper..."
-        Remove-Item $ancien -Force
+    if (Test-Path $ancien) { Remove-Item $ancien -Force }
+    Write-Success "Obsolete service removed"
+}
+
+# Un serveur en marche tient son binaire : la copie echouerait sur « fichier utilise par un autre
+# processus ». On le NOMME au lieu de le tuer — c'est peut-etre une comptabilite ouverte.
+function Assert-AucunServeurEnCours {
+    $cible = Join-Path $InstallDir "ledgeralps-server.exe"
+    $enCours = @(Get-Process -Name "ledgeralps-server" -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -eq $cible })
+    if ($enCours.Count -gt 0) {
+        Write-Fail ("ledgeralps-server.exe tourne (PID $($enCours[0].Id)) depuis $InstallDir : fermez LedgerAlps " +
+                    "(icone de la barre des taches, ou Stop-Process -Id $($enCours[0].Id)) puis relancez.")
     }
-
-    # Compte de service dedie, pas LocalSystem.
-    #
-    # Sans obj=, sc.exe retombe sur LocalSystem : un serveur HTTP servant une
-    # base comptable tournerait avec les droits de la machine, et toute
-    # execution de code dans le processus deviendrait un controle total du
-    # poste. Le pendant Linux de ce service tourne deja sous un compte dedie
-    # avec NoNewPrivileges et ProtectSystem=strict — le raisonnement de moindre
-    # privilege avait ete fait une fois, puis pas porte sur Windows.
-    #
-    # « NT SERVICE\<nom> » est un compte de service virtuel : cree par le SCM a
-    # l'enregistrement, sans mot de passe a stocker nulle part, et sans aucun
-    # droit herite.
-    $svcAccount = "NT SERVICE\$serviceName"
-
-    sc.exe create $serviceName binPath= "`"$exePath`"" `
-        DisplayName= "LedgerAlps Accounting Server" start= auto obj= $svcAccount | Out-Null
-    if ($LASTEXITCODE -ne 0) { Write-Fail "sc.exe create a echoue (code $LASTEXITCODE)" }
-
-    sc.exe description $serviceName "LedgerAlps Swiss SME Accounting - double-entry bookkeeping with QR-bill and ISO 20022 support." | Out-Null
-    if ($LASTEXITCODE -ne 0) { Write-Warn "sc.exe description a echoue (code $LASTEXITCODE)" }
-
-    sc.exe failure $serviceName reset= 60 actions= restart/5000/restart/10000/restart/30000 | Out-Null
-    if ($LASTEXITCODE -ne 0) { Write-Warn "sc.exe failure a echoue (code $LASTEXITCODE)" }
-
-    # L'environnement, lu par le SCM au demarrage. Seules les lignes NOM=VALEUR
-    # sont retenues : les commentaires et les lignes vides du fichier .env
-    # n'ont rien a faire ici, et c'est le filtre que le .bat croyait appliquer.
-    if (Test-Path $envFile) {
-        $envLines = @(Get-Content $envFile |
-            Where-Object { $_ -match '^\s*[A-Za-z_][A-Za-z0-9_]*=' } |
-            ForEach-Object { $_.Trim() })
-        if ($envLines.Count -gt 0) {
-            New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName" `
-                -Name Environment -PropertyType MultiString -Value $envLines -Force | Out-Null
-            Write-Info "Service environment loaded from $envFile ($($envLines.Count) variables)"
-        }
-    } else {
-        Write-Warn "$envFile absent : le service demarrera sans configuration. Creez-le, puis relancez cet installeur."
-    }
-
-    # Le compte de service virtuel n'herite d'aucun droit : lui accorder
-    # explicitement l'acces a ses seules donnees, et rien d'autre.
-    icacls $DataDir /grant "${svcAccount}:(OI)(CI)M" /T | Out-Null
-    if ($LASTEXITCODE -ne 0) { Write-Warn "icacls sur $DataDir a echoue (code $LASTEXITCODE) - verifiez les droits du service" }
-
-    Write-Success "Windows Service '$serviceName' registered (running as $svcAccount)"
-    Write-Info "Start with: Start-Service -Name '$serviceName'"
-    Write-Info "  or:       sc.exe start $serviceName"
-    Write-Info "Note: apres modification de $envFile, relancez cet installeur pour recharger l'environnement du service."
 }
 
 # --------------------------------------------------------------------------- #
@@ -471,17 +425,28 @@ function Write-NextSteps {
     Write-Host ""
     Write-Host "  NEXT STEPS:" -ForegroundColor White
     Write-Host ""
+    Write-Host "  This script installs the programs only: it registers NO Windows service." -ForegroundColor Yellow
+    Write-Host "  For a desktop installation (launcher, setup wizard), use LedgerAlps_Setup_*.exe instead." -ForegroundColor Yellow
+    Write-Host ""
     Write-Host "  1. Edit the config file:" -ForegroundColor White
     Write-Host "       Copy-Item '$DataDir\ledgeralps.env.example' '$DataDir\ledgeralps.env'" -ForegroundColor Gray
     Write-Host "       # Set JWT_SECRET to a strong random value (32+ characters)" -ForegroundColor Gray
     Write-Host ""
-    Write-Host "  2. Start the service:" -ForegroundColor White
-    Write-Host "       Start-Service -Name 'LedgerAlps'" -ForegroundColor Gray
+    Write-Host "  2. Let the account that will run the server read and write the data folder" -ForegroundColor White
+    Write-Host "     (it is restricted to SYSTEM and Administrators):" -ForegroundColor White
+    Write-Host "       icacls '$DataDir' /grant `"${env:USERNAME}:(OI)(CI)M`"" -ForegroundColor Gray
     Write-Host ""
-    Write-Host "  3. Create your admin user:" -ForegroundColor White
+    Write-Host "  3. Run the server in a terminal, with that file's settings:" -ForegroundColor White
+    Write-Host "       Get-Content '$DataDir\ledgeralps.env' | Where-Object { `$_ -match '^\s*[A-Za-z_][A-Za-z0-9_]*=' } |" -ForegroundColor Gray
+    Write-Host "         ForEach-Object { `$k,`$v = `$_ -split '=',2; Set-Item `"env:`$(`$k.Trim())`" `$v.Trim() }" -ForegroundColor Gray
+    Write-Host "       ledgeralps-server" -ForegroundColor Gray
+    Write-Host "     To keep it running without a session, use a supervisor of your choice (Task Scheduler," -ForegroundColor Gray
+    Write-Host "     NSSM...) around that command." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  4. Create your admin user:" -ForegroundColor White
     Write-Host "       ledgeralps-cli bootstrap --email=admin@example.com --password=yourpassword" -ForegroundColor Gray
     Write-Host ""
-    Write-Host "  4. Open http://localhost:8000" -ForegroundColor White
+    Write-Host "  5. Open http://localhost:8000" -ForegroundColor White
     Write-Host ""
 }
 
@@ -499,5 +464,5 @@ $tag    = Resolve-Version
 Install-Binaries -Tag $tag -Arch $arch
 Add-ToPath
 Write-EnvTemplate
-Register-Service
+if ($NoService) { Write-Warn "-NoService is obsolete and ignored: this script no longer registers a service." }
 Write-NextSteps -Tag $tag

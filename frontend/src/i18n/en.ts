@@ -386,6 +386,7 @@ export const en: Catalogue = {
 
   // ─── Validation et paramètres ───
   'val.requis': 'Required',
+  'val.tauxTDFN': 'A rate between 0.01 and 8.1 (for example 6.1)',
   'val.nomRequis': 'Name required',
   'val.adresseRequise': 'Address required for the QR-bill',
   'val.npaRequis': 'Postcode required for the QR-bill',
@@ -1313,6 +1314,8 @@ export const en: Catalogue = {
   'pr.tvaNonAssujettiAide': 'Turnover below the threshold, or an excluded activity. Your lines start at 0 %: VAT Act art. 27 para. 1 forbids you to show the tax.',
   'pr.tvaNonDeclare': 'Until you answer, LedgerAlps applies 8.1 % by default and will refuse the invoice if no VAT number is on file.',
   'pr.tvaAFCAide': 'Required on any invoice carrying VAT (VAT Act art. 26 para. 2 let. a). Without it, LedgerAlps refuses to issue the document.',
+  'pr.tdfnTaux': 'Net tax rate (TDFN) granted by the FTA (%)',
+  'pr.tdfnAide': 'Only if you account using the net tax rate: the rate the FTA granted you, specific to your industry (it appears on its confirmation letter). LedgerAlps neither calculates nor suggests it; without it, the TDFN declaration is refused. It applies to the VAT-inclusive turnover of invoices with a positive tax rate, credit notes deducted.',
   'pr.tvaNumeroEfface': 'The VAT number has been removed: it is printed on the invoice, and leaving it there would contradict your declaration.',
   'pr.virementAide': 'This information is added to the invoice for a customer paying by transfer rather than with the QR code — typically from abroad. Leave it empty if you only collect within Switzerland.',
   'mr.tvaTitre': 'Your VAT status',

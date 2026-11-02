@@ -75,7 +75,11 @@ func maskIBAN(iban string) string {
 // ─── LegalArchive GET /api/v1/exports/legal-archive ──────────────────────────
 
 // LegalArchive produces a ZIP archive containing all accounting data required
-// for the 10-year retention obligation under CO art. 958f.
+// for the 10-year retention obligation under CO art. 958f: chart of accounts, journal
+// entries, issued invoices, contacts, fiscal years — and the supporting documents and
+// movements: supplier invoices (with their lines and settlement), payments, bank
+// statement entries and the audit log (always whole: its hash chain only verifies when
+// continuous).
 // Each file in the archive is JSON (UTF-8); a manifest.json lists SHA-256 hashes.
 //
 // Query params (all optional):
@@ -131,15 +135,24 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 	}
 
 	// Dans l'ordre alphabétique des tables : c'est celui des fichiers CSV de l'archive.
+	//
+	// Les factures fournisseurs, les paiements, les relevés bancaires et le journal d'audit y sont depuis
+	// l'audit croisé Gemini (CRIT-11, décision du propriétaire) : sans eux, une charge comptabilisée n'avait
+	// plus sa pièce, un encaissement plus son paiement, et rien ne prouvait que les livres n'avaient pas été
+	// retouchés. Voir export_pieces.go.
 	tables := []struct {
 		nom, erreur string
 		lire        func() (any, error)
 	}{
 		{"accounts", "les comptes n'ont pas pu être lus", func() (any, error) { return h.fetchAccounts(ctx) }},
+		{"audit_logs", "le journal d'audit n'a pas pu être lu", func() (any, error) { return h.fetchAuditLogs(ctx) }},
+		{"bank_entries", "les relevés bancaires n'ont pas pu être lus", func() (any, error) { return h.fetchBankEntries(ctx, filters) }},
 		{"contacts", "les contacts n'ont pas pu être lus", func() (any, error) { return h.fetchContacts(ctx) }},
 		{"fiscal_years", "les exercices n'ont pas pu être lus", func() (any, error) { return h.fetchFiscalYears(ctx) }},
 		{"invoices", "les factures n'ont pas pu être lues", func() (any, error) { return h.fetchInvoices(ctx, filters) }},
 		{"journal_entries", "les écritures n'ont pas pu être lues", func() (any, error) { return h.fetchJournalEntries(ctx, filters) }},
+		{"payments", "les paiements n'ont pas pu être lus", func() (any, error) { return h.fetchPayments(ctx, filters) }},
+		{"supplier_invoices", "les factures fournisseurs n'ont pas pu être lues", func() (any, error) { return h.fetchSupplierInvoices(ctx, filters) }},
 	}
 	// Les CSV déjà versés : leur nom et leur taille, pour le LISEZ-MOI, sans leurs octets.
 	var csvVerses []csvSet
@@ -224,7 +237,10 @@ func (h *ExportHandler) LegalArchive(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture du manifeste dans l'archive impossible"})
 		return
 	}
-	ordre := []string{"accounts.json", "journal_entries.json", "invoices.json", "contacts.json", "fiscal_years.json"}
+	ordre := []string{
+		"accounts.json", "journal_entries.json", "invoices.json", "contacts.json", "fiscal_years.json",
+		"supplier_invoices.json", "payments.json", "bank_entries.json", "audit_logs.json",
+	}
 	for _, f := range csvVerses {
 		ordre = append(ordre, "csv/"+f.name)
 	}

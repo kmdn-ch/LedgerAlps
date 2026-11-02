@@ -264,6 +264,8 @@ export interface CompanySettings {
   // '' = la question n'a pas été posée. À distinguer de 'exempt' : un numéro
   // pas encore saisi n'est pas une exemption.
   vat_status?: '' | 'liable' | 'exempt'
+  // Taux de la dette fiscale nette ACCORDÉ par l'AFC, en pour cent. null : pas de taux (jamais deviné).
+  tdfn_rate?: number | null
   phone: string
   email: string
   bank_name: string

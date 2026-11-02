@@ -244,8 +244,12 @@ rapport suit : le chiffrement programmé appelle désormais le redémarrage (et 
 contrôle hôte et origine), la veille Fedlex surveille **l'ensemble** des consolidations (la date
 maximale masquait une consolidation intermédiaire), l'ordre de paiement porte les adresses postales
 structurées et refuse un QR-IBAN comme compte à débiter, et la release naît en brouillon, publiée une
-fois l'installeur envoyé — ce dernier point n'est éprouvé que par la prochaine rc. Restent ouverts :
-les décisions du propriétaire (TDFN, service Windows, contenu de l'archive légale).
+fois l'installeur envoyé — ce dernier point n'est éprouvé que par la prochaine rc. Les trois décisions du
+propriétaire sont prises et appliquées : le taux TDFN est celui de l'AFC, saisi, sur la base TTC ; le
+chemin « service Windows » est retiré ; l'archive légale contient les factures fournisseurs, les paiements,
+les relevés bancaires et le journal d'audit. Rien de connu ne reste ouvert dans ce rapport ; restent à
+éprouver ce que la prochaine rc éprouvera (la publication en brouillon) et ce que seul un vrai Windows
+éprouvera (`install.ps1` sous élévation, le lanceur en TLS).
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions

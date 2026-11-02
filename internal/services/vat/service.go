@@ -3,6 +3,7 @@ package vat
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -25,7 +26,17 @@ type VATDeclaration struct {
 	} `json:"vat_collected"`
 	VATDeductible float64 `json:"vat_deductible"` // Impôt préalable déductible (chiffre 400)
 	VATPayable    float64 `json:"vat_payable"`    // Montant dû / à rembourser (302+312+342-400)
+
+	// Méthode TDFN seulement : le taux accordé par l'AFC (en %, saisi dans la fiche entreprise) et la base sur
+	// laquelle il s'applique — le chiffre d'affaires TTC des factures à taux positif, avoirs déduits.
+	TDFNRate float64 `json:"tdfn_rate,omitempty"`
+	TDFNBase float64 `json:"tdfn_base,omitempty"`
 }
+
+// ErrTauxTDFNAbsent : la méthode TDFN applique le taux que l'AFC a ACCORDÉ à l'entreprise. Il se saisit, il
+// ne se devine pas : sans lui, il n'y a pas de déclaration à produire (audit croisé Gemini, CRIT-07).
+var ErrTauxTDFNAbsent = errors.New(
+	"le taux TDFN n'est pas renseigné : saisissez celui que l'AFC vous a accordé (Paramètres → Banque, rubrique TVA, statut « assujetti »)")
 
 // Service calculates Swiss VAT declarations for periodic AFC reporting.
 type Service struct {
@@ -43,12 +54,27 @@ func New(database *sql.DB, usePostgres bool) *Service {
 // Méthode "effective" (AFC 318) : agrège les montants TVA par taux depuis les
 // factures émises ou payées dans la période.
 //
-// Méthode "tdfn" (taux de dette fiscale net, AFC 100) : applique un taux
-// forfaitaire de compliance.VATRateStandard × 0.8 sur le CA brut HT.
-// Cette approximation est valide pour les PME à activité mixte (art. 37 LTVA).
+// Méthode "tdfn" (taux de la dette fiscale nette, AFC 100) : applique le taux que l'AFC a ACCORDÉ à
+// l'entreprise (fiche entreprise, `tdfn_rate`) au chiffre d'affaires TTC des factures à taux positif,
+// avoirs déduits (art. 37 LTVA). Sans taux saisi, la déclaration est refusée : le taux « normal × 0,8 »
+// que ce code appliquait jusqu'ici (6,48 %, sur le chiffre d'affaires hors taxe) n'était celui d'aucune
+// branche.
 func (s *Service) GenerateDeclaration(ctx context.Context, periodStart, periodEnd time.Time, method string) (*VATDeclaration, error) {
 	if method != "effective" && method != "tdfn" {
 		return nil, fmt.Errorf("unknown VAT method %q: must be 'effective' or 'tdfn'", method)
+	}
+	// Le taux se lit AVANT d'agréger : sans lui, inutile de parcourir les factures.
+	var tauxTDFN float64
+	if method == "tdfn" {
+		var t sql.NullFloat64
+		if err := s.db.QueryRowContext(ctx, `SELECT tdfn_rate FROM company_settings LIMIT 1`).Scan(&t); err != nil &&
+			!errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("read tdfn rate: %w", err)
+		}
+		if !t.Valid || t.Float64 <= 0 {
+			return nil, ErrTauxTDFNAbsent
+		}
+		tauxTDFN = t.Float64
 	}
 
 	decl := &VATDeclaration{
@@ -107,6 +133,13 @@ func (s *Service) GenerateDeclaration(ctx context.Context, periodStart, periodEn
 		}
 		decl.TotalRevenue += totalHT
 
+		// TDFN : la base est le chiffre d'affaires TTC des factures À TAUX POSITIF. Un chiffre d'affaires à
+		// 0 % (exportation, prestation exclue) n'est pas imposé au taux de la dette fiscale nette ; et la
+		// TVA facturée en fait partie, le taux étant fixé sur la contre-prestation convenue, taxe comprise.
+		if method == "tdfn" && vatRate > 0.0001 {
+			decl.TDFNBase += totalHT + totalVAT
+		}
+
 		if method == "effective" {
 			// Deux notations coexistent, et les confondre vidait les lignes
 			// 312 et 342 du formulaire.
@@ -159,10 +192,9 @@ func (s *Service) GenerateDeclaration(ctx context.Context, periodStart, periodEn
 		)
 
 	case "tdfn":
-		// Taux de dette fiscale net: forfaitaire ≈ VATRateStandard × 0.8
-		// sur le chiffre d'affaires HT brut (art. 37 LTVA).
-		tdfnRate := compliance.VATRateStandard * 0.8
-		vatDue := compliance.RoundTo5Rappen(decl.TotalRevenue * tdfnRate)
+		decl.TDFNRate = tauxTDFN
+		decl.TDFNBase = compliance.RoundCents(decl.TDFNBase)
+		vatDue := compliance.RoundTo5Rappen(decl.TDFNBase * tauxTDFN / 100)
 		decl.VATCollected.Standard = vatDue
 		decl.VATCollected.Total = vatDue
 	}

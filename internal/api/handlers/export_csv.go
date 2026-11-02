@@ -209,8 +209,9 @@ func recordsFromJSON(raw []byte) ([]map[string]any, error) {
 // tablesImbriquees : les tables dont les lignes sont imbriquées. Le parent perd sa colonne
 // `lines`, qui part dans un fichier dédié relié par clé étrangère.
 var tablesImbriquees = map[string]struct{ field, fk, child string }{
-	"journal_entries": {"lines", "entry_id", "journal_lines"},
-	"invoices":        {"lines", "invoice_id", "invoice_lines"},
+	"journal_entries":   {"lines", "entry_id", "journal_lines"},
+	"invoices":          {"lines", "invoice_id", "invoice_lines"},
+	"supplier_invoices": {"lines", "supplier_invoice_id", "supplier_invoice_lines"},
 }
 
 // csvFilesFor produit les fichiers CSV d'UNE table : d'abord celui de ses lignes imbriquées, s'il
@@ -294,12 +295,18 @@ func csvReadme(l i18n.Lang, files []csvSet) []byte {
 	b.WriteString("  invoice_lines.invoice_id  → invoices.id\n")
 	b.WriteString("  journal_lines.account_id  → accounts.id\n")
 	b.WriteString("  invoices.contact_id       → contacts.id\n")
-	b.WriteString("  journal_entries.fiscal_year_id → fiscal_years.id\n\n")
+	b.WriteString("  journal_entries.fiscal_year_id → fiscal_years.id\n")
+	b.WriteString("  supplier_invoice_lines.supplier_invoice_id → supplier_invoices.id\n")
+	b.WriteString("  supplier_invoices.supplier_id → contacts.id\n")
+	b.WriteString("  payments.invoice_id → invoices.id\n")
+	b.WriteString("  bank_entries.invoice_id → invoices.id\n\n")
 	b.WriteString("Fichiers\n")
 	b.WriteString("--------\n")
 	for _, f := range files {
 		b.WriteString(fmt.Sprintf("  %-24s %7d octets\n", f.name, f.octets))
 	}
+	b.WriteString(t("\nLe journal d'audit (audit_logs) est exporté en entier, quelle que soit la période :\n"))
+	b.WriteString(t("sa chaîne d'empreintes ne se vérifie que continue.\n"))
 	b.WriteString(t("\nNote sur les données personnelles (nLPD) : les IBAN des contacts sont\n"))
 	b.WriteString(t("masqués dans cet export, comme dans le JSON. L'export complet d'un IBAN\n"))
 	b.WriteString(t("se fait depuis la fiche du contact concerné.\n"))

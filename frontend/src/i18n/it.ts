@@ -386,6 +386,7 @@ export const it: Catalogue = {
 
   // ─── Validation et paramètres ───
   'val.requis': 'Obbligatorio',
+  'val.tauxTDFN': 'Un’aliquota tra 0,01 e 8,1 (ad es. 6,1)',
   'val.nomRequis': 'Nome obbligatorio',
   'val.adresseRequise': 'Indirizzo obbligatorio per la fattura QR',
   'val.npaRequis': 'NPA obbligatorio per la fattura QR',
@@ -1313,6 +1314,8 @@ export const it: Catalogue = {
   'pr.tvaNonAssujettiAide': 'Cifra d’affari sotto la soglia, oppure attività esclusa. Le vostre righe partono da 0 %: la LIVA art. 27 cpv. 1 vi vieta di indicare l’imposta.',
   'pr.tvaNonDeclare': 'Finché non avete risposto, LedgerAlps applica l’8.1 % per impostazione predefinita e rifiuterà la fattura se nessun numero IVA è registrato.',
   'pr.tvaAFCAide': 'Richiesto su ogni fattura con IVA (LIVA art. 26 cpv. 2 lett. a). Senza di esso, LedgerAlps rifiuta di emettere il documento.',
+  'pr.tdfnTaux': 'Aliquota saldo concessa dall’AFC (%)',
+  'pr.tdfnAide': 'Solo se conteggiate con l’aliquota saldo: l’aliquota che l’AFC vi ha concesso, propria del vostro settore (figura nella sua lettera di conferma). LedgerAlps non la calcola né la propone; senza di essa, il conteggio con aliquota saldo è rifiutato. Si applica alla cifra d’affari IVA inclusa delle fatture con aliquota positiva, note di credito dedotte.',
   'pr.tvaNumeroEfface': 'Il numero IVA è stato rimosso: si stampa sulla fattura, e lasciarvelo contraddirebbe la vostra dichiarazione.',
   'pr.virementAide': 'Queste informazioni si aggiungono alla fattura per un cliente che paga con bonifico anziché con il codice QR — tipicamente dall’estero. Lasciatele vuote se incassate solo in Svizzera.',
   'mr.tvaTitre': 'Il vostro stato IVA',

@@ -3,6 +3,7 @@ package vat_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -186,6 +187,7 @@ func TestTDFNDoesNotClaimInputVAT(t *testing.T) {
 
 	seedSalesInvoice(t, database, "sent", 10000, 810, 8.1, "2026-03-15")
 	seedSupplierInvoice(t, database, supplier, "booked", 2000, 162, 0.081, "2026-03-20")
+	poserTauxTDFN(t, database, 6.1)
 
 	start, end := period()
 	decl, err := vat.New(database, false).GenerateDeclaration(context.Background(), start, end, "tdfn")
@@ -417,22 +419,18 @@ func nearly(a, b float64) bool {
 	return d < 0.005
 }
 
-// Le montant TDFN lui-même doit rester pinné.
+// Le montant TDFN lui-même doit rester pinné, et dans la bonne échelle.
 //
-// La méthode TDFN multiplie un chiffre d'affaires par
-// `compliance.VATRateStandard * 0.8`, donc elle a besoin des constantes sous
-// leur forme FRACTIONNAIRE (0.081). Le classement par taux, lui, compare à des
-// valeurs lues en POURCENTAGE. Les deux usages coexistent dans le même fichier.
-//
-// Sans ce test, « corriger » le classement en passant les constantes en
-// pourcentage — le raccourci tentant — ferait calculer 648'000 au lieu de 648
-// sans qu'aucun test ne bronche : l'ancien test TDFN ne vérifiait que le
-// déductible à zéro.
-func TestLeMontantTDFNResteCalculeSurLaFraction(t *testing.T) {
+// Le taux se saisit en POURCENT (6 pour 6 %), les taux des factures sont lus en pourcentage aussi, et
+// les constantes de `compliance` sont en fraction : trois échelles dans un seul fichier. Sans ce test,
+// une « simplification » qui oublierait la division par cent ferait calculer 64'860 au lieu de 648.60
+// sans qu'aucun autre test ne bronche.
+func TestLeMontantTDFNEstLeTauxSaisiSurLaBaseTTC(t *testing.T) {
 	database := newTestDB(t)
 	svc := vat.New(database, false)
 
 	seedSalesInvoiceAt(t, database, 10000, 810, 8.1, "2026-03-15")
+	poserTauxTDFN(t, database, 6)
 
 	decl, err := svc.GenerateDeclaration(context.Background(),
 		mustDate("2026-01-01"), mustDate("2026-12-31"), "tdfn")
@@ -440,10 +438,16 @@ func TestLeMontantTDFNResteCalculeSurLaFraction(t *testing.T) {
 		t.Fatalf("GenerateDeclaration: %v", err)
 	}
 
-	// 10'000 HT × (8.1 % × 0.8) = 10'000 × 0.0648 = 648.00
-	if got, want := decl.VATCollected.Total, 648.0; !nearly(got, want) {
-		t.Errorf("TVA due en TDFN = %.2f, attendu %.2f — "+
-			"les constantes compliance.VATRate* doivent rester en fraction", got, want)
+	// Base TTC : 10'000 + 810 = 10'810 ; 6 % de 10'810 = 648.60. (L'ancien code : 10'000 HT × 6,48 %
+	// inventé = 648.00 — un montant qui TOMBAIT presque juste sur ce cas, pour de mauvaises raisons.)
+	if got, want := decl.TDFNBase, 10810.0; !nearly(got, want) {
+		t.Errorf("base TDFN = %.2f, attendu %.2f (chiffre d'affaires TTC)", got, want)
+	}
+	if got, want := decl.VATCollected.Total, 648.60; !nearly(got, want) {
+		t.Errorf("TVA due en TDFN = %.2f, attendu %.2f", got, want)
+	}
+	if decl.TDFNRate != 6 {
+		t.Errorf("taux restitué = %v, attendu 6", decl.TDFNRate)
 	}
 }
 
@@ -478,5 +482,85 @@ func TestUneFactureArchiveeResteDansLeDecompte(t *testing.T) {
 	}
 	if decl.VATCollected.Standard != 243 {
 		t.Errorf("TVA collectée = %.2f, attendu 243.00 : la facture archivée a disparu du décompte", decl.VATCollected.Standard)
+	}
+}
+
+// poserTauxTDFN écrit le taux accordé par l'AFC dans la fiche entreprise.
+func poserTauxTDFN(t *testing.T, database *sql.DB, taux float64) {
+	t.Helper()
+	if _, err := database.Exec(`UPDATE company_settings SET tdfn_rate = ?`, taux); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM company_settings`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n == 0 {
+		if _, err := database.Exec(`INSERT INTO company_settings (id, company_name, tdfn_rate) VALUES (?, 'Test SA', ?)`,
+			db.NewID(), taux); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Audit croisé Gemini, CRIT-07 (décision du propriétaire) : le taux TDFN est celui que l'AFC a ACCORDÉ,
+// saisi dans la fiche entreprise. LedgerAlps appliquait « taux normal × 0,8 » — 6,48 % pour tout le monde,
+// sur le chiffre d'affaires hors taxe : le montant d'une déclaration à l'administration, calculé avec un
+// taux qu'aucune branche ne porte. Sans taux saisi, il n'y a pas de déclaration TDFN.
+func TestSansTauxSaisiLaDeclarationTDFNEstRefusee(t *testing.T) {
+	database := newTestDB(t)
+	seedSalesInvoiceAt(t, database, 10000, 810, 8.1, "2026-03-15")
+	svc := vat.New(database, false)
+	start, end := period()
+
+	// Aucune fiche entreprise, puis une fiche sans taux, puis un taux à zéro : trois façons de ne pas en avoir.
+	for _, etat := range []string{"aucune fiche", "fiche sans taux", "taux à zéro"} {
+		switch etat {
+		case "fiche sans taux":
+			if _, err := database.Exec(`INSERT INTO company_settings (id, company_name) VALUES (?, 'Test SA')`, db.NewID()); err != nil {
+				t.Fatal(err)
+			}
+		case "taux à zéro":
+			if _, err := database.Exec(`UPDATE company_settings SET tdfn_rate = 0`); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := svc.GenerateDeclaration(context.Background(), start, end, "tdfn"); !errors.Is(err, vat.ErrTauxTDFNAbsent) {
+			t.Errorf("%s : erreur = %v, attendu ErrTauxTDFNAbsent", etat, err)
+		}
+	}
+
+	// La méthode effective n'a pas besoin de taux.
+	if _, err := svc.GenerateDeclaration(context.Background(), start, end, "effective"); err != nil {
+		t.Errorf("la méthode effective exige un taux TDFN : %v", err)
+	}
+}
+
+// La base est le chiffre d'affaires TTC des factures À TAUX POSITIF, avoirs déduits : une prestation à 0 %
+// (exportation, prestation exclue) n'est pas imposée au taux de la dette fiscale nette.
+func TestLaBaseTDFNExclutLesFacturesAZeroPourCentEtDeduitLesAvoirs(t *testing.T) {
+	database := newTestDB(t)
+	svc := vat.New(database, false)
+	poserTauxTDFN(t, database, 6.1)
+
+	seedSalesInvoiceAt(t, database, 1000, 81, 8.1, "2026-03-01") // 1 081 TTC, imposable
+	seedSalesInvoiceAt(t, database, 500, 0, 0, "2026-03-02")     // exportation : hors base
+	seedSalesInvoiceAt(t, database, 2000, 52, 2.6, "2026-03-03") // 2 052 TTC au taux réduit
+	seedCreditNote(t, database, 100, 8.1, 8.1, "2026-03-04")     // avoir de 108.10 TTC
+
+	decl, err := svc.GenerateDeclaration(context.Background(), mustDate("2026-01-01"), mustDate("2026-12-31"), "tdfn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 1 081 + 2 052 − 108.10 = 3 024.90 ; × 6,1 % = 184.52 → 184.50 (arrondi aux 5 centimes).
+	if got, want := decl.TDFNBase, 3024.90; !nearly(got, want) {
+		t.Errorf("base TDFN = %.2f, attendu %.2f", got, want)
+	}
+	if got, want := decl.VATCollected.Total, 184.50; !nearly(got, want) {
+		t.Errorf("TVA due = %.2f, attendu %.2f", got, want)
+	}
+	// Le chiffre d'affaires hors taxe, lui, compte tout : l'exportation y figure.
+	if got, want := decl.TotalRevenue, 3400.0; !nearly(got, want) {
+		t.Errorf("chiffre d'affaires HT = %.2f, attendu %.2f", got, want)
 	}
 }

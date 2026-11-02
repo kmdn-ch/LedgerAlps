@@ -279,7 +279,10 @@ type CompanySettings struct {
 	// AutoPostInvoices comptabilise la facture au journal dès son envoi. Éteint
 	// sur les installations antérieures à ce réglage : l'allumer d'office y
 	// doublerait les écritures saisies à la main.
-	AutoPostInvoices     bool      `db:"auto_post_invoices"   json:"auto_post_invoices"`
+	AutoPostInvoices bool `db:"auto_post_invoices"   json:"auto_post_invoices"`
+	// TdfnRate est le taux de la dette fiscale nette ACCORDÉ par l'AFC, en pour cent (6.1 pour 6,1 %).
+	// nil : pas de taux — la déclaration TDFN est alors refusée. Jamais calculé ni deviné.
+	TdfnRate             *float64  `db:"tdfn_rate"            json:"tdfn_rate"`
 	IBAN                 string    `db:"iban"                     json:"iban"`
 	FiscalYearStartMonth int       `db:"fiscal_year_start_month"  json:"fiscal_year_start_month"`
 	Currency             string    `db:"currency"                 json:"currency"`

@@ -97,6 +97,32 @@ func TestLArchiveLegaleGardeSaDispositionEtSesEmpreintes(t *testing.T) {
 		}
 	}
 
+	// Les pièces et mouvements ajoutés sur décision du propriétaire (CRIT-11) : une facture fournisseur à deux
+	// lignes, un paiement, une écriture de relevé bancaire, deux maillons du journal d'audit.
+	brouillonFournisseur(t, database, "s1", "F-1", 200, 16.2)
+	for s := 0; s < 2; s++ {
+		if _, err := database.Exec(`INSERT INTO supplier_invoice_lines (id, supplier_invoice_id, description, quantity,
+			unit_price, vat_rate, line_total, sequence) VALUES (?, 's1', 'Papier', 1, 100, 0.081, 100, ?)`,
+			fmt.Sprintf("sl%d", s), s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := database.Exec(`INSERT INTO payments (id, invoice_id, amount, payment_date, method, created_by_id)
+		VALUES ('p1', 'f1', 216.2, '2026-03-20', 'bank_transfer', 'u1')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`INSERT INTO bank_entries (id, fingerprint, amount, currency, is_credit, booking_date, counterparty, invoice_id)
+		VALUES ('b1', 'fp1', 216.2, 'CHF', 1, '2026-03-20', 'Client SA', 'f1')`); err != nil {
+		t.Fatal(err)
+	}
+	for n := 1; n <= 2; n++ {
+		if _, err := database.Exec(`INSERT INTO audit_logs (id, user_id, action, table_name, record_id, sequence_number, entry_hash, prev_hash)
+			VALUES (?, 'u1', 'essai', 'invoices', 'f1', ?, ?, ?)`,
+			fmt.Sprintf("al%d", n), n, fmt.Sprintf("hash%d", n), fmt.Sprintf("hash%d", n-1)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.GET("/archive", NewExportHandler(database, false).LegalArchive)
@@ -122,9 +148,11 @@ func TestLArchiveLegaleGardeSaDispositionEtSesEmpreintes(t *testing.T) {
 	attendu := []string{
 		"manifest.json",
 		"accounts.json", "journal_entries.json", "invoices.json", "contacts.json", "fiscal_years.json",
-		"csv/accounts.csv", "csv/contacts.csv", "csv/fiscal_years.csv",
+		"supplier_invoices.json", "payments.json", "bank_entries.json", "audit_logs.json",
+		"csv/accounts.csv", "csv/audit_logs.csv", "csv/bank_entries.csv", "csv/contacts.csv", "csv/fiscal_years.csv",
 		"csv/invoice_lines.csv", "csv/invoices.csv",
 		"csv/journal_lines.csv", "csv/journal_entries.csv",
+		"csv/payments.csv", "csv/supplier_invoice_lines.csv", "csv/supplier_invoices.csv",
 		"csv/LISEZ-MOI.txt",
 	}
 	if strings.Join(noms, "\n") != strings.Join(attendu, "\n") {
@@ -175,16 +203,88 @@ func TestLArchiveLegaleGardeSaDispositionEtSesEmpreintes(t *testing.T) {
 		t.Errorf("journal_lines.csv sans clé étrangère entry_id : %v", entete)
 	}
 
+	// 3 bis. Les pièces et mouvements ajoutés : la facture fournisseur et ses lignes reliées par clé étrangère, le
+	// paiement, l'écriture de relevé, et le journal d'audit avec ses empreintes.
+	if n := len(compter("csv/supplier_invoices.csv")) - 1; n != 1 {
+		t.Errorf("supplier_invoices.csv : %d facture(s), attendu 1", n)
+	}
+	lignesFournisseur := compter("csv/supplier_invoice_lines.csv")
+	if n := len(lignesFournisseur) - 1; n != 2 {
+		t.Errorf("supplier_invoice_lines.csv : %d ligne(s), attendu 2", n)
+	}
+	if !strings.Contains(strings.Join(lignesFournisseur[0], ","), "supplier_invoice_id") {
+		t.Errorf("supplier_invoice_lines.csv sans clé étrangère supplier_invoice_id : %v", lignesFournisseur[0])
+	}
+	if n := len(compter("csv/payments.csv")) - 1; n != 1 {
+		t.Errorf("payments.csv : %d paiement(s), attendu 1", n)
+	}
+	if n := len(compter("csv/bank_entries.csv")) - 1; n != 1 {
+		t.Errorf("bank_entries.csv : %d écriture(s) de relevé, attendu 1", n)
+	}
+	journalAudit := compter("csv/audit_logs.csv")
+	if n := len(journalAudit) - 1; n != 2 {
+		t.Errorf("audit_logs.csv : %d maillon(s), attendu 2", n)
+	}
+	if !strings.Contains(strings.Join(journalAudit[0], ","), "entry_hash") || !strings.Contains(strings.Join(journalAudit[0], ","), "prev_hash") {
+		t.Errorf("audit_logs.csv sans ses empreintes : %v", journalAudit[0])
+	}
+
 	// 4. Le LISEZ-MOI annonce la taille réelle de chaque CSV.
 	readme := string(lireEntree(t, parNom["csv/LISEZ-MOI.txt"]))
 	annonce := regexp.MustCompile(`(?m)^  (\S+\.csv)\s+(\d+) octets$`).FindAllStringSubmatch(readme, -1)
-	if len(annonce) != 7 {
-		t.Fatalf("le LISEZ-MOI annonce %d fichier(s) CSV, attendu 7 :\n%s", len(annonce), readme)
+	if len(annonce) != 12 {
+		t.Fatalf("le LISEZ-MOI annonce %d fichier(s) CSV, attendu 12 :\n%s", len(annonce), readme)
+	}
+	if !strings.Contains(readme, "supplier_invoice_lines.supplier_invoice_id") || !strings.Contains(readme, "payments.invoice_id") {
+		t.Errorf("le LISEZ-MOI ne documente pas les relations des pièces ajoutées :\n%s", readme)
 	}
 	for _, m := range annonce {
 		reel := len(lireEntree(t, parNom["csv/"+m[1]]))
 		if taille, _ := strconv.Atoi(m[2]); taille != reel {
 			t.Errorf("LISEZ-MOI : %s annoncé à %d octets, %d dans l'archive", m[1], taille, reel)
 		}
+	}
+}
+
+// Le journal d'audit est exporté EN ENTIER, quels que soient les filtres : sa chaîne d'empreintes ne se
+// vérifie que continue. Les pièces et mouvements, eux, suivent la période demandée.
+func TestLesFiltresDeLArchiveNeCoupentPasLaChaineDAudit(t *testing.T) {
+	database, _, _ := cancelEnv(t)
+	brouillonFournisseur(t, database, "s1", "F-1", 200, 16.2)
+	for n := 1; n <= 3; n++ {
+		if _, err := database.Exec(`INSERT INTO audit_logs (id, user_id, action, table_name, record_id, sequence_number, entry_hash, prev_hash)
+			VALUES (?, 'u1', 'essai', 'invoices', 'f1', ?, ?, ?)`,
+			fmt.Sprintf("al%d", n), n, fmt.Sprintf("hash%d", n), fmt.Sprintf("hash%d", n-1)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/archive", NewExportHandler(database, false).LegalArchive)
+	w := httptest.NewRecorder()
+	// Une période où il n'y a aucune pièce.
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/archive?from=2030-01-01&to=2030-12-31", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("archive : %d %s", w.Code, w.Body.String())
+	}
+	zr, err := zip.NewReader(bytes.NewReader(w.Body.Bytes()), int64(w.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var audit, fournisseurs []map[string]any
+	for _, f := range zr.File {
+		switch {
+		case strings.HasSuffix(f.Name, "/audit_logs.json"):
+			_ = json.Unmarshal(lireEntree(t, f), &audit)
+		case strings.HasSuffix(f.Name, "/supplier_invoices.json"):
+			_ = json.Unmarshal(lireEntree(t, f), &fournisseurs)
+		}
+	}
+	if len(audit) != 3 {
+		t.Errorf("%d maillon(s) d'audit exporté(s) sous un filtre de période, attendu les 3 de la chaîne", len(audit))
+	}
+	if len(fournisseurs) != 0 {
+		t.Errorf("%d facture(s) fournisseur sur une période qui n'en a aucune", len(fournisseurs))
 	}
 }

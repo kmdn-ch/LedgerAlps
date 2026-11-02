@@ -430,6 +430,7 @@ export const fr = {
 
   // ─── Validation et paramètres ───
   'val.requis': 'Requis',
+  'val.tauxTDFN': 'Un taux entre 0,01 et 8,1 (par exemple 6,1)',
   'val.nomRequis': 'Nom requis',
   'val.adresseRequise': 'Adresse requise pour la facture QR',
   'val.npaRequis': 'NPA requis pour la facture QR',
@@ -1357,6 +1358,8 @@ export const fr = {
   'pr.tvaNonAssujettiAide': 'Chiffre d’affaires sous le seuil, ou activité exclue. Vos lignes partent à 0 % : la LTVA art. 27 al. 1 vous interdit de faire figurer l’impôt.',
   'pr.tvaNonDeclare': 'Tant que vous n’avez pas répondu, LedgerAlps applique 8.1 % par défaut et refusera la facture si aucun numéro de TVA n’est enregistré.',
   'pr.tvaAFCAide': 'Exigé sur toute facture portant de la TVA (LTVA art. 26 al. 2 let. a). Sans lui, LedgerAlps refuse d’établir le document.',
+  'pr.tdfnTaux': 'Taux TDFN accordé par l’AFC (%)',
+  'pr.tdfnAide': 'Seulement si vous décomptez au taux de la dette fiscale nette : le taux que l’AFC vous a accordé, propre à votre branche (il figure sur sa lettre de confirmation). LedgerAlps ne le calcule pas et ne le propose pas ; sans lui, la déclaration TDFN est refusée. Il s’applique au chiffre d’affaires TTC des factures à taux positif, avoirs déduits.',
   'pr.tvaNumeroEfface': 'Le numéro de TVA a été retiré : il s’imprime sur la facture, et l’y laisser contredirait votre déclaration.',
   'pr.virementAide': 'Ces informations s’ajoutent à la facture pour un client qui paie par virement plutôt qu’avec le QR code — typiquement depuis l’étranger. Laissez-les vides si vous n’encaissez qu’en Suisse.',
   'mr.tvaTitre': 'Votre statut TVA',

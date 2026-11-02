@@ -1247,10 +1247,45 @@ var catalogue = map[string]map[Lang]string{
 		IT: "L'IBAN della vostra azienda è un QR-IBAN: serve solo a ricevere pagamenti con riferimento QR, non ad addebitarli. Indicate l'IBAN ordinario del conto (Impostazioni → Azienda) e lasciate il QR-IBAN nel suo campo.",
 		EN: "Your company's IBAN is a QR-IBAN: it only receives payments with a QR reference and cannot be debited. Enter the account's ordinary IBAN (Settings → Company) and keep the QR-IBAN in its own field.",
 	},
+	"le taux TDFN doit être compris entre 0,01 et 8,1 pour cent : saisissez celui que l'AFC vous a accordé, ou 0 pour l'effacer": {
+		DE: "Der SSS-Satz muss zwischen 0,01 und 8,1 Prozent liegen: Tragen Sie den von der ESTV bewilligten Satz ein, oder 0, um ihn zu löschen",
+		IT: "L'aliquota saldo deve essere compresa tra 0,01 e 8,1 per cento: indicate quella concessa dall'AFC, oppure 0 per cancellarla",
+		EN: "The net tax rate (TDFN) must be between 0.01 and 8.1 percent: enter the one the FTA granted you, or 0 to clear it",
+	},
+	"le taux TDFN n'est pas renseigné : saisissez celui que l'AFC vous a accordé (Paramètres → Banque, rubrique TVA, statut « assujetti »)": {
+		DE: "Der SSS-Satz ist nicht erfasst: Tragen Sie den von der ESTV bewilligten Satz ein (Einstellungen → Bank, Rubrik MWST, Status «steuerpflichtig»)",
+		IT: "L'aliquota saldo non è indicata: inserite quella concessa dall'AFC (Impostazioni → Banca, rubrica IVA, stato «assoggettato»)",
+		EN: "The net tax rate (TDFN) is not set: enter the one the FTA granted you (Settings → Bank, VAT section, status “liable”)",
+	},
 	"ce contact est un client, pas un fournisseur : changez son type dans sa fiche, ou choisissez un autre fournisseur": {
 		DE: "Dieser Kontakt ist ein Kunde, kein Lieferant: Ändern Sie seinen Typ in seinem Eintrag oder wählen Sie einen anderen Lieferanten",
 		IT: "Questo contatto è un cliente, non un fornitore: cambiate il suo tipo nella scheda, oppure scegliete un altro fornitore",
 		EN: "This contact is a customer, not a supplier: change its type on its record, or pick another supplier",
+	},
+	"le journal d'audit n'a pas pu être lu": {
+		DE: "Das Prüfprotokoll konnte nicht gelesen werden",
+		IT: "Il registro di audit non ha potuto essere letto",
+		EN: "The audit log could not be read",
+	},
+	"les relevés bancaires n'ont pas pu être lus": {
+		DE: "Die Kontoauszüge konnten nicht gelesen werden",
+		IT: "Gli estratti conto non hanno potuto essere letti",
+		EN: "The bank statements could not be read",
+	},
+	"les paiements n'ont pas pu être lus": {
+		DE: "Die Zahlungen konnten nicht gelesen werden",
+		IT: "I pagamenti non hanno potuto essere letti",
+		EN: "The payments could not be read",
+	},
+	"\nLe journal d'audit (audit_logs) est exporté en entier, quelle que soit la période :\n": {
+		DE: "\nDas Prüfprotokoll (audit_logs) wird unabhängig vom Zeitraum vollständig exportiert:\n",
+		IT: "\nIl registro di audit (audit_logs) è esportato per intero, qualunque sia il periodo:\n",
+		EN: "\nThe audit log (audit_logs) is always exported whole, whatever the period:\n",
+	},
+	"sa chaîne d'empreintes ne se vérifie que continue.\n": {
+		DE: "seine Hashkette lässt sich nur lückenlos überprüfen.\n",
+		IT: "la sua catena di impronte si verifica solo se continua.\n",
+		EN: "its hash chain can only be verified when continuous.\n",
 	},
 	"les factures fournisseurs n'ont pas pu être lues": {
 		DE: "Die Lieferantenrechnungen konnten nicht gelesen werden",
