@@ -67,7 +67,7 @@ touchent jamais votre base réelle.
 ```bash
 go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
 govulncheck ./...                          # 0 = rien d'atteignable · 3 = à corriger
-GOTOOLCHAIN=go1.26.10 govulncheck ./...    # avec la toolchain exacte de la release
+GOTOOLCHAIN=go1.26.11 govulncheck ./...    # avec la toolchain exacte de la release
 ```
 
 `govulncheck` raisonne par **chemin d'appel** : il ne signale que ce que le code
