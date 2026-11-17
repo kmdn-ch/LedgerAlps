@@ -419,6 +419,12 @@ func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
 		}
 	}
 
+	// Les colonnes font TOUJOURS 180 mm à elles toutes : de la marge gauche (15 mm) à 195 mm,
+	// soit 15 mm de marge à droite, comme les totaux, le bloc client et les notes. wDisc n'est
+	// pas dans cette somme de base : la colonne Rabais, quand elle existe, se prend sur la
+	// description. Sans rabais, la description gardait en plus ces 15 mm (`wDesc += wDisc`) alors
+	// que la colonne n'était pas dessinée : le tableau faisait 195 mm et finissait AU BORD de la
+	// feuille — sur toute facture ou tout devis sans rabais, donc la plupart.
 	wDesc, wQty, wPrice, wDisc, wVAT, wTotal := 90.0, 20.0, 30.0, 15.0, 15.0, 25.0
 	if !showVAT {
 		wDesc += wVAT
@@ -427,7 +433,6 @@ func renderLines(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	if showDiscount {
 		wDesc -= wDisc
 	} else {
-		wDesc += wDisc
 		wDisc = 0
 	}
 
