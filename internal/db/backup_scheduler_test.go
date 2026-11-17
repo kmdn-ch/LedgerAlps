@@ -86,9 +86,25 @@ func TestUneCopieEstReprisePendantQueLeServeurTourne(t *testing.T) {
 	database, cfg := newTestDB(t)
 	dir := t.TempDir()
 	ctx, annuler := context.WithCancel(context.Background())
-	defer annuler()
+
+	// Le test ne doit rendre la main qu'une fois la dernière sauvegarde terminée : sinon elle écrit
+	// encore dans le dossier temporaire pendant que Go le supprime (« directory not empty », vu en CI).
+	// On compte la tâche AVANT de regarder l'annulation : une tâche qui démarre juste après `annuler`
+	// est soit comptée (on l'attend), soit voit l'annulation et ne touche à rien.
+	var enCours atomic.Int32
+	defer func() {
+		annuler()
+		if !attendre(5*time.Second, func() bool { return enCours.Load() == 0 }) {
+			t.Error("une sauvegarde est encore en cours après l'arrêt")
+		}
+	}()
 
 	job := func(ctx context.Context) {
+		enCours.Add(1)
+		defer enCours.Add(-1)
+		if ctx.Err() != nil {
+			return
+		}
 		// Intervalle de 30 ms : « plus d'un jour » à l'échelle du test.
 		_, _ = MaybeAutoBackup(ctx, database, cfg, dir, 30*time.Millisecond, 100, "")
 	}
