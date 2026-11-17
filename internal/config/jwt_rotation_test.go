@@ -214,8 +214,7 @@ func TestLeCheminDuFichierEstBienIsole(t *testing.T) {
 // ─── Rotation et JWT_SECRET d'environnement (audit 4, É-2) ───────────────────
 //
 // Le chemin Linux/systemd pose JWT_SECRET dans l'environnement du service
-// via `EnvironmentFile=` (le service Windows que posait `scripts/install.ps1`
-// n'existe plus). Sur ce chemin, `applyEnvOverrides` réimpose la
+// via `EnvironmentFile=` (il n'y a pas de service Windows). Sur ce chemin, `applyEnvOverrides` réimpose la
 // valeur statique par-dessus toute clé tournée relue du fichier — et cette
 // préséance est VOULUE, documentée dans config.go après un incident réel
 // (SQLITE_PATH d'une restauration écrasé par le fichier).

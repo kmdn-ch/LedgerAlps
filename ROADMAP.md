@@ -249,7 +249,7 @@ propriétaire sont prises et appliquées : le taux TDFN est celui de l'AFC, sais
 chemin « service Windows » est retiré ; l'archive légale contient les factures fournisseurs, les paiements,
 les relevés bancaires et le journal d'audit. Rien de connu ne reste ouvert dans ce rapport ; restent à
 éprouver ce que la prochaine rc éprouvera (la publication en brouillon) et ce que seul un vrai Windows
-éprouvera (`install.ps1` sous élévation, le lanceur en TLS).
+éprouvera.
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions

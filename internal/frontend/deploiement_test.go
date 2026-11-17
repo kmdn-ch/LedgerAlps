@@ -62,54 +62,15 @@ func TestLEmpreinteDeLInstalleurNEstAjouteeQuUneFois(t *testing.T) {
 	}
 }
 
-// HIGH-25. Un dossier de données préexistant n'est accepté que s'il est digne de confiance, et le
-// service est arrêté avant que ses binaires soient remplacés.
-func TestLInstallationWindowsGardeSesGardeFous(t *testing.T) {
-	ps := racine(t, "scripts", "install.ps1")
-	for _, attendu := range []string{
-		"function Assert-DossierDeDonnees",
-		"ReparsePoint",
-		"Assert-DossierDeDonnees -Chemin $DataDir",
-	} {
-		if !strings.Contains(ps, attendu) {
-			t.Errorf("install.ps1 ne contient plus %q", attendu)
-		}
-	}
-	// Un service hérité et le serveur en marche sont écartés AVANT la copie des binaires.
-	copie := strings.Index(ps, `Copy-Item $serverExe.FullName`)
-	for _, appel := range []string{"    Remove-ObsoleteService", "    Assert-AucunServeurEnCours"} {
-		if i := strings.Index(ps, appel); i < 0 || copie < 0 || i > copie {
-			t.Errorf("%q n'est pas appelé AVANT la copie des binaires (appel %d, copie %d)", strings.TrimSpace(appel), i, copie)
-		}
-	}
-	// Le contrôle du dossier précède sa création.
-	if strings.Index(ps, "Assert-DossierDeDonnees -Chemin $DataDir") > strings.Index(ps, "Install-Binaries -Tag") {
-		t.Error("le dossier de données est contrôlé APRÈS le début de l'installation")
-	}
-}
-
 // CRIT-15 (décision du propriétaire : retirer le chemin « service »). ledgeralps-server.exe n'appelle
 // jamais StartServiceCtrlDispatcher : un service qui pointe sur lui échoue au démarrage (erreur 1053).
-// install.ps1 n'en enregistre plus, retire celui d'une exécution antérieure — seulement s'il pointe sur
-// NOTRE binaire — et ne tue pas un serveur en marche.
-func TestInstallPs1NEnregistrePlusDeServiceEtRetireLAncien(t *testing.T) {
-	ps := racine(t, "scripts", "install.ps1")
-	for _, interdit := range []string{"sc.exe create", "New-Service", "Register-Service", "sc.exe failure", "start= auto"} {
-		if strings.Contains(ps, interdit) {
-			t.Errorf("install.ps1 enregistre encore un service (%q) : le binaire ne sait pas en être un", interdit)
-		}
+// scripts/install.ps1, qui en enregistrait un, a été supprimé ; rien ne doit en poser un autre.
+//
+// Le binaire n'a toujours pas le protocole de service : s'il l'a un jour, cette décision se rouvre.
+func TestLeBinaireNEstPasUnServiceWindows(t *testing.T) {
+	if _, err := os.Stat(filepath.Join("..", "..", "scripts", "install.ps1")); err == nil {
+		t.Error("scripts/install.ps1 est revenu : il a été retiré, et son service ne pouvait pas démarrer")
 	}
-	for _, attendu := range []string{
-		"function Remove-ObsoleteService",
-		`-notlike "*ledgeralps-server.exe*"`, // un service du même nom qui n'est pas le nôtre reste intact
-		"function Assert-AucunServeurEnCours",
-		"is obsolete and ignored",
-	} {
-		if !strings.Contains(ps, attendu) {
-			t.Errorf("install.ps1 ne contient plus %q", attendu)
-		}
-	}
-	// Et le binaire n'a toujours pas le protocole de service : s'il l'a un jour, cette décision se rouvre.
 	for _, dossier := range []string{"cmd", "internal"} {
 		_ = filepath.Walk(filepath.Join("..", "..", dossier), func(chemin string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() || !strings.HasSuffix(chemin, ".go") || strings.HasSuffix(chemin, "_test.go") {

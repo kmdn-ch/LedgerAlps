@@ -165,5 +165,5 @@ install: build ## Install both binaries to /usr/local/bin
 	    install -m 0755 $(DIST_DIR)/$(BINARY_SERVER) /usr/local/bin/$(BINARY_SERVER); \
 	    install -m 0755 $(DIST_DIR)/$(BINARY_CLI) /usr/local/bin/$(BINARY_CLI); \
 	    echo "Installed $(BINARY_SERVER) and $(BINARY_CLI) to /usr/local/bin/";; \
-	  *) echo "ERROR: 'make install' is Linux/macOS only. On Windows run: scripts\install.ps1"; exit 1;; \
+	  *) echo "ERROR: 'make install' is Linux/macOS only. On Windows use the LedgerAlps_Setup_*.exe installer from the releases page"; exit 1;; \
 	esac

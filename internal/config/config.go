@@ -62,8 +62,8 @@ type Config struct {
 	// JWT_SECRET, et non du fichier de configuration.
 	//
 	// Sur le chemin d'installation « service » — Linux/systemd via
-	// `EnvironmentFile=` — cette variable est chargée à chaque démarrage. (Le service Windows
-	// que posait scripts/install.ps1 n'existe plus : le binaire ne sait pas en être un.) `applyEnvOverrides` la réimpose alors par-dessus toute
+	// `EnvironmentFile=` — cette variable est chargée à chaque démarrage. (Il n'y a pas de service
+	// Windows : le binaire ne sait pas en être un.) `applyEnvOverrides` la réimpose alors par-dessus toute
 	// clé tournée relue du fichier, et cette préséance est VOULUE (voir le
 	// commentaire de Load : le fichier gagnait, ce qui rendait SQLITE_PATH et
 	// consorts inatteignables).
