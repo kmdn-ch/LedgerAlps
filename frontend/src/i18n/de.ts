@@ -411,7 +411,7 @@ export const de: Catalogue = {
   'sv.creee': 'Sicherung erstellt und geprüft.',
   'sv.disponibles': 'Verfügbare Sicherungen ({n})',
   'sv.aucune': 'Keine Sicherung',
-  'sv.aucuneAide': 'Erstellen Sie oben eine. Beim Start wird ausserdem automatisch eine Sicherung angelegt.',
+  'sv.aucuneAide': 'Erstellen Sie oben eine. Eine automatische Sicherung wird ausserdem beim Start angelegt, danach sobald die letzte älter als ein Tag ist.',
   'sv.fichier': 'Datei',
   'sv.taille': 'Grösse',
   'sv.chiffrement': 'Verschlüsselung',

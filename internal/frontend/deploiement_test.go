@@ -209,3 +209,20 @@ func TestLeServeurNEcouteQueSurLaBoucleLocale(t *testing.T) {
 		t.Error("la route de rotation de la clé de signature a disparu avec les réglages réseau")
 	}
 }
+
+// La sauvegarde automatique n'était prise qu'au démarrage du serveur. Sur une machine allumée des
+// semaines, la copie la plus récente avait donc l'âge du dernier démarrage. Le serveur la rappelle
+// maintenant à intervalle régulier, rattachée à la durée de vie de l'application (elle s'arrête avec
+// elle). Le planificateur lui-même est testé dans internal/db ; ceci tient que le serveur l'appelle.
+func TestLeServeurRappelleLaSauvegardeAutomatique(t *testing.T) {
+	src := racine(t, "cmd", "server", "main.go")
+	if !strings.Contains(src, "db.StartAutoBackupScheduler(ctxApp, db.AutoBackupCheckEvery,") {
+		t.Error("cmd/server/main.go ne rappelle plus la sauvegarde automatique : elle ne serait prise qu'au démarrage, " +
+			"et une machine allumée des semaines n'aurait aucune copie récente")
+	}
+	// La phrase de passe est relue à chaque passage : elle se change sans redémarrer.
+	i := strings.Index(src, "db.StartAutoBackupScheduler(")
+	if i < 0 || !strings.Contains(src[i:], "backupPolicy.Passphrase()") {
+		t.Error("le passage périodique ne relit pas la phrase de passe : un changement de réglage ne serait suivi qu'au redémarrage")
+	}
+}

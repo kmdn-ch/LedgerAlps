@@ -227,6 +227,28 @@ func main() {
 		fmt.Printf("LedgerAlps: backup written to %s\n", path)
 	}
 
+	// Puis toutes les heures, tant que le serveur tourne.
+	//
+	// Le serveur n'est pas arrêté quand on ferme le navigateur : le lanceur le démarre puis se termine, et
+	// il survit. Une copie prise UNIQUEMENT au démarrage laissait une machine allumée des semaines sans
+	// copie plus récente que celle du jour où elle avait démarré. On pose la même question — « la plus
+	// récente a-t-elle plus d'un jour ? » — à chaque heure, et une copie due est prise dans l'heure.
+	//
+	// La phrase de passe est relue à CHAQUE passage : elle se change dans Paramètres sans redémarrer, et
+	// une copie prise le lendemain avec l'ancienne valeur (ou en clair) serait un défaut silencieux.
+	// L'avertissement « sera écrite EN CLAIR » n'est pas répété ici : il a été donné au démarrage, et le
+	// redire toutes les heures n'apprendrait rien de plus qu'à l'ignorer.
+	db.StartAutoBackupScheduler(ctxApp, db.AutoBackupCheckEvery, func(ctx context.Context) {
+		pass, _ := backupPolicy.Passphrase()
+		path, err := db.MaybeAutoBackup(ctx, database, cfg, db.BackupDir(), db.DefaultInterval, db.DefaultKeep, pass)
+		switch {
+		case err != nil:
+			log.Printf("WARNING: sauvegarde automatique périodique échouée: %v", err)
+		case path != "":
+			fmt.Printf("LedgerAlps: backup written to %s\n", path)
+		}
+	})
+
 	// ── 4. Gin ────────────────────────────────────────────────────────────────
 	if !cfg.Debug {
 		gin.SetMode(gin.ReleaseMode)

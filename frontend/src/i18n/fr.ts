@@ -454,7 +454,7 @@ export const fr = {
   'sv.creee': 'Sauvegarde créée et vérifiée.',
   'sv.disponibles': 'Sauvegardes disponibles ({n})',
   'sv.aucune': 'Aucune sauvegarde',
-  'sv.aucuneAide': 'Créez-en une ci-dessus. Une sauvegarde automatique est aussi prise au démarrage.',
+  'sv.aucuneAide': 'Créez-en une ci-dessus. Une sauvegarde automatique est aussi prise au démarrage, puis dès que la dernière a plus d’un jour.',
   'sv.fichier': 'Fichier',
   'sv.taille': 'Taille',
   'sv.chiffrement': 'Chiffrement',

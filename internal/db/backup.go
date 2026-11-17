@@ -47,7 +47,8 @@ const (
 	// DefaultKeep is how many snapshots are retained by default.
 	DefaultKeep = 14
 	// DefaultInterval is the minimum age of the newest backup before the server
-	// takes another one automatically at startup.
+	// takes another one automatically — at startup, then every
+	// AutoBackupCheckEvery while it runs (backup_scheduler.go).
 	DefaultInterval = 24 * time.Hour
 )
 

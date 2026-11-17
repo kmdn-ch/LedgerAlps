@@ -410,7 +410,7 @@ export const en: Catalogue = {
   'sv.creee': 'Backup created and verified.',
   'sv.disponibles': 'Available backups ({n})',
   'sv.aucune': 'No backup',
-  'sv.aucuneAide': 'Create one above. An automatic backup is also taken at start-up.',
+  'sv.aucuneAide': 'Create one above. An automatic backup is also taken at start-up, then whenever the latest one is more than a day old.',
   'sv.fichier': 'File',
   'sv.taille': 'Size',
   'sv.chiffrement': 'Encryption',

@@ -255,10 +255,12 @@ les relevés bancaires et le journal d'audit. Rien de connu ne reste ouvert dans
 éprouver ce que la prochaine rc éprouvera (la publication en brouillon) et ce que seul un vrai Windows
 éprouvera.
 
-Après les rc, deux décisions du propriétaire : `scripts/install.ps1` est supprimé (il ne faisait plus que copier
-deux binaires, et n'avait jamais tourné sur un vrai Windows) ; et **LedgerAlps n'est plus joignable par le réseau**
+Après les rc, trois décisions du propriétaire : `scripts/install.ps1` est supprimé (il ne faisait plus que copier
+deux binaires, et n'avait jamais tourné sur un vrai Windows) ; **LedgerAlps n'est plus joignable par le réseau**
 (écoute sur `127.0.0.1` seulement, plus de TLS, plus d'adresse d'écoute réglable, plus de mandataires ni d'origines
-à déclarer — voir le point 5).
+à déclarer — voir le point 5) ; et la **sauvegarde automatique est périodique** : elle n'était prise qu'au démarrage
+du serveur, donc jamais sur une machine allumée des semaines ; elle est maintenant reprise toutes les heures dès que
+la dernière copie a plus d'un jour.
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions

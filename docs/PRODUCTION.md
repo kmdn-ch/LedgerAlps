@@ -250,8 +250,13 @@ ledgeralps-cli backups                 # lister
 ledgeralps-cli restore --file=… --confirm   # serveur ARRÊTÉ
 ```
 
-Un instantané est pris automatiquement au démarrage si le dernier date de plus
-de 24 h. Les sauvegardes vont dans `<données applicatives>/backups`.
+Un instantané est pris automatiquement **au démarrage, puis toutes les heures**
+dès que le dernier date de plus de 24 h : une machine qui reste allumée des semaines
+n'attend donc pas son prochain redémarrage pour avoir une copie récente (jusqu'à la
+1.6.5, la copie n'était prise qu'au démarrage). Une copie manuelle compte comme la
+plus récente. La phrase de passe des sauvegardes est relue à chaque passage : la
+changer dans Paramètres vaut pour la copie suivante, sans redémarrer. Il garde les
+14 dernières. Les sauvegardes vont dans `<données applicatives>/backups`.
 
 **À faire vous-même :** copier ces instantanés hors de la machine (NAS, disque
 externe chiffré). Une sauvegarde qui vit sur le disque qui meurt ne sauve rien.

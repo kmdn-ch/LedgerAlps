@@ -410,7 +410,7 @@ export const it: Catalogue = {
   'sv.creee': 'Backup creato e verificato.',
   'sv.disponibles': 'Backup disponibili ({n})',
   'sv.aucune': 'Nessun backup',
-  'sv.aucuneAide': 'Createne uno qui sopra. Un backup automatico viene inoltre eseguito all’avvio.',
+  'sv.aucuneAide': 'Createne uno qui sopra. Un backup automatico viene inoltre eseguito all’avvio, poi non appena l’ultimo ha più di un giorno.',
   'sv.fichier': 'File',
   'sv.taille': 'Dimensione',
   'sv.chiffrement': 'Cifratura',

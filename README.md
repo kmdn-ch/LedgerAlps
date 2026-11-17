@@ -85,7 +85,7 @@ ce qu'elle prouve que ce qu'elle ne prouve pas.
 
 ### 💾 Sauvegardes
 
-Instantané automatique, chiffrable par une phrase de passe (Argon2id +
+Instantané automatique quotidien, chiffrable par une phrase de passe (Argon2id +
 XChaCha20-Poly1305).
 
 Restauration annulable : votre comptabilité actuelle est sauvegardée avant d'être
