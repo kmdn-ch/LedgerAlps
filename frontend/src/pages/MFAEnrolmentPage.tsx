@@ -119,9 +119,12 @@ export function MFAEnrolmentPage() {
                 {t('mf.active')}
               </h1>
 
-              <div className="mt-4 rounded-lg border border-warning-500/40 bg-warning-500/10 p-4">
-                <p className="text-sm text-warning-200 flex items-start gap-2">
-                  <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+              {/* Fond blanc, texte bleu nuit : sur la carte sombre, l'ancien encart était
+                  illisible — `text-warning-200` n'existe pas dans la palette (100, 500 et 700
+                  seulement), le texte retombait donc sur une couleur sombre, sur fond sombre. */}
+              <div className="mt-4 rounded-lg border-2 border-warning-500 bg-white p-4">
+                <p className="text-sm font-medium text-alpine-900 flex items-start gap-2">
+                  <AlertTriangle size={16} className="shrink-0 mt-0.5 text-warning-700" />
                   <span>
                     {t('mf.notezMaintenant')}
                   </span>
