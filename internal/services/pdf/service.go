@@ -9,14 +9,17 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	_ "image/jpeg" // enregistre le décodeur JPEG : un logo JPEG se mesure comme un PNG
 	"image/png"
 	"math"
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	gofpdf "github.com/go-pdf/fpdf"
 	qrcode "github.com/skip2/go-qrcode"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/i18n"
@@ -212,17 +215,22 @@ func Generate(inv InvoiceData) ([]byte, error) {
 // ─── Section renderers ────────────────────────────────────────────────────────
 
 func renderHeader(pdf *gofpdf.Fpdf, inv InvoiceData) {
-	// Render company logo if present (top-left, 22×16 mm reserved area).
-	// Company text starts to the right of the logo when present, otherwise at x=15.
+	// Le logo, en haut à gauche, dans une boîte de logoMaxL × logoMaxH mm. Le texte
+	// de l'émetteur commence à droite du logo quand il y en a un, sinon à x = 15.
 	textX := 15.0
 	if inv.Company.LogoData != "" {
 		if imgData, imgType, err := decodeLogoDataURL(inv.Company.LogoData); err == nil {
-			imgKey := "company_logo"
-			reader := bytes.NewReader(imgData)
-			pdf.RegisterImageOptionsReader(imgKey, gofpdf.ImageOptions{ImageType: imgType}, reader)
-			// Place logo at (15, 13), 22mm wide, 16mm tall (fixed box — proportions may vary)
-			pdf.ImageOptions(imgKey, 15, 13, 22, 16, false, gofpdf.ImageOptions{ImageType: imgType}, 0, "")
-			textX = 40 // company text starts after the logo
+			// Les dimensions viennent de l'image elle-même. Un logo illisible est
+			// laissé de côté : s'il était confié tel quel au générateur, il
+			// mettrait TOUT le PDF en erreur, donc la facture ne sortirait plus.
+			if cfg, _, err := image.DecodeConfig(bytes.NewReader(imgData)); err == nil && cfg.Width > 0 && cfg.Height > 0 {
+				w, h := inscrireDansLaBoite(cfg.Width, cfg.Height, logoMaxL, logoMaxH)
+				imgKey := "company_logo"
+				reader := bytes.NewReader(imgData)
+				pdf.RegisterImageOptionsReader(imgKey, gofpdf.ImageOptions{ImageType: imgType}, reader)
+				pdf.ImageOptions(imgKey, logoX, logoY, w, h, false, gofpdf.ImageOptions{ImageType: imgType}, 0, "")
+				textX = logoX + w + logoEcart // le texte de l'émetteur suit le logo
+			}
 		}
 	}
 
@@ -284,6 +292,38 @@ func renderHeader(pdf *gofpdf.Fpdf, inv InvoiceData) {
 	pdf.CellFormat(65, 12, latin1(documentTitle(inv)), "", 1, "R", false, 0, "")
 
 	pdf.SetY(45)
+}
+
+// La boîte du logo.
+//
+// Elle était de 22 × 16 mm et le logo y était ÉTIRÉ : `ImageOptions(…, 22, 16)`
+// donne les deux côtés, donc un logo carré (300 × 300 px, le format que
+// l'interface enregistre) sortait écrasé en rectangle 1,375 : 1, et un logo
+// horizontal étiré dans l'autre sens. Un logo déformé n'est plus celui de
+// l'entreprise.
+//
+// Elle est maintenant de 34 × 24 mm et le logo y est INSCRIT, proportions
+// gardées. La hauteur reste sous les 45 mm où commence le bloc client, et la
+// colonne de gauche n'a rien d'autre dans cette bande : la mise en page du reste
+// de la facture ne bouge pas.
+const (
+	logoX, logoY       = 15.0, 13.0 // coin haut-gauche, inchangé
+	logoMaxL, logoMaxH = 34.0, 24.0 // boîte maximale, en mm
+	logoEcart          = 5.0        // entre le logo et le texte de l'émetteur
+)
+
+// inscrireDansLaBoite rend la taille, en mm, à laquelle imprimer une image de
+// largeurPx × hauteurPx pour qu'elle tienne dans maxL × maxH sans changer de
+// proportions. Le côté contraignant remplit la boîte.
+func inscrireDansLaBoite(largeurPx, hauteurPx int, maxL, maxH float64) (l, h float64) {
+	if largeurPx <= 0 || hauteurPx <= 0 {
+		return maxL, maxH
+	}
+	rapport := float64(largeurPx) / float64(hauteurPx)
+	if rapport >= maxL/maxH {
+		return maxL, maxL / rapport
+	}
+	return maxH * rapport, maxH
 }
 
 // decodeLogoDataURL splits a base64 data URL into raw bytes and an fpdf image type string.
@@ -760,7 +800,7 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	// ── Receipt section ───────────────────────────────────────────────────────
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.SetXY(margin, slipTop+margin)
-	pdf.CellFormat(rcWidth, 6, latin1("R\u00e9c\u00e9piss\u00e9"), "", 1, "L", false, 0, "")
+	pdf.CellFormat(rcWidth, 6, latin1(inv.t("Récépissé")), "", 1, "L", false, 0, "")
 
 	pdf.SetFont("Helvetica", "B", 6)
 	pdf.SetX(margin)
@@ -825,7 +865,7 @@ func renderPaymentSlip(pdf *gofpdf.Fpdf, inv InvoiceData) error {
 	if refType != "NON" {
 		pdf.SetFont("Helvetica", "B", 8)
 		pdf.SetX(infoX)
-		pdf.CellFormat(infoW, 4.5, latin1("R\u00e9f\u00e9rence"), "", 1, "L", false, 0, "")
+		pdf.CellFormat(infoW, 4.5, latin1(inv.t("Référence")), "", 1, "L", false, 0, "")
 		pdf.SetFont("Helvetica", "", 10)
 		pdf.SetX(infoX)
 		pdf.CellFormat(infoW, 4.5, compliance.FormatQRRReference(ref), "", 1, "L", false, 0, "")
@@ -1053,7 +1093,9 @@ func formatIBAN(iban string) string {
 // latin1 converts a UTF-8 string to ISO-8859-1 (Latin-1) bytes so that fpdf's
 // standard Core fonts (Helvetica, Times, Courier) render accented characters
 // correctly. Unicode code points U+0000–U+00FF map one-to-one to Latin-1 byte
-// values; code points above U+00FF are replaced with '?'.
+// values ; au-delà, voir ci-dessous : ponctuation typographique translittérée,
+// lettres Windows-1252 (« œ ») rendues, autres lettres latines ramenées à leur
+// lettre de base, le reste devient « ? ».
 // latin1 convertit vers l'encodage attendu par le générateur PDF.
 //
 // Elle N'EST PAS idempotente, et c'est ce qui a produit « B?n?ficiaire » sur les
@@ -1068,6 +1110,12 @@ func latin1(s string) string {
 	b := make([]byte, 0, len(s))
 	for _, r := range s {
 		switch {
+		case r < 0x80:
+			b = append(b, byte(r))
+		case r < 0xA0:
+			// Contrôles C1 : aucun glyphe. Les écrire tels quels les ferait
+			// lire comme les caractères Windows-1252 de la même plage (0x9C est
+			// « œ »), donc afficher une lettre que personne n'a tapée.
 		case r < 0x100:
 			b = append(b, byte(r))
 		default:
@@ -1080,12 +1128,56 @@ func latin1(s string) string {
 			// tirets et apostrophes typographiques qui n'y sont pas.
 			if repl, ok := translitteration[r]; ok {
 				b = append(b, repl...)
+			} else if c, ok := windows1252[r]; ok {
+				b = append(b, c)
+			} else if base := sansDiacritique(r); base != 0 {
+				b = append(b, base)
 			} else {
 				b = append(b, '?')
 			}
 		}
 	}
 	return string(b)
+}
+
+// windows1252 donne l'octet des lettres que Latin-1 n'a pas mais que la police
+// du PDF a.
+//
+// Les polices de base (Helvetica…) sont déclarées en WinAnsiEncoding — c'est-à-dire
+// Windows-1252, pas ISO-8859-1 : la plage 0x80–0x9F, que Latin-1 laisse aux
+// contrôles, y porte des lettres et des signes. « œ » est à 0x9C. Sans cette
+// table, « Main-d'œuvre », « Œuvres », « cœur » sortaient « Main-d'?uvre » sur la
+// facture, alors que le glyphe était dans la police.
+var windows1252 = map[rune]byte{
+	'Œ': 0x8C, 'œ': 0x9C, // « main-d'œuvre », « cœur », « sœur », « nœud »
+	'Š': 0x8A, 'š': 0x9A, // « Škoda »
+	'Ž': 0x8E, 'ž': 0x9E,
+	'Ÿ': 0x9F,
+	'™': 0x99,
+}
+
+// lettresSansDecomposition : des lettres latines qu'Unicode ne décompose pas en
+// « lettre + accent », donc que sansDiacritique ne sait pas ramener seule.
+var lettresSansDecomposition = map[rune]byte{
+	'Ł': 'L', 'ł': 'l', 'Đ': 'D', 'đ': 'd', 'Ħ': 'H', 'ħ': 'h', 'ı': 'i', 'Ŧ': 'T', 'ŧ': 't',
+}
+
+// sansDiacritique ramène une lettre latine hors Windows-1252 à sa lettre de
+// base : « č » → « c », « ő » → « o », « ł » → « l ». Une facture à « Dvořák »
+// ou à « Łukasiewicz » doit rester lisible et reconnaissable ; « Dvo?ák » ne
+// l'est pas. Rend 0 quand ce n'est pas une lettre latine à diacritique : le
+// caractère reste alors un « ? », ce qui dit honnêtement qu'il n'a pas pu être
+// rendu.
+func sansDiacritique(r rune) byte {
+	if b, ok := lettresSansDecomposition[r]; ok {
+		return b
+	}
+	for _, d := range norm.NFD.String(string(r)) {
+		if d < 0x80 && unicode.IsLetter(d) {
+			return byte(d)
+		}
+	}
+	return 0
 }
 
 // translitteration donne l'équivalent Latin-1 des caractères typographiques

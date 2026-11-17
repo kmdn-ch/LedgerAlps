@@ -3,12 +3,8 @@
 // Cet écran n'est plus qu'un assemblage : chaque sujet porte son propre titre et
 // se lit seul.
 //
-// La régénération de la clé de signature vivait ici, dans une carte à elle, au
-// dessus d'une seconde carte — dans le panneau suivant — qui annonçait que la
-// même clé était de toute façon régénérée chaque nuit. Deux encadrés pour une
-// seule clé, dont le premier renvoyait au second par « voir plus bas ». Elle a
-// rejoint celui qui décrit la régénération automatique : voir
-// SessionSecurityPanel.
+// La régénération de la clé de signature vit dans SessionSecurityPanel, une seule
+// carte pour une seule clé.
 
 import { DatabaseEncryptionPanel } from './DatabaseEncryptionPanel'
 import { SessionSecurityPanel } from './SessionSecurityPanel'

@@ -398,7 +398,6 @@ export interface SystemHealth {
     settings_uri?: string
     caveat?: string
   }
-  capabilities: Record<string, boolean>
   // Ce que la rétention nLPD art. 6 al. 4 fait réellement, en chiffres :
   // annoncer une durée sans montrer qu'elle s'applique était le défaut à éviter.
   personal_data?: {

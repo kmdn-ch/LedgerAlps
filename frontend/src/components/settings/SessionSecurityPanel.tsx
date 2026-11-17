@@ -6,16 +6,13 @@
 // à en durcir un et à laisser l'autre grand ouvert, ce qui donne l'illusion
 // d'une protection sans la protection.
 //
-// # Pourquoi la régénération forcée est ici et pas ailleurs
+// # La carte de la clé
 //
-// Elle vivait sur un autre écran, dans sa propre carte, à côté d'une carte qui
-// annonçait la régénération automatique. Deux encadrés parlant de la même clé,
-// dont l'un renvoyait à l'autre par « voir plus bas ». Qui lisait le premier
-// croyait devoir cliquer ; ce que la machine fait déjà toute seule chaque nuit.
-//
-// Il n'y a qu'une clé : il n'y a qu'une carte. Elle dit ce qui se passe sans
-// qu'on demande rien, puis offre la seule commande qui ajoute quelque chose —
-// ne pas attendre demain.
+// Elle ne porte plus d'encadré « régénération automatique » : la clé est régénérée
+// toute seule chaque jour, au démarrage, sans rien demander à l'utilisateur, et
+// l'annoncer en permanence n'apprenait rien. Reste la seule commande qui ajoute
+// quelque chose — ne pas attendre demain — et, quand l'environnement fige la clé,
+// l'avertissement qui dit pourquoi elle ne peut pas changer.
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -25,8 +22,7 @@ import { SectionTitle, ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
 import { targetURLAfterRestart, waitForShutdownThenGo } from '@/utils/restart'
 import type { SecuritySettings, RotateSecretResult } from '@/types'
-import { useT, useLangue } from '@/i18n/useT'
-import { localeIntl } from '@/i18n'
+import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
 
 // Deux minutes est le plancher accepté par le serveur : en dessous, la
@@ -40,19 +36,8 @@ const IDLE_CHOICES: { v: number; cle: Cle }[] = [
   { v: 60, cle: 'ss.uneHeure' },
 ]
 
-// La locale suit la langue choisie : « 09.02.2026 14:30 » est suisse, un
-// Britannique lit « 09/02/2026, 14:30 ». Le figer en fr-CH affichait une date
-// française sur une interface anglaise.
-function formatDateTime(iso: string | undefined, loc: string): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString(loc, {
-    dateStyle: 'short', timeStyle: 'short',
-  })
-}
-
 export function SessionSecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
   const t = useT()
-  const loc = localeIntl(useLangue())
   const qc = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -144,37 +129,19 @@ export function SessionSecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
           <div className="flex items-start gap-2">
             <RefreshCw size={16} className="mt-0.5 flex-shrink-0 text-alpine-500" />
             <div className="flex-1">
-              <p className="font-medium">{t('ss.rotationTitre')}</p>
-              <p className="text-alpine-600 mt-0.5">
-                {t('ss.rotationAide')}
-              </p>
-              {/* Dire la vérité plutôt qu'afficher une date qui avance sans
-                  effet. Quand JWT_SECRET vient de l'environnement — les
-                  installations en service Linux/systemd et Windows Service —
-                  la clé est réimposée à chaque démarrage : la rotation ne peut
-                  pas aboutir, et l'annoncer quand même décourageait de
-                  chercher ailleurs une protection qu'on croyait acquise. */}
-              {s.rotation.bloquee_par_environnement ? (
-                <p className="mt-2 text-warning-700">
+              {/* Quand JWT_SECRET vient de l'environnement — les installations
+                  en service Linux/systemd — la clé est réimposée à chaque
+                  démarrage : aucune régénération ne peut aboutir. Le dire,
+                  plutôt que laisser cliquer sur un bouton sans effet. */}
+              {s.rotation.bloquee_par_environnement && (
+                <p className="mb-3 text-warning-700">
                   {t('ss.rotationBloqueeEnv')}
                 </p>
-              ) : (
-                <>
-                  <p className="mt-2 text-success-700">
-                    {t('ss.rotationCadence')}
-                  </p>
-                  <p className="mt-1 text-xs text-alpine-500">
-                    {t('ss.derniereRegeneration', { date: formatDateTime(s.rotation.rotated_at, loc) })}
-                    {s.rotation.next_at
-                      && t('ss.prochaineAu', { date: formatDateTime(s.rotation.next_at, loc) })}
-                  </p>
-                </>
               )}
 
-              {/* La seule commande de l'écran. Tout le reste se fait sans elle ;
-                  elle ne sert qu'au cas que la périodicité ne couvre pas — on
-                  vient de s'apercevoir d'une fuite, demain est trop tard. */}
-              <div className="mt-3 border-t border-neutral-200 pt-3">
+              {/* La seule commande de la carte : on vient de s'apercevoir d'une
+                  fuite, il ne faut pas attendre le prochain démarrage. */}
+              <div>
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="font-medium">{t('ss.regenerationImmediate')}</p>

@@ -33,18 +33,6 @@ const SEVERITY: Record<IntegrityFinding['severity'], {
   info:    { icon: Info,          className: 'text-alpine-600',  cle: 'dg.information' },
 }
 
-// Les capacités remontées par le serveur sont les mêmes que celles qui gardent
-// les avis de conformité honnêtes. Les afficher évite d'avoir à croire sur
-// parole ce que le produit protège.
-const CAPABILITY_LABEL: Record<string, Cle> = {
-  encrypted_backups:      'dg.capSauvegardes',
-  encrypted_database:     'dg.capBase',
-  native_tls:             'dg.capTLS',
-  contact_anonymisation:  'dg.capAnonymisation',
-  period_locking:         'dg.capVerrouillage',
-  qr_bill_sps_2026:       'dg.capQR2026',
-}
-
 export function DiagnosticPanel() {
   const t = useT()
   const peutEcrire = useCanWrite()
@@ -232,24 +220,6 @@ export function DiagnosticPanel() {
             {health.data.disk_encryption && (
               <DiskEncryption info={health.data.disk_encryption} />
             )}
-
-            {/* Ce que le produit sait faire, tel que le serveur le déclare —
-                la même table qui empêche les avis de conformité de mentir. */}
-            <div className="text-sm">
-              <p className="text-alpine-500 text-xs uppercase tracking-wider mb-1.5">{t('dg.protections')}</p>
-              <ul className="space-y-0.5">
-                {Object.entries(health.data.capabilities).map(([name, present]) => (
-                  <li key={name} className="flex items-center gap-1.5 text-alpine-700">
-                    {present
-                      ? <ShieldCheck size={13} className="text-success-700 flex-shrink-0" />
-                      : <XCircle size={13} className="text-alpine-400 flex-shrink-0" />}
-                    <span className={present ? '' : 'text-alpine-500'}>
-                      {CAPABILITY_LABEL[name] ? t(CAPABILITY_LABEL[name]) : name}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
 
             {(health.data.login_lockouts ?? 0) > 0 && (
               <div className="text-sm">
