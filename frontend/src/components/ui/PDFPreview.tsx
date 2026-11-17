@@ -87,8 +87,15 @@ export function PDFPreview({ fetchPDF, filename, className, onClose }: PDFPrevie
         </div>
       </div>
 
-      {/* Contenu */}
-      <div className="flex-1 min-h-0 relative" style={{ height: '600px' }}>
+      {/* Contenu.
+          La hauteur suit la LARGEUR : une page A4 entière (210 × 297) à la largeur de l'aperçu, plus
+          de quoi loger la barre du lecteur PDF (`pb-20`, hors du rapport de forme grâce à `box-content`).
+          Avec les 600 px fixes d'avant, on ne voyait qu'un tiers de la facture ; maintenant la première
+          page se lit en entier sans défiler, et s'il y en a une deuxième on défile DANS l'aperçu. */}
+      <div
+        className="relative box-content w-full flex-none pb-20"
+        style={{ aspectRatio: '210 / 297', minHeight: '600px' }}
+      >
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-white">
             <Loader2 className="w-6 h-6 text-alpine-400 animate-spin" />
@@ -102,9 +109,12 @@ export function PDFPreview({ fetchPDF, filename, className, onClose }: PDFPrevie
         )}
         {blobUrl && !loading && (
           <iframe
-            src={blobUrl}
+            // `#view=FitH` : le lecteur ajuste la page à la largeur — c'est la largeur qui fixe la hauteur
+            // ci-dessus. `navpanes=0` : sans le volet de vignettes, qui rétrécirait la page. Un lecteur
+            // qui ignore ces paramètres garde son réglage par défaut.
+            src={`${blobUrl}#view=FitH&navpanes=0`}
             title={t('pv.apercuPDF')}
-            className="w-full h-full border-0"
+            className="absolute inset-0 w-full h-full border-0"
           />
         )}
       </div>
