@@ -226,3 +226,29 @@ func TestLeServeurRappelleLaSauvegardeAutomatique(t *testing.T) {
 		t.Error("le passage périodique ne relit pas la phrase de passe : un changement de réglage ne serait suivi qu'au redémarrage")
 	}
 }
+
+// Le nom du fichier PDF d'un devis s'écrivait « facture_… » : l'aperçu et la liste l'écrivaient en dur.
+// Une seule fonction (`pdfFileName`) le décide d'après le TYPE du document, et les trois endroits qui
+// nomment un PDF l'appellent.
+func TestLeNomDuFichierPDFSuitLeTypeDuDocument(t *testing.T) {
+	utils := racine(t, "frontend", "src", "utils", "index.ts")
+	for _, attendu := range []string{"export function pdfFileName(", "'offre'", "'note_credit'", "'facture'"} {
+		if !strings.Contains(utils, attendu) {
+			t.Errorf("utils/index.ts ne contient plus %q", attendu)
+		}
+	}
+	for _, page := range []string{"InvoiceDetailPage.tsx", "InvoicesPage.tsx"} {
+		src := racine(t, "frontend", "src", "pages", page)
+		if !strings.Contains(src, "pdfFileName(") {
+			t.Errorf("%s ne nomme plus ses PDF par pdfFileName", page)
+		}
+		if strings.Contains(src, "`facture_$") {
+			t.Errorf("%s écrit « facture_ » en dur : un devis sortirait nommé « facture_… »", page)
+		}
+	}
+	// L'écran d'une facture numérote ses lignes par POSITION, pas par le rang stocké (0 avant la 1.6.6).
+	detail := racine(t, "frontend", "src", "pages", "InvoiceDetailPage.tsx")
+	if strings.Contains(detail, "{line.sequence}") {
+		t.Error("InvoiceDetailPage affiche line.sequence : une facture d'avant la 1.6.6 montrerait « 0 » sur chaque ligne")
+	}
+}

@@ -11,7 +11,7 @@ import {
 import { useCanWrite, RAISON_LECTURE_SEULE } from '@/hooks/usePermissions'
 import { useT, useFormats } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
-import { formatCHF, formatDate, isOverdue } from '@/utils'
+import { formatCHF, formatDate, isOverdue, pdfFileName } from '@/utils'
 import type { Invoice, DisplayStatus, Contact } from '@/types'
 import { useNavigate } from 'react-router-dom'
 
@@ -62,9 +62,9 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
     isQuote ? i.document_type === 'quote' : i.document_type !== 'quote'
   )
 
-  const downloadPDF = async (id: string, invoiceNumber: string) => {
+  const downloadPDF = async (id: string, invoiceNumber: string, documentType: string) => {
     const resp = await invoicesApi.downloadPDF(id)
-    downloadBlob(resp.data, `facture_${invoiceNumber}.pdf`)
+    downloadBlob(resp.data, pdfFileName(documentType, invoiceNumber))
   }
 
   const markPaid = useMutation({
@@ -257,7 +257,7 @@ export function InvoicesPage({ mode = 'invoice' }: Props) {
                       </button>
                     )}
                     <button
-                      onClick={() => downloadPDF(inv.id, inv.invoice_number)}
+                      onClick={() => downloadPDF(inv.id, inv.invoice_number, inv.document_type)}
                       className="btn-ghost btn-sm"
                       title={t('fact.telechargerPDF')}
                     >

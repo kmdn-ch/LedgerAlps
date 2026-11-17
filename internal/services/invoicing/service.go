@@ -131,6 +131,21 @@ type LineInput struct {
 	Sequence    int
 }
 
+// rangDeLigne rend le numéro d'ordre d'une ligne : celui que le client a donné, sinon sa POSITION
+// (à partir de 1).
+//
+// La création n'attribuait rien : une ligne sans rang s'écrivait avec 0, donc toutes les lignes d'une
+// facture avaient le rang 0 — l'écran affichait « 0, 0, 0 » dans la colonne « # », et `ORDER BY sequence`
+// ne départageait plus rien (l'ordre des lignes ne tenait qu'à la base). Seule la modification posait déjà
+// `i + 1`. La conversion d'une offre et la note de crédit recopient les lignes lues : elles héritaient des
+// 0 de la facture d'origine, d'où la même règle ici.
+func rangDeLigne(sequence, position int) int {
+	if sequence > 0 {
+		return sequence
+	}
+	return position + 1
+}
+
 type CreateInvoiceRequest struct {
 	DocumentType string // "invoice" | "quote" | "credit_note"
 	ContactID    string
@@ -237,12 +252,12 @@ func (s *Service) CreateInvoice(ctx context.Context, userID string, req CreateIn
 	insertLine := db.Rebind(`
 		INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit, unit_price, discount_pct, vat_rate, line_total, sequence)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
-	for _, l := range req.Lines {
+	for i, l := range req.Lines {
 		// line_total is the HT amount after discount (before VAT).
 		lineTotal := lineBase(l)
 		if _, err := tx.ExecContext(ctx, insertLine,
 			db.NewID(), invoiceID, l.Description, l.Quantity, l.Unit, l.UnitPrice,
-			l.DiscountPct, l.VATRate, lineTotal, l.Sequence); err != nil {
+			l.DiscountPct, l.VATRate, lineTotal, rangDeLigne(l.Sequence, i)); err != nil {
 			return nil, fmt.Errorf("insert line: %w", err)
 		}
 	}
@@ -411,13 +426,9 @@ func (s *Service) UpdateInvoiceBy(ctx context.Context, invoiceID string, req Cre
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
 	for i, l := range req.Lines {
 		lineTotal := lineBase(l)
-		seq := l.Sequence
-		if seq == 0 {
-			seq = i + 1
-		}
 		if _, err := tx.ExecContext(ctx, insertLine,
 			db.NewID(), invoiceID, l.Description, l.Quantity, l.Unit,
-			l.UnitPrice, l.DiscountPct, l.VATRate, lineTotal, seq); err != nil {
+			l.UnitPrice, l.DiscountPct, l.VATRate, lineTotal, rangDeLigne(l.Sequence, i)); err != nil {
 			return nil, fmt.Errorf("insert line: %w", err)
 		}
 	}
@@ -878,11 +889,11 @@ func (s *Service) ConvertQuote(ctx context.Context, quoteID, userID string, req 
 	insertLine := db.Rebind(`
 		INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit, unit_price, discount_pct, vat_rate, line_total, sequence)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
-	for _, l := range lines {
+	for i, l := range lines {
 		lineTotal := lineBase(l)
 		if _, err := tx.ExecContext(ctx, insertLine,
 			db.NewID(), invoiceID, l.Description, l.Quantity, l.Unit, l.UnitPrice,
-			l.DiscountPct, l.VATRate, lineTotal, l.Sequence); err != nil {
+			l.DiscountPct, l.VATRate, lineTotal, rangDeLigne(l.Sequence, i)); err != nil {
 			return nil, fmt.Errorf("insert converted line: %w", err)
 		}
 	}
@@ -1124,11 +1135,11 @@ func (s *Service) CreateCreditNote(ctx context.Context, invoiceID, userID string
 	insertLine := db.Rebind(`
 		INSERT INTO invoice_lines (id, invoice_id, description, quantity, unit, unit_price, discount_pct, vat_rate, line_total, sequence)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, s.usePostgres)
-	for _, l := range lines {
+	for i, l := range lines {
 		lineTotal := lineBase(l)
 		if _, err := tx.ExecContext(ctx, insertLine,
 			db.NewID(), creditNoteID, l.Description, l.Quantity, l.Unit, l.UnitPrice,
-			l.DiscountPct, l.VATRate, lineTotal, l.Sequence); err != nil {
+			l.DiscountPct, l.VATRate, lineTotal, rangDeLigne(l.Sequence, i)); err != nil {
 			return nil, fmt.Errorf("insert credit note line: %w", err)
 		}
 	}

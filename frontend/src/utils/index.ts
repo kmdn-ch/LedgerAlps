@@ -92,6 +92,18 @@ export function statusCle(s: DisplayStatus): Cle | null { return STATUS_LABELS[s
 export function statusClass(s: DisplayStatus): string { return STATUS_CLASS[s] ?? 'badge-draft' }
 
 // ─── IBAN formaté ─────────────────────────────────────────────────────────────
+/**
+ * Nom du fichier PDF d'un document : le préfixe suit le TYPE (« offre_ » pour une offre de prix,
+ * « note_credit_ » pour une note de crédit, « facture_ » sinon), pas toujours « facture_ ».
+ * Une seule définition, pour que l'aperçu, le bouton « Télécharger » et la liste s'accordent.
+ */
+export function pdfFileName(documentType: string | undefined, numero: string): string {
+  const prefixe = documentType === 'quote' ? 'offre'
+    : documentType === 'credit_note' ? 'note_credit'
+    : 'facture'
+  return `${prefixe}_${numero}.pdf`
+}
+
 export function formatIBAN(iban: string): string {
   const c = iban.replace(/\s/g, '').toUpperCase()
   return c.match(/.{1,4}/g)?.join(' ') ?? iban

@@ -16,7 +16,7 @@ import { InvoicePayments } from '@/components/invoice/InvoicePayments'
 import { useCanWrite } from '@/hooks/usePermissions'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
-import { formatCHF, formatDate, isOverdue } from '@/utils'
+import { formatCHF, formatDate, isOverdue, pdfFileName } from '@/utils'
 import { businessRefusal } from '@/utils/refusal'
 import type { DocumentStatus, Invoice, QuoteOutcome } from '@/types'
 
@@ -285,9 +285,7 @@ export function InvoiceDetailPage() {
   const handleDownload = async () => {
     if (!invoice) return
     const resp = await invoicesApi.downloadPDF(invoiceId!)
-    const prefix = invoice.document_type === 'quote' ? 'offre'
-      : invoice.document_type === 'credit_note' ? 'note_credit' : 'facture'
-    downloadBlob(resp.data, `${prefix}_${invoice.invoice_number}.pdf`)
+    downloadBlob(resp.data, pdfFileName(invoice.document_type, invoice.invoice_number))
   }
 
   // Dossier de validation SIX : le payload exact du QR et le bulletin, à
@@ -607,9 +605,10 @@ export function InvoiceDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {invoice.lines.map(line => (
+              {invoice.lines.map((line, i) => (
                 <tr key={line.id}>
-                  <td className="text-alpine-400 w-8">{line.sequence}</td>
+                  {/* La POSITION, pas `line.sequence` : une facture créée avant la 1.6.6 porte le rang 0 sur toutes ses lignes. */}
+                  <td className="text-alpine-400 w-8">{i + 1}</td>
                   <td className="text-alpine-800">{line.description}</td>
                   <td className="text-right tabular-nums">
                     {line.quantity}{line.unit ? ` ${line.unit}` : ''}
@@ -649,7 +648,7 @@ export function InvoiceDetailPage() {
       {showPDF && (
         <PDFPreview
           fetchPDF={() => invoicesApi.downloadPDF(invoiceId!).then(r => r.data as Blob)}
-          filename={`facture_${invoice.invoice_number}.pdf`}
+          filename={pdfFileName(invoice.document_type, invoice.invoice_number)}
           className="mb-6"
           onClose={() => setShowPDF(false)}
         />
