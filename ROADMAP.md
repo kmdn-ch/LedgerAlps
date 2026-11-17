@@ -80,7 +80,7 @@ flowchart TB
 | 16 | Montée react-router v6 → v7 (et zod 4) | 🔎 à valider |
 | 17 | Correctifs d'audit reportés (1.6.3) | ✅ |
 | 18 | Audit brutal : correctifs (1.6.5) | 🔎 à valider |
-| 19 | Audit 9 : correctifs (à paraître en 1.6.6) | 🔎 sur `test`, à valider |
+| 19 | Audit 9 : correctifs (1.6.6) | ✅ |
 | 14 | **Modules métier** | 💡 à trancher |
 
 ---
@@ -214,8 +214,8 @@ doublons d'import bancaire, numérotation, arrondi des négatifs. Sécurité : `
 déconnexion sur inactivité tenue par le serveur, plafond des codes de secours.
 Outillage : `react-router` 7, `zod` 4, macro NSIS.
 
-**19 — Audit 9 : correctifs (à paraître en 1.6.6).** Revue complète du code après la
-1.6.5, dix-neuf constats corrigés sur la branche `test`. Critique : une facture dont
+**19 — Audit 9 : correctifs (1.6.6).** Revue complète du code après la
+1.6.5, dix-neuf constats corrigés. Critique : une facture dont
 le HT n'est pas un multiple de 0,05 partait sans jamais être comptabilisée — le total
 est désormais HT + TVA au centime, avec une reprise explicite des documents déjà dans
 cet état. Élevés : un jeton de rafraîchissement n'ouvre plus l'API, les dates et les
@@ -227,7 +227,7 @@ Reste ouverte : la signature Authenticode (pas de certificat). Rapport :
 `review-Claude9.md` (local, ignoré par git).
 Un audit externe (Gemini, soixante-huit constats) a ensuite été recoupé avec le code
 (`review-Gemini1.md`, local) : la première série, celle des chiffres faux, est corrigée
-sur `test` — clôture déséquilibrée, compte de résultat et bilan faux, carnet du lait,
+— clôture déséquilibrée, compte de résultat et bilan faux, carnet du lait,
 notes de crédit à l'encaissement, cycle des factures fournisseurs, factures archivées dans
 la TVA. La deuxième série ferme le contournement du limiteur du second facteur (et du mot
 de passe), dégèle la navigation des écrans Journal et Achats et rend leurs accents aux
@@ -248,12 +248,12 @@ rapport suit : le chiffrement programmé appelle désormais le redémarrage (et 
 contrôle hôte et origine), la veille Fedlex surveille **l'ensemble** des consolidations (la date
 maximale masquait une consolidation intermédiaire), l'ordre de paiement porte les adresses postales
 structurées et refuse un QR-IBAN comme compte à débiter, et la release naît en brouillon, publiée une
-fois l'installeur envoyé — ce dernier point n'est éprouvé que par la prochaine rc. Les trois décisions du
+fois l'installeur envoyé. Les trois décisions du
 propriétaire sont prises et appliquées : le taux TDFN est celui de l'AFC, saisi, sur la base TTC ; le
 chemin « service Windows » est retiré ; l'archive légale contient les factures fournisseurs, les paiements,
-les relevés bancaires et le journal d'audit. Rien de connu ne reste ouvert dans ce rapport ; restent à
-éprouver ce que la prochaine rc éprouvera (la publication en brouillon) et ce que seul un vrai Windows
-éprouvera.
+les relevés bancaires et le journal d'audit. Rien de connu ne reste ouvert dans ce rapport. La publication en
+brouillon, puis publiée une fois l'installeur envoyé, a été éprouvée par les trois versions candidates, et
+l'installeur Windows de la rc3 a été validé par le propriétaire.
 
 Après les rc, trois décisions du propriétaire : `scripts/install.ps1` est supprimé (il ne faisait plus que copier
 deux binaires, et n'avait jamais tourné sur un vrai Windows) ; **LedgerAlps n'est plus joignable par le réseau**
@@ -319,6 +319,7 @@ infrastructure) restent délibérément en français : déclarés un par un dans
 
 | Version | Apport principal |
 |---|---|
+| **v1.6.6** | **Audits 9 et croisé (Gemini) : correctifs.** Chiffres faux corrigés (clôture, compte de résultat, bilan, carnet du lait, TDFN au taux de l'AFC), immuabilité réelle des lignes et du journal d'audit, limiteur du second facteur, accents, logo et marge du PDF. **LedgerAlps n'est plus joignable par le réseau** : écoute sur `127.0.0.1` seulement, plus de HTTPS. `scripts/install.ps1` supprimé. Sauvegarde automatique reprise toutes les heures |
 | **v1.6.0** | **Audit 4 : trois défauts comptables critiques corrigés** — déclaration TVA qui ne ventilait jamais par taux, facture rouverte jamais recomptabilisée, adresse client contournable en modification. PostgreSQL refuse clairement plutôt que d'échouer à mi-chemin. Rotation du secret honnête sur tous les modes d'installation. Duplication du formulaire de facture éliminée |
 | **v1.5.9** | Adresse client obligatoire pour la facturation QR, logo d'en-tête agrandi |
 | **v1.5.8** | Extourne fournisseur correctement marquée et rattachée, port de config.json validé, `X-Forwarded-Proto` vérifié, chaîne d'approvisionnement durcie |

@@ -7,7 +7,19 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — Versioning
 
 ## [Unreleased]
 
+---
+
+## [1.6.6] — 2026-11-17
+
 Audit croisé de Gemini (`review-Gemini1.md`) : première série, les chiffres faux, deuxième série (second facteur, navigation, accents du PDF), troisième série (données, sécurité, assainissement), quatrième série (données et sécurité, documents, interface, déploiement), puis les finitions (les constats de faible gravité), dans l'ordre du rapport. Chaque correctif a un test qui échoue sans lui ; l'interface est vérifiée dans un navigateur.
+
+### À savoir en mettant à jour
+
+- **LedgerAlps n'est plus joignable par le réseau.** Le serveur n'écoute que sur `127.0.0.1`, en HTTP, et il n'y a plus de HTTPS. Une installation qui avait ouvert l'accès aux autres postes (`HOST`, écran « Réseau et chiffrement ») redevient locale : le serveur ignore ces réglages et l'écrit dans son journal. Détail et raisonnement : `docs/PRODUCTION.md` §6.
+- **Chaque session ouverte se reconnecte une fois** à la première mise à jour : la clé de signature tourne, son âge étant inconnu (`docs/PRODUCTION.md` §5 bis).
+- **Une déclaration TDFN déjà produite avec l'ancien taux est fausse** ; refaites-la après avoir saisi votre taux dans Paramètres → Banque (rubrique TVA).
+- **`scripts/install.ps1` est supprimé.** Un service Windows `LedgerAlps` laissé par l'ancien script reste en place, inoffensif ; la commande pour le retirer est dans `docs/PRODUCTION.md` §5 bis.
+- **L'API change :** `GET` et `PUT /settings/server` n'existent plus, `/maintenance/health` ne rend plus de bloc `network`.
 
 ### Corrigé — retour sur la 1.6.6-rc2
 
