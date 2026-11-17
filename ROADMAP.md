@@ -8,19 +8,11 @@ une solution comptable complète, et ce n'est pas l'objectif.
 
 ## Ce qui entre dans le produit, et ce qui n'y entre pas
 
-```mermaid
-flowchart TB
-    P["💡 Fonctionnalité proposée"] --> Q{"Sans elle, une facture suisse<br/>est-elle non conforme<br/>ou inexploitable ?"}
+Une fonctionnalité entre si, sans elle, une facture suisse serait non conforme ou inexploitable.
 
-    Q -->|"Oui"| N["🔒 Noyau<br/><br/>verrouillage de période · chaîne d'intégrité<br/>déclaration TVA · QR-facture"]
-    Q -->|"Non, mais un métier en a besoin"| M["🔧 Module métier<br/><br/>pièces et main-d'œuvre · métré<br/>honoraires et débours"]
-    Q -->|"Non"| X["⛔ Écarté<br/><br/>comptabilité analytique · budget<br/>gestion de stock · mobile"]
-
-    style N fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
-    style M fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
-    style X fill:#fafafa,stroke:#bdbdbd,stroke-dasharray:4 3
-    style Q fill:#fff8e1,stroke:#f9a825,stroke-width:2px
-```
+- **Noyau** — oui : verrouillage de période, chaîne d'intégrité, déclaration TVA, QR-facture.
+- **Module métier** — non, mais un métier en a besoin : pièces et main-d'œuvre, métré, honoraires et débours.
+- **Écarté** — non : comptabilité analytique, budget, gestion de stock, mobile.
 
 ---
 
@@ -79,7 +71,7 @@ flowchart TB
 | 15 | Trouver ses marques : mise en route, statut TVA | ✅ |
 | 16 | Montée react-router v6 → v7 (et zod 4) | 🔎 à valider |
 | 17 | Correctifs d'audit reportés (1.6.3) | ✅ |
-| 18 | Audit brutal : correctifs (1.6.5) | 🔎 à valider |
+| 18 | Audit brutal : correctifs (1.6.5) | ✅ |
 | 19 | Audit 9 : correctifs (1.6.6) | ✅ |
 | 14 | **Modules métier** | 💡 à trancher |
 
@@ -110,13 +102,8 @@ illisible.
 défaut, réglable 2 min–1 h ou jamais). Rotation de la clé de signature chaque
 jour, au démarrage uniquement — périodicité non réglable.
 
-**5 — HTTPS natif.** Livré en 1.4.5 (écoute sur `127.0.0.1` par défaut ; `HOST`
-externe imposait TLS, certificat fourni ou auto-signé), **retiré en 1.6.6** sur
-décision du propriétaire : LedgerAlps n'est plus joignable par le réseau. Il
-n'écoute que sur `127.0.0.1`, en HTTP, sans réglage ; `HOST`, `TLS_CERT`, `TLS_KEY`,
-`ALLOW_INSECURE_HTTP`, `ALLOWED_ORIGINS`, `TRUSTED_PROXIES`, l'écran « Réseau et
-chiffrement » et le certificat auto-signé disparaissent. Les anciens réglages sont
-ignorés et signalés au journal.
+**5 — HTTPS natif.** Livré en 1.4.5, **retiré en 1.6.6** : LedgerAlps n'écoute plus que sur
+`127.0.0.1`, sans réglage, donc sans HTTPS.
 
 **6 — Rotation du secret de signature.** Bouton Maintenance → Sécurité,
 administrateurs. Déconnecte toutes les sessions, ne touche à rien d'autre.
@@ -193,74 +180,18 @@ redirection ouverte (CVE-2025-68470) sur `react-router-dom` 6.30.3 et un avis su
 navigateur (session, navigation, garde de saisie, connexion, factures, réglages,
 contacts). *Reste* : la validation par le propriétaire.
 
-**17 — Correctifs d'audit reportés (1.6.3).** Constats des audits 5 et 6 que la
-publication de la 1.6.2 a laissés de côté pour ne livrer que le correctif de
-sécurité de la bibliothèque standard : le magasin de secrets doit renvoyer une
-erreur, et non paniquer, sur une entrée vide de `secrets.json` ; le gabarit du
-lanceur ne reçoit plus de `template.JS` qu'il ne rend pas ; NSIS s'installe à
-version épinglée dans le job de l'installeur ; l'adresse du destinataire se
-vérifie aussi côté serveur à l'émission (audit 5, M-1) ; nettoyages `ruff`,
-`mypy` et export superflu de `lineSchema` ; témoin `.reinstalled` écrit après le
-consentement et `Sleep 1000` de l'installeur. Parcours de mise à jour de
-l'installeur validé par le propriétaire.
+**17 — Correctifs d'audit reportés (1.6.3).** Les constats des audits 5 et 6 laissés de côté en 1.6.2 :
+secrets, lanceur, installeur, adresse du destinataire contrôlée côté serveur. Mise à jour de
+l'installeur validée par le propriétaire.
 
-**18 — Audit brutal : correctifs (1.6.5).** Les seize constats de `review-brutal.md`
-(audit de la 1.6.0, jamais traité jusque-là), vérifiés un à un contre le code puis
-corrigés ou classés avec leur preuve. Comptabilité : les encaissements entrent dans
-les livres (versements partiels cumulés, « Marquer payée » qui solde la créance, section
-Paiements sur la facture), exercice suivant d'une année bissextile, lots camt.053,
-doublons d'import bancaire, numérotation, arrondi des négatifs. Sécurité : `MsgId`
-`pain.001` unique, formules CSV neutralisées, causes d'erreur gardées au journal,
-déconnexion sur inactivité tenue par le serveur, plafond des codes de secours.
-Outillage : `react-router` 7, `zod` 4, macro NSIS.
+**18 — Audit brutal : correctifs (1.6.5).** Les seize constats de `review-brutal.md`, vérifiés contre le
+code puis corrigés. Surtout : les encaissements entrent dans les livres, la déconnexion sur inactivité
+est tenue par le serveur, les exports CSV sont neutralisés.
 
-**19 — Audit 9 : correctifs (1.6.6).** Revue complète du code après la
-1.6.5, dix-neuf constats corrigés. Critique : une facture dont
-le HT n'est pas un multiple de 0,05 partait sans jamais être comptabilisée — le total
-est désormais HT + TVA au centime, avec une reprise explicite des documents déjà dans
-cet état. Élevés : un jeton de rafraîchissement n'ouvre plus l'API, les dates et les
-montants sont bornés dans les services, une facture reçue garde ses centimes.
-Moyens et faibles : devise unique, journal exact au centime, contrôle d'intégrité
-élargi, limiteur de connexion non réinitialisable, assistant d'installation protégé
-par un jeton, garde de l'en-tête `Host`, politique de mot de passe dès le premier.
-Reste ouverte : la signature Authenticode (pas de certificat). Rapport :
-`review-Claude9.md` (local, ignoré par git).
-Un audit externe (Gemini, soixante-huit constats) a ensuite été recoupé avec le code
-(`review-Gemini1.md`, local) : la première série, celle des chiffres faux, est corrigée
-— clôture déséquilibrée, compte de résultat et bilan faux, carnet du lait,
-notes de crédit à l'encaissement, cycle des factures fournisseurs, factures archivées dans
-la TVA. La deuxième série ferme le contournement du limiteur du second facteur (et du mot
-de passe), dégèle la navigation des écrans Journal et Achats et rend leurs accents aux
-lignes de facture du PDF. La troisième série rend l'immuabilité réelle (lignes et journal d'audit
-protégés, condensé des lignes scellé), propose le complément des clôtures déjà déséquilibrées,
-protège la clé d'une base chiffrée de l'assistant d'installation, rétablit la rotation de la clé de
-signature sur l'installeur, borne la décompression des PDF et corrige le rapprochement bancaire, les
-avoirs, la balance âgée et les créances du tableau de bord. Les vingt-huit constats restants ont été
-instruits (`review-Gemini2.md`, local) et la quatrième série corrige les plus lourds : la fiche société
-écrite avant validation, le code de secours utilisable deux fois, deux exercices qui finissent la
-même année, le payload QR décalé par un retour à la ligne et le PDF qui taisait remise, TVA par taux et
-conditions de paiement, l'ordre de paiement par devise, l'écran du mot de passe temporaire sans issue
-après un F5, les explications de refus perdues pour tout téléchargement, le lanceur incapable de
-retrouver un serveur en TLS, et un job de CI pour le frontend. Les constats de faible gravité du même
-rapport sont repris à part : masquage de l'audit, modification des achats, neutralisation des formules
-CSV, CORS et limiteur, rapport de chiffre d'affaires, mémoire de l'archive légale. Le reste du second
-rapport suit : le chiffrement programmé appelle désormais le redémarrage (et le mode récupération
-contrôle hôte et origine), la veille Fedlex surveille **l'ensemble** des consolidations (la date
-maximale masquait une consolidation intermédiaire), l'ordre de paiement porte les adresses postales
-structurées et refuse un QR-IBAN comme compte à débiter, et la release naît en brouillon, publiée une
-fois l'installeur envoyé. Les trois décisions du
-propriétaire sont prises et appliquées : le taux TDFN est celui de l'AFC, saisi, sur la base TTC ; le
-chemin « service Windows » est retiré ; l'archive légale contient les factures fournisseurs, les paiements,
-les relevés bancaires et le journal d'audit. Rien de connu ne reste ouvert dans ce rapport. La publication en
-brouillon, puis publiée une fois l'installeur envoyé, a été éprouvée par les trois versions candidates, et
-l'installeur Windows de la rc3 a été validé par le propriétaire.
-
-Après les rc, trois décisions du propriétaire : `scripts/install.ps1` est supprimé (il ne faisait plus que copier
-deux binaires, et n'avait jamais tourné sur un vrai Windows) ; **LedgerAlps n'est plus joignable par le réseau**
-(écoute sur `127.0.0.1` seulement, plus de TLS, plus d'adresse d'écoute réglable, plus de mandataires ni d'origines
-à déclarer — voir le point 5) ; et la **sauvegarde automatique est périodique** : elle n'était prise qu'au démarrage
-du serveur, donc jamais sur une machine allumée des semaines ; elle est maintenant reprise toutes les heures dès que
-la dernière copie a plus d'un jour.
+**19 — Audit 9 : correctifs (1.6.6).** Les dix-neuf constats de l'audit 9 et ceux d'un audit externe :
+chiffres faux (clôture, bilan, TDFN), immuabilité du journal, second facteur, PDF. LedgerAlps n'est plus
+joignable par le réseau, la sauvegarde automatique est reprise chaque heure, `scripts/install.ps1` est
+supprimé. Reste ouverte : la signature Authenticode (pas de certificat).
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions
@@ -319,7 +250,7 @@ infrastructure) restent délibérément en français : déclarés un par un dans
 
 | Version | Apport principal |
 |---|---|
-| **v1.6.6** | **Audits 9 et croisé (Gemini) : correctifs.** Chiffres faux corrigés (clôture, compte de résultat, bilan, carnet du lait, TDFN au taux de l'AFC), immuabilité réelle des lignes et du journal d'audit, limiteur du second facteur, accents, logo et marge du PDF. **LedgerAlps n'est plus joignable par le réseau** : écoute sur `127.0.0.1` seulement, plus de HTTPS. `scripts/install.ps1` supprimé. Sauvegarde automatique reprise toutes les heures |
+| **v1.6.6** | Audits 9 et externe : correctifs. LedgerAlps n'est plus joignable par le réseau (écoute locale, plus de HTTPS), sauvegarde automatique horaire, `install.ps1` supprimé |
 | **v1.6.0** | **Audit 4 : trois défauts comptables critiques corrigés** — déclaration TVA qui ne ventilait jamais par taux, facture rouverte jamais recomptabilisée, adresse client contournable en modification. PostgreSQL refuse clairement plutôt que d'échouer à mi-chemin. Rotation du secret honnête sur tous les modes d'installation. Duplication du formulaire de facture éliminée |
 | **v1.5.9** | Adresse client obligatoire pour la facturation QR, logo d'en-tête agrandi |
 | **v1.5.8** | Extourne fournisseur correctement marquée et rattachée, port de config.json validé, `X-Forwarded-Proto` vérifié, chaîne d'approvisionnement durcie |
