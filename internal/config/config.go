@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 )
 
@@ -25,25 +24,10 @@ var knownWeakSecrets = []string{
 type Config struct {
 	// Server
 	//
-	// Host defaults to 127.0.0.1. Until v1.4.5 the server bound to every
-	// interface, which meant a laptop on a café network was serving its
-	// accounts to that network in clear. Reaching LedgerAlps from another
-	// machine is now something you ask for, and asking for it brings TLS.
-	Host  string
+	// Le serveur n'écoute que sur la boucle locale (ListenHost) : il n'y a ni adresse d'écoute à régler,
+	// ni TLS, ni mandataire à déclarer. LedgerAlps n'est pas joignable depuis le réseau (1.6.6).
 	Port  string
 	Debug bool
-
-	// TLS. Supplying both a certificate and a key serves HTTPS. Leaving them
-	// empty while Host is not loopback makes the server generate a self-signed
-	// certificate rather than fall back to clear text.
-	TLSCert string
-	TLSKey  string
-
-	// AllowInsecureHTTP serves clear HTTP on a non-loopback interface. It
-	// exists for the case where a reverse proxy already terminates TLS on the
-	// same host — and nowhere else. Anything else puts the login password, the
-	// session token and the backup passphrase on the wire.
-	AllowInsecureHTTP bool
 
 	// Database — SQLite by default, PostgreSQL if DSN is set
 	SQLitePath  string
@@ -81,22 +65,7 @@ type Config struct {
 	IdleLogoutMinutes int
 
 	// Application
-	LogLevel       string
-	AllowedOrigins string // comma-separated CORS origins
-
-	// TrustedProxies liste les mandataires dont on accepte les en-têtes
-	// d'adresse (`X-Forwarded-For`, `X-Real-IP`), en adresses ou en CIDR.
-	//
-	// VIDE PAR DÉFAUT, et c'est le point. gin fait l'inverse : ses mandataires
-	// de confiance valent `0.0.0.0/0` et `::/0`, si bien que `c.ClientIP()`
-	// rend l'en-tête posé par l'appelant. Le verrouillage des connexions
-	// devient alors décoratif — une valeur différente à chaque requête est une
-	// clé différente — et l'adresse scellée dans la chaîne d'audit
-	// (CO art. 957a) devient celle que l'attaquant a choisie.
-	//
-	// LedgerAlps écoute en direct. Une installation derrière un reverse proxy
-	// déclare le sien ici, explicitement, plutôt que de tout accepter.
-	TrustedProxies []string
+	LogLevel string
 
 	// UpdateCheck controls the single outbound request LedgerAlps ever makes:
 	// asking whether a newer release exists, so a user is told to update when a
@@ -110,17 +79,11 @@ type fileConfig struct {
 	JWTSecret   string `json:"jwt_secret"`
 	SQLitePath  string `json:"sqlite_path"`
 	PostgresDSN string `json:"postgres_dsn,omitempty"`
-	Host        string `json:"host,omitempty"`
 	Port        string `json:"port"`
 	Debug       bool   `json:"debug"`
-	TLSCert     string `json:"tls_cert,omitempty"`
-	TLSKey      string `json:"tls_key,omitempty"`
-	// Pointer so an absent key keeps the safe default (false).
-	AllowInsecureHTTP *bool  `json:"allow_insecure_http,omitempty"`
-	AllowedOrigins    string `json:"allowed_origins"`
-	// Mandataires de confiance, en adresses ou en CIDR. Absent ou vide = aucun,
-	// donc l'adresse observée est celle de la connexion elle-même.
-	TrustedProxies []string `json:"trusted_proxies,omitempty"`
+	// Les clés `host`, `tls_cert`, `tls_key`, `allow_insecure_http`, `trusted_proxies` et
+	// `allowed_origins` d'un fichier écrit par une version antérieure sont ignorées à la lecture :
+	// voir ReglagesReseauIgnores.
 	// Pointer so that an absent key keeps the default (enabled) while an
 	// explicit `"update_check": false` is honoured.
 	UpdateCheck *bool `json:"update_check,omitempty"`
@@ -161,10 +124,7 @@ func Load() *Config {
 	// Try config file first (written by the setup wizard / installer).
 	if fc, err := loadFromFile(ConfigFilePath()); err == nil {
 		cfg := &Config{
-			Host:             fc.Host,
 			Port:             fc.Port,
-			TLSCert:          fc.TLSCert,
-			TLSKey:           fc.TLSKey,
 			Debug:            fc.Debug,
 			SQLitePath:       fc.SQLitePath,
 			PostgresDSN:      fc.PostgresDSN,
@@ -172,18 +132,10 @@ func Load() *Config {
 			JWTAccessMinutes: 60,
 			JWTRefreshDays:   30,
 			LogLevel:         "INFO",
-			AllowedOrigins:   fc.AllowedOrigins,
-			TrustedProxies:   fc.TrustedProxies,
 			UpdateCheck:      fc.UpdateCheck == nil || *fc.UpdateCheck,
 		}
 		if cfg.Port == "" {
 			cfg.Port = "8000"
-		}
-		if cfg.Host == "" {
-			cfg.Host = "127.0.0.1"
-		}
-		if fc.AllowInsecureHTTP != nil {
-			cfg.AllowInsecureHTTP = *fc.AllowInsecureHTTP
 		}
 		// Absent = valeur par defaut ; pose a zero = desactive volontairement.
 		// La distinction ne peut se faire qu'avec un pointeur, sans quoi
@@ -200,14 +152,11 @@ func Load() *Config {
 			// Une date illisible reste nulle, donc « jamais tournee », donc la
 			// cle tourne au prochain demarrage. C'est le bon sens de l'erreur.
 		}
-		if cfg.AllowedOrigins == "" {
-			cfg.AllowedOrigins = "http://localhost:" + cfg.Port
-		}
 		// Environment variables override the file.
 		//
 		// The file used to win outright, which made every operational setting
 		// unreachable on a Windows install: the wizard always writes a
-		// config.json, so HOST, TLS_CERT and the rest were read from
+		// config.json, so SQLITE_PATH and the rest were read from
 		// a file that has no such keys and silently defaulted. The launcher even
 		//
 		// It also surprised us once in a way that mattered: SQLITE_PATH was set
@@ -228,11 +177,7 @@ func Load() *Config {
 
 	// No config file: environment variables only (Linux, systemd, CI).
 	cfg := &Config{
-		Host:              getEnv("HOST", "127.0.0.1"),
 		Port:              getEnv("PORT", "8000"),
-		TLSCert:           getEnv("TLS_CERT", ""),
-		TLSKey:            getEnv("TLS_KEY", ""),
-		AllowInsecureHTTP: getEnv("ALLOW_INSECURE_HTTP", "false") == "true",
 		Debug:             getEnv("DEBUG", "false") == "true",
 		SQLitePath:        getEnv("SQLITE_PATH", "ledgeralps.db"),
 		PostgresDSN:       getEnv("POSTGRES_DSN", ""),
@@ -241,8 +186,6 @@ func Load() *Config {
 		JWTRefreshDays:    30,
 		IdleLogoutMinutes: DefaultIdleLogoutMinutes,
 		LogLevel:          getEnv("LOG_LEVEL", "INFO"),
-		AllowedOrigins:    getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
-		TrustedProxies:    listeDeProxies(getEnv("TRUSTED_PROXIES", "")),
 		UpdateCheck:       getEnv("UPDATE_CHECK", "true") != "false",
 	}
 	// Sans fichier de configuration, la clé ne peut venir que de
@@ -304,23 +247,6 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// listeDeProxies lit « 10.0.0.1, 192.168.1.0/24 » en liste.
-//
-// Rend `nil` — et non une tranche vide — quand il n'y a rien à lire :
-// `SetTrustedProxies(nil)` fait rendre à `ClientIP()` l'adresse de la connexion
-// seule, ce qui est exactement le défaut voulu. Les entrées vides laissées par
-// une virgule en trop sont écartées : une chaîne vide passée à gin serait une
-// erreur de démarrage, pour une faute de frappe.
-func listeDeProxies(brut string) []string {
-	var out []string
-	for _, p := range strings.Split(brut, ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 // applyEnvOverrides lets the environment win over the config file, for the
 // variables that are actually set. See Load for why.
 func applyEnvOverrides(cfg *Config) {
@@ -335,21 +261,13 @@ func applyEnvOverrides(cfg *Config) {
 		}
 	}
 
-	setStr("HOST", &cfg.Host)
 	setStr("PORT", &cfg.Port)
 	setStr("SQLITE_PATH", &cfg.SQLitePath)
 	setStr("POSTGRES_DSN", &cfg.PostgresDSN)
 	setStr("JWT_SECRET", &cfg.JWTSecret)
-	setStr("ALLOWED_ORIGINS", &cfg.AllowedOrigins)
-	if v, ok := os.LookupEnv("TRUSTED_PROXIES"); ok {
-		cfg.TrustedProxies = listeDeProxies(v)
-	}
 	setStr("LOG_LEVEL", &cfg.LogLevel)
-	setStr("TLS_CERT", &cfg.TLSCert)
-	setStr("TLS_KEY", &cfg.TLSKey)
 
 	setBool("DEBUG", &cfg.Debug)
-	setBool("ALLOW_INSECURE_HTTP", &cfg.AllowInsecureHTTP)
 	// UPDATE_CHECK is the one where anything other than "false" means enabled,
 	// matching how it is documented.
 	if v, ok := os.LookupEnv("UPDATE_CHECK"); ok && v != "" {

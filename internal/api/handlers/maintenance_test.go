@@ -21,7 +21,7 @@ func newMaintenanceDB(t *testing.T) (*MaintenanceHandler, func(q string, args ..
 	tmp.Close()
 	t.Cleanup(func() { os.Remove(tmp.Name()) })
 
-	cfg := &config.Config{SQLitePath: tmp.Name(), Host: "127.0.0.1"}
+	cfg := &config.Config{SQLitePath: tmp.Name()}
 	database, err := db.Open(cfg)
 	if err != nil {
 		t.Fatalf("open: %v", err)
@@ -227,16 +227,15 @@ func TestHealthWorksOnAFreshInstall(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	for _, key := range []string{"version", "database", "counts", "network", "capabilities"} {
+	for _, key := range []string{"version", "database", "counts", "capabilities"} {
 		if _, ok := body[key]; !ok {
 			t.Errorf("la réponse ne contient pas %q", key)
 		}
 	}
-	// Loopback must read as loopback, or the page would tell the user they are
-	// exposed when they are not — or worse, the reverse.
-	net, _ := body["network"].(map[string]any)
-	if lb, _ := net["loopback"].(bool); !lb {
-		t.Error("127.0.0.1 n'est pas reconnu comme loopback")
+	// Plus d'état réseau à rapporter : LedgerAlps n'écoute que sur la boucle locale (1.6.6). Un bloc
+	// « network » qui dirait « loopback: true » serait une information sans objet.
+	if _, ok := body["network"]; ok {
+		t.Error("la réponse porte encore un bloc « network » : il n'y a plus de réglage réseau à rapporter")
 	}
 }
 

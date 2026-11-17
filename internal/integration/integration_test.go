@@ -48,7 +48,6 @@ func newTestServer(t *testing.T) (*gin.Engine, *sql.DB, *config.Config) {
 		JWTSecret:        "integration-test-secret-32chars-ok",
 		JWTAccessMinutes: 60,
 		JWTRefreshDays:   30,
-		AllowedOrigins:   "http://localhost:5173",
 	}
 
 	database, err := db.Open(cfg)

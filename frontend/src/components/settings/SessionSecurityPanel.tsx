@@ -20,7 +20,7 @@ import { Clock, RefreshCw, Loader2, AlertTriangle, ShieldCheck } from 'lucide-re
 import { securityApi, backupsApi } from '@/api/client'
 import { SectionTitle, ErrorBanner } from '@/components/ui'
 import { refusalMessage } from '@/utils/refusal'
-import { targetURLAfterRestart, waitForShutdownThenGo } from '@/utils/restart'
+import { waitForShutdownThenGo } from '@/utils/restart'
 import type { SecuritySettings, RotateSecretResult } from '@/types'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
@@ -36,7 +36,7 @@ const IDLE_CHOICES: { v: number; cle: Cle }[] = [
   { v: 60, cle: 'ss.uneHeure' },
 ]
 
-export function SessionSecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
+export function SessionSecurityPanel() {
   const t = useT()
   const qc = useQueryClient()
   const [error, setError] = useState<string | null>(null)
@@ -72,7 +72,7 @@ export function SessionSecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
     setRestarting(true)
     try {
       await backupsApi.restart()
-      await waitForShutdownThenGo(targetURLAfterRestart(tlsEnabled))
+      await waitForShutdownThenGo(window.location.origin + '/')
     } catch {
       setRestarting(false)
       setRotateError(t('sp.echecRedemarrage'))

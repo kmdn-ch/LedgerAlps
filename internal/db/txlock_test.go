@@ -102,7 +102,7 @@ func verifierSerialisation(t *testing.T, db *sql.DB) {
 
 func TestLaBaseEnClairSerialiseLesEcrituresConcurrentes(t *testing.T) {
 	isoler(t)
-	database, err := Open(&config.Config{SQLitePath: filepath.Join(t.TempDir(), "clair.db"), Host: "127.0.0.1"})
+	database, err := Open(&config.Config{SQLitePath: filepath.Join(t.TempDir(), "clair.db")})
 	if err != nil {
 		t.Fatal(err)
 	}

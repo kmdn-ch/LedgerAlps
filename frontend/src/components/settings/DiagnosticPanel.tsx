@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   ShieldCheck, AlertTriangle, XCircle, Info, RefreshCw, Loader2,
-  Database, Lock, LockOpen,
+  Database,
 } from 'lucide-react'
 import { maintenanceApi } from '@/api/client'
 import { SectionTitle, LoadingSpinner, ErrorBanner } from '@/components/ui'
@@ -175,19 +175,9 @@ export function DiagnosticPanel() {
 
         {health.data && (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Stat icon={Database} label={t('dg.baseDeDonnees')} value={health.data.database.engine} />
               <Stat icon={Info}     label={t('dg.version')}       value={health.data.version} />
-              <Stat
-                icon={health.data.network.tls ? Lock : LockOpen}
-                label={t('dg.accesReseau')}
-                value={
-                  health.data.network.loopback ? t('dg.machineUniquement')
-                    : health.data.network.tls ? t('dg.reseauChiffre')
-                    : t('dg.reseauEnClair')
-                }
-                warn={!health.data.network.loopback && !health.data.network.tls}
-              />
             </div>
 
             {/* Volumétrie — utile pour juger si une lenteur est normale. */}

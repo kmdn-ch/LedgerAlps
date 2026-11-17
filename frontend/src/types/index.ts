@@ -384,7 +384,6 @@ export interface SystemHealth {
     count: number; encrypted: number; directory: string
     newest?: string; newest_name?: string
   }
-  network: { host: string; tls: boolean; loopback: boolean; insecure_opt_in: boolean }
   disk_encryption?: {
     status: 'encrypted' | 'not_encrypted' | 'unknown'
     mechanism?: string
@@ -409,13 +408,6 @@ export interface SystemHealth {
     invoices_recipient_reconstructed?: number
   }
   login_lockouts?: number
-}
-
-export interface ServerSettings {
-  host: string
-  tls_cert: string
-  tls_key: string
-  allow_insecure_http: boolean
 }
 
 // ─── Piste d'audit (CO art. 957a) ─────────────────────────────────────────────

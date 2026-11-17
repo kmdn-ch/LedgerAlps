@@ -11,7 +11,7 @@ import { SessionSecurityPanel } from './SessionSecurityPanel'
 import { UsersPanel } from './UsersPanel'
 import { useAuthStore } from '@/store/auth'
 
-export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
+export function SecurityPanel() {
   const isAdmin = useAuthStore(st => st.role) === 'admin'
 
   return (
@@ -21,7 +21,7 @@ export function SecurityPanel({ tlsEnabled }: { tlsEnabled: boolean }) {
           celui qui le lit, pas à l'administration du logiciel. Le laisser ici
           l'aurait rendu inatteignable pour un comptable, qui doit pourtant
           inscrire le sien — il vit désormais dans l'onglet « Mon compte ». */}
-      <SessionSecurityPanel tlsEnabled={tlsEnabled} />
+      <SessionSecurityPanel />
       {isAdmin && <UsersPanel />}
     </div>
   )

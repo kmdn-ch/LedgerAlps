@@ -109,7 +109,7 @@ func TestUneSauvegardeAvecLaPolitiqueEstChiffree(t *testing.T) {
 
 	dbDir := t.TempDir()
 	dbPath := filepath.Join(dbDir, "ledgeralps.db")
-	cfg := &config.Config{SQLitePath: dbPath, Host: "127.0.0.1"}
+	cfg := &config.Config{SQLitePath: dbPath}
 	database, err := db.Open(cfg)
 	if err != nil {
 		t.Fatal(err)

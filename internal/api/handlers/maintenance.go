@@ -20,7 +20,6 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/core/compliance"
 	"github.com/kmdn-ch/ledgeralps/internal/core/diskcrypt"
-	"github.com/kmdn-ch/ledgeralps/internal/core/tlsutil"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
 	"github.com/kmdn-ch/ledgeralps/version"
@@ -748,14 +747,6 @@ func (h *MaintenanceHandler) SystemHealth(c *gin.Context) {
 			info["newest_name"] = backups[0].Name
 		}
 		resp["backups"] = info
-	}
-
-	// Sécurité du transport : dire ce qui est, pas ce qui devrait être.
-	resp["network"] = gin.H{
-		"host":            h.cfg.Host,
-		"tls":             !tlsutil.IsLoopback(h.cfg.Host) && !h.cfg.AllowInsecureHTTP,
-		"loopback":        tlsutil.IsLoopback(h.cfg.Host),
-		"insecure_opt_in": h.cfg.AllowInsecureHTTP,
 	}
 
 	// Chiffrement du disque : la mesure qui protège réellement la base, et la

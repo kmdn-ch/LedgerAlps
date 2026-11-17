@@ -32,8 +32,6 @@ const (
 	CapEncryptedBackups Capability = "encrypted_backups"
 	// CapEncryptedDatabase — the live database is encrypted at rest.
 	CapEncryptedDatabase Capability = "encrypted_database"
-	// CapNativeTLS — the server can serve HTTPS itself.
-	CapNativeTLS Capability = "native_tls"
 	// CapContactAnonymisation — a contact can be anonymised while the
 	// accounting records the CO requires are kept.
 	CapContactAnonymisation Capability = "contact_anonymisation"
@@ -65,10 +63,6 @@ var Capabilities = map[Capability]bool{
 	// donnee : le chiffrement reste desactive par defaut, et l'avis correspondant
 	// doit donc parler de l'etat constate, pas d'une impossibilite.
 	CapEncryptedDatabase: true,
-
-	// v1.4.5 — TLS on any non-loopback interface, with a generated
-	// certificate when none is supplied.
-	CapNativeTLS: true,
 
 	// Livré en v1.4.6 : un contact peut être anonymisé (nLPD art. 6 al. 4 et
 	// art. 32) sans amputer les pièces comptables, qui portent désormais

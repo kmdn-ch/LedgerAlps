@@ -38,8 +38,8 @@ déconnexion : l'authentification des routes est sans état.
 > journal de sécurité (`login_lockout`, `mfa_lockout`).
 >
 > L'adresse retenue est celle de la connexion elle-même. Les en-têtes
-> `X-Forwarded-For` / `X-Real-IP` ne sont pris en compte que si le mandataire
-> qui les pose est déclaré dans `TRUSTED_PROXIES` — sans quoi n'importe qui
+> `X-Forwarded-For` / `X-Real-IP` ne sont **jamais** pris en compte (le serveur
+> n'écoute que sur la boucle locale, sans mandataire) — sans quoi n'importe qui
 > choisirait l'identité que le compteur observe.
 
 ---
@@ -577,7 +577,7 @@ fournisseur. C'est elle qui voyage dans l'ordre de virement.
 | POST | `/backups` | **admin** | Créer un instantané (`passphrase` facultative) |
 | POST | `/backups/restore` | **admin** | **Préparer** une restauration (`confirm` requis) |
 | DELETE | `/backups/restore` | **admin** | Annuler une restauration préparée |
-| POST | `/system/restart` | **admin** | Redémarrer pour appliquer ce qui attend : restauration préparée, conversion du chiffrement, réglages réseau |
+| POST | `/system/restart` | **admin** | Redémarrer pour appliquer ce qui attend : restauration préparée, conversion du chiffrement, clé de signature régénérée |
 
 Réservé aux administrateurs : une restauration remplace toute la comptabilité.
 
@@ -601,8 +601,8 @@ application serait pire que de ne pas restaurer.
 ### Redémarrer
 
 `POST /system/restart` — **refusé (`422`) si rien n'attend un redémarrage** :
-une restauration préparée, une conversion du chiffrement programmée, ou des
-réglages réseau écrits depuis le démarrage. En dehors de ces cas, un bouton de
+une restauration préparée, une conversion du chiffrement programmée, ou une clé
+de signature régénérée depuis le démarrage. En dehors de ces cas, un bouton de
 redémarrage n'est qu'un moyen supplémentaire d'interrompre quelqu'un en pleine
 saisie.
 
@@ -623,9 +623,7 @@ jusqu'à réponse avant de recharger la page.
 | POST | `/settings/logo` | **admin** | Logo de la société, en adresse de données PNG ou JPEG (2 Mo au plus). Toute image dont un côté dépasse **300 px** est réduite, sans déformation, et ré-encodée en PNG. La réponse rend `logo_data`, `width`, `height` et `resized` — ce qui a été RETENU, pas ce qui a été envoyé |
 | PUT | `/settings/company` | **admin** | `vat_status` vaut `""` (non déclaré), `"liable"` ou `"exempt"`. **Absent = ne touche pas** ; toute autre valeur répond `422`. `"exempt"` efface `vat_number` — il s'imprime sur la facture, et le garder contredirait la déclaration (LTVA art. 27 al. 1). Le statut est **validé avant toute écriture** et la fiche s'écrit en **une transaction** : un refus `422` n'a rien écrit — ni l'IBAN, ni une ligne d'audit |
 | GET | `/maintenance/integrity` | **admin** | Contrôle de cohérence des données |
-| GET | `/maintenance/health` | **admin** | État du système, sauvegardes, exposition réseau |
-| GET | `/settings/server` | **admin** | Réglages réseau en vigueur. `restart_required` : quelque chose attend un redémarrage (réglages réseau écrits, restauration préparée, conversion du chiffrement programmée) ; `network_restart_required` : les réglages réseau eux-mêmes |
-| PUT | `/settings/server` | **admin** | Écrire les réglages réseau (effet au redémarrage) |
+| GET | `/maintenance/health` | **admin** | État du système et des sauvegardes |
 
 **Lecture seule.** Ces vues montrent, elles ne réparent pas : une comptabilité
 incohérente se corrige par une écriture, pas par un bouton — réparer en silence
@@ -646,25 +644,15 @@ deux décimales), `journal_dates` et `invoice_dates` (année improbable),
 `fiscal_year_dates` (bornes d'exercice illisibles, réparées au démarrage) et
 `invoice_amounts` (total négatif ou démesuré).
 
-`PUT /settings/server` écrit `host`, `tls_cert`, `tls_key` et
-`allow_insecure_http` dans `config.json`, puis répond `restart_required: true`.
-Il ne peut pas appliquer à chaud : l'adresse d'écoute et la configuration TLS
-sont choisies une seule fois, au démarrage.
+**Plus de réglages réseau** (1.6.6). `GET` et `PUT /settings/server` sont supprimés : LedgerAlps n'écoute que
+sur `127.0.0.1` et il n'y a rien à régler (voir [`PRODUCTION.md`](PRODUCTION.md) §6). `/maintenance/health` ne
+rend plus de bloc `network`. Seule la route `POST /settings/server/rotate-secret` demeure.
 
-Ce chemin existe parce que `config.json` est écrit **une seule fois**, par
-l'assistant de premier démarrage, et jamais retouché : une installation mise à
-jour ne contient donc que les clés de sa version d'origine. Toute option ajoutée
-depuis était absente, lue comme sa valeur par défaut, et inatteignable.
-
-L'écriture préserve **toutes** les clés inconnues — sérialiser une structure
-supprimerait `jwt_secret` au passage, ce qui déconnecterait chaque utilisateur de
-sa comptabilité. Le fichier est écrit à côté puis renommé : une coupure en cours
-d'écriture laisserait sinon un `config.json` tronqué, et l'application ne
-redémarrerait pas.
-
-Certificat et clé doivent être fournis **ensemble**, et leurs chemins sont
-vérifiés avant enregistrement : la moitié d'une configuration TLS empêcherait le
-serveur de démarrer, et l'utilisateur se serait exclu de ses propres comptes.
+`config.json` est écrit par l'assistant de premier démarrage, puis réécrit par la rotation de la clé de
+signature. Cette écriture préserve **toutes** les clés inconnues — sérialiser une structure supprimerait
+`jwt_secret` au passage, ce qui déconnecterait chaque utilisateur de sa comptabilité — et le fichier est écrit
+à côté puis renommé : une coupure en cours d'écriture laisserait sinon un `config.json` tronqué, et
+l'application ne redémarrerait pas.
 
 `health` expose aussi les **capacités** du produit, la table même qui empêche les
 avis de conformité de devenir faux (voir [`compliance/README.md`](../compliance/README.md)).

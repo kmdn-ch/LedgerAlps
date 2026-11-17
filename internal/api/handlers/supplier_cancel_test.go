@@ -39,7 +39,7 @@ func cancelEnv(t *testing.T) (*sql.DB, *gin.Engine, *SupplierInvoicesHandler) {
 	tmp.Close()
 	t.Cleanup(func() { os.Remove(tmp.Name()) })
 
-	database, err := db.Open(&config.Config{SQLitePath: tmp.Name(), Host: "127.0.0.1"})
+	database, err := db.Open(&config.Config{SQLitePath: tmp.Name()})
 	if err != nil {
 		t.Fatal(err)
 	}

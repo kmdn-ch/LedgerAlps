@@ -1,16 +1,12 @@
 package config
 
-// Writing the network settings back to config.json.
+// Écrire dans config.json.
 //
-// config.json is created by the setup wizard on first run and never touched
-// again. An upgrade therefore never adds new keys: an installation from v1.1
-// still carries the five keys it was born with. Anything added since — host,
-// TLS, the insecure opt-in — is simply absent, reads as its zero value, and no
-// amount of editing the environment helps on Windows because the launcher
-// starts the server itself.
+// config.json est créé par l'assistant au premier lancement. Ce fichier porte ce que l'application
+// y réécrit ensuite : la rotation de la clé de signature.
 //
-// So the settings have to be writable from the application. Hand-editing JSON
-// in %APPDATA% is not an answer for accounting software.
+// Les réglages d'accès réseau (adresse d'écoute, TLS) n'existent plus : LedgerAlps n'écoute que sur
+// la boucle locale (voir reseau.go).
 
 import (
 	"crypto/rand"
@@ -21,26 +17,6 @@ import (
 	"path/filepath"
 	"time"
 )
-
-// ServerSettings is the network-facing subset a user can change at runtime.
-// Everything here takes effect at the next start, which is why saving one
-// returns a restart request rather than pretending it applied.
-type ServerSettings struct {
-	Host              string `json:"host"`
-	TLSCert           string `json:"tls_cert"`
-	TLSKey            string `json:"tls_key"`
-	AllowInsecureHTTP bool   `json:"allow_insecure_http"`
-}
-
-// CurrentServerSettings reports what is in effect now.
-func CurrentServerSettings(cfg *Config) ServerSettings {
-	return ServerSettings{
-		Host:              cfg.Host,
-		TLSCert:           cfg.TLSCert,
-		TLSKey:            cfg.TLSKey,
-		AllowInsecureHTTP: cfg.AllowInsecureHTTP,
-	}
-}
 
 // RotateJWTSecret remplace le secret de signature par un nouveau tirage
 // aléatoire de 32 octets et retourne sa longueur en caractères hexadécimaux.
@@ -89,25 +65,6 @@ func newSecret() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// SaveServerSettings fusionne s dans config.json en préservant toutes les
-// autres clés. Les réglages prennent effet au prochain démarrage, ce pour quoi
-// l'enregistrement demande un redémarrage au lieu de prétendre avoir appliqué.
-func SaveServerSettings(s ServerSettings) error {
-	return updateConfigFile(func(existing map[string]any) {
-		existing["host"] = s.Host
-		// force_tls a existé le temps d'une pré-version puis a été retiré : servir
-		// en TLS sur localhost n'apportait rien qu'un avertissement de certificat
-		// répété. La clé est supprimée plutôt qu'ignorée, pour qu'un fichier de
-		// cette période ne conserve pas un réglage sans effet.
-		delete(existing, "force_tls")
-		existing["allow_insecure_http"] = s.AllowInsecureHTTP
-		// Empty means "not configured": storing "" would be indistinguishable from
-		// a path the user cleared on purpose, and both should read as absent.
-		setOrDelete(existing, "tls_cert", s.TLSCert)
-		setOrDelete(existing, "tls_key", s.TLSKey)
-	})
-}
-
 // updateConfigFile applique `mutate` au contenu de config.json et le réécrit.
 //
 // La lecture-modification-écriture porte sur une map générique et non sur une
@@ -150,12 +107,4 @@ func updateConfigFile(mutate func(existing map[string]any)) error {
 		return fmt.Errorf("remplacement de la configuration: %w", err)
 	}
 	return nil
-}
-
-func setOrDelete(m map[string]any, key, value string) {
-	if value == "" {
-		delete(m, key)
-		return
-	}
-	m[key] = value
 }

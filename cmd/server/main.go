@@ -14,7 +14,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -24,7 +23,6 @@ import (
 	"github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 	"github.com/kmdn-ch/ledgeralps/internal/config"
 	"github.com/kmdn-ch/ledgeralps/internal/core/authz"
-	"github.com/kmdn-ch/ledgeralps/internal/core/tlsutil"
 	"github.com/kmdn-ch/ledgeralps/internal/db"
 	embeddedFrontend "github.com/kmdn-ch/ledgeralps/internal/frontend"
 	"github.com/kmdn-ch/ledgeralps/internal/services/accounting"
@@ -36,6 +34,14 @@ import (
 func main() {
 	// ── 1. Load and validate configuration ────────────────────────────────────
 	cfg := config.Load()
+
+	// LedgerAlps n'est plus joignable depuis le réseau (1.6.6) : il n'écoute que sur 127.0.0.1. Une
+	// installation qui avait ouvert l'accès cesse d'être joignable — le dire, plutôt que de la laisser
+	// chercher pourquoi.
+	if ignores := config.ReglagesReseauIgnores(); len(ignores) > 0 {
+		log.Printf("WARNING: l'accès par le réseau n'existe plus. LedgerAlps n'écoute que sur %s. "+
+			"Réglages ignorés : %s.", config.ListenHost, strings.Join(ignores, ", "))
+	}
 
 	// ── 1a. Rotation de la clé de signature ───────────────────────────────────
 	//
@@ -227,7 +233,7 @@ func main() {
 	}
 	r := gin.New()
 
-	// Ne croire AUCUN en-tête d'adresse, sauf mandataire déclaré.
+	// Ne croire AUCUN en-tête d'adresse.
 	//
 	// gin fait l'inverse par défaut : ses mandataires de confiance valent
 	// 0.0.0.0/0 et ::/0, si bien que `c.ClientIP()` rend la valeur de
@@ -243,12 +249,10 @@ func main() {
 	//     celle que l'attaquant a choisie — la chaîne reste cohérente, elle
 	//     scelle simplement un mensonge.
 	//
-	// LedgerAlps écoute en direct. Une installation derrière un reverse proxy
-	// déclare le sien dans TRUSTED_PROXIES.
-	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
-		log.Fatalf("FATAL: TRUSTED_PROXIES illisible (%v). "+
-			"Attendu : des adresses ou des CIDR séparés par des virgules, "+
-			"par exemple « 10.0.0.1, 192.168.1.0/24 ».", err)
+	// LedgerAlps écoute en direct sur la boucle locale : il n'y a pas de mandataire à déclarer, et
+	// aucun en-tête `X-Forwarded-*` ne doit peser sur quoi que ce soit.
+	if err := r.SetTrustedProxies(nil); err != nil {
+		log.Fatalf("FATAL: impossible de désactiver la confiance dans les mandataires: %v", err)
 	}
 
 	// Borner le corps AVANT que quoi que ce soit ne le lise.
@@ -273,12 +277,10 @@ func main() {
 		log.Printf("PANIC recovered: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 	}))
-	// AVANT SecurityHeaders : celui-ci decide d'emettre HSTS d'apres
-	// X-Forwarded-Proto, et cet en-tete ne vaut que d'un mandataire declare.
-	// Sans ce verdict pose en premier, la question se poserait sans reponse.
-	r.Use(middleware.ConfianceMandataire(cfg.TrustedProxies))
 	r.Use(middleware.SecurityHeaders())
-	r.Use(middleware.CORS(strings.Split(cfg.AllowedOrigins, ",")...))
+	// Les origines admises sont celles de la machine elle-même : l'interface servie par ce serveur, et,
+	// en mode débogage, le serveur de développement du frontend (Vite). Il n'y a pas d'origine à déclarer.
+	r.Use(middleware.CORS(originesLocales(cfg.Port, cfg.Debug)...))
 	r.Use(middleware.ErrorHandler())
 	// Avant tout ce qui produit une réponse, et après la reprise sur panique :
 	// un refus écrit par un gestionnaire comme par un intercepteur d'erreur
@@ -286,7 +288,7 @@ func main() {
 	// la raison de traduire ici plutôt qu'aux deux cents endroits qui refusent.
 	r.Use(middleware.Langue())
 	// Refuse un Host étranger : le « rebinding » d'un site hostile (audit 9, F-06).
-	r.Use(middleware.HostGuard(cfg.Host, strings.Split(cfg.AllowedOrigins, ",")...))
+	r.Use(middleware.HostGuard())
 	if cfg.Debug {
 		r.Use(gin.Logger())
 	}
@@ -526,11 +528,6 @@ func main() {
 	restartCh := make(chan struct{}, 1)
 	sysh := handlers.NewSystemHandler(restartCh, cfg, database)
 	api.POST("/system/restart", authorizer.Require(authz.PermAdmin), sysh.Restart)
-	// Réglages réseau. config.json n'est écrit qu'au premier lancement : sans
-	// cet écran, aucune option ajoutée depuis n'est atteignable par un
-	// utilisateur, et éditer du JSON dans %APPDATA% n'est pas une réponse.
-	api.GET("/settings/server", authorizer.Require(authz.PermAdmin), sysh.GetServerSettings)
-	api.PUT("/settings/server", authorizer.Require(authz.PermAdmin), sysh.PutServerSettings)
 	api.POST("/settings/server/rotate-secret", authorizer.Require(authz.PermAdmin), sysh.RotateJWTSecret)
 	api.GET("/settings/security", authorizer.Require(authz.PermAdmin), sysh.GetSecuritySettings)
 	api.PUT("/settings/security", authorizer.Require(authz.PermAdmin), sysh.UpdateSecuritySettings)
@@ -772,7 +769,8 @@ func main() {
 	alh.StartAttestationScheduler(ctxApp, config.AppDataDir())
 
 	// ── 9. Start ──────────────────────────────────────────────────────────────
-	addr := net.JoinHostPort(cfg.Host, cfg.Port)
+	// La boucle locale, et rien d'autre : l'adresse n'est pas un réglage (config.ListenHost).
+	addr := cfg.ListenAddr()
 	// Des délais, parce qu'une connexion sans délai est une connexion qu'on ne
 	// reprend jamais. Sans ReadHeaderTimeout, un client qui envoie son en-tête
 	// octet par octet occupe une goroutine indéfiniment — et il en faut peu
@@ -791,26 +789,11 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	certFile, keyFile, tlsErr := resolveTLS(cfg)
-	if tlsErr != nil {
-		log.Fatalf("FATAL: %v", tlsErr)
-	}
-
 	serveErr := make(chan error, 1)
 	go func() {
-		scheme := "http"
-		if certFile != "" {
-			scheme = "https"
-		}
-		fmt.Printf("LedgerAlps: listening on %s://%s\n", scheme, addr)
+		fmt.Printf("LedgerAlps: listening on http://%s\n", addr)
 
-		var err error
-		if certFile != "" {
-			err = srv.ListenAndServeTLS(certFile, keyFile)
-		} else {
-			err = srv.ListenAndServe()
-		}
-		if err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serveErr <- err
 		}
 	}()
@@ -875,55 +858,20 @@ func relaunch() error {
 	return cmd.Start()
 }
 
-// resolveTLS decides how this instance serves, and refuses the combination
-// that silently leaks credentials.
-//
-// Loopback: plain HTTP. The traffic never reaches a cable, so TLS would buy
-// nothing and cost a certificate warning at every start.
-//
-// Any other interface means another machine can reach LedgerAlps, and with it
-// the login password, the session token and the backup passphrase. There TLS is
-// the default rather than an option: a supplied certificate is used, and
-// failing that one is generated. Until v1.4.5 the server bound to every
-// interface and served all of it in clear, without anyone having chosen that.
-//
-// ALLOW_INSECURE_HTTP covers the one legitimate case — a reverse proxy
-// terminating TLS on the same host — and says so loudly in the log, because
-// that same flag is what someone reaches for to make a warning go away.
-func resolveTLS(cfg *config.Config) (certFile, keyFile string, err error) {
-	if cfg.TLSCert != "" && cfg.TLSKey != "" {
-		return cfg.TLSCert, cfg.TLSKey, nil
+// originesLocales rend les origines que le serveur admet pour CORS : celles de la machine elle-même.
+// En mode débogage s'y ajoute le serveur de développement du frontend (Vite, port 5173), qui appelle
+// l'API depuis une autre origine.
+func originesLocales(port string, debug bool) []string {
+	hotes := []string{"localhost", "127.0.0.1"}
+	ports := []string{port}
+	if debug {
+		ports = append(ports, "5173")
 	}
-	if (cfg.TLSCert == "") != (cfg.TLSKey == "") {
-		return "", "", fmt.Errorf("TLS_CERT et TLS_KEY doivent être fournis ensemble")
+	var out []string
+	for _, p := range ports {
+		for _, h := range hotes {
+			out = append(out, "http://"+net.JoinHostPort(h, p))
+		}
 	}
-	// Loopback stays plain HTTP. The traffic never reaches a cable, so TLS buys
-	// nothing an attacker with local code access could not already bypass — and
-	// costs a certificate warning that trains people to click through them.
-	// Serving TLS here was offered for one pre-release and withdrawn: it bought
-	// no real security and spent trust in warnings.
-	if tlsutil.IsLoopback(cfg.Host) {
-		return "", "", nil
-	}
-
-	if cfg.AllowInsecureHTTP {
-		log.Printf("WARNING: LedgerAlps sert en HTTP NON CHIFFRÉ sur %s. "+
-			"Mot de passe de connexion, jeton de session et phrase de passe de sauvegarde "+
-			"traversent le réseau en clair. À n'utiliser que derrière un reverse proxy TLS "+
-			"sur la même machine.", cfg.Host)
-		return "", "", nil
-	}
-
-	dir := filepath.Join(config.AppDataDir(), "tls")
-	certFile, keyFile, err = tlsutil.EnsureSelfSigned(dir, tlsutil.LocalHostnames())
-	if err != nil {
-		return "", "", fmt.Errorf("LedgerAlps est configuré pour être joignable depuis le réseau (HOST=%s) "+
-			"mais aucun certificat TLS n'a pu être préparé: %w\n"+
-			"  Fournissez TLS_CERT et TLS_KEY, revenez à HOST=127.0.0.1, "+
-			"ou acceptez explicitement le clair avec ALLOW_INSECURE_HTTP=true", cfg.Host, err)
-	}
-	log.Printf("LedgerAlps: certificat auto-signé utilisé (%s). "+
-		"Votre navigateur affichera un avertissement à la première visite — c'est attendu. "+
-		"Pour l'éviter, fournissez TLS_CERT et TLS_KEY.", certFile)
-	return certFile, keyFile, nil
+	return out
 }

@@ -11,16 +11,16 @@
 //   Conformité          — « puis-je le prouver à un tiers ? »
 //   Piste d'audit       — « quelqu'un a-t-il modifié mes livres ? »
 //   Données personnelles— « que sait LedgerAlps sur mes clients, et pour combien de temps ? »
-//   Sécurité & réseau   — « qui peut atteindre cette installation ? »
+//   Sécurité            — « qui a accès, et la comptabilité est-elle protégée ? »
 //
 // Chaque écran reste consultatif : il montre et il agit sur demande explicite,
 // mais aucun ne répare en silence — une comptabilité incohérente se corrige par
 // une écriture, pas par un bouton (CO art. 957a al. 2 ch. 5).
 
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
-  Stethoscope, ScrollText, ShieldCheck, UserRoundX, Network,
+  Stethoscope, ScrollText, ShieldCheck, UserRoundX, Lock,
 } from 'lucide-react'
 import { maintenanceApi } from '@/api/client'
 import { DiagnosticPanel } from '@/components/settings/DiagnosticPanel'
@@ -28,9 +28,8 @@ import { CompliancePanel } from '@/components/settings/CompliancePanel'
 import { AuditTrailPanel } from '@/components/settings/AuditTrailPanel'
 import { PersonalDataPanel } from '@/components/settings/PersonalDataPanel'
 import { SecurityPanel } from '@/components/settings/SecurityPanel'
-import { NetworkSettings } from '@/components/settings/NetworkSettings'
 import { useCanAdmin } from '@/hooks/usePermissions'
-import type { IntegrityReport, SystemHealth } from '@/types'
+import type { IntegrityReport } from '@/types'
 import { useT } from '@/i18n/useT'
 import type { Cle } from '@/i18n'
 
@@ -46,16 +45,15 @@ const SECTIONS: {
   { key: 'compliance', cle: 'mt.conformite',          icon: ShieldCheck, hint: 'mt.conformiteHint' },
   { key: 'audit',      cle: 'at.titre',               icon: ScrollText,  hint: 'mt.auditHint' },
   { key: 'personal',   cle: 'mt.donneesPersonnelles', icon: UserRoundX,  hint: 'mt.donneesPersonnellesHint' },
-  { key: 'security',   cle: 'mt.securiteReseau',      icon: Network,     hint: 'mt.securiteReseauHint' },
+  { key: 'security',   cle: 'mt.securite',            icon: Lock,        hint: 'mt.securiteHint' },
 ]
 
 export function MaintenancePanel() {
   const t = useT()
-  const qc = useQueryClient()
   const [section, setSection] = useState<SectionKey>('diagnostic')
 
-  // « Sécurité & réseau » n'est pas du ressort du comptable : clé de signature,
-  // adresse d'écoute, réglages de session et comptes utilisateurs. Le serveur
+  // « Sécurité » n'est pas du ressort du comptable : clé de signature,
+  // réglages de session et comptes utilisateurs. Le serveur
   // refuse déjà ces routes, mais afficher l'entrée produisait pire qu'un
   // refus — un panneau dont chaque requête échouait, dont une restait bloquée
   // sur « chargement » indéfiniment.
@@ -68,12 +66,6 @@ export function MaintenancePanel() {
     ? section
     : sections[0].key
 
-  // L'état de santé sert à deux endroits : la pastille du Diagnostic et le
-  // réglage TLS de la section Sécurité. Une seule requête, partagée par la clé.
-  const health = useQuery<SystemHealth>({
-    queryKey: ['maintenance', 'health'],
-    queryFn:  () => maintenanceApi.health().then(r => r.data),
-  })
   // Le nombre d'anomalies est affiché sur l'entrée Diagnostic : sans cela,
   // rien n'inciterait à l'ouvrir, et un contrôle qu'on n'ouvre pas ne sert à rien.
   const integrity = useQuery<IntegrityReport>({
@@ -130,10 +122,7 @@ export function MaintenancePanel() {
       {active === 'personal' && <PersonalDataPanel />}
       {active === 'security' && (
         <div className="space-y-6">
-          <SecurityPanel tlsEnabled={health.data?.network.tls ?? false} />
-          <NetworkSettings
-            onSaved={() => qc.invalidateQueries({ queryKey: ['maintenance', 'health'] })}
-          />
+          <SecurityPanel />
         </div>
       )}
 

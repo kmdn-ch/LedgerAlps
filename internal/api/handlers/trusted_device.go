@@ -124,7 +124,7 @@ func (h *AuthHandler) rememberDevice(c *gin.Context, userID string) {
 	// raison d'accompagner une requête venue d'un autre site.
 	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie(trustedDeviceCookie, token, TrustedDeviceDays*24*3600, "/",
-		"", c.Request.TLS != nil, true)
+		"", cookieSecure, true)
 }
 
 // deviceIsTrusted dit si la requête vient d'un poste déjà vérifié.
@@ -227,7 +227,7 @@ func (h *AuthHandler) ForgetTrustedDevices(c *gin.Context) {
 	forgetDevices(c.Request.Context(), h.db, h.cfg.UsePostgres(), claims.UserID)
 
 	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie(trustedDeviceCookie, "", -1, "/", "", c.Request.TLS != nil, true)
+	c.SetCookie(trustedDeviceCookie, "", -1, "/", "", cookieSecure, true)
 
 	recordSecurityEvent(c.Request.Context(), h.db, h.cfg.UsePostgres(),
 		"trusted_devices_cleared", c.ClientIP(), "compte="+claims.UserID)

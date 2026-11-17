@@ -281,8 +281,6 @@ export const maintenanceApi = {
   health:    () => api.get('/maintenance/health'),
   // Réglages réseau. config.json n'est écrit qu'au premier lancement : sans cet
   // écran, aucune option ajoutée depuis n'est atteignable.
-  getServerSettings: () => api.get('/settings/server'),
-  putServerSettings: (data: unknown) => api.put('/settings/server', data),
 }
 
 // La mise en route — ce qu'il reste à régler avant qu'une facture tienne

@@ -152,3 +152,60 @@ func TestLaReleaseNEstPublieeQuApresSonInstalleur(t *testing.T) {
 		t.Error("la release doit être publiée par une seule étape, la dernière du job de l'installeur")
 	}
 }
+
+// 1.6.6 — décision du propriétaire : LedgerAlps n'est plus joignable par le réseau. Il n'écoute que sur
+// 127.0.0.1, en HTTP ; il n'y a plus de TLS, d'adresse d'écoute réglable, de mandataire ni d'origine à
+// déclarer. Ces gardes tiennent que ce chemin ne revient pas par inadvertance : le rouvrir est une
+// décision, pas un effet de bord.
+func TestLeServeurNEcouteQueSurLaBoucleLocale(t *testing.T) {
+	// Aucun code de production ne sert en TLS, n'écoute sur toutes les interfaces, ni n'ouvre une
+	// socket d'écoute ailleurs que sur la boucle locale.
+	for _, dossier := range []string{"cmd", "internal"} {
+		_ = filepath.Walk(filepath.Join("..", "..", dossier), func(chemin string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(chemin, ".go") || strings.HasSuffix(chemin, "_test.go") {
+				return nil
+			}
+			b, _ := os.ReadFile(chemin)
+			src := string(b)
+			for _, interdit := range []string{"ListenAndServeTLS", "tls.Listen(", "tls.NewListener(", `"0.0.0.0`, "SetTrustedProxies(cfg"} {
+				if strings.Contains(src, interdit) {
+					t.Errorf("%s contient %q : l'accès par le réseau a été retiré", chemin, interdit)
+				}
+			}
+			for _, ligne := range strings.Split(src, "\n") {
+				if strings.Contains(ligne, "net.Listen(") && !strings.Contains(ligne, `"127.0.0.1:`) {
+					t.Errorf("%s ouvre une socket d'écoute hors de la boucle locale : %s", chemin, strings.TrimSpace(ligne))
+				}
+			}
+			return nil
+		})
+	}
+
+	// Le serveur principal et le mode récupération prennent leur adresse de la configuration, où elle
+	// est une constante ; le premier ne croit aucun en-tête de mandataire.
+	for _, fichier := range []string{"main.go", "recovery.go"} {
+		src := racine(t, "cmd", "server", fichier)
+		if !strings.Contains(src, "cfg.ListenAddr()") {
+			t.Errorf("cmd/server/%s n'écoute plus sur cfg.ListenAddr() (la boucle locale)", fichier)
+		}
+		for _, interdit := range []string{"cfg.Host", "cfg.TLSCert", "cfg.AllowedOrigins", "cfg.TrustedProxies"} {
+			if strings.Contains(src, interdit) {
+				t.Errorf("cmd/server/%s lit %s : ce réglage n'existe plus", fichier, interdit)
+			}
+		}
+	}
+	if !strings.Contains(racine(t, "cmd", "server", "main.go"), "SetTrustedProxies(nil)") {
+		t.Error("cmd/server/main.go ne désactive plus la confiance de gin dans X-Forwarded-For (SetTrustedProxies(nil))")
+	}
+
+	// Plus d'écran ni de route pour régler l'accès réseau — la rotation de la clé, elle, reste.
+	main := racine(t, "cmd", "server", "main.go")
+	for _, route := range []string{`"/settings/server",`, "GetServerSettings", "PutServerSettings"} {
+		if strings.Contains(main, route) {
+			t.Errorf("cmd/server/main.go déclare encore %s", route)
+		}
+	}
+	if !strings.Contains(main, `"/settings/server/rotate-secret"`) {
+		t.Error("la route de rotation de la clé de signature a disparu avec les réglages réseau")
+	}
+}

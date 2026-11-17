@@ -17,7 +17,7 @@ func newBackfillDB(t *testing.T) *sql.DB {
 	tmp.Close()
 	t.Cleanup(func() { os.Remove(tmp.Name()) })
 
-	database, err := Open(&config.Config{SQLitePath: tmp.Name(), Host: "127.0.0.1"})
+	database, err := Open(&config.Config{SQLitePath: tmp.Name()})
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

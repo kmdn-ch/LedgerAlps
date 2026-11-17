@@ -207,7 +207,7 @@ func TestLaSauvegardeDUneBaseChiffreeNeDependPasDeLaCleMachine(t *testing.T) {
 	}
 	defer database.Close()
 
-	cfg := &config.Config{SQLitePath: path, Host: "127.0.0.1"}
+	cfg := &config.Config{SQLitePath: path}
 	backups := filepath.Join(dir, "backups")
 
 	// Sans phrase : la copie sort en clair — c'est ce qui la rend restaurable
@@ -260,7 +260,7 @@ func TestUneRestaurationNeDechiffrePasLInstallationEnSilence(t *testing.T) {
 		t.Fatal("le montage du test est faux : la base devait être en clair ici")
 	}
 
-	cfg := &config.Config{SQLitePath: path, Host: "127.0.0.1"}
+	cfg := &config.Config{SQLitePath: path}
 	done, err := ReconcileDatabaseEncryption(context.Background(), cfg, dir)
 	if err != nil {
 		t.Fatalf("réconciliation: %v", err)
@@ -295,7 +295,7 @@ func TestDechiffrementParLaReconciliation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.Config{SQLitePath: path, Host: "127.0.0.1"}
+	cfg := &config.Config{SQLitePath: path}
 	if _, err := ReconcileDatabaseEncryption(context.Background(), cfg, dir); err != nil {
 		t.Fatalf("réconciliation: %v", err)
 	}
@@ -328,7 +328,7 @@ func TestSansCleLaReconciliationNeTouchePasALaBase(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.Config{SQLitePath: path, Host: "127.0.0.1"}
+	cfg := &config.Config{SQLitePath: path}
 	done, err := ReconcileDatabaseEncryption(context.Background(), cfg, dir)
 	if err != nil {
 		t.Fatal(err)
@@ -356,7 +356,7 @@ func TestReconciliationIdempotente(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := &config.Config{SQLitePath: path, Host: "127.0.0.1"}
+	cfg := &config.Config{SQLitePath: path}
 	for i := 0; i < 3; i++ {
 		if _, err := ReconcileDatabaseEncryption(context.Background(), cfg, dir); err != nil {
 			t.Fatalf("passage %d: %v", i+1, err)

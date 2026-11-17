@@ -79,7 +79,7 @@ func TestUneCleDeBaseSansConfigurationNeLancePasL_Assistant(t *testing.T) {
 // la rotation ne touche jamais. Sur le chemin d'installation NSIS — celui de tout le monde —
 // la clé de signature ne tournait donc pas, contrairement à ce que le code annonçait.
 func TestLeLanceurNePasseJamaisLeSecretParLEnvironnement(t *testing.T) {
-	c := &config{JWTSecret: strings.Repeat("ab", 32), SQLitePath: `C:\données\ledgeralps.db`, Port: "8000", AllowedOrigins: "http://localhost:8000"}
+	c := &config{JWTSecret: strings.Repeat("ab", 32), SQLitePath: `C:\données\ledgeralps.db`, Port: "8000"}
 	for _, e := range serverEnv(nil, c) {
 		if strings.HasPrefix(e, "JWT_SECRET=") {
 			t.Fatalf("le secret de signature est passé par l'environnement : %s", e)
@@ -87,7 +87,7 @@ func TestLeLanceurNePasseJamaisLeSecretParLEnvironnement(t *testing.T) {
 	}
 	// Le reste est bien transmis.
 	env := strings.Join(serverEnv(nil, c), "\n")
-	for _, attendu := range []string{"SQLITE_PATH=", "PORT=8000", "ALLOWED_ORIGINS=http://localhost:8000", "LEDGERALPS_INSTALL_DIR="} {
+	for _, attendu := range []string{"SQLITE_PATH=", "PORT=8000", "LEDGERALPS_INSTALL_DIR="} {
 		if !strings.Contains(env, attendu) {
 			t.Errorf("%q absent de l'environnement du serveur", attendu)
 		}
@@ -116,7 +116,7 @@ func TestLaRotationTourneSurLeCheminDuLanceur(t *testing.T) {
 	// L'environnement que le lanceur compose, appliqué au processus de test.
 	os.Unsetenv("JWT_SECRET")
 	t.Cleanup(func() { os.Unsetenv("JWT_SECRET") })
-	for _, e := range serverEnv(nil, &config{SQLitePath: filepath.Join(dir, "x.db"), Port: "8000", AllowedOrigins: "http://localhost:8000"}) {
+	for _, e := range serverEnv(nil, &config{SQLitePath: filepath.Join(dir, "x.db"), Port: "8000"}) {
 		if k, v, ok := strings.Cut(e, "="); ok {
 			t.Setenv(k, v)
 		}

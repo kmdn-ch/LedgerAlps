@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	mw "github.com/kmdn-ch/ledgeralps/internal/api/middleware"
 )
 
 const (
@@ -31,17 +30,13 @@ const (
 	refreshCookiePath = "/api/v1/auth"
 )
 
-// isSecureRequest reports whether the connection is TLS-protected, directly or
-// behind a reverse proxy that says so.
+// cookieSecure : le cookie ne porte pas l'attribut Secure.
 //
-// The Secure attribute is set only then: LedgerAlps is local-first and most
-// installations serve plain HTTP on localhost, where a Secure cookie would be
-// dropped by the browser and lock the user out of their own accounts.
-func isSecureRequest(c *gin.Context) bool {
-	// Meme regle que pour X-Forwarded-For : un en-tete de mandataire ne vaut
-	// que s'il vient d'un mandataire declare. Voir middleware/mandataire.go.
-	return mw.ProtocoleAnnonceHTTPS(c)
-}
+// LedgerAlps ne sert qu'en HTTP sur la boucle locale — il n'y a ni TLS ni mandataire depuis la 1.6.6.
+// Un cookie Secure serait écarté par les navigateurs qui ne tiennent pas « http://localhost » pour
+// sûr, et l'utilisateur ne pourrait plus se connecter à sa propre comptabilité. Le trafic ne quitte
+// pas la machine ; les protections qui comptent sont HttpOnly, SameSite=Strict et le chemin restreint.
+const cookieSecure = false
 
 // setRefreshCookie stores the refresh token for the browser.
 func setRefreshCookie(c *gin.Context, token string, ttl time.Duration) {
@@ -51,7 +46,7 @@ func setRefreshCookie(c *gin.Context, token string, ttl time.Duration) {
 		Path:     refreshCookiePath,
 		MaxAge:   int(ttl.Seconds()),
 		HttpOnly: true,
-		Secure:   isSecureRequest(c),
+		Secure:   cookieSecure,
 		// Strict rather than Lax: the refresh endpoint is only ever called by
 		// the application itself, never by following a link from elsewhere, so
 		// there is no reason for another site's navigation to carry it.
@@ -67,7 +62,7 @@ func clearRefreshCookie(c *gin.Context) {
 		Path:     refreshCookiePath,
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   isSecureRequest(c),
+		Secure:   cookieSecure,
 		SameSite: http.SameSiteStrictMode,
 	})
 }

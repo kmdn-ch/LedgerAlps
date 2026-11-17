@@ -44,18 +44,12 @@ import (
 // ── Config ────────────────────────────────────────────────────────────────────
 
 type config struct {
-	JWTSecret      string `json:"jwt_secret"`
-	SQLitePath     string `json:"sqlite_path"`
-	Port           string `json:"port"`
-	Debug          bool   `json:"debug"`
-	AllowedOrigins string `json:"allowed_origins"`
-	// Hôte et TLS, réglés dans l'application (Paramètres → Sécurité et réseau) et lus par le
-	// serveur dans le même fichier. Le lanceur ne s'en sert QUE pour chercher l'adresse à laquelle le
-	// serveur répond (voir adresse.go) ; omitempty, pour que l'assistant n'écrive rien de plus
-	// qu'avant.
-	Host    string `json:"host,omitempty"`
-	TLSCert string `json:"tls_cert,omitempty"`
-	TLSKey  string `json:"tls_key,omitempty"`
+	JWTSecret  string `json:"jwt_secret"`
+	SQLitePath string `json:"sqlite_path"`
+	Port       string `json:"port"`
+	Debug      bool   `json:"debug"`
+	// Les clés `allowed_origins`, `host`, `tls_cert` et `tls_key` d'un fichier écrit par une version
+	// antérieure sont ignorées : le serveur n'écoute que sur la boucle locale (1.6.6).
 }
 
 func appDataDir() string {
@@ -175,8 +169,7 @@ func openBrowser(url string) {
 // or the context is cancelled.
 
 // L'assistant d'installation parle à SON serveur, lancé avec l'environnement par défaut, donc en
-// clair sur la boucle locale. Pour retrouver un serveur déjà réglé (TLS, adresse d'écoute), le
-// lanceur cherche son adresse : voir adresse.go.
+// clair sur la boucle locale.
 
 func waitForServer(ctx context.Context, baseURL string, client *http.Client) error {
 	tick := time.NewTicker(300 * time.Millisecond)
@@ -198,10 +191,8 @@ func waitForServer(ctx context.Context, baseURL string, client *http.Client) err
 
 // serverEnv compose l'environnement du serveur lancé par le lanceur.
 //
-// Seuls les réglages dont le lanceur a lui-même besoin sont transmis. Les options réseau
-// restent dans config.json, que le serveur lit directement : les passer ici en ferait une
-// seconde source de vérité qui, valant sa valeur par défaut, écraserait le fichier — c'est ce
-// qui rendait le réglage TLS impossible à activer.
+// Seuls les réglages dont le lanceur a lui-même besoin sont transmis : le serveur lit le reste
+// dans config.json, et les passer ici en ferait une seconde source de vérité.
 //
 // # Le secret de signature n'en fait PAS partie (audit croisé Gemini, CRIT-16)
 //
@@ -215,7 +206,6 @@ func serverEnv(base []string, cfg *config) []string {
 	env = append(env,
 		"SQLITE_PATH="+cfg.SQLitePath,
 		"PORT="+cfg.Port,
-		"ALLOWED_ORIGINS="+cfg.AllowedOrigins,
 		// Tell the server where it's installed so it can locate the frontend dist folder.
 		"LEDGERALPS_INSTALL_DIR="+exeDir(),
 	)
@@ -1218,11 +1208,10 @@ func runSetupWizard() {
 		// Build config.
 		dataDir := appDataDir()
 		cfg := &config{
-			JWTSecret:      secret,
-			SQLitePath:     filepath.Join(dataDir, "ledgeralps.db"),
-			Port:           req.Port,
-			Debug:          false,
-			AllowedOrigins: "http://localhost:" + req.Port,
+			JWTSecret:  secret,
+			SQLitePath: filepath.Join(dataDir, "ledgeralps.db"),
+			Port:       req.Port,
+			Debug:      false,
 		}
 
 		// Save config file before starting server.
@@ -1426,9 +1415,7 @@ func main() {
 
 	// Config exists — ensure server is running, then open browser.
 	//
-	// L'adresse se CHERCHE (adresse.go) au lieu de se supposer en clair sur « localhost » : un serveur
-	// réglé en TLS, ou à l'écoute sur une adresse du réseau, ne répond pas à http://localhost:<port>
-	// (audit croisé Gemini, HIGH-25).
+	// Le serveur n'écoute que sur la boucle locale, en HTTP : une seule adresse à sonder (adresse.go).
 	appURL := fmt.Sprintf("http://localhost:%s", cfg.Port)
 	enMarche := false
 	if base, ok := serveurJoignable(cfg); ok {

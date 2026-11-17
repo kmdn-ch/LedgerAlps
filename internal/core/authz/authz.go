@@ -90,7 +90,7 @@ const (
 	// devait demander à quelqu'un dont le rôle est de gérer des mots de passe.
 	PermManage Permission = "manage"
 	// PermAdmin : sécurité du logiciel et comptes utilisateurs. Chiffrement de
-	// la base, restauration d'une sauvegarde, réseau et TLS, clé de signature,
+	// la base, restauration d'une sauvegarde, clé de signature,
 	// journal de sécurité, création et rôles des comptes.
 	//
 	// La frontière est celle-ci : PermManage administre la COMPTABILITÉ,

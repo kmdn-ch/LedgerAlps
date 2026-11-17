@@ -44,7 +44,7 @@ flowchart TB
 | Interdiction de mentionner la TVA sans l'être | LTVA art. 27 al. 1 et 2 | ✅ |
 | Correction par note de crédit | LTVA art. 27 al. 4, art. 41 | ✅ |
 | QR-facture | SIX IG v2.4 | ✅ conforme · ⏳ validation portail SIX |
-| Sécurité des données | nLPD art. 8, OPDo art. 3 | ✅ HTTPS · sauvegardes chiffrées · base chiffrable |
+| Sécurité des données | nLPD art. 8, OPDo art. 3 | ✅ accès limité à la machine · sauvegardes chiffrées · base chiffrable |
 | Effacement et rétention | nLPD art. 6 al. 4, art. 32 | ✅ anonymisation, purge des IP |
 | Portabilité | nLPD art. 25 et 28 | ✅ export par client, archive complète |
 
@@ -60,7 +60,7 @@ flowchart TB
 | 3 | Limitation des tentatives de connexion | ✅ |
 | 4 | Chiffrement au repos (disque, sauvegardes, base) | ✅ |
 | 4b | Durée de vie des sessions | ✅ |
-| 5 | HTTPS natif | 🔎 renouvellement auto du certificat à faire |
+| 5 | HTTPS natif | ⛔ retiré en 1.6.6 — LedgerAlps n'écoute plus que sur la machine |
 | 6 | Rotation du secret de signature | ✅ |
 | 7 | Maintenance & Système | ✅ |
 | 7b | Journal et plan comptable | ✅ |
@@ -110,15 +110,19 @@ illisible.
 défaut, réglable 2 min–1 h ou jamais). Rotation de la clé de signature chaque
 jour, au démarrage uniquement — périodicité non réglable.
 
-**5 — HTTPS natif.** Écoute par défaut sur `127.0.0.1`. `HOST` externe impose
-TLS : certificat fourni, sinon auto-signé et réutilisé. *Reste* : renouvellement
-automatique, HSTS.
+**5 — HTTPS natif.** Livré en 1.4.5 (écoute sur `127.0.0.1` par défaut ; `HOST`
+externe imposait TLS, certificat fourni ou auto-signé), **retiré en 1.6.6** sur
+décision du propriétaire : LedgerAlps n'est plus joignable par le réseau. Il
+n'écoute que sur `127.0.0.1`, en HTTP, sans réglage ; `HOST`, `TLS_CERT`, `TLS_KEY`,
+`ALLOW_INSECURE_HTTP`, `ALLOWED_ORIGINS`, `TRUSTED_PROXIES`, l'écran « Réseau et
+chiffrement » et le certificat auto-signé disparaissent. Les anciens réglages sont
+ignorés et signalés au journal.
 
 **6 — Rotation du secret de signature.** Bouton Maintenance → Sécurité,
 administrateurs. Déconnecte toutes les sessions, ne touche à rien d'autre.
 
 **7 — Maintenance & Système.** Cinq écrans : Diagnostic, Conformité, Piste
-d'audit, Données personnelles, Sécurité & réseau. Recalcul des soldes
+d'audit, Données personnelles, Sécurité. Recalcul des soldes
 volontairement absent — une incohérence se corrige par une écriture, pas par un
 bouton.
 
@@ -250,6 +254,11 @@ chemin « service Windows » est retiré ; l'archive légale contient les factur
 les relevés bancaires et le journal d'audit. Rien de connu ne reste ouvert dans ce rapport ; restent à
 éprouver ce que la prochaine rc éprouvera (la publication en brouillon) et ce que seul un vrai Windows
 éprouvera.
+
+Après les rc, deux décisions du propriétaire : `scripts/install.ps1` est supprimé (il ne faisait plus que copier
+deux binaires, et n'avait jamais tourné sur un vrai Windows) ; et **LedgerAlps n'est plus joignable par le réseau**
+(écoute sur `127.0.0.1` seulement, plus de TLS, plus d'adresse d'écoute réglable, plus de mandataires ni d'origines
+à déclarer — voir le point 5).
 
 **14 — Modules métier.** Piste retenue, non engagée : des modules qui composent
 la facture différemment selon le métier (garage, artisanat, professions

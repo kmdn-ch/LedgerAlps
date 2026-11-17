@@ -32,8 +32,8 @@ go run ./cmd/cli bootstrap --email=dev@local.ch --password='motdepasse-solide'
 cd frontend && npm install && npm run dev    # Vite sur http://localhost:5173
 ```
 
-Le frontend appelle l'API sur le port 8000 ; `ALLOWED_ORIGINS` inclut déjà
-`http://localhost:5173` par défaut.
+Le frontend appelle l'API sur le port 8000 : Vite relaie `/api` et `/health` (voir `frontend/vite.config.ts`). Avec
+`DEBUG=true`, le serveur admet aussi l'origine `http://localhost:5173` pour CORS.
 
 ## Cibles Make
 

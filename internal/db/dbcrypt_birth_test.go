@@ -31,7 +31,7 @@ func TestBaseNeuveAvecCleDejaConfiguree(t *testing.T) {
 	}
 
 	path := filepath.Join(dir, "ledgeralps.db")
-	cfg := &config.Config{SQLitePath: path, Host: "127.0.0.1"}
+	cfg := &config.Config{SQLitePath: path}
 	d, err := Open(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestUneBaseEnClairExistanteResteLueEnClair(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.Config{SQLitePath: path, Host: "127.0.0.1"}
+	cfg := &config.Config{SQLitePath: path}
 	d, err := Open(cfg)
 	if err != nil {
 		t.Fatalf("une base en clair ne s'ouvre plus quand une clé existe: %v", err)

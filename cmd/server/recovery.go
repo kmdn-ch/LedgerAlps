@@ -107,11 +107,11 @@ func (e *essaisRecuperation) autorise(adresse string) bool {
 //     l'en-tête Origin sur tout POST ; une requête sans Origin (un outil en ligne de commande) reste
 //     acceptée, comme partout ailleurs dans le produit ;
 //   - la page ne se met ni en cache ni dans un cadre.
-func protegerRecuperation(listenHost string, allowedOrigins []string, suite http.Handler) http.Handler {
+func protegerRecuperation(suite http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Frame-Options", "DENY")
-		if !middleware.HostAllowed(listenHost, r.Host, allowedOrigins...) {
+		if !middleware.HostAllowed(r.Host) {
 			http.Error(w, "hôte non autorisé : ouvrez LedgerAlps par son adresse locale", http.StatusMisdirectedRequest)
 			return
 		}
@@ -131,20 +131,11 @@ func protegerRecuperation(listenHost string, allowedOrigins []string, suite http
 // runRecoveryServer serves the recovery page until the key is restored, then
 // relaunches. It never returns while it succeeds in serving.
 func runRecoveryServer(cfg *config.Config, cause error) {
-	addr := net.JoinHostPort(cfg.Host, fmt.Sprint(cfg.Port))
+	addr := cfg.ListenAddr()
 	keys := db.NewDatabaseKeys(config.AppDataDir())
 
-	// Le transport suit la MÊME règle que le serveur normal.
-	//
-	// Ce formulaire demande la phrase qui enveloppe la clé de dix ans de
-	// comptabilité. La servir en clair sur une installation réseau donne à qui
-	// écoute le câble exactement ce que le chiffrement de la base devait lui
-	// refuser. resolveTLS laisse le loopback en clair — là, il n'y a pas de
-	// câble — et impose TLS dès que l'hôte est joignable.
-	certFile, keyFile, tlsErr := resolveTLS(cfg)
-	if tlsErr != nil {
-		log.Fatalf("FATAL: %v (cause initiale: %v)", tlsErr, cause)
-	}
+	// Comme le serveur normal : la boucle locale, en HTTP. Ce formulaire demande la phrase qui enveloppe
+	// la clé de dix ans de comptabilité ; il n'est joignable que depuis la machine.
 
 	limiteur := &essaisRecuperation{essais: map[string][]time.Time{}}
 
@@ -217,7 +208,7 @@ func runRecoveryServer(cfg *config.Config, cause error) {
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           protegerRecuperation(cfg.Host, strings.Split(cfg.AllowedOrigins, ","), mux),
+		Handler:           protegerRecuperation(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Le serveur normal borne ses quatre delais ; celui-ci n'en bornait
 		// qu'un. Une connexion lente y tenait donc un descripteur sans terme,
@@ -227,19 +218,10 @@ func runRecoveryServer(cfg *config.Config, cause error) {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	schema := "http"
-	if certFile != "" {
-		schema = "https"
-	}
 	fmt.Printf("\nLedgerAlps: la base de données est chiffrée et sa clé n'est pas lisible sur ce compte.\n")
-	fmt.Printf("LedgerAlps: ouvrez %s://%s pour saisir votre phrase de récupération.\n\n", schema, addr)
+	fmt.Printf("LedgerAlps: ouvrez http://%s pour saisir votre phrase de récupération.\n\n", addr)
 
-	var err error
-	if certFile != "" {
-		err = srv.ListenAndServeTLS(certFile, keyFile)
-	} else {
-		err = srv.ListenAndServe()
-	}
+	err := srv.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
 		log.Fatalf("FATAL: %v (cause initiale: %v)", err, cause)
 	}

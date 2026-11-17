@@ -34,7 +34,7 @@ func newGuardDB(t *testing.T, vatNumber string) (*Service, *sql.DB, string) {
 	tmp.Close()
 	t.Cleanup(func() { os.Remove(tmp.Name()) })
 
-	database, err := db.Open(&config.Config{SQLitePath: tmp.Name(), Host: "127.0.0.1"})
+	database, err := db.Open(&config.Config{SQLitePath: tmp.Name()})
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

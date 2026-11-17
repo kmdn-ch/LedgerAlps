@@ -16,7 +16,6 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
@@ -38,8 +37,9 @@ type SystemHandler struct {
 	usePostgres bool
 
 	// settingsChanged records that config.json was edited since this process
-	// started, so the restart button has something to offer beyond a pending
-	// restore. Guarded because it is written by one request and read by others.
+	// started (la rotation de la clé de signature), so the restart button has
+	// something to offer beyond a pending restore. Guarded because it is written
+	// by one request and read by others.
 	mu              sync.Mutex
 	settingsChanged bool
 }
@@ -48,9 +48,8 @@ func NewSystemHandler(restart chan<- struct{}, cfg *config.Config, database *sql
 	return &SystemHandler{restart: restart, cfg: cfg, db: database, usePostgres: cfg.UsePostgres()}
 }
 
-// networkChanged reports whether config.json was edited since this process started: the one
-// thing the network settings screen has to say "saved but not applied" about.
-func (h *SystemHandler) networkChanged() bool {
+// configChanged reports whether config.json was edited since this process started.
+func (h *SystemHandler) configChanged() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.settingsChanged
@@ -58,28 +57,28 @@ func (h *SystemHandler) networkChanged() bool {
 
 // restartPending reports whether a restart would actually achieve something.
 //
-// Three things wait for one: network settings written since this process started, a staged
+// Three things wait for one: a signing-key rotation written since this process started, a staged
 // restore, and a staged encryption or decryption of the database. The last was missing (audit
 // croisé Gemini, HIGH-17): after `POST /database/encryption` the screen said "restart" and the
 // server answered "nothing to apply" when asked to — the conversion could only happen if the
 // owner closed and reopened the application by hand.
 func (h *SystemHandler) restartPending() bool {
-	return h.networkChanged() ||
+	return h.configChanged() ||
 		db.ReadPendingRestore(db.BackupDir()) != nil ||
 		db.ReadPendingEncryption(config.AppDataDir()) != nil
 }
 
 // Restart POST /api/v1/system/restart
 //
-// Only when something is actually waiting for it — a staged restore, or network
-// settings written since this process started. Outside those cases a restart
+// Only when something is actually waiting for it — a staged restore, a staged
+// encryption conversion, or a signing key rotated since this process started. Outside those cases a restart
 // button is a power tool with no purpose, and one more way to interrupt someone
 // mid-invoice.
 func (h *SystemHandler) Restart(c *gin.Context) {
 	if !h.restartPending() {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
 			"error": "rien à appliquer : le redémarrage n'est proposé que pour une restauration " +
-				"préparée, une conversion du chiffrement programmée ou un changement de réglages réseau",
+				"préparée, une conversion du chiffrement programmée ou une clé de signature régénérée",
 		})
 		return
 	}
@@ -96,70 +95,6 @@ func (h *SystemHandler) Restart(c *gin.Context) {
 	case h.restart <- struct{}{}:
 	default: // a restart is already under way
 	}
-}
-
-// ─── Réglages réseau ──────────────────────────────────────────────────────────
-
-// GetServerSettings GET /api/v1/settings/server
-func (h *SystemHandler) GetServerSettings(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"settings": config.CurrentServerSettings(h.cfg),
-		// `restart_required` : QUELQUE CHOSE attend un redémarrage. `network_restart_required` :
-		// ce sont les réglages réseau eux-mêmes — l'écran qui les édite n'a pas à dire « réglages
-		// enregistrés mais pas appliqués » parce qu'une restauration ou un chiffrement attend.
-		"restart_required":         h.restartPending(),
-		"network_restart_required": h.networkChanged(),
-		"config_file":              config.ConfigFilePath(),
-	})
-}
-
-// PutServerSettings PUT /api/v1/settings/server
-//
-// Writes to config.json and asks for a restart. It cannot apply live: the
-// listening socket and its TLS configuration are chosen once, at start.
-func (h *SystemHandler) PutServerSettings(c *gin.Context) {
-	var s config.ServerSettings
-	if err := c.ShouldBindJSON(&s); err != nil {
-		refus(c, http.StatusUnprocessableEntity, err)
-		return
-	}
-
-	if s.Host == "" {
-		s.Host = "127.0.0.1"
-	}
-	// Half a certificate is worse than none: the server would refuse to start,
-	// and the user would have shut themselves out of their own accounts.
-	if (s.TLSCert == "") != (s.TLSKey == "") {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{
-			"error": "le certificat et la clé doivent être fournis ensemble"})
-		return
-	}
-	for _, p := range []string{s.TLSCert, s.TLSKey} {
-		if p == "" {
-			continue
-		}
-		if _, err := os.Stat(p); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{
-				"error": "fichier introuvable: " + p + " — vérifiez le chemin avant d'enregistrer"})
-			return
-		}
-	}
-
-	if err := config.SaveServerSettings(s); err != nil {
-		erreurInterne(c, msgErreurInterne, err)
-		return
-	}
-
-	h.mu.Lock()
-	h.settingsChanged = true
-	h.mu.Unlock()
-
-	c.JSON(http.StatusOK, gin.H{
-		"settings":         s,
-		"restart_required": true,
-		"message": "Réglages enregistrés. Ils prennent effet au redémarrage de LedgerAlps : " +
-			"l'adresse d'écoute et le chiffrement sont choisis une seule fois, au démarrage.",
-	})
 }
 
 // ─── POST /api/v1/settings/server/rotate-secret ──────────────────────────────

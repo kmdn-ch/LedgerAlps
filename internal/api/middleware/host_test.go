@@ -19,10 +19,10 @@ func requeteHote(r *gin.Engine, host string) int {
 // Audit 9, F-06 : sans contrôle de l'en-tête Host, un site hostile qui fait
 // pointer son nom vers 127.0.0.1 (« DNS rebinding ») lit les réponses du serveur
 // local.
-func TestUnHostEtrangerEstRefuseSurLaLoopback(t *testing.T) {
+func TestUnHostEtrangerEstRefuse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(HostGuard("127.0.0.1", "http://localhost:5173", "https://compta.exemple.ch"))
+	r.Use(HostGuard())
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
 
 	for host, want := range map[string]int{
@@ -30,13 +30,14 @@ func TestUnHostEtrangerEstRefuseSurLaLoopback(t *testing.T) {
 		"LOCALHOST":              http.StatusOK,
 		"127.0.0.1:8000":         http.StatusOK,
 		"[::1]:8000":             http.StatusOK,
-		"compta.exemple.ch":      http.StatusOK, // origine déclarée, derrière un mandataire TLS local
 		"evil.example":           http.StatusMisdirectedRequest,
 		"evil.example:8000":      http.StatusMisdirectedRequest,
 		"127.0.0.1.evil.example": http.StatusMisdirectedRequest,
 		"localhost.evil.example": http.StatusMisdirectedRequest,
 		"0.0.0.0:8000":           http.StatusMisdirectedRequest,
 		"192.168.1.20:8000":      http.StatusMisdirectedRequest,
+		// Un nom public — celui qu'un mandataire TLS local retransmettait avant la 1.6.6 : plus accepté.
+		"compta.exemple.ch": http.StatusMisdirectedRequest,
 	} {
 		if got := requeteHote(r, host); got != want {
 			t.Errorf("Host %q : %d, attendu %d", host, got, want)
@@ -44,16 +45,33 @@ func TestUnHostEtrangerEstRefuseSurLaLoopback(t *testing.T) {
 	}
 }
 
-// Exposé volontairement sur le réseau, le garde se retire : l'installation y est
-// joignable par des noms qu'il ne connaît pas.
-func TestLeGardeDeHoteSeRetireQuandLeServeurEstExpose(t *testing.T) {
+// Le mode récupération applique la même règle que le serveur normal.
+func TestHostAllowedSuitLaMemeRegleQueLeGarde(t *testing.T) {
+	for host, want := range map[string]bool{
+		"localhost:8000": true, "127.0.0.1": true, "[::1]:8000": true,
+		"evil.example": false, "compta.exemple.ch": false, "192.168.1.20": false, "": false,
+	} {
+		if got := HostAllowed(host); got != want {
+			t.Errorf("HostAllowed(%q) = %v, attendu %v", host, got, want)
+		}
+	}
+}
+
+// Pas de HSTS : un navigateur qui l'enregistre pour « localhost » refuse ensuite http:// sur cet hôte.
+func TestAucunEnTeteStrictTransportSecurity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, ecoute := range []string{"0.0.0.0", "", "192.168.1.20", "ledger.lan"} {
-		r := gin.New()
-		r.Use(HostGuard(ecoute))
-		r.GET("/health", func(c *gin.Context) { c.Status(http.StatusOK) })
-		if got := requeteHote(r, "ledger.lan:8443"); got != http.StatusOK {
-			t.Errorf("écoute %q : %d, le garde devrait être retiré", ecoute, got)
+	r := gin.New()
+	r.Use(SecurityHeaders())
+	r.GET("/health", func(c *gin.Context) { c.Status(http.StatusOK) })
+	for _, proto := range []string{"", "https"} {
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		if proto != "" {
+			req.Header.Set("X-Forwarded-Proto", proto)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if v := w.Header().Get("Strict-Transport-Security"); v != "" {
+			t.Errorf("X-Forwarded-Proto=%q : Strict-Transport-Security = %q, attendu absent", proto, v)
 		}
 	}
 }

@@ -1,28 +1,8 @@
 // Redémarrer le serveur depuis l'interface, puis y revenir.
 //
-// Deux pièges, tous deux rencontrés :
-//
-// 1. Sonder `/health` en relatif ne marche pas quand le schéma change. La page
-//    est sur http://localhost:8000, le serveur repart en https sur le MÊME
-//    port : la requête en clair se heurte à une poignée de main TLS et échoue
-//    jusqu'au délai d'attente. Le bouton tournait alors indéfiniment.
-//
-// 2. Sonder la nouvelle adresse ne marche pas non plus. Avec un certificat
-//    auto-signé, le navigateur refuse toute requête tant qu'il n'a pas montré
-//    son avertissement — qu'il ne montre que pour une navigation, jamais pour
-//    un fetch. Aucune attente ne rendra ce sondage possible.
-//
-// D'où cette approche : on attend que le serveur ACTUEL cesse de répondre —
-// preuve que le redémarrage a bien commencé — puis on navigue vers la nouvelle
-// adresse. La navigation laisse le navigateur afficher son avertissement si
-// besoin, ce qu'un fetch ne permet pas.
-
-/** URL de destination après redémarrage, selon le schéma qui sera servi. */
-export function targetURLAfterRestart(tlsEnabled: boolean): string {
-  const scheme = tlsEnabled ? 'https' : 'http'
-  const { hostname, port } = window.location
-  return `${scheme}://${hostname}${port ? `:${port}` : ''}/`
-}
+// On attend que le serveur ACTUEL cesse de répondre — preuve que le redémarrage a bien commencé —
+// puis on navigue vers la même adresse : le serveur repart sur le même port, en HTTP, sur la boucle
+// locale (il n'y a plus de TLS ni d'adresse d'écoute réglable).
 
 /** Vrai tant que le serveur en cours répond. */
 async function stillAlive(): Promise<boolean> {

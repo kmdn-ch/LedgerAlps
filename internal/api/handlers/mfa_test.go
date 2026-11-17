@@ -48,7 +48,6 @@ func mfaEnvOpt(t *testing.T, limite bool) (*sql.DB, *gin.Engine, *config.Config)
 
 	cfg := &config.Config{
 		SQLitePath:       tmp.Name(),
-		Host:             "127.0.0.1",
 		JWTSecret:        mfaSecret,
 		JWTAccessMinutes: 60,
 		JWTRefreshDays:   30,

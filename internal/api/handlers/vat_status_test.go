@@ -37,7 +37,7 @@ func nouveauxRéglages(t *testing.T) (*SettingsHandler, *gin.Engine) {
 	tmp.Close()
 	t.Cleanup(func() { os.Remove(tmp.Name()) })
 
-	cfg := &config.Config{SQLitePath: tmp.Name(), Host: "127.0.0.1"}
+	cfg := &config.Config{SQLitePath: tmp.Name()}
 	database, err := db.Open(cfg)
 	if err != nil {
 		t.Fatalf("open: %v", err)

@@ -28,7 +28,6 @@ func TestPostgresEstRefuseAvecUneRaisonLisible(t *testing.T) {
 	cfg := &config.Config{
 		PostgresDSN: "postgres://ledgeralps:motdepasse@localhost:5432/ledgeralps",
 		SQLitePath:  "sans-objet.db",
-		Host:        "127.0.0.1",
 	}
 	if !cfg.UsePostgres() {
 		t.Fatal("le harnais est faux : UsePostgres() devrait être vrai avec un DSN posé")

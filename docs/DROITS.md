@@ -154,7 +154,6 @@ fonction de sécurité : les deux restent à l'administrateur.
 | Action | Lecture seule | Comptable | Admin |
 |---|:---:|:---:|:---:|
 | Chiffrement de la base, phrase de récupération | ⛔ | ⛔ | ✅ |
-| Réseau, TLS, port d'écoute | ⛔ | ⛔ | ✅ |
 | Clé de signature des sessions | ⛔ | ⛔ | ✅ |
 | Déconnexion automatique, réglages de session | ⛔ | ⛔ | ✅ |
 | Journal de sécurité (connexions, verrouillages) | ⛔ | ⛔ | ✅ |

@@ -4,11 +4,11 @@
 > l'installeur fait tout : téléchargez-le depuis la page
 > [Releases](https://github.com/kmdn-ch/LedgerAlps/releases/latest) et
 > double-cliquez — rien d'autre à configurer. Cette page s'adresse à qui veut
-> faire tourner LedgerAlps sur un serveur Linux x86-64, par exemple pour y
-> accéder depuis plusieurs postes du bureau.
+> faire tourner LedgerAlps sur une machine Linux x86-64, sans l'installeur
+> Windows.
 
-LedgerAlps reste **local-first** : même déployé sur un serveur, il est conçu
-pour votre réseau, pas pour être exposé sur Internet.
+LedgerAlps est **local-first** : il n'écoute que sur la machine où il tourne
+(`127.0.0.1`), et il n'existe aucun moyen de l'ouvrir au réseau — voir §6.
 
 ---
 
@@ -176,53 +176,41 @@ sc.exe delete LedgerAlps      # le retirer (« service inexistant » = rien à f
 Le dossier `C:\ProgramData\LedgerAlps` que créait ce script n'est pas supprimé : il peut contenir une
 base et une clé de session. Vérifiez-le avant de l'effacer.
 
-## 6. Accès réseau
+## 6. Accès : cette machine uniquement
 
-**Par défaut, LedgerAlps n'écoute que sur `127.0.0.1`** : il n'est joignable que
-depuis sa propre machine, et le trafic ne touche aucun câble. C'est le mode
-normal du produit.
+**LedgerAlps n'écoute que sur `127.0.0.1`, en HTTP, et rien ne permet de changer cela** (1.6.6).
+Il n'est joignable que depuis sa propre machine, et le trafic ne touche aucun câble.
+L'adresse n'est pas un réglage : c'est une constante du programme.
 
-> Jusqu'à la v1.4.5, le serveur écoutait sur **toutes** les interfaces. Un
-> portable sur un réseau public servait donc sa comptabilité en clair à ce
-> réseau, sans que personne l'ait choisi. Ce n'est plus le cas.
+> **Historique.** Jusqu'à la v1.4.5, le serveur écoutait sur **toutes** les interfaces : un portable sur
+> un réseau public servait sa comptabilité en clair à ce réseau, sans que personne l'ait choisi. De la
+> 1.4.5 à la 1.6.5, l'écoute sur le réseau était un choix (`HOST`, écran Paramètres → Sécurité et réseau)
+> qui imposait TLS, avec un certificat fourni ou auto-signé. **Ce choix est supprimé en 1.6.6, avec tout
+> ce qui le portait** : `HOST`, `TLS_CERT`, `TLS_KEY`, `ALLOW_INSECURE_HTTP`, `ALLOWED_ORIGINS`,
+> `TRUSTED_PROXIES`, l'écran, les routes `GET`/`PUT /settings/server`, le certificat auto-signé et le
+> sondage TLS du lanceur. Il n'y a donc plus de HTTPS, et plus d'avertissement de certificat.
 
-Pour y accéder depuis d'autres postes :
+**Si vous aviez ouvert l'accès au réseau**, l'installation redevient locale à la mise à jour : les autres
+postes ne peuvent plus s'y connecter. Le serveur l'écrit au journal au démarrage (`server.log` dans le
+dossier de données, `%APPDATA%\LedgerAlps` sous Windows) : « l'accès par le réseau n'existe plus […]
+Réglages ignorés : … », avec le nom de ce qu'il a trouvé dans l'environnement ou dans `config.json`. Les
+anciennes clés de `config.json` ne sont pas effacées : elles sont ignorées. Pour travailler depuis un
+autre poste, installez LedgerAlps sur ce poste et reportez-y les données par une sauvegarde (§7).
 
-```bash
-export HOST=0.0.0.0            # ou l'adresse de l'interface concernée
-```
+Ce que le serveur fait de ce qui arrive :
 
-**Ce choix impose TLS**, et LedgerAlps s'en charge :
-
-| Situation | Comportement |
+| Quoi | Comportement |
 |---|---|
-| `HOST` loopback | HTTP simple — rien à chiffrer, le trafic ne sort pas |
-| `HOST` réseau + `TLS_CERT`/`TLS_KEY` | HTTPS avec votre certificat |
-| `HOST` réseau, sans certificat | **Certificat auto-signé généré** dans `<données applicatives>/tls`, HTTPS |
-| `HOST` réseau + `ALLOW_INSECURE_HTTP=true` | HTTP en clair, avec un avertissement au journal |
+| En-tête `Host` | Seuls `localhost`, `127.0.0.1` et `::1` sont admis ; tout autre nom reçoit `421`. C'est la défense contre le « DNS rebinding » — et c'est ce qui refuse un mandataire local qui retransmettrait un nom public |
+| `X-Forwarded-For`, `X-Real-IP`, `X-Forwarded-Proto` | **Ignorés.** L'adresse retenue est celle de la connexion elle-même (verrouillage des connexions, chaîne d'audit) |
+| CORS | Les origines de la machine seulement : `http://localhost:<port>` et `http://127.0.0.1:<port>` ; en mode débogage (`DEBUG=true`), aussi le serveur de développement du frontend (port 5173) |
+| `Strict-Transport-Security` | **Jamais émis** : un navigateur qui l'enregistre pour `localhost` refuse ensuite `http://` sur cet hôte, et l'utilisateur perd l'accès à sa comptabilité |
+| Cookie de session | Sans l'attribut `Secure` (HttpOnly, SameSite=Strict, chemin restreint) : certains navigateurs écartent un cookie `Secure` reçu en `http://localhost` |
 
-Le certificat auto-signé couvre `localhost`, le nom de la machine et ses
-adresses IP, il est valable dix ans et **réutilisé d'un démarrage à l'autre** —
-l'exception que vous accordez dans le navigateur tient. Le navigateur avertira
-à la première visite : c'est le prix d'un certificat sans autorité de
-certification, et il reste inférieur à celui d'un mot de passe en clair sur le
-réseau.
+Un bureau à distance ou un tunnel SSH vers la machine sont des outils extérieurs à LedgerAlps : il ne les
+prévoit pas, ne les teste pas et ne les protège pas.
 
-Pour éviter l'avertissement, fournissez un certificat d'une autorité interne, ou
-placez un reverse proxy (nginx, Caddy) devant.
-
-**Le lanceur Windows suit le réglage.** Il cherche l'adresse à laquelle le serveur *répond* — l'hôte
-précis de `config.json` s'il y en a un, puis `localhost`, en HTTPS d'abord quand un certificat est
-configuré — au lieu de supposer `http://localhost:<port>`. Avant, un serveur réglé en TLS ou à l'écoute sur
-une adresse du réseau répondait 400 à son sondage : le lanceur en lançait un second, abandonnait au bout de
-vingt secondes et n'ouvrait jamais le navigateur. Son sondage `/health` accepte le certificat
-auto-signé (il ne fait qu'un GET, sans rien envoyer) ; le navigateur, lui, affiche son avertissement.
-
-```bash
-export ALLOWED_ORIGINS="https://compta.entreprise.local"
-```
-
-### Pourquoi HTTP sur localhost
+### Pourquoi HTTP, et pas HTTPS
 
 C'est une question légitime, et la réponse n'est pas « par simplicité ».
 
@@ -246,32 +234,10 @@ certification dans le magasin de confiance de Windows : une clé capable de
 forger des certificats **pour n'importe quel site**, posée sur le poste — un
 risque supérieur à celui qu'on prétend traiter.
 
-**Cette option a existé, et a été retirée.** Une pré-version proposait de servir
-en HTTPS sur `localhost` ; elle a été supprimée avant publication. Elle
-n'apportait aucune sécurité réelle — le trafic ne quitte toujours pas la
-machine — et coûtait un avertissement de certificat à chaque nouveau profil de
-navigateur. Dépenser la confiance des utilisateurs dans les avertissements pour
-ne rien protéger est un mauvais échange.
-
 Si votre politique de sécurité exige TLS jusqu'au poste de travail, la réponse
 n'est pas dans LedgerAlps : c'est le chiffrement du disque (BitLocker, LUKS),
 qui protège la base de données elle-même — la vraie cible sur une machine à
 laquelle un attaquant a accès.
-
-⚠️ **`ALLOW_INSECURE_HTTP` n'a qu'un usage légitime** : un reverse proxy qui
-termine déjà TLS sur la **même** machine. Partout ailleurs, mot de passe de
-connexion, jeton de session et phrase de passe de chiffrement des sauvegardes
-traversent le réseau en clair, lisibles par quiconque écoute le segment — ce que
-la LPD art. 8 et l'OPDo art. 3 demandent précisément d'empêcher.
-
-```bash
-export ALLOWED_ORIGINS="https://compta.entreprise.local"
-```
-
-⚠️ **N'exposez pas LedgerAlps directement sur Internet.** Il n'y a ni
-authentification à deux facteurs, ni gestion multi-utilisateurs à rôles
-(prévue, voir la [roadmap](../ROADMAP.md)). Le mode d'emploi prévu est le
-réseau local, éventuellement via VPN.
 
 ## 7. Sauvegardes
 
@@ -556,15 +522,14 @@ export UPDATE_CHECK=false
 | `SQLITE_PATH` | `ledgeralps.db` | Chemin de la base SQLite |
 | `POSTGRES_DSN` | vide | **Non supporté** — s'il est défini, le serveur refuse de démarrer (voir §3) |
 | `PORT` | `8000` | Port d'écoute |
-| `ALLOWED_ORIGINS` | `http://localhost:5173` | Origines CORS, séparées par des virgules |
 | `DEBUG` | `false` | Journalisation verbeuse |
 | `LOG_LEVEL` | `INFO` | Niveau de journal |
 | `UPDATE_CHECK` | `true` | Vérifier l'existence d'une version plus récente. `false` = aucun appel réseau |
 | `BACKUP_PASSPHRASE` | vide | Si définie, chiffre les sauvegardes. À conserver hors de la machine |
-| `HOST` | `127.0.0.1` | Interface d'écoute. Toute valeur non-loopback impose TLS |
-| `TLS_CERT` / `TLS_KEY` | vide | Certificat et clé. À fournir ensemble |
-| `ALLOW_INSECURE_HTTP` | `false` | Sert en clair sur le réseau. Uniquement derrière un proxy TLS local |
-| `TRUSTED_PROXIES` | vide | Mandataires (adresses ou CIDR) dont `X-Forwarded-For` est cru. Vide = l'adresse observée est celle de la connexion |
+
+`HOST`, `TLS_CERT`, `TLS_KEY`, `ALLOW_INSECURE_HTTP`, `ALLOWED_ORIGINS` et `TRUSTED_PROXIES` n'existent plus
+(1.6.6) : le serveur n'écoute que sur `127.0.0.1` (§6). S'ils sont encore posés, ils sont ignorés et le
+serveur le dit au journal.
 
 > **Attention à la précédence.** Si un fichier `config.json` existe dans le
 > répertoire de données applicatives, il **prime sur ces variables**. C'est

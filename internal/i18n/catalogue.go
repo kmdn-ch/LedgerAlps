@@ -2136,10 +2136,10 @@ var catalogue = map[string]map[Lang]string{
 		IT: "Rimuovete il vostro secondo fattore dal vostro account: lì la password è richiesta di nuovo, che è proprio la protezione a cui rinunciate",
 		EN: "Remove your own second factor from your account: the password is asked again there, which is precisely the protection you are giving up",
 	},
-	"rien à appliquer : le redémarrage n'est proposé que pour une restauration préparée, une conversion du chiffrement programmée ou un changement de réglages réseau": {
-		DE: "Nichts anzuwenden: der Neustart wird nur für eine vorbereitete Wiederherstellung, eine geplante Umstellung der Verschlüsselung oder eine Änderung der Netzwerkeinstellungen angeboten",
-		IT: "Nulla da applicare: il riavvio è proposto solo per un ripristino preparato, una conversione della cifratura programmata o una modifica delle impostazioni di rete",
-		EN: "Nothing to apply: the restart is offered only for a prepared restore, a scheduled encryption change or a change of network settings",
+	"rien à appliquer : le redémarrage n'est proposé que pour une restauration préparée, une conversion du chiffrement programmée ou une clé de signature régénérée": {
+		DE: "Nichts anzuwenden: der Neustart wird nur für eine vorbereitete Wiederherstellung, eine geplante Umstellung der Verschlüsselung oder einen neu erzeugten Signaturschlüssel angeboten",
+		IT: "Nulla da applicare: il riavvio è proposto solo per un ripristino preparato, una conversione della cifratura programmata o una chiave di firma rigenerata",
+		EN: "Nothing to apply: the restart is offered only for a prepared restore, a scheduled encryption change or a regenerated signing key",
 	},
 	"réinitialisez plutôt votre propre mot de passe depuis votre compte : cette action afficherait un mot de passe temporaire à l'écran sans rien vous apporter": {
 		DE: "Setzen Sie Ihr eigenes Kennwort lieber über Ihr Konto zurück: diese Aktion zeigte ein temporäres Kennwort auf dem Bildschirm, ohne Ihnen etwas zu bringen",

@@ -224,9 +224,6 @@ SQLITE_PATH=/var/lib/ledgeralps/ledgeralps.db
 # OR use PostgreSQL (comment out SQLITE_PATH and uncomment below)
 # POSTGRES_DSN=postgres://user:password@localhost:5432/ledgeralps?sslmode=disable
 
-# CORS — allowed frontend origins (comma-separated)
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
-
 # Logging
 LOG_LEVEL=INFO
 DEBUG=false

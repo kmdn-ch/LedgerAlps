@@ -3,9 +3,9 @@ package main
 // Le mode récupération demande la phrase qui enveloppe la clé de dix ans de
 // comptabilité. Deux choses le protègent, et aucune n'existait :
 //
-//   - le TRANSPORT suit la même règle que le serveur normal (resolveTLS), au
-//     lieu d'être en clair quoi qu'il arrive — vérifié par construction dans
-//     runRecoveryServer, qui n'a plus qu'un seul chemin vers ListenAndServe ;
+//   - le serveur n'écoute que sur la boucle locale, en HTTP, comme le serveur
+//     normal (cfg.ListenAddr) — il n'y a plus de chemin TLS ni d'adresse
+//     réglable ;
 //   - les TENTATIVES sont bornées, ce que rien ne faisait ici alors que la
 //     connexion ordinaire a son limiteur depuis longtemps.
 //
@@ -77,7 +77,7 @@ func TestLaFenetreGlisse(t *testing.T) {
 
 func requeteRecuperation(methode, hote, origine string) *httptest.ResponseRecorder {
 	suite := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	h := protegerRecuperation("127.0.0.1", []string{"http://localhost:5173"}, suite)
+	h := protegerRecuperation(suite)
 	req := httptest.NewRequest(methode, "http://"+hote+"/", nil)
 	req.Host = hote
 	if origine != "" {
@@ -124,15 +124,12 @@ func TestLeModeRecuperationRefuseUnPostDUneAutreOrigine(t *testing.T) {
 	}
 }
 
-// Exposé volontairement sur le réseau, le serveur de récupération se comporte comme le serveur normal :
-// la liste exacte des noms de l'installation n'est pas connue, le contrôle d'hôte se retire.
-func TestLeModeRecuperationExposeSurLeReseauNeFiltrePasLHote(t *testing.T) {
-	suite := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	h := protegerRecuperation("0.0.0.0", nil, suite)
-	req := httptest.NewRequest(http.MethodGet, "http://compta.exemple.ch/", nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("serveur exposé : %d, attendu 200", w.Code)
+// Il n'y a plus d'exposition possible sur le réseau : un nom public — celui qu'un mandataire TLS local
+// retransmettait avant la 1.6.6 — est refusé comme n'importe quel hôte inconnu.
+func TestLeModeRecuperationRefuseUnNomPublic(t *testing.T) {
+	for _, hote := range []string{"compta.exemple.ch", "192.168.1.20:8000", "0.0.0.0:8000"} {
+		if w := requeteRecuperation(http.MethodGet, hote, ""); w.Code != http.StatusMisdirectedRequest {
+			t.Errorf("hôte %s : %d, attendu 421", hote, w.Code)
+		}
 	}
 }
